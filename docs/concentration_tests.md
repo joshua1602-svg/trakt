@@ -112,6 +112,54 @@ metrics are `interface_only`: they evaluate only when an approved
 * `unsupported` — a structured implementation request, never an improvised
   formula.
 
+### Document conventions the extractor reads
+
+Facility schedules are drafted, not written for machines. Three conventions
+are handled deterministically because misreading them produces a schedule of
+empty thresholds rather than an honest question:
+
+* **Bracketed figures.** A negotiated number stays in square brackets until
+  the document is agreed — `[50]%`, `£[1,500,000]`, `[3.75]% per annum`.
+  `normalise_source_text` unwraps digit-bearing brackets only; `[Reserved]`
+  and cross-references are left exactly as drafted.
+* **Limits tables.** The comparison lives in the lead-in sentence and the
+  numbers live in the rows beneath it. Each row inherits the lead-in's
+  operator and denominator, and the reviewer is always shown the lead-in
+  together with the row — a row never appears without the sentence that gives
+  it meaning. The lead-in is only consumed when rows actually follow it.
+  Regions are recognised by ITL1 code as well as by label, so
+  `UKI + UKJ | London and South East` collapses to two canonical regions.
+* **Defined denominators.** A schedule that defines its own denominator —
+  *“Concentration Limit Denominator” means the greater of £33,000,000 and the
+  Current Balance of all the Eligible Mortgage Loans* — has that floor read
+  once from the definitions and applied to every clause citing the term (see
+  below). The definition itself is not proposed as a test.
+
+Wording that states a *concept* still asks. “Loans which have two Borrowers”
+resolves to `borrower_joint_share` with `joint_basis: borrower_count` because
+the covenant names the count; bare “joint borrowers” raises
+`joint_definition_uncertain`, because it says nothing about whether the book
+encodes jointness as a classification flag or a borrower count, and the two
+can disagree on the same loan.
+
+### Floored denominators
+
+`denominator_floor` measures a share against the **greater** of a contractual
+amount and the resolved denominator balance. It is declared only on metrics
+whose evaluator actually measures against a balance denominator — a parameter
+that could not change a result would be worse than no parameter at all — so
+weighted averages and count metrics reject it rather than accept and ignore
+it.
+
+The floor is disclosed in `denominator_basis` whether or not it binds
+(`current_balance (floored at 33,000,000)` vs
+`current_balance (floor 33,000,000 not binding)`), so a reader never has to
+infer from the number that a floor was in play. Being an absolute contractual
+amount, it applies unchanged in the forward-looking states: a
+probability-weighted expected balance is compared against the same floor as
+the funded balance. Commercially this is what makes limits looser at ramp-up —
+a single loan in a £50k book is 2.5% of a £2m floor, not 100% of the book.
+
 ## Persistence
 
 `blob://{TRAKT_OPS_CONTAINER}/{client}/concentration-tests/`:
@@ -340,7 +388,10 @@ mock mode and tests exercise real governance behaviour.
 ## Test suites
 
 `tests/concentration_tests/` (library, metrics, matching, governance,
-evaluation, compat) · `tests/operations_control/test_concentration_routes.py`
+evaluation, compat) · `tests/concentration_tests/test_schedule_8.py` (a real
+warehouse-facility schedule end to end: all seventeen limits must extract with
+a threshold and an operator) ·
+`tests/operations_control/test_concentration_routes.py`
 (review-surface API) · `mi_agent_api/tests/test_concentration_tests_api.py`
 (service, routes, MI Query/Copilot delegation) ·
 `frontend/mi-agent-ui/src/components/risk/RiskLimitsWorkspace.test.tsx`

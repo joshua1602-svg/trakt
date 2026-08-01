@@ -151,6 +151,19 @@ field_roles:
 # each metric declares its own schema explicitly so the contract is local).
 denominators: &denominators [current_balance, original_balance, loan_count]
 
+# A contractual floor on the denominator, e.g. a facility that defines its
+# "Concentration Limit Denominator" as the greater of a fixed amount and the
+# portfolio balance. Declared only on metrics whose evaluator measures a share
+# against a balance denominator — a parameter that could not change a result
+# would be worse than no parameter at all.
+denominator_floor_param: &denominator_floor
+  type: number
+  minimum: 0
+  description: >-
+    Measure the share against the GREATER of this amount and the resolved
+    denominator balance. Omit unless the covenant defines a floored
+    denominator; the floor is contractual and is never inferred from data.
+
 metrics:
   # ------------------------------------------------------------------- A. Geography
   - metric_id: geo_region_share
@@ -172,6 +185,7 @@ metrics:
     required_roles: [region, balance_current]
     optional_roles: [balance_original]
     parameters:
+      denominator_floor: *denominator_floor
       regions:
         type: list_string
         required: true
@@ -212,6 +226,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [country, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       countries: {type: list_string, required: true}
       denominator:
         type: enum
@@ -237,6 +252,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [county, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       counties: {type: list_string, required: true}
       denominator:
         type: enum
@@ -264,6 +280,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [postcode, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       areas:
         type: list_string
         required: true
@@ -292,6 +309,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [region, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       denominator:
         type: enum
         values: [current_balance, original_balance]
@@ -350,6 +368,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [valuation_original, valuation_current, valuation_indexed]
     parameters:
+      denominator_floor: *denominator_floor
       amount: {type: number, required: true, description: Valuation threshold.}
       value_basis:
         type: enum
@@ -383,6 +402,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [valuation_original, valuation_current, valuation_indexed]
     parameters:
+      denominator_floor: *denominator_floor
       amount: {type: number, required: true}
       value_basis:
         type: enum
@@ -465,6 +485,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [valuation_original, valuation_current]
     parameters:
+      denominator_floor: *denominator_floor
       value_basis: {type: enum, values: [original, current], default: current}
       denominator:
         type: enum
@@ -494,6 +515,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [balance_original]
     parameters:
+      denominator_floor: *denominator_floor
       amount: {type: number, required: true}
       balance_basis:
         type: enum
@@ -599,6 +621,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       n: {type: integer, required: true, minimum: 1}
       denominator:
         type: enum
@@ -627,6 +650,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [borrower_id, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       denominator:
         type: enum
         values: [current_balance, original_balance]
@@ -673,6 +697,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [borrower_id, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       min_loans: {type: integer, required: true, minimum: 2}
       denominator:
         type: enum
@@ -680,6 +705,52 @@ metrics:
         default: current_balance
     aliases: [borrowers with more than, multi-loan borrowers,
               borrowers with at least]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: borrower_aggregate_balance_share
+    canonical_name: borrower_aggregate_balance_share
+    display_name: Large-borrower aggregate exposure
+    category: borrower
+    description: >-
+      Balance share held by borrowers whose TOTAL lending across all their
+      loans breaches `amount`. The aggregate is struck per borrower, so a
+      borrower with several small loans can qualify while no single loan
+      would — which is the point of the covenant.
+    asset_classes: [cross_asset]
+    evaluator: borrower_aggregate_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: sum
+    numerator: >-
+      Sum of balance for every loan of each borrower whose aggregate balance
+      is above (or below) `amount`.
+    denominator_options: [current_balance, original_balance]
+    required_roles: [borrower_id, balance_current]
+    optional_roles: [balance_original]
+    parameters:
+      denominator_floor: *denominator_floor
+      amount: {type: number, required: true, minimum: 0}
+      aggregate_basis:
+        type: enum
+        values: [original, current]
+        default: original
+        description: >-
+          Which balance the per-borrower aggregate is struck on. Facility
+          drafting says "initial principal balance" for original.
+      comparison:
+        type: enum
+        values: [above, below]
+        default: above
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [aggregate initial principal balance, aggregate principal balance,
+              aggregate balance to any borrower, borrower aggregate exposure,
+              aggregate exposure to any borrower]
     composable: true
     implementation_status: implemented
     version: "1.0"
@@ -702,6 +773,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [borrower_structure, borrower_count]
     parameters:
+      denominator_floor: *denominator_floor
       joint_basis:
         type: enum
         values: [structure_flag, borrower_count]
@@ -718,7 +790,8 @@ metrics:
         default: false
         description: true measures SINGLE-borrower share instead.
     aliases: [joint borrowers, joint borrower percentage, single borrowers,
-              sole borrowers]
+              sole borrowers, two borrowers, 2 borrowers,
+              more than one borrower, multiple borrowers]
     composable: true
     implementation_status: implemented
     version: "1.0"
@@ -741,6 +814,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [borrower_age_youngest, borrower_age_oldest]
     parameters:
+      denominator_floor: *denominator_floor
       age: {type: number, required: true}
       age_basis:
         type: enum
@@ -839,6 +913,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [rate_type, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       values:
         type: list_string
         required: true
@@ -869,6 +944,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [product, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       values: {type: list_string, required: true}
       denominator:
         type: enum
@@ -896,6 +972,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [payment_option, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       values: {type: list_string, required: true}
       denominator:
         type: enum
@@ -925,6 +1002,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [ltv_original, ltv_current, ltv_indexed]
     parameters:
+      denominator_floor: *denominator_floor
       ltv_percent: {type: number, required: true}
       ltv_basis:
         type: enum
@@ -1015,6 +1093,7 @@ metrics:
     required_roles: [balance_current]
     optional_roles: [days_past_due, arrears_balance]
     parameters:
+      denominator_floor: *denominator_floor
       min_days:
         type: number
         required: false
@@ -1046,6 +1125,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [account_status, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       values: {type: list_string, required: true}
       denominator:
         type: enum
@@ -1122,6 +1202,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       dimension:
         type: enum
         values: [originator, seller, source_type, source_portfolio, servicer,
@@ -1160,6 +1241,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       dimension:
         type: enum
         values: [originator, seller, source_type, source_portfolio, servicer,
@@ -1193,6 +1275,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [origination_date, balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       years:
         type: list_string
         required: true
@@ -1277,6 +1360,7 @@ metrics:
     denominator_options: *denominators
     required_roles: [balance_current]
     parameters:
+      denominator_floor: *denominator_floor
       filters:
         type: filter_list
         required: true

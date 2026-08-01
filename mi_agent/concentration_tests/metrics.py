@@ -182,6 +182,18 @@ def _denominator(df: pd.DataFrame, lib: ConcentrationLibrary,
         # BOTH numerator and denominator; a funded row carries p = 1.0.
         bal = bal * prob
     total = float(bal.sum(skipna=True))
+    floor = _param(metric, params, "denominator_floor")
+    if floor is not None:
+        # A contractual floored denominator ("the greater of £33m and the
+        # Current Balance of the portfolio"). The floor is an absolute amount,
+        # so it applies in every state: a probability-weighted expected
+        # balance is compared against the same floor as the funded balance.
+        # Whether it binds is disclosed either way — a reader must not have to
+        # infer from the number that a floor was in play.
+        floor = float(floor)
+        if floor > total:
+            return bal, floor, f"{basis} (floored at {floor:,.0f})", []
+        return bal, total, f"{basis} (floor {floor:,.0f} not binding)", []
     if not total:
         return bal, None, basis, []
     return bal, total, basis, []
@@ -623,6 +635,49 @@ def _eval_multi_loan_borrower_share(df, lib, metric, params, external=None):
                          {"borrower_id": col})
 
 
+def _eval_borrower_aggregate_share(df, lib, metric, params, external=None):
+    """Share held by borrowers whose aggregate lending breaches `amount`.
+
+    The aggregate is struck on the REAL balance column, never the
+    probability-weighted one: whether a borrower is above the covenant's
+    per-borrower ceiling is a fact about the borrower, not about how much
+    expected exposure they contribute. The probability weighting applies to
+    the exposure sums, as everywhere else.
+    """
+    bal, total, basis, missing = _denominator(df, lib, metric, params)
+    if missing:
+        return MetricComputation.missing("balance", missing, unit=metric.unit,
+                                         total_loans=len(df))
+    if total is None:
+        return _no_denominator(metric, basis, len(df))
+    col = resolve_role_column(df, lib, "borrower_id")
+    if col is None:
+        return MetricComputation.missing("borrower_id",
+                                         role_candidates(lib, "borrower_id"),
+                                         unit=metric.unit, total_loans=len(df))
+    amount = _param(metric, params, "amount")
+    if amount is None:
+        return MetricComputation(
+            value=None, unit=metric.unit, data_status=DATA_MISSING,
+            total_loans=len(df),
+            notes="The per-borrower aggregate threshold is not configured.")
+    aggregate_basis = str(_param(metric, params, "aggregate_basis") or "original")
+    role = _BASIS_ROLES["balance_basis"].get(aggregate_basis, "balance_original")
+    value_col = resolve_role_column(df, lib, role)
+    if value_col is None:
+        return MetricComputation.missing(role, role_candidates(lib, role),
+                                         unit=metric.unit, total_loans=len(df))
+    groups = _norm_text(df[col])
+    per_borrower = coerce_numeric(df[value_col]).groupby(groups).transform("sum")
+    if str(_param(metric, params, "comparison") or "above") == "below":
+        breached = per_borrower < float(amount)
+    else:
+        breached = per_borrower > float(amount)
+    mask = (df[col].notna() & breached).fillna(False)
+    return _share_result(df, mask, bal, total, metric, basis,
+                         {"borrower_id": col, "aggregate_balance": value_col})
+
+
 def _eval_joint_borrower_share(df, lib, metric, params, external=None):
     bal, total, basis, missing = _denominator(df, lib, metric, params)
     if missing:
@@ -774,6 +829,7 @@ EVALUATORS: Dict[str, Callable[..., MetricComputation]] = {
     "top_n_share": _eval_top_n_share,
     "max_count_per_group": _eval_max_count_per_group,
     "multi_loan_borrower_share": _eval_multi_loan_borrower_share,
+    "borrower_aggregate_share": _eval_borrower_aggregate_share,
     "joint_borrower_share": _eval_joint_borrower_share,
     "arrears_share": _eval_arrears_share,
     "dimension_share": _eval_dimension_share,

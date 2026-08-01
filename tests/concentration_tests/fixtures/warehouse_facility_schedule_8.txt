@@ -1,0 +1,36 @@
+For the purposes of this Schedule 8, “Concentration Limit Denominator” means an amount equal to the greater of: (a) £[33,000,000] and (b) the Current Balance of all the Eligible Mortgage Loans in the Financing Portfolio.
+1.	Region
+1.	The Current Balance of Eligible Mortgage Loans secured by Mortgaged Properties located in each Geographic Region as a percentage of the Concentration Limit Denominator does not exceed the limits set out below:
+
+Geographic Region	Region Name	Concentration Limit
+UKI + UKJ	London and South East	[50]%
+UKC	North East	[10]%
+UKD	North West	[10]%
+UKE	Yorkshire & The Humber	[15]%
+UKF	East Midlands	[15]%
+UKG	West Midlands	[15]%
+UKH	East of England	[25]%
+UKK	South West	[20]%
+UKM	Scotland	[10]%
+UKL	Wales	[10]%
+
+2.	Property Value
+
+1.	The Current Balance of Eligible Mortgage Loans secured by Mortgaged Properties with an Original Valuation greater than £[1,500,000] as a percentage of the Concentration Limit Denominator shall not exceed [10]%. 
+
+2.	The Current Balance of Eligible Mortgage Loans secured by Mortgaged Properties with an Original Valuation less than £[150,000] as a percentage of the Concentration Limit Denominator shall not exceed [10]%.
+
+3.	Principal Balance
+1.	The Current Balance of all Eligible Mortgage Loans made to any Borrower with an aggregate initial principal balance greater than £[1,000,000] as a percentage of the Concentration Limit Denominator shall not exceed [10]%. 
+
+2.	The average initial principal balance of Eligible Mortgage Loans in the Financing Portfolio shall not be greater than £[300,000].
+
+4.	Age
+1.	The aggregate Current Balance of Eligible Mortgage Loans made to Borrowers where the sole Borrower or the youngest Borrower is below 55 years of age as a percentage of the Concentration Limit Denominator shall not exceed [0]%.
+ 
+5.	Other
+1.	The Portfolio Net WAC of Eligible Mortgage Loans shall be greater than or equal to [3.75]% per annum, where “Portfolio Net WAC” means:
+a.	the weighted average fixed interest rate of all of the Eligible Mortgage Loans in the Mortgage Portfolio (weighted by Current Balance and expected duration), minus
+b.	the Series Fixed Rate from the Final Maturity Date onwards.
+
+2.	The Current Balance of all Eligible Mortgage Loans which have two Borrowers as a percentage of the Concentration Limit Denominator shall not exceed [90]%.
