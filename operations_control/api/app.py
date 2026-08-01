@@ -77,7 +77,7 @@ _cors = [o.strip() for o in os.environ.get(
 app.add_middleware(CORSMiddleware, allow_origins=_cors,
                    allow_methods=["*"],
                    allow_headers=["X-Operator-Token", "Authorization",
-                                  "Content-Type"])
+                                  "Content-Type", "X-Request-Id"])
 
 
 #: Client Onboarding — the governed standing-configuration capability. It sits
@@ -124,11 +124,24 @@ def mount_occ_agent(application: FastAPI) -> bool:
 mount_occ_agent(app)
 
 
+def _request_id(request: Request) -> str:
+    """The caller's correlation identifier, echoed back on every error.
+
+    The browser sends one per request; a missing or oversized value degrades to
+    empty rather than failing the error path itself.
+    """
+    rid = str(request.headers.get("x-request-id") or "")[:64]
+    return rid if rid.replace("-", "").isalnum() else ""
+
+
 @app.exception_handler(OpsError)
 async def _ops_error(request: Request, exc: OpsError):
+    rid = _request_id(request)
+    logger.info("refused %s %s: %s (request_id=%s)", request.method,
+                request.url.path, exc.code, rid or "-")
     return JSONResponse(status_code=exc.http_status,
                         content={"ok": False, "errorCode": exc.code,
-                                 "message": exc.message})
+                                 "message": exc.message, "requestId": rid})
 
 
 @app.exception_handler(_CaseError)
@@ -136,16 +149,19 @@ async def _case_error(request: Request, exc: _CaseError):
     """An illegal onboarding transition is an operator mistake, not a fault."""
     return JSONResponse(status_code=exc.http_status,
                         content={"ok": False, "errorCode": exc.code,
-                                 "message": exc.message})
+                                 "message": exc.message,
+                                 "requestId": _request_id(request)})
 
 
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception):
-    logger.exception("unhandled error on %s", request.url.path)
+    rid = _request_id(request)
+    logger.exception("unhandled error on %s (request_id=%s)",
+                     request.url.path, rid or "-")
     return JSONResponse(status_code=500, content={
         "ok": False, "errorCode": "OPS_INTERNAL",
         "message": "Something went wrong on our side. Nothing has been lost — "
-                   "try again in a moment."})
+                   "try again in a moment.", "requestId": rid})
 
 
 @app.get("/health")

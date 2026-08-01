@@ -87,12 +87,20 @@ export class HttpOpsClient implements OpsClient {
     // A multipart body carries its own boundary — setting Content-Type here
     // would corrupt it, so the browser is left to set it.
     const isForm = typeof FormData !== "undefined" && init?.body instanceof FormData;
+    // A correlation identifier per request, echoed back on error responses and
+    // written into the server's log line — so a failure an operator reports
+    // can be found without guessing at timestamps.
+    const requestId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
         ...init,
         headers: {
           ...(isForm ? {} : { "Content-Type": "application/json" }),
           "X-Operator-Token": getToken() ?? "",
+          "X-Request-Id": requestId,
           ...(init?.headers ?? {}),
         },
       });

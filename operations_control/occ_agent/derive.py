@@ -186,6 +186,116 @@ def facts(case: OnboardingCase, *, portfolio_id: str = "",
     return out
 
 
+#: Operator wording for each governed dataset. The DATASETS are the platform's
+#: (``operations_control.contracts.BATCH_DATASETS``); only the phrasing is here.
+_STREAM_PURPOSE = {
+    "funded": "Funded MI, risk monitoring and reporting as configured",
+    "pipeline": "Pipeline MI only",
+}
+
+_STREAM_FILE_ROLE = {"funded": "loan_extract", "pipeline": "pipeline_report"}
+
+
+def stream_sentence(dataset: str) -> str:
+    """One line an operator reads about a declared stream."""
+    if dataset == "pipeline":
+        return ("A pipeline stream: pipeline MI only. It never feeds a "
+                "regulatory regime.")
+    if dataset == "funded":
+        return ("A funded stream: funded MI, risk and reporting as "
+                "configured, and regime reporting where eligible.")
+    return f"A {dataset} stream."
+
+
+def stream_summaries(case: OnboardingCase,
+                     cat: Optional[Catalogue] = None) -> List[Dict[str, Any]]:
+    """The case's operational data streams, one row per source registration.
+
+    A PROJECTION over Client Onboarding's own ``sources`` rows — the durable
+    registrations ``derive_sources`` maintains — plus the product-eligibility
+    table and the regime-capable-dataset contract. Nothing here is a second
+    model: delete this function and the streams still exist; only the
+    operator-facing summary goes.
+    """
+    from ..contracts import REGIME_CAPABLE_DATASETS
+    from ..onboarding.derivation import product_eligibility
+    from .input_roles import artefact_vocabulary
+
+    cat = cat or catalogue()
+    vocab = artefact_vocabulary()
+    eligibility = product_eligibility(case, cat)
+    chosen = set(case.products)
+    #: Regime-bearing products: those whose declaration names a regime
+    #: capability or identifier. Only these can make a stream regime-relevant.
+    regime_products = {key for key, spec in (cat.regime_products or {}).items()
+                       if (spec or {}).get("supported_by_assets_declaring")
+                       or (spec or {}).get("regime_id")}
+
+    out: List[Dict[str, Any]] = []
+    for source in case.items("sources"):
+        dataset = str(source.get("dataset") or "")
+        pid = str(source.get("portfolio_id") or "")
+        capable = dataset in REGIME_CAPABLE_DATASETS
+        cadence = str(source.get("cadence") or "")
+        cadence_path = _cadence_provenance_path(case, pid, dataset)
+        cadence_confirmed = case.provenance_class.get(cadence_path) in (
+            "human_supplied", "client_supplied", "human_approved")
+
+        if not capable:
+            regime_status, regime_note = "not_applicable", (
+                "Pipeline data feeds pipeline MI only. It never feeds a "
+                "regulatory regime.")
+        else:
+            applied = [k for k in regime_products
+                       if k in chosen and (eligibility.get(k) or {})
+                       .get("eligible")]
+            eligible = [k for k in regime_products
+                        if (eligibility.get(k) or {}).get("eligible")]
+            if applied:
+                regime_status = "configured"
+                regime_note = ("Regime reporting is configured: "
+                               + ", ".join(str((eligibility.get(k) or {})
+                                               .get("label") or k)
+                                           for k in sorted(applied)) + ".")
+            elif eligible:
+                regime_status = "potential"
+                regime_note = ("Potentially applicable, subject to product "
+                               "selection.")
+            else:
+                regime_status = "not_eligible"
+                reasons = [str((eligibility.get(k) or {}).get("reason") or "")
+                           for k in sorted(regime_products)]
+                regime_note = " ".join(r for r in reasons if r) \
+                    or "No regime product is eligible for this book."
+
+        role = _STREAM_FILE_ROLE.get(dataset, "")
+        out.append({
+            "source_key": str(source.get("source_key") or ""),
+            "portfolio_id": pid,
+            "dataset": dataset,
+            "label": dataset.replace("_", " ").title() or "Stream",
+            "purpose": _STREAM_PURPOSE.get(
+                dataset, f"{dataset.title()} deliveries"),
+            "cadence": cadence,
+            "cadence_confirmed": bool(cadence and cadence_confirmed),
+            "required_file": vocab.label(role) if role else "",
+            "expected_files": list(source.get("expected_files") or []),
+            "regime_capable": capable,
+            "regime_status": regime_status,
+            "regime_note": regime_note,
+        })
+    return out
+
+
+def _cadence_provenance_path(case: OnboardingCase, pid: str,
+                             dataset: str) -> str:
+    for index, source in enumerate(case.items("sources")):
+        if str(source.get("portfolio_id") or "") == pid \
+                and str(source.get("dataset") or "") == dataset:
+            return f"sources[{index}].cadence"
+    return "sources.cadence"
+
+
 def portfolio_choices(case: OnboardingCase) -> List[Dict[str, str]]:
     """The portfolios a run could be for, for an operator to choose between."""
     return [{"portfolio_id": str(p.get("portfolio_id") or ""),

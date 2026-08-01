@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, CircleDot, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Circle,
+  CircleDot,
+  ExternalLink,
+} from "lucide-react";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
 import type {
@@ -9,6 +15,7 @@ import type {
   AgentStatus,
   DecisionCard,
   ReadinessCriterion,
+  StreamSummary,
 } from "@/api/agentTypes";
 import type { ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
@@ -19,16 +26,21 @@ import { copy } from "@/lib/copy";
 import { humanize } from "@/lib/format";
 import { errorMessage, useLoad } from "@/lib/useLoad";
 import { Empty, Field, Panel, SyntheticBanner, stateTone } from "./shared";
+import { deriveStages, type StageInfo, type StageKey } from "./stages";
 
 /**
- * The case workspace: a conversation on the left, the governed state on the
- * right.
+ * The case workspace, rebuilt around chronology.
  *
- * It renders decisions the backend made — the onboarding's own status and
- * checklist, the practice run's stage, the controls, the readiness criteria and
- * the decision cards — and never computes them. It also deliberately does NOT
- * reproduce the onboarding wizard, the OCC's execution screens or its approval
- * screens: where one of those is the right place to look, the case links to it.
+ * The spine of the page is the operator journey — define, scope, pack, client
+ * response, configuration, rehearsal, readiness, approval, activation — with
+ * exactly one current stage expanded, completed stages collapsed into the
+ * timeline, and future stages listed without their panels. The conversation
+ * stays beside it at every stage.
+ *
+ * It still renders only decisions the backend made — the onboarding's own
+ * status and checklist, the run's state, the readiness criteria, the decision
+ * cards — and never computes them. Where an existing OCC view is the right
+ * place to look, the case links to it rather than reproducing it.
  */
 
 type AgentStep = Parameters<ReturnType<typeof useOpsClient>["runAgentStep"]>[1];
@@ -60,6 +72,16 @@ function onboardingActions(status: AgentStatus): string[] {
     out.push("approve_onboarding");
   }
   return out;
+}
+
+/** Which pack stage currently owns the pack panel, so it renders exactly once. */
+function packOwner(status: AgentStatus): StageKey {
+  const packStatus = status.pack.status ?? "";
+  if (!packStatus || packStatus === "DRAFTED" || packStatus === "HUMAN_REVIEW_REQUIRED") {
+    return (status.pack.sections ?? []).length > 0 ? "pack_review" : "pack_prepare";
+  }
+  if (packStatus === "APPROVED_TO_SEND") return "pack_issue";
+  return "pack_issue"; // SENT — collapsed under the issue stage
 }
 
 export function AgentCaseScreen() {
@@ -128,6 +150,194 @@ export function AgentCaseScreen() {
     ...(status.state.allowed_human_actions ?? []),
     ...onboardingActions(status),
   ]);
+  const stages = deriveStages(status);
+  const current = stages.find((stage) => stage.status === "current");
+  const packStage = packOwner(status);
+  const openDecisions = status.open_decisions.filter((d) => d.status === "open");
+
+  /** One stage's workflow content. Rendered under exactly one stage. */
+  function stageBody(key: StageKey): ReactNode {
+    switch (key) {
+      case "scope":
+        return (
+          <ScopeBlock status={status} />
+        );
+      case "pack_prepare":
+      case "pack_review":
+      case "pack_issue":
+        if (key !== packStage) return null;
+        return (
+          <PackPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onDraft={() => void act(() => client.draftAgentPack(caseId))}
+            onApprove={() => void act(() => client.approveAgentPack(caseId))}
+            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+          />
+        );
+      case "responses":
+        return (
+          <ResponsesBlock
+            requests={onboarding.information_requests}
+            checklist={onboarding.client_checklist}
+            busy={busy}
+            canAsk={available.has("request_client_information")}
+            onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
+            onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
+          />
+        );
+      case "artefacts":
+        return (
+          <ArtefactsPanel
+            status={status}
+            busy={busy}
+            onUpload={(files) => void act(() => client.uploadAgentArtefacts(caseId, files))}
+            onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
+            onFixture={() =>
+              void act(() => client.loadAgentFixtureArtefacts(caseId, run.fixture_id))
+            }
+          />
+        );
+      case "configure":
+        return (
+          <>
+            {available.has("submit_for_approval") && (
+              <PrimaryButton busy={busy} onClick={() => void act(() => client.runAgentStep(caseId, "submit"))}>
+                Submit for approval
+              </PrimaryButton>
+            )}
+            <Panel
+              title={copy.agent.previewHeading}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setShowPreview((prev) => !prev)}
+                  className="text-sm font-medium text-blue-700"
+                >
+                  {showPreview ? copy.agent.hidePackage : copy.agent.downloadPackage}
+                </button>
+              }
+            >
+              <p className="text-sm text-stone-600">{copy.agent.previewDescription}</p>
+              <p className="mt-1 text-xs font-medium text-violet-700">
+                {copy.agent.previewNothingWritten}
+              </p>
+              {(preview.data?.preview.artefacts ?? []).length === 0 ? (
+                <p className="mt-3 text-sm text-stone-400">{copy.agent.previewNone}</p>
+              ) : showPreview ? (
+                <pre className="mt-3 max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
+                  {JSON.stringify(preview.data?.preview, null, 2)}
+                </pre>
+              ) : (
+                <ul className="mt-3 space-y-1 text-sm text-stone-700">
+                  {(preview.data?.preview.artefacts ?? []).map((artefact) => (
+                    <li key={artefact.rel}>{artefact.label}</li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </>
+        );
+      case "config_review":
+        return available.has("approve_onboarding") ? (
+          <PrimaryButton busy={busy} onClick={() => void act(() => client.runAgentStep(caseId, "approve"))}>
+            Approve the onboarding
+          </PrimaryButton>
+        ) : null;
+      case "rehearsal":
+        return (
+          <>
+            {available.has("run_synthetic_onboarding") && (
+              <PrimaryButton busy={busy} onClick={() => void act(() => client.runAgentStep(caseId, "run"))}>
+                Start rehearsal
+              </PrimaryButton>
+            )}
+            {Object.keys(status.stage_outcomes).length > 0 && (
+              <Panel title={copy.agent.executionHeading}>
+                <ul className="space-y-1">
+                  {Object.entries(status.stage_outcomes).map(([stage, outcome]) => (
+                    <li key={stage} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-stone-600">{humanize(stage)}</span>
+                      <span className="text-xs font-medium text-stone-500">
+                        {copy.agent.stageOutcomes[outcome] ?? humanize(outcome)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Panel>
+            )}
+          </>
+        );
+      case "exceptions":
+        return null; // decision cards stay at the top, where they cannot be missed
+      case "readiness":
+        return (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {available.has("generate_orchestration_plan") && (
+                <PrimaryButton busy={busy} onClick={() => void act(() => client.runAgentStep(caseId, "plan"))}>
+                  Prepare the execution plan
+                </PrimaryButton>
+              )}
+              {available.has("approve_execution_readiness") && (
+                <PrimaryButton
+                  busy={busy}
+                  onClick={() => void act(() => client.runAgentStep(caseId, "readiness/approve"))}
+                >
+                  Approve readiness
+                </PrimaryButton>
+              )}
+            </div>
+            {isReady && (
+              <Panel
+                title={copy.agent.readinessHeading}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setShowPackage((prev) => !prev)}
+                    className="text-sm font-medium text-blue-700"
+                  >
+                    {showPackage ? copy.agent.hidePackage : copy.agent.downloadPackage}
+                  </button>
+                }
+              >
+                {showPackage && readiness.data?.package ? (
+                  <pre className="max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
+                    {JSON.stringify(readiness.data.package, null, 2)}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-stone-600">{copy.agent.readyHeadline}</p>
+                )}
+              </Panel>
+            )}
+          </>
+        );
+      case "approve_activation":
+        return (
+          <ReviewPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onSubmit={() => void act(() => client.requestAgentReview(caseId))}
+            onApprove={() => void act(() => client.approveAgentActivation(caseId))}
+          />
+        );
+      case "confirm_activation":
+        return (
+          <ActivationPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onConfirm={(confirmation) =>
+              void act(() => client.confirmAgentActivation(caseId, confirmation))
+            }
+          />
+        );
+      default:
+        return null;
+    }
+  }
 
   return (
     <Page
@@ -147,12 +357,63 @@ export function AgentCaseScreen() {
     >
       <SyntheticBanner />
 
+      {run.state === "BLOCKED" && status.blockers.length > 0 && (
+        <div role="alert" className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+          <p className="text-sm font-semibold text-rose-900">{copy.agent.blockersHeading}</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm text-rose-800">
+            {status.blockers.map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {isReady && <ReadyBanner />}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-6">
+      <CaseSummaryCard status={status} currentStageLabel={current?.label ?? ""} />
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="space-y-4">
+          {openDecisions.length > 0 && (
+            <Panel title={copy.agent.decisionsHeading}>
+              <ul className="space-y-4">
+                {openDecisions.map((decision) => (
+                  <DecisionCardView
+                    key={decision.decision_id}
+                    decision={decision}
+                    busy={busy}
+                    onAnswer={(action, value) =>
+                      void act(() =>
+                        client.answerAgentDecision(caseId, {
+                          decision_id: decision.decision_id,
+                          action,
+                          value,
+                        }),
+                      )
+                    }
+                  />
+                ))}
+              </ul>
+            </Panel>
+          )}
+
+          <section aria-label={copy.agent.timelineHeading}>
+            <h2 className="mb-3 text-sm font-semibold text-stone-900">
+              {copy.agent.timelineHeading}
+            </h2>
+            <ol className="space-y-2">
+              {stages.map((stage) => (
+                <StageSection key={stage.key} stage={stage}>
+                  {stage.status !== "future" ? stageBody(stage.key) : null}
+                </StageSection>
+              ))}
+            </ol>
+          </section>
+        </div>
+
+        <aside className="space-y-6">
           <Panel title={copy.agent.conversationHeading}>
-            <ol className="space-y-3">
+            <ol className="max-h-80 space-y-3 overflow-y-auto">
               {run.messages.map((message, index) => (
                 <li
                   key={`${message.at}-${index}`}
@@ -216,188 +477,6 @@ export function AgentCaseScreen() {
             </div>
           </Panel>
 
-          {status.open_decisions.filter((d) => d.status === "open").length > 0 && (
-            <Panel title={copy.agent.decisionsHeading}>
-              <ul className="space-y-4">
-                {status.open_decisions
-                  .filter((decision) => decision.status === "open")
-                  .map((decision) => (
-                    <DecisionCardView
-                      key={decision.decision_id}
-                      decision={decision}
-                      busy={busy}
-                      onAnswer={(action, value) =>
-                        void act(() =>
-                          client.answerAgentDecision(caseId, {
-                            decision_id: decision.decision_id,
-                            action,
-                            value,
-                          }),
-                        )
-                      }
-                    />
-                  ))}
-              </ul>
-            </Panel>
-          )}
-
-          <ClientPanel
-            checklist={onboarding.client_checklist}
-            requests={onboarding.information_requests}
-            busy={busy}
-            onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
-          />
-
-          <Panel title={copy.agent.artefactsHeading}>
-            {run.received_artefacts.length === 0 ? (
-              <>
-                <Empty />
-                <p className="mt-2 text-sm text-stone-500">{copy.agent.uploadHelp}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <label className="cursor-pointer rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">
-                    {copy.agent.uploadButton}
-                    <input
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={(event) => {
-                        const files = Array.from(event.target.files ?? []);
-                        if (files.length > 0) {
-                          void act(() => client.uploadAgentArtefacts(caseId, files));
-                        }
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void act(() => client.generateAgentResponse(caseId))}
-                    className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                  >
-                    {copy.agent.uploadGenerate}
-                  </button>
-                  {run.fixture_id && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void act(() => client.loadAgentFixtureArtefacts(caseId, run.fixture_id))
-                      }
-                      className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                    >
-                      {copy.agent.uploadFixture}
-                    </button>
-                  )}
-                </div>
-              </>
-            ) : (
-              <ul className="space-y-3">
-                {run.received_artefacts.map((artefact) => (
-                  <li
-                    key={artefact.artefact_id}
-                    className="rounded-xl border border-stone-200 px-3 py-2"
-                  >
-                    <p className="text-sm font-medium text-stone-900">{artefact.source_file}</p>
-                    <p className="text-xs text-stone-500">
-                      {artefact.artefact_type
-                        ? humanize(artefact.artefact_type)
-                        : copy.workflow.fileKind}
-                      {artefact.row_count > 0 && ` · ${artefact.row_count} records`}
-                    </p>
-                    <p className="mt-1 break-all text-xs text-stone-400">
-                      {copy.agent.artefactIntended}: {artefact.intended_live_uri || "—"}
-                    </p>
-                    <p className="text-xs font-medium text-violet-700">
-                      {copy.agent.artefactNotWritten}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-
-          <PackPanel
-            status={status}
-            busy={busy}
-            caseId={caseId}
-            onDraft={() => void act(() => client.draftAgentPack(caseId))}
-            onApprove={() => void act(() => client.approveAgentPack(caseId))}
-            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
-          />
-
-          <ReviewPanel
-            status={status}
-            busy={busy}
-            caseId={caseId}
-            onSubmit={() => void act(() => client.requestAgentReview(caseId))}
-            onApprove={() => void act(() => client.approveAgentActivation(caseId))}
-          />
-
-          <ActivationPanel
-            status={status}
-            busy={busy}
-            caseId={caseId}
-            onConfirm={(confirmation) =>
-              void act(() => client.confirmAgentActivation(caseId, confirmation))
-            }
-          />
-
-          <Panel
-            title={copy.agent.previewHeading}
-            action={
-              <button
-                type="button"
-                onClick={() => setShowPreview((prev) => !prev)}
-                className="text-sm font-medium text-blue-700"
-              >
-                {showPreview ? copy.agent.hidePackage : copy.agent.downloadPackage}
-              </button>
-            }
-          >
-            <p className="text-sm text-stone-600">{copy.agent.previewDescription}</p>
-            <p className="mt-1 text-xs font-medium text-violet-700">
-              {copy.agent.previewNothingWritten}
-            </p>
-            {(preview.data?.preview.artefacts ?? []).length === 0 ? (
-              <p className="mt-3 text-sm text-stone-400">{copy.agent.previewNone}</p>
-            ) : showPreview ? (
-              <pre className="mt-3 max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
-                {JSON.stringify(preview.data?.preview, null, 2)}
-              </pre>
-            ) : (
-              <ul className="mt-3 space-y-1 text-sm text-stone-700">
-                {(preview.data?.preview.artefacts ?? []).map((artefact) => (
-                  <li key={artefact.rel}>{artefact.label}</li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-
-          {isReady && (
-            <Panel
-              title={copy.agent.readinessHeading}
-              action={
-                <button
-                  type="button"
-                  onClick={() => setShowPackage((prev) => !prev)}
-                  className="text-sm font-medium text-blue-700"
-                >
-                  {showPackage ? copy.agent.hidePackage : copy.agent.downloadPackage}
-                </button>
-              }
-            >
-              {showPackage && readiness.data?.package ? (
-                <pre className="max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
-                  {JSON.stringify(readiness.data.package, null, 2)}
-                </pre>
-              ) : (
-                <p className="text-sm text-stone-600">{copy.agent.readyHeadline}</p>
-              )}
-            </Panel>
-          )}
-        </div>
-
-        <aside className="space-y-6">
           <Panel title={copy.agent.statusHeading}>
             <Field label={copy.agent.onboardingStageHeading}>
               <StatusChip
@@ -428,59 +507,20 @@ export function AgentCaseScreen() {
             )}
           </Panel>
 
-          <Panel title={copy.agent.gatesHeading}>
-            <ol className="space-y-1">
-              {status.lifecycle
-                .filter((entry) => !["BLOCKED", "CANCELLED"].includes(entry.state))
-                .map((entry) => (
-                  <li
-                    key={entry.state}
-                    data-state={entry.state}
-                    data-current={entry.current ? "true" : "false"}
-                    className={clsx(
-                      "flex items-center gap-2 rounded-lg px-2 py-1 text-sm",
-                      entry.current && "bg-stone-100 font-medium text-stone-900",
-                      !entry.current && entry.reached && "text-stone-600",
-                      !entry.current && !entry.reached && "text-stone-400",
-                    )}
-                  >
-                    {entry.reached && !entry.current ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden />
-                    ) : (
-                      <CircleDot
-                        className={clsx(
-                          "h-4 w-4",
-                          entry.current ? "text-blue-500" : "text-stone-300",
-                        )}
-                        aria-hidden
-                      />
-                    )}
-                    <span>{entry.label}</span>
-                  </li>
-                ))}
-            </ol>
-          </Panel>
-
-          {Object.keys(status.stage_outcomes).length > 0 && (
-            <Panel title={copy.agent.executionHeading}>
-              <ul className="space-y-1">
-                {Object.entries(status.stage_outcomes).map(([stage, outcome]) => (
-                  <li key={stage} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-stone-600">{humanize(stage)}</span>
-                    <span className="text-xs font-medium text-stone-500">
-                      {copy.agent.stageOutcomes[outcome] ?? humanize(outcome)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          )}
+          <ClientPanel
+            checklist={onboarding.client_checklist}
+            requests={onboarding.information_requests}
+            busy={busy}
+            onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
+          />
 
           <Panel title={copy.agent.criteriaHeading}>
             <CriteriaList criteria={status.readiness.criteria} />
           </Panel>
 
-          {status.blockers.length > 0 && (
+          {/* The blocked banner at the top already lists these when the run is
+              BLOCKED; this panel covers blockers recorded in any other state. */}
+          {status.blockers.length > 0 && run.state !== "BLOCKED" && (
             <Panel title={copy.agent.blockersHeading}>
               <ul className="list-disc space-y-1 pl-4 text-sm text-rose-700">
                 {status.blockers.map((blocker) => (
@@ -520,6 +560,42 @@ export function AgentCaseScreen() {
             />
           </Panel>
 
+          <details className="rounded-2xl border border-stone-200 bg-white p-5">
+            <summary className="cursor-pointer text-sm font-semibold text-stone-900">
+              {copy.agent.gatesHeading}
+            </summary>
+            <ol className="mt-3 space-y-1">
+              {status.lifecycle
+                .filter((entry) => !["BLOCKED", "CANCELLED"].includes(entry.state))
+                .map((entry) => (
+                  <li
+                    key={entry.state}
+                    data-state={entry.state}
+                    data-current={entry.current ? "true" : "false"}
+                    className={clsx(
+                      "flex items-center gap-2 rounded-lg px-2 py-1 text-sm",
+                      entry.current && "bg-stone-100 font-medium text-stone-900",
+                      !entry.current && entry.reached && "text-stone-600",
+                      !entry.current && !entry.reached && "text-stone-400",
+                    )}
+                  >
+                    {entry.reached && !entry.current ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden />
+                    ) : (
+                      <CircleDot
+                        className={clsx(
+                          "h-4 w-4",
+                          entry.current ? "text-blue-500" : "text-stone-300",
+                        )}
+                        aria-hidden
+                      />
+                    )}
+                    <span>{entry.label}</span>
+                  </li>
+                ))}
+            </ol>
+          </details>
+
           <Panel title={copy.agent.occLinksHeading}>
             <ul className="space-y-2">
               {status.occ_links.map((link) => (
@@ -539,6 +615,340 @@ export function AgentCaseScreen() {
         </aside>
       </div>
     </Page>
+  );
+}
+
+/** One clear primary action for a stage. */
+function PrimaryButton({
+  busy,
+  onClick,
+  children,
+}: {
+  busy: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={onClick}
+      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The compact structured summary at the top of every case: who this is for,
+ * which mode, where it stands, and — separately — each declared data stream.
+ */
+function CaseSummaryCard({
+  status,
+  currentStageLabel,
+}: {
+  status: AgentStatus;
+  currentStageLabel: string;
+}) {
+  const practice = status.run.mode !== "live";
+  return (
+    <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-5">
+      <dl className="grid gap-x-8 gap-y-1 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-stone-400">
+            {copy.agent.summaryClient}
+          </dt>
+          <dd className="font-medium text-stone-900">
+            {status.onboarding.client_name || status.case_ref}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-stone-400">
+            {copy.agent.summaryMode}
+          </dt>
+          <dd className="font-medium text-stone-900">
+            {practice ? copy.agent.summaryModePractice : copy.agent.summaryModeLive}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-stone-400">
+            {copy.agent.summaryStage}
+          </dt>
+          <dd className="font-medium text-stone-900">{currentStageLabel || "—"}</dd>
+        </div>
+      </dl>
+      <div className="mt-4">
+        <p className="text-xs uppercase tracking-wide text-stone-400">
+          {copy.agent.summaryStreams}
+        </p>
+        {status.streams.length === 0 ? (
+          <p className="mt-1 text-sm text-stone-500">{copy.agent.streamsNone}</p>
+        ) : (
+          <ol className="mt-1 space-y-2">
+            {status.streams.map((stream, index) => (
+              <StreamRow key={stream.source_key || index} stream={stream} index={index} />
+            ))}
+          </ol>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StreamRow({ stream, index }: { stream: StreamSummary; index: number }) {
+  const regime =
+    stream.regime_status === "not_applicable"
+      ? copy.agent.streamRegimeNone
+      : stream.regime_status === "potential"
+        ? copy.agent.streamRegimePotential
+        : stream.regime_status === "configured"
+          ? copy.agent.streamRegimeConfigured
+          : (stream.regime_note || copy.agent.streamRegimeNotEligible);
+  return (
+    <li className="rounded-xl border border-stone-200 px-3 py-2" data-testid={`stream-${stream.dataset}`}>
+      <p className="text-sm font-semibold text-stone-900">
+        {index + 1}. {stream.label}
+      </p>
+      <dl className="mt-1 grid gap-x-6 gap-y-0.5 text-xs text-stone-600 sm:grid-cols-2">
+        <div className="flex gap-1">
+          <dt className="text-stone-400">{copy.agent.streamPurpose}:</dt>
+          <dd>{stream.purpose}</dd>
+        </div>
+        <div className="flex gap-1">
+          <dt className="text-stone-400">{copy.agent.streamCadence}:</dt>
+          <dd>
+            {stream.cadence ? humanize(stream.cadence) : "—"}
+            {stream.cadence && !stream.cadence_confirmed
+              ? `, ${copy.agent.streamCadencePending}`
+              : ""}
+          </dd>
+        </div>
+        <div className="flex gap-1">
+          <dt className="text-stone-400">{copy.agent.streamFile}:</dt>
+          <dd>{stream.required_file || "—"}</dd>
+        </div>
+        <div className="flex gap-1">
+          <dt className="text-stone-400">{copy.agent.streamRegime}:</dt>
+          <dd>{regime}</dd>
+        </div>
+      </dl>
+    </li>
+  );
+}
+
+/** One stage of the timeline: collapsed when done, expanded when current. */
+function StageSection({ stage, children }: { stage: StageInfo; children: ReactNode }) {
+  if (stage.status === "future") {
+    return (
+      <li
+        className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2"
+        data-stage={stage.key}
+        data-stage-status="future"
+      >
+        <Circle className="h-4 w-4 shrink-0 text-stone-300" aria-hidden />
+        <span className="text-sm text-stone-400">{stage.label}</span>
+        {stage.liveOnly && (
+          <span className="text-xs text-stone-400">— {copy.agent.stageLiveOnly}</span>
+        )}
+      </li>
+    );
+  }
+
+  if (stage.status === "done") {
+    return (
+      <li data-stage={stage.key} data-stage-status="done">
+        <details className="rounded-xl border border-stone-200 bg-white">
+          <summary className="flex cursor-pointer items-center gap-3 px-3 py-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" aria-hidden />
+            <span className="text-sm font-medium text-stone-700">{stage.label}</span>
+            {stage.note && <span className="truncate text-xs text-stone-400">{stage.note}</span>}
+            <span className="ml-auto shrink-0 text-xs font-medium text-emerald-600">
+              {copy.agent.stageDone}
+            </span>
+          </summary>
+          {children && <div className="space-y-4 border-t border-stone-100 p-3">{children}</div>}
+        </details>
+      </li>
+    );
+  }
+
+  return (
+    <li
+      className="rounded-2xl border-2 border-blue-200 bg-white p-4"
+      data-stage={stage.key}
+      data-stage-status="current"
+    >
+      <div className="flex items-center gap-3">
+        <CircleDot className="h-5 w-5 shrink-0 text-blue-500" aria-hidden />
+        <span className="text-sm font-semibold text-stone-900">{stage.label}</span>
+        <span
+          className={clsx(
+            "ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+            stage.blocked ? "bg-rose-100 text-rose-800" : "bg-blue-100 text-blue-800",
+          )}
+        >
+          {stage.blocked ? copy.agent.stageBlockedChip : copy.agent.stageCurrent}
+        </span>
+      </div>
+      {stage.note && <p className="mt-1 pl-8 text-sm text-stone-500">{stage.note}</p>}
+      <div className="mt-3 space-y-4">{children}</div>
+    </li>
+  );
+}
+
+/** What the scope stage still needs, in the catalogue's own words. */
+function ScopeBlock({ status }: { status: AgentStatus }) {
+  const missing = status.onboarding.blocking.slice(0, 5);
+  return (
+    <div className="text-sm text-stone-600">
+      {status.streams.length === 0 && <p>{copy.agent.streamsNone}</p>}
+      {missing.length > 0 && (
+        <>
+          <p className="mt-2 font-medium text-stone-700">{copy.agent.stageWhatRemains}</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {missing.map((problem) => (
+              <li key={`${problem.section}-${problem.field}-${problem.index}`}>
+                {problem.message}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="mt-2 text-xs text-stone-500">{copy.agent.newCasePrompt}</p>
+    </div>
+  );
+}
+
+/** Recording what the client sent back, or letting practice mode stand in. */
+function ResponsesBlock({
+  requests,
+  checklist,
+  busy,
+  canAsk,
+  onAsk,
+  onGenerate,
+}: {
+  requests: InformationRequest[];
+  checklist: ChecklistRow[];
+  busy: boolean;
+  canAsk: boolean;
+  onAsk: () => void;
+  onGenerate: () => void;
+}) {
+  const outstanding = requests.filter((r) => ["open", "sent"].includes(r.status));
+  return (
+    <div className="text-sm text-stone-600">
+      {outstanding.length > 0 ? (
+        <p>
+          {outstanding.length} request{outstanding.length === 1 ? "" : "s"}{" "}
+          {copy.agent.requestOutstanding.toLowerCase()}.
+        </p>
+      ) : checklist.length > 0 ? (
+        <p>{checklist.length} item(s) still outstanding from the client.</p>
+      ) : (
+        <p>{copy.agent.checklistEmpty}</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {canAsk && checklist.length > 0 && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onAsk}
+            className="rounded-xl bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {copy.agent.checklistAsk}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onGenerate}
+          className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+        >
+          {copy.agent.uploadGenerate}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The practice files: what has arrived, and the ways to provide it. */
+function ArtefactsPanel({
+  status,
+  busy,
+  onUpload,
+  onGenerate,
+  onFixture,
+}: {
+  status: AgentStatus;
+  busy: boolean;
+  onUpload: (files: File[]) => void;
+  onGenerate: () => void;
+  onFixture: () => void;
+}) {
+  const run = status.run;
+  return (
+    <Panel title={copy.agent.artefactsHeading}>
+      {run.received_artefacts.length === 0 ? (
+        <>
+          <Empty />
+          <p className="mt-2 text-sm text-stone-500">{copy.agent.uploadHelp}</p>
+        </>
+      ) : (
+        <ul className="space-y-3">
+          {run.received_artefacts.map((artefact) => (
+            <li key={artefact.artefact_id} className="rounded-xl border border-stone-200 px-3 py-2">
+              <p className="text-sm font-medium text-stone-900">{artefact.source_file}</p>
+              <p className="text-xs text-stone-500">
+                {artefact.artefact_type
+                  ? humanize(artefact.artefact_type)
+                  : copy.workflow.fileKind}
+                {artefact.row_count > 0 && ` · ${artefact.row_count} records`}
+              </p>
+              <p className="mt-1 break-all text-xs text-stone-400">
+                {copy.agent.artefactIntended}: {artefact.intended_live_uri || "—"}
+              </p>
+              <p className="text-xs font-medium text-violet-700">
+                {copy.agent.artefactNotWritten}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <label className="cursor-pointer rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">
+          {copy.agent.uploadButton}
+          <input
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              if (files.length > 0) onUpload(files);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onGenerate}
+          className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+        >
+          {copy.agent.uploadGenerate}
+        </button>
+        {run.fixture_id && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onFixture}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {copy.agent.uploadFixture}
+          </button>
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -624,6 +1034,11 @@ function PackPanel({
   const [showDocument, setShowDocument] = useState(false);
   const [recipient, setRecipient] = useState("");
   const pack = status.pack;
+  // Tolerant reads: a pack projected by an older backend must degrade to an
+  // empty list, never crash the case page.
+  const sections = pack.sections ?? [];
+  const confirmations = pack.confirmations ?? [];
+  const notAsked = pack.not_asked ?? [];
   const allowed = new Set(status.state.allowed_human_actions ?? []);
   const document = useLoad(() => client.getAgentPack(caseId), [caseId, status.run.version]);
   const recipients = pack.email?.to ?? [];
@@ -632,7 +1047,7 @@ function PackPanel({
     <Panel
       title={copy.agent.packHeading}
       action={
-        pack.sections.length > 0 ? (
+        sections.length > 0 ? (
           <button
             type="button"
             onClick={() => setShowDocument((prev) => !prev)}
@@ -645,7 +1060,7 @@ function PackPanel({
     >
       <p className="text-sm text-stone-600">{copy.agent.packDescription}</p>
 
-      {pack.sections.length === 0 ? (
+      {sections.length === 0 ? (
         <p className="mt-3 text-sm text-stone-400">{copy.agent.packNone}</p>
       ) : (
         <>
@@ -656,7 +1071,7 @@ function PackPanel({
             {pack.summary?.total ? ` (of ${pack.summary.total} fields)` : ""}
           </p>
           <ul className="mt-2 space-y-1 text-sm text-stone-600">
-            {steps(pack.sections).map((step) => (
+            {steps(sections).map((step) => (
               <li key={step.key} className="flex justify-between gap-2">
                 <span>{step.label}</span>
                 <span className="text-xs text-stone-500">
@@ -666,14 +1081,14 @@ function PackPanel({
             ))}
           </ul>
 
-          {pack.confirmations.length > 0 && (
+          {confirmations.length > 0 && (
             <details className="mt-3">
               <summary className="cursor-pointer text-sm font-medium text-stone-700">
-                {copy.agent.packConfirmHeading} ({pack.confirmations.length})
+                {copy.agent.packConfirmHeading} ({confirmations.length})
               </summary>
               <p className="mt-1 text-xs text-stone-500">{copy.agent.packConfirmNote}</p>
               <ul className="mt-1 space-y-0.5 text-sm text-stone-600">
-                {pack.confirmations.map((question) => (
+                {confirmations.map((question) => (
                   <li key={`${question.section}.${question.field}-${question.index}`}>
                     {question.label}: <span className="font-medium">{render(question.value)}</span>
                   </li>
@@ -682,13 +1097,13 @@ function PackPanel({
             </details>
           )}
 
-          {pack.not_asked.length > 0 && (
+          {notAsked.length > 0 && (
             <details className="mt-2">
               <summary className="cursor-pointer text-sm font-medium text-stone-700">
-                {copy.agent.packNotAskedHeading} ({pack.not_asked.length})
+                {copy.agent.packNotAskedHeading} ({notAsked.length})
               </summary>
               <ul className="mt-1 space-y-0.5 text-sm text-stone-600">
-                {pack.not_asked.map((row) => (
+                {notAsked.map((row) => (
                   <li key={row.key}>
                     {row.label} — <span className="text-xs text-stone-500">{row.reason}</span>
                   </li>
@@ -724,9 +1139,15 @@ function PackPanel({
             type="button"
             disabled={busy}
             onClick={onDraft}
-            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+            className={clsx(
+              "rounded-xl px-3 py-1.5 text-sm",
+              sections.length > 0
+                ? "border border-stone-300 font-medium text-stone-700 hover:bg-stone-50"
+                : "bg-blue-600 font-semibold text-white",
+              "disabled:opacity-50",
+            )}
           >
-            {pack.sections.length > 0 ? copy.agent.packRedraft : copy.agent.packDraft}
+            {sections.length > 0 ? copy.agent.packRedraft : copy.agent.packDraft}
           </button>
         )}
         {allowed.has("approve_pack_to_send") && (
@@ -882,7 +1303,7 @@ function ReviewPanel({
             type="button"
             disabled={busy}
             onClick={onSubmit}
-            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+            className="rounded-xl bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {copy.agent.reviewSubmit}
           </button>

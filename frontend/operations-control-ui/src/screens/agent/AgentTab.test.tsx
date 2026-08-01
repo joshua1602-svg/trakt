@@ -207,7 +207,8 @@ describe("OCC Agent tab — the operating loop", () => {
   it("an incomplete case stays blocked and says what is missing", async () => {
     await runScenario("C — Missing mandatory artefact");
     expect(await screen.findByText(copy.agent.blockersHeading)).toBeInTheDocument();
-    expect(screen.getByText(/Primary loan tape/)).toBeInTheDocument();
+    // Named in the blocker AND on the stream summary's required-file row.
+    expect(screen.getAllByText(/Primary loan tape/).length).toBeGreaterThan(0);
     expect(screen.queryByText(copy.agent.readyHeadline)).not.toBeInTheDocument();
   });
 

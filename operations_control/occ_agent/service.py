@@ -366,6 +366,7 @@ class OccAgentService:
             confidence=interpretation.confidence)
         plan.unrecognised.extend(interpretation.unrecognised)
         plan.reporting_period = interpretation.reporting_period
+        plan.streams = list(interpretation.streams)
         plan.expected_artefacts = list(interpretation.expected_artefacts)
         if interpretation.delivery:
             plan.cadence = str(interpretation.delivery.get("cadence") or "")
@@ -404,6 +405,17 @@ class OccAgentService:
             case = self.onboarding.save_step(case_id=case.case_id, step=step,
                                              payload=payload, by=actor)
             written.append(step)
+        if "pipeline" in plan.streams:
+            # A declared pipeline stream becomes its own source registration
+            # beside the funded one Client Onboarding derives for every book —
+            # through the onboarding service's own writer, never a second path.
+            pid = next((str(p.get("portfolio_id") or "")
+                        for p in case.items("portfolios")
+                        if p.get("portfolio_id")), "")
+            if pid:
+                case = self.onboarding.add_pipeline_source(
+                    case_id=case.case_id, portfolio_id=pid, by=actor)
+                written.append("pipeline_book")
         if delivery:
             case = self._apply_delivery(case, delivery, actor)
             written.append("sources")
@@ -499,6 +511,10 @@ class OccAgentService:
         if applied:
             lines.append("Recorded:")
             lines += [f"- {line}" for line in applied]
+        if plan.streams:
+            lines.append("Streams registered separately:")
+            lines += [f"- {_derive.stream_sentence(stream)}"
+                      for stream in plan.streams]
         if plan.reporting_period:
             lines.append(f"- Reporting period: {plan.reporting_period}")
         if plan.unrecognised:
@@ -522,6 +538,11 @@ class OccAgentService:
         sources = [dict(s) for s in case.items("sources")]
         if not sources:
             return case
+        # A source's identity — which book, which dataset — is never a blanket
+        # answer. "They deliver monthly" applies to every registration;
+        # "a funded book" names ONE stream and is handled as one.
+        values = {k: v for k, v in values.items()
+                  if k not in ("dataset", "portfolio_id", "source_key")}
         for source in sources:
             source.update({k: v for k, v in values.items() if v not in
                            (None, "", [])})
@@ -2011,6 +2032,10 @@ class OccAgentService:
                           for s in STEPS],
             },
             "facts": self.facts(agent_case).to_dict(),
+            # One row per source registration: the operational data streams
+            # this onboarding declares, funded and pipeline kept separate.
+            "streams": _derive.stream_summaries(case,
+                                                self.onboarding.catalogue),
             "state": _states.describe(run.state),
             "lifecycle": [
                 {**entry,
@@ -2026,14 +2051,21 @@ class OccAgentService:
             "occ_links": _occ_links(case, run),
             # The client-facing half: what has been drafted, approved and
             # issued, and — honestly — whether anything actually left Trakt.
+            # The drafted pack document is carried WHOLE (confirmations,
+            # not-asked, summary and all): re-projecting a subset here is what
+            # once made the tab render a pack shape the API never sent.
             "pack": {
+                "outstanding": 0,
+                "questions": 0,
+                "sections": [],
+                "email": {},
+                "artefacts": [],
+                "confirmations": [],
+                "not_asked": [],
+                "summary": {},
+                **{k: v for k, v in (run.pack or {}).items()},
                 "status": run.pack_status,
                 "history": run.pack_history,
-                "outstanding": (run.pack or {}).get("outstanding", 0),
-                "questions": (run.pack or {}).get("questions", 0),
-                "sections": (run.pack or {}).get("sections", []),
-                "email": (run.pack or {}).get("email", {}),
-                "artefacts": (run.pack or {}).get("artefacts", []),
                 "mapping_statement": _pack.MAPPING_STATEMENT,
                 "receipt": run.pack_receipt,
                 "sent": bool((run.pack_receipt or {}).get("sent")),

@@ -2,12 +2,12 @@
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
   "manifestVersion": "1.19",
   "version": "2.0.0",
-  "id": "REPLACE-WITH-NEW-GUID",
+  "id": "89c9db43-8ae0-45f6-800f-df9e8fb20dda",
   "developer": {
     "name": "Trakt",
-    "websiteUrl": "https://trakt-mi-api.azurewebsites.net",
-    "privacyUrl": "https://trakt-mi-api.azurewebsites.net",
-    "termsOfUseUrl": "https://trakt-mi-api.azurewebsites.net"
+    "websiteUrl": "https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net",
+    "privacyUrl": "https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net",
+    "termsOfUseUrl": "https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net"
   },
   "name": {
     "short": "Trakt",
@@ -15,7 +15,7 @@
   },
   "description": {
     "short": "Portfolio MI answers and latest Trakt artefacts in Copilot.",
-    "full": "Ask Trakt portfolio MI questions and retrieve the latest generated Trakt artefacts (investor deck, canonical loan tape, mapping report, validation report, ESMA Annex 2 XML). Answers come from Trakt's deterministic MI engine — never model estimation. When a question is better explored interactively, Trakt links you into the Trakt MI Workspace."
+    "full": "Ask Trakt portfolio MI questions and retrieve the latest generated Trakt artefacts (investor deck, canonical loan tape, mapping report, validation report, ESMA Annex 2 XML). Answers come from Trakt's deterministic MI engine \u2014 never model estimation. When a question is better explored interactively, Trakt links you into the Trakt MI Workspace."
   },
   "icons": {
     "color": "color.png",
@@ -31,6 +31,6 @@
     ]
   },
   "validDomains": [
-    "trakt-mi-api.azurewebsites.net"
+    "trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net"
   ]
 }
