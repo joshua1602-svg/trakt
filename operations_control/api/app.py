@@ -87,6 +87,14 @@ from . import onboarding_routes  # noqa: E402  (router needs `app` above)
 
 app.include_router(onboarding_routes.router)
 
+#: Concentration-test governance — extraction, operator review, approval and
+#: versioned activation of the funded-book concentration tests. Same tenancy
+#: and audit model as Client Onboarding; the activated configuration is what
+#: the MI evaluation service reads.
+from . import concentration_routes  # noqa: E402  (router needs `app` above)
+
+app.include_router(concentration_routes.router)
+
 
 def mount_occ_agent(application: FastAPI) -> bool:
     """Mount the OCC Agent tab's routes, when the feature is switched on.

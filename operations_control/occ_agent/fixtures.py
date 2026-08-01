@@ -248,6 +248,15 @@ def _client_response(*, domain: str, country: str = "GB",
         "data_semantics.cut_off_convention":
             "Calendar month end, struck at close of business.",
         "data_semantics.measure_basis": "point_in_time",
+        # The one mandatory concentration-test request. A practice client
+        # answers it the way a real one would — with the covenant wording —
+        # and the operator records it as supplied.
+        "risk_limits.concentration_tests":
+            "Concentration limits under the facility: (a) the aggregate "
+            "Current Balance of Loans secured on Properties located in any "
+            "single region must not exceed 25% of the Portfolio; (b) the "
+            "weighted average Current Loan to Value of the Portfolio must "
+            "not exceed 35%.",
         **extra,
     }
 

@@ -72,6 +72,11 @@ STEPS: Tuple[Dict[str, Any], ...] = (
     {"key": "reporting", "label": "Your reports",
      "help": "What you receive, and how it should look.",
      "sections": ("reporting", "regime", "presentation")},
+    {"key": "covenants", "label": "Your concentration tests",
+     "help": "The portfolio-level tests and covenants your funded book is "
+             "monitored against. Share whatever you have — a facility "
+             "schedule, covenant workbook or a completed limits table.",
+     "sections": ("risk_limits",)},
     {"key": "access", "label": "Who needs access",
      "help": "People at your end who need Trakt, or who receive reports.",
      "sections": ("access",)},

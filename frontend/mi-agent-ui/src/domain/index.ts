@@ -6,6 +6,7 @@ export * from "./pipeline";
 export * from "./guards";
 export * from "./evolution";
 export * from "./riskLimits";
+export * from "./concentrationTests";
 export * from "./forecastExtrapolation";
 export * from "./decks";
 export * from "./cohorts";

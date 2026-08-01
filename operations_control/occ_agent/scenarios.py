@@ -95,6 +95,17 @@ def run_scenario(service: OccAgentService, scenario_or_id, *, tenant: str,
         ("record the client's response", _states.ACTION_RECORD_RESPONSE,
          lambda c: bool(c.case.outstanding_requests),
          lambda c: _respond(service, c, scenario, actor)),
+        # The mandatory concentration-test request is an onboarding-level
+        # control: approval is blocked until an operator records its outcome.
+        # A practice client supplied the covenant wording in the response, so
+        # the operator records it as supplied here, exactly as a real one
+        # would.
+        ("record the concentration-test outcome",
+         _states.ACTION_RECORD_RESPONSE,
+         lambda c: bool(_concentration_response(scenario)),
+         lambda c: service.record_concentration_outcome(
+             c, actor=actor, status="supplied",
+             response_text=_concentration_response(scenario))),
         ("submit the onboarding for approval",
          _states.ACTION_SUBMIT_FOR_APPROVAL,
          lambda c: service.onboarding_readiness(c)["ready"],
@@ -175,6 +186,12 @@ def _pack_recipients(agent_case: AgentCase, scenario: Scenario) -> List[str]:
     known = str(scenario.client_response.get("contacts.reporting_contact_email")
                 or "")
     return [known] if known else []
+
+
+def _concentration_response(scenario: Scenario) -> str:
+    """The covenant wording this practice client supplied, if any."""
+    return str(scenario.client_response.get(
+        "risk_limits.concentration_tests") or "").strip()
 
 
 def _onboarding_holds(service: OccAgentService, agent_case: AgentCase,

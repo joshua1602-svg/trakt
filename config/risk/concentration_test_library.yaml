@@ -1,0 +1,1293 @@
+# ---------------------------------------------------------------------------
+# Governed concentration-test library.
+#
+# This registry declares WHAT a concentration test is: its deterministic
+# evaluator, parameter schema, required canonical fields, aliases and
+# implementation status. It is shared across every client. Client-specific
+# thresholds, operators, filters and effective dates are NOT here — they are
+# versioned, operator-approved configuration produced by the OCC review
+# workflow (mi_agent.concentration_tests.store).
+#
+# Every metric resolves to a registered evaluator in
+# mi_agent/concentration_tests/metrics.py. There is no formula language and no
+# path from client text to executable code: an unsupported test raises a
+# structured implementation request, never an improvised calculation.
+#
+# implementation_status:
+#   implemented    — deterministic evaluator available.
+#   interface_only — governed interface declared; evaluation reports
+#                    external_reference_unconfigured until the required
+#                    external source is configured. Never simulated.
+#   not_implemented — catalogued for matching, but proposals map to
+#                    "unsupported" and raise an implementation request.
+# ---------------------------------------------------------------------------
+schema_version: "1.0.0"
+library_version: "1.0.0"
+owner: Trakt Risk Engineering
+
+# Logical field roles, resolved to the first present-and-populated canonical
+# column at evaluation time (mirrors mi_agent_api.risk_limits._REGION_COLUMNS:
+# readable labels are preferred over regulatory codes so a "South East" test is
+# never silently 0% against a book keyed by ITL3 codes).
+field_roles:
+  balance_current:
+    candidates: [current_outstanding_balance, current_principal_balance]
+    description: Current principal balance of the loan.
+  balance_original:
+    candidates: [original_principal_balance]
+    description: Original / initial principal balance.
+  region:
+    candidates: [collateral_geography, geographic_region_collateral,
+                 geographic_region_obligor]
+    description: Property / collateral region (readable label preferred).
+  country:
+    candidates: [borrower_jurisdiction, country]
+    description: Country of the borrower or collateral.
+  county:
+    candidates: [county, canonical_region_detail]
+    description: County-level geography, where supplied.
+  postcode:
+    candidates: [postcode, property_postcode, property_post_code]
+    description: Property postcode; outward code is derived deterministically.
+  valuation_original:
+    candidates: [original_valuation_amount]
+    description: Original property valuation.
+  valuation_current:
+    candidates: [current_valuation_amount, collateral_value, market_value]
+    description: Current property valuation.
+  valuation_indexed:
+    candidates: [indexed_value]
+    description: Indexed property valuation (requires an approved HPI feed).
+  borrower_id:
+    candidates: [borrower_identifier, borrower_id, unique_borrower_id,
+                 original_obligor_identifier, customer_id]
+    description: Borrower / obligor identifier used for grouping.
+  borrower_age_youngest:
+    candidates: [youngest_borrower_age, borrower_1_age]
+    description: Age of the youngest borrower.
+  borrower_age_oldest:
+    candidates: [oldest_borrower_age, borrower_1_age]
+    description: Age of the oldest borrower.
+  borrower_count:
+    candidates: [number_of_borrowers]
+    description: Number of borrowers on the loan.
+  borrower_structure:
+    candidates: [borrower_structure, borrower_type]
+    description: Single / joint borrower classification.
+  interest_rate:
+    candidates: [current_interest_rate]
+    description: Current customer interest rate (gross coupon).
+  interest_rate_margin:
+    candidates: [current_interest_rate_margin]
+    description: Margin over index, where supplied.
+  rate_type:
+    candidates: [interest_rate_type, rate_type, fixed_or_variable_flag]
+    description: Fixed / variable / rate product classification.
+  product:
+    candidates: [erm_product_type, product_type, loan_sub_type]
+    description: Product classification.
+  payment_option:
+    candidates: [amortisation_type, erm_sub_product_type]
+    description: Payment / interest roll-up option.
+  ltv_current:
+    candidates: [current_loan_to_value]
+    description: Current loan-to-value (normalised to percent).
+  ltv_original:
+    candidates: [original_loan_to_value]
+    description: Original loan-to-value (normalised to percent).
+  ltv_indexed:
+    candidates: [indexed_loan_to_value]
+    description: Indexed loan-to-value (requires an approved HPI feed).
+  days_past_due:
+    candidates: [number_of_days_in_arrears]
+    description: Days past due.
+  arrears_balance:
+    candidates: [arrears_balance]
+    description: Arrears balance.
+  account_status:
+    candidates: [account_status]
+    description: Account status (performing / arrears / default / restructured).
+  default_date:
+    candidates: [default_date]
+    description: Date of default, where defaulted.
+  originator:
+    candidates: [originator_name, originator, original_lender_name]
+    description: Originating lender.
+  seller:
+    candidates: [seller_name]
+    description: Seller / vendor of an acquired book.
+  source_type:
+    candidates: [source_portfolio_type]
+    description: direct vs acquired provenance.
+  source_portfolio:
+    candidates: [source_portfolio_id, portfolio_cohort]
+    description: Source portfolio / cohort identifier.
+  servicer:
+    candidates: [servicer_name]
+    description: Servicer.
+  spv:
+    candidates: [spv_id]
+    description: SPV identifier, where supplied.
+  loan_purpose:
+    candidates: [purpose]
+    description: Loan purpose.
+  broker:
+    candidates: [broker_channel, origination_channel]
+    description: Introducing broker / channel.
+  property_type:
+    candidates: [property_type]
+    description: Property type.
+  tenure:
+    candidates: [tenure, occupancy_type]
+    description: Tenure / occupancy.
+  origination_date:
+    candidates: [origination_date, loan_origination_date]
+    description: Origination date (vintage tests derive the year).
+  loan_id:
+    candidates: [loan_id, loan_identifier, loan_policy_number, account_number]
+    description: Loan identifier for drill-through.
+
+# Shared parameter fragments (documented here; the loader inlines nothing —
+# each metric declares its own schema explicitly so the contract is local).
+denominators: &denominators [current_balance, original_balance, loan_count]
+
+metrics:
+  # ------------------------------------------------------------------- A. Geography
+  - metric_id: geo_region_share
+    canonical_name: exposure_share_by_region
+    display_name: Regional exposure
+    category: geography
+    description: >-
+      Balance-weighted share of the portfolio secured on properties in one or
+      more named regions, as a percentage of the denominator. Combined-region
+      tests (e.g. London plus South East) are this metric with several regions.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans whose region is in `regions`.
+    denominator_options: *denominators
+    required_roles: [region, balance_current]
+    optional_roles: [balance_original]
+    parameters:
+      regions:
+        type: list_string
+        required: true
+        description: Region labels exactly as they appear in the funded tape.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+      balance_basis:
+        type: enum
+        values: [current, original]
+        default: current
+    aliases:
+      - regional concentration
+      - exposure by region
+      - region limit
+      - combined region
+      - london plus south east
+      - east anglia
+      - east midlands
+      - properties located in
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: geo_country_share
+    canonical_name: exposure_share_by_country
+    display_name: Country exposure
+    category: geography
+    description: Balance share in one or more countries.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans whose country is in `countries`.
+    denominator_options: *denominators
+    required_roles: [country, balance_current]
+    parameters:
+      countries: {type: list_string, required: true}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [country concentration, exposure by country, country limit]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: geo_county_share
+    canonical_name: exposure_share_by_county
+    display_name: County exposure
+    category: geography
+    description: Balance share in one or more counties, where county data exists.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans whose county is in `counties`.
+    denominator_options: *denominators
+    required_roles: [county, balance_current]
+    parameters:
+      counties: {type: list_string, required: true}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [county concentration, exposure by county]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: geo_postcode_area_share
+    canonical_name: exposure_share_by_postcode_area
+    display_name: Postcode-area exposure
+    category: geography
+    description: >-
+      Balance share for one or more postcode areas or outward codes, derived
+      deterministically from the property postcode.
+    asset_classes: [cross_asset]
+    evaluator: postcode_area_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans whose postcode area is in `areas`.
+    denominator_options: *denominators
+    required_roles: [postcode, balance_current]
+    parameters:
+      areas:
+        type: list_string
+        required: true
+        description: Postcode areas ("CB") or outward codes ("CB1").
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [postcode concentration, postcode area, outward code]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: geo_largest_region_share
+    canonical_name: largest_geographic_concentration
+    display_name: Largest regional concentration
+    category: geography
+    description: Balance share of the single largest region.
+    asset_classes: [cross_asset]
+    evaluator: largest_group_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: max_group_share
+    numerator: Balance of the largest region by exposure.
+    denominator_options: *denominators
+    required_roles: [region, balance_current]
+    parameters:
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+      exclude_values:
+        type: list_string
+        required: false
+        description: Regions with their own specific limit, to exclude.
+    aliases: [largest geographic concentration, any single region,
+              any other single region, largest region]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: geo_region_count
+    canonical_name: represented_region_count
+    display_name: Represented regions
+    category: geography
+    description: >-
+      Number of distinct regions represented. With operator `min` this is a
+      minimum-diversification test.
+    asset_classes: [cross_asset]
+    evaluator: distinct_group_count
+    unit: count
+    output_precision: 0
+    supported_operators: [max, min]
+    aggregation: count_distinct
+    numerator: Count of distinct regions with exposure.
+    denominator_options: [loan_count]
+    required_roles: [region]
+    parameters:
+      min_share:
+        type: number
+        required: false
+        description: Only count regions holding at least this % of balance.
+    aliases: [number of regions, minimum geographic diversification,
+              represented regions]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  # ------------------------------------------- B. Property and collateral value
+  - metric_id: property_value_below_share
+    canonical_name: valuation_below_amount_share
+    display_name: Low-value property exposure
+    category: property_value
+    description: Balance share of loans whose valuation is below `amount`.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance_numeric
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where valuation < `amount`.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [valuation_original, valuation_current, valuation_indexed]
+    parameters:
+      amount: {type: number, required: true, description: Valuation threshold.}
+      value_basis:
+        type: enum
+        values: [original, current, indexed]
+        default: original
+        description: Which valuation the test reads.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+      comparison: {type: enum, values: [below], default: below}
+    aliases: [original valuation below, property value below, valuation less than,
+              valuation below, low value property]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: property_value_above_share
+    canonical_name: valuation_above_amount_share
+    display_name: High-value property exposure
+    category: property_value
+    description: Balance share of loans whose valuation is above `amount`.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance_numeric
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where valuation > `amount`.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [valuation_original, valuation_current, valuation_indexed]
+    parameters:
+      amount: {type: number, required: true}
+      value_basis:
+        type: enum
+        values: [original, current, indexed]
+        default: original
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+      comparison: {type: enum, values: [above], default: above}
+    aliases: [original valuation above, property value above, valuation in excess of,
+              valuation above, high value property, valuation greater than]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: property_wa_valuation
+    canonical_name: weighted_average_valuation
+    display_name: Weighted average valuation
+    category: property_value
+    description: Balance-weighted average property valuation.
+    asset_classes: [cross_asset]
+    evaluator: weighted_average
+    unit: currency
+    output_precision: 0
+    supported_operators: [max, min]
+    aggregation: weighted_average
+    numerator: Σ(valuation × balance).
+    denominator_options: [current_balance, original_balance]
+    required_roles: [balance_current]
+    optional_roles: [valuation_original, valuation_current]
+    parameters:
+      value_basis: {type: enum, values: [original, current], default: original}
+      weighting:
+        type: enum
+        values: [current_balance, original_balance, unweighted]
+        default: current_balance
+    aliases: [weighted average valuation, weighted average original valuation,
+              weighted average current valuation]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: property_max_value
+    canonical_name: maximum_property_value
+    display_name: Maximum property value
+    category: property_value
+    description: The single largest property valuation in the portfolio.
+    asset_classes: [cross_asset]
+    evaluator: field_maximum
+    unit: currency
+    output_precision: 0
+    supported_operators: [max]
+    aggregation: max
+    numerator: Maximum valuation.
+    denominator_options: []
+    required_roles: []
+    optional_roles: [valuation_original, valuation_current]
+    parameters:
+      value_basis: {type: enum, values: [original, current], default: current}
+    aliases: [maximum property value, largest property value]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: property_largest_exposure_share
+    canonical_name: largest_property_exposure_share
+    display_name: Largest property exposure
+    category: property_value
+    description: >-
+      Balance share of the loan secured on the highest-value property.
+    asset_classes: [cross_asset]
+    evaluator: largest_by_field_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: sum
+    numerator: Balance of the loan with the highest valuation.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [valuation_original, valuation_current]
+    parameters:
+      value_basis: {type: enum, values: [original, current], default: current}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [largest property exposure]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  # ------------------------------------------------ C. Loan and principal balance
+  - metric_id: balance_above_share
+    canonical_name: balance_above_amount_share
+    display_name: Large-loan exposure
+    category: loan_balance
+    description: >-
+      Balance share of loans whose balance (original or current, per
+      `balance_basis`) exceeds `amount`.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance_numeric
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where the basis balance > `amount`.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [balance_original]
+    parameters:
+      amount: {type: number, required: true}
+      balance_basis:
+        type: enum
+        values: [original, current]
+        default: current
+        description: Which balance is compared against `amount`.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+      comparison: {type: enum, values: [above, below], default: above}
+    aliases: [initial principal above, original principal above, balance above,
+              loans greater than, balances in excess of, large loans]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: balance_average
+    canonical_name: average_principal_balance
+    display_name: Average principal balance
+    category: loan_balance
+    description: Simple average balance per loan (original or current basis).
+    asset_classes: [cross_asset]
+    evaluator: field_average
+    unit: currency
+    output_precision: 0
+    supported_operators: [max, min]
+    aggregation: mean
+    numerator: Sum of the basis balance.
+    denominator_options: [loan_count]
+    required_roles: [balance_current]
+    optional_roles: [balance_original]
+    parameters:
+      balance_basis: {type: enum, values: [original, current], default: current}
+    aliases: [average initial principal balance, average original principal,
+              average current balance, average loan size, average balance]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: balance_weighted_average
+    canonical_name: weighted_average_balance
+    display_name: Weighted average balance
+    category: loan_balance
+    description: Balance-weighted average balance, where contractually relevant.
+    asset_classes: [cross_asset]
+    evaluator: weighted_average
+    unit: currency
+    output_precision: 0
+    supported_operators: [max, min]
+    aggregation: weighted_average
+    numerator: Σ(basis balance × weight).
+    denominator_options: [current_balance, original_balance]
+    required_roles: [balance_current]
+    optional_roles: [balance_original]
+    parameters:
+      value_basis: {type: enum, values: [original, current], default: current}
+      weighting:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [weighted average balance]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: balance_maximum
+    canonical_name: maximum_individual_balance
+    display_name: Maximum individual balance
+    category: loan_balance
+    description: The single largest loan balance.
+    asset_classes: [cross_asset]
+    evaluator: field_maximum
+    unit: currency
+    output_precision: 0
+    supported_operators: [max]
+    aggregation: max
+    numerator: Maximum basis balance.
+    denominator_options: []
+    required_roles: [balance_current]
+    optional_roles: [balance_original]
+    parameters:
+      balance_basis: {type: enum, values: [original, current], default: current}
+    aliases: [maximum loan balance, maximum individual balance, largest balance]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: top_n_loans_share
+    canonical_name: top_n_loans_share
+    display_name: Top-N loan concentration
+    category: loan_balance
+    description: >-
+      Balance share of the largest `n` loans. `n = 1` is the largest single
+      loan as a percentage of the portfolio.
+    asset_classes: [cross_asset]
+    evaluator: top_n_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: top_n
+    numerator: Sum of balance of the `n` largest loans.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    parameters:
+      n: {type: integer, required: true, minimum: 1}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [largest loan, largest single loan, top loans, top 10 loans,
+              single loan concentration]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  # ------------------------------------------------- D. Borrower concentration
+  - metric_id: borrower_largest_share
+    canonical_name: largest_borrower_exposure_share
+    display_name: Largest borrower exposure
+    category: borrower
+    description: >-
+      Balance share of the single largest borrower or borrower group.
+    asset_classes: [cross_asset]
+    evaluator: largest_group_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: max_group_share
+    numerator: Balance of the largest borrower by exposure.
+    denominator_options: *denominators
+    required_roles: [borrower_id, balance_current]
+    parameters:
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [largest single borrower, single borrower exposure,
+              borrower concentration, connected borrowers]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: borrower_max_loans
+    canonical_name: maximum_loans_per_borrower
+    display_name: Maximum loans per borrower
+    category: borrower
+    description: The largest number of loans held by any single borrower.
+    asset_classes: [cross_asset]
+    evaluator: max_count_per_group
+    unit: count
+    output_precision: 0
+    supported_operators: [max]
+    aggregation: max_group_count
+    numerator: Loan count of the borrower with the most loans.
+    denominator_options: [loan_count]
+    required_roles: [borrower_id]
+    parameters: {}
+    aliases: [loans per borrower, maximum number of loans per borrower]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: borrower_multi_loan_share
+    canonical_name: multi_loan_borrower_share
+    display_name: Multi-loan borrower exposure
+    category: borrower
+    description: >-
+      Balance share to borrowers holding at least `min_loans` loans.
+    asset_classes: [cross_asset]
+    evaluator: multi_loan_borrower_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: sum
+    numerator: Sum of balance for loans of borrowers with >= `min_loans` loans.
+    denominator_options: *denominators
+    required_roles: [borrower_id, balance_current]
+    parameters:
+      min_loans: {type: integer, required: true, minimum: 2}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [borrowers with more than, multi-loan borrowers,
+              borrowers with at least]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: borrower_joint_share
+    canonical_name: joint_borrower_share
+    display_name: Joint-borrower exposure
+    category: borrower
+    description: >-
+      Balance share of loans with joint borrowers. The joint definition
+      (structure flag vs borrower count) is a governed parameter, not a guess.
+    asset_classes: [cross_asset]
+    evaluator: joint_borrower_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for joint-borrower loans.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [borrower_structure, borrower_count]
+    parameters:
+      joint_basis:
+        type: enum
+        values: [structure_flag, borrower_count]
+        default: structure_flag
+        description: >-
+          structure_flag reads the joint/single classification field;
+          borrower_count treats number_of_borrowers >= 2 as joint.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+      invert:
+        type: boolean
+        default: false
+        description: true measures SINGLE-borrower share instead.
+    aliases: [joint borrowers, joint borrower percentage, single borrowers,
+              sole borrowers]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: borrower_age_share
+    canonical_name: borrower_age_threshold_share
+    display_name: Borrower-age exposure
+    category: borrower
+    description: >-
+      Balance share of loans where the borrower age (youngest or oldest basis)
+      is below or above `age`.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance_numeric
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where the basis age satisfies the comparison.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [borrower_age_youngest, borrower_age_oldest]
+    parameters:
+      age: {type: number, required: true}
+      age_basis:
+        type: enum
+        values: [youngest, oldest]
+        default: youngest
+      comparison: {type: enum, values: [below, above], required: true}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [youngest borrower, oldest borrower, borrower age, borrowers under,
+              borrowers over, aged over, aged under]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  # ------------------------------------- E. Interest rate and product structure
+  - metric_id: rate_gross_wac
+    canonical_name: gross_weighted_average_coupon
+    display_name: Gross WAC
+    category: rate_product
+    description: Balance-weighted average customer coupon (gross).
+    asset_classes: [cross_asset]
+    evaluator: weighted_average
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: weighted_average
+    numerator: Σ(coupon × balance).
+    denominator_options: [current_balance, original_balance]
+    required_roles: [interest_rate, balance_current]
+    parameters:
+      weighting:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [gross wac, weighted average coupon, gross weighted average coupon,
+              portfolio coupon, wac]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: rate_net_wac
+    canonical_name: net_weighted_average_coupon
+    display_name: Net WAC
+    category: rate_product
+    description: >-
+      Balance-weighted average coupon net of a confirmed deduction. "Net" has
+      no default meaning: the deduction basis (servicing only, or servicing
+      plus hedging/funding) must be confirmed at onboarding and is applied as
+      an explicit, governed parameter — never inferred.
+    asset_classes: [cross_asset]
+    evaluator: weighted_average
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: weighted_average
+    numerator: Σ((coupon − deduction) × balance).
+    denominator_options: [current_balance, original_balance]
+    required_roles: [interest_rate, balance_current]
+    parameters:
+      deduction_percent:
+        type: number
+        required: true
+        description: >-
+          Confirmed annual deduction in percentage points (e.g. 0.50 for a
+          50bp servicing fee).
+      deduction_basis:
+        type: enum
+        values: [servicing_fee_only, servicing_hedging_funding, other_confirmed]
+        required: true
+        description: What the confirmed deduction represents.
+      weighting:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [net wac, net weighted average coupon, net coupon, net margin]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: rate_type_share
+    canonical_name: rate_type_share
+    display_name: Rate-type exposure
+    category: rate_product
+    description: >-
+      Balance share of loans whose rate type is in `values` (fixed-rate or
+      variable-rate concentration).
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where rate type matches.
+    denominator_options: *denominators
+    required_roles: [rate_type, balance_current]
+    parameters:
+      values:
+        type: list_string
+        required: true
+        description: Rate-type values, matched case-insensitively by token
+          ("fixed", "variable", "floating"...).
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [fixed rate concentration, variable rate concentration,
+              floating rate, bearing a variable rate]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: product_type_share
+    canonical_name: product_type_share
+    display_name: Product-type exposure
+    category: rate_product
+    description: Balance share of one or more product types.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where the product is in `values`.
+    denominator_options: *denominators
+    required_roles: [product, balance_current]
+    parameters:
+      values: {type: list_string, required: true}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [product concentration, product type concentration]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: payment_option_share
+    canonical_name: payment_option_share
+    display_name: Payment-option exposure
+    category: rate_product
+    description: >-
+      Balance share by payment / interest roll-up option, where the canonical
+      field is supplied.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where the payment option is in `values`.
+    denominator_options: *denominators
+    required_roles: [payment_option, balance_current]
+    parameters:
+      values: {type: list_string, required: true}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [interest roll-up, payment option, serviced interest]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  # ---------------------------------------------- F. LTV and collateralisation
+  - metric_id: ltv_above_share
+    canonical_name: ltv_above_threshold_share
+    display_name: LTV band exposure
+    category: ltv
+    description: >-
+      Balance share of loans with LTV (original / current / indexed basis)
+      above `ltv_percent`. LTV values are normalised to percent.
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance_numeric
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where the basis LTV > `ltv_percent`.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [ltv_original, ltv_current, ltv_indexed]
+    parameters:
+      ltv_percent: {type: number, required: true}
+      ltv_basis:
+        type: enum
+        values: [original, current, indexed]
+        default: current
+      comparison: {type: enum, values: [above, below], default: above}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [ltv above, loans above ltv, ltv concentration, ltv band]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: ltv_weighted_average
+    canonical_name: weighted_average_ltv
+    display_name: Weighted average LTV
+    category: ltv
+    description: Balance-weighted average LTV (original / current / indexed basis).
+    asset_classes: [cross_asset]
+    evaluator: weighted_average
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: weighted_average
+    numerator: Σ(LTV × balance).
+    denominator_options: [current_balance, original_balance]
+    required_roles: [balance_current]
+    optional_roles: [ltv_original, ltv_current, ltv_indexed]
+    parameters:
+      ltv_basis:
+        type: enum
+        values: [original, current, indexed]
+        default: current
+      weighting:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [weighted average ltv, wa ltv, portfolio ltv,
+              weighted average current loan to value]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: ltv_maximum
+    canonical_name: maximum_individual_ltv
+    display_name: Maximum individual LTV
+    category: ltv
+    description: The highest single-loan LTV on the chosen basis.
+    asset_classes: [cross_asset]
+    evaluator: field_maximum
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: max
+    numerator: Maximum basis LTV.
+    denominator_options: []
+    required_roles: []
+    optional_roles: [ltv_original, ltv_current, ltv_indexed]
+    parameters:
+      ltv_basis:
+        type: enum
+        values: [original, current, indexed]
+        default: current
+    aliases: [maximum ltv, no loan may have a loan to value greater than,
+              per-loan ltv cap]
+    composable: false
+    implementation_status: implemented
+    version: "1.0"
+
+  # ------------------------------------------------------------ G. Performance
+  - metric_id: perf_arrears_share
+    canonical_name: arrears_balance_share
+    display_name: Arrears exposure
+    category: performance
+    description: >-
+      Balance share of loans in arrears — either any positive arrears balance,
+      or days past due above `min_days`.
+    asset_classes: [cross_asset]
+    evaluator: arrears_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: sum
+    numerator: Sum of balance for loans meeting the arrears definition.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    optional_roles: [days_past_due, arrears_balance]
+    parameters:
+      min_days:
+        type: number
+        required: false
+        description: Days-past-due threshold; omitted means any arrears balance.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [arrears concentration, loans in arrears, days past due,
+              delinquent loans, dpd]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: perf_status_share
+    canonical_name: account_status_share
+    display_name: Account-status exposure
+    category: performance
+    description: >-
+      Balance share of loans whose account status is in `values` (default,
+      restructured, non-performing...).
+    asset_classes: [cross_asset]
+    evaluator: share_of_balance
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: sum
+    numerator: Sum of balance where the account status matches.
+    denominator_options: *denominators
+    required_roles: [account_status, balance_current]
+    parameters:
+      values: {type: list_string, required: true}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [default concentration, restructuring concentration,
+              non-performing exposure, npe, defaulted loans, restructured loans]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: perf_cumulative_loss_share
+    canonical_name: cumulative_loss_share
+    display_name: Cumulative loss
+    category: performance
+    description: >-
+      Cumulative realised losses as a share of original balance. Requires a
+      loss field or realised-loss history the canonical dataset does not yet
+      carry.
+    asset_classes: [cross_asset]
+    evaluator: null
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: sum
+    numerator: Cumulative realised losses.
+    denominator_options: [original_balance]
+    required_roles: []
+    parameters: {}
+    aliases: [cumulative loss, realised losses, loss concentration]
+    composable: false
+    implementation_status: not_implemented
+    version: "1.0"
+
+  - metric_id: perf_prepayment_share
+    canonical_name: redemption_share
+    display_name: Redemption / prepayment
+    category: performance
+    description: >-
+      Period redemption or prepayment rate. Requires flow data between
+      snapshots; catalogued for matching, implemented when the redemption
+      workflow supplies governed flows.
+    asset_classes: [cross_asset]
+    evaluator: null
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Redeemed balance in the period.
+    denominator_options: [current_balance]
+    required_roles: []
+    parameters: {}
+    aliases: [redemption rate, prepayment rate, cpr]
+    composable: false
+    implementation_status: not_implemented
+    version: "1.0"
+
+  # ---------------------------- H. Portfolio composition and diversification
+  - metric_id: composition_dimension_share
+    canonical_name: composition_dimension_share
+    display_name: Composition exposure
+    category: composition
+    description: >-
+      Balance share of loans whose value on a governed composition dimension
+      (originator, seller, source type, servicer, SPV, loan purpose, property
+      type, tenure) is in `values`.
+    asset_classes: [cross_asset]
+    evaluator: dimension_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance where the dimension value matches.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    parameters:
+      dimension:
+        type: enum
+        values: [originator, seller, source_type, source_portfolio, servicer,
+                 spv, loan_purpose, property_type, tenure, product,
+                 payment_option, rate_type]
+        required: true
+        description: The governed field role the test groups on.
+      values: {type: list_string, required: true}
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [originator concentration, seller concentration, spv concentration,
+              servicing concentration, servicer concentration,
+              direct versus acquired, acquisition source, loan purpose,
+              property type concentration, tenure concentration,
+              acquired book share]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: composition_largest_group_share
+    canonical_name: composition_largest_group_share
+    display_name: Largest composition group
+    category: composition
+    description: >-
+      Balance share of the single largest group on a governed composition
+      dimension (largest originator, largest servicer, ...).
+    asset_classes: [cross_asset]
+    evaluator: largest_group_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max]
+    aggregation: max_group_share
+    numerator: Balance of the largest group by exposure.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    parameters:
+      dimension:
+        type: enum
+        values: [originator, seller, source_type, source_portfolio, servicer,
+                 spv, loan_purpose, property_type, tenure, product, region,
+                 broker]
+        required: true
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [largest originator, largest seller, largest servicer,
+              single broker, largest broker, any single originator]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: composition_vintage_share
+    canonical_name: vintage_share
+    display_name: Vintage exposure
+    category: composition
+    description: >-
+      Balance share of loans originated in the named years (vintage /
+      origination-year concentration).
+    asset_classes: [cross_asset]
+    evaluator: vintage_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans originated in `years`.
+    denominator_options: *denominators
+    required_roles: [origination_date, balance_current]
+    parameters:
+      years:
+        type: list_string
+        required: true
+        description: Origination years, e.g. ["2023", "2024"].
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [vintage concentration, origination year, originated in]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  # ---------------------------------- I. Index and external-reference tests
+  - metric_id: index_hpi_ratio
+    canonical_name: hpi_index_ratio
+    display_name: House-price-index ratio
+    category: external_index
+    description: >-
+      Current HPI index value divided by the index value at the reference
+      date, as a percentage. A governed interface: it evaluates only when an
+      approved external index source, series, geography mapping and base date
+      have been configured. It is never simulated and never defaults.
+    asset_classes: [cross_asset]
+    evaluator: external_index_ratio
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: ratio
+    numerator: Index value at the reporting date.
+    denominator_options: [reference_index_value]
+    required_roles: []
+    parameters:
+      index_source:
+        type: string
+        required: true
+        description: Approved external index source identifier.
+      index_series:
+        type: string
+        required: true
+        description: Series within the source (e.g. UK all-property NSA).
+      geography_mapping:
+        type: string
+        required: false
+        description: How portfolio geography maps to index geography.
+      reference_date:
+        type: date
+        required: true
+        description: The base / closing date the ratio is measured against.
+    aliases: [house price index, hpi, index ratio, hpi decline, index change,
+              current hpi divided by]
+    composable: false
+    implementation_status: interface_only
+    version: "1.0"
+
+  # ------------------------------------------------------------- J. Primitives
+  # The generic reusable primitives are the evaluators themselves
+  # (share_of_balance, share_of_balance_numeric, weighted_average, field_average,
+  # field_maximum, field_minimum, top_n_share, largest_group_share,
+  # distinct_group_count, max_count_per_group, multi_loan_borrower_share,
+  # dimension_share). Composition happens by parameterising a registered
+  # metric — combined categories through list parameters, filtered populations
+  # through segment_filters — and stays governed: there is deliberately no
+  # metric whose parameters accept an expression or formula.
+  - metric_id: primitive_filtered_share
+    canonical_name: filtered_balance_share
+    display_name: Filtered exposure share
+    category: primitive
+    description: >-
+      Governed composition primitive: balance share of loans matching a set of
+      approved field filters (categorical values and/or numeric ranges). Used
+      by the review workflow to compose tests that have no narrower metric;
+      every filter names a governed field role — arbitrary expressions are
+      rejected at validation.
+    asset_classes: [cross_asset]
+    evaluator: filtered_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans matching every filter.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    parameters:
+      filters:
+        type: filter_list
+        required: true
+        description: >-
+          List of {role, values} or {role, min, max} filters over governed
+          field roles.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: []
+    composable: true
+    implementation_status: implemented
+    version: "1.0"

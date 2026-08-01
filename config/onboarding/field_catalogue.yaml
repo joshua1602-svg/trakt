@@ -712,6 +712,88 @@ sections:
         amendable: true
 
   # -----------------------------------------------------------------------
+  # Concentration tests and portfolio covenants. ONE mandatory request, not a
+  # questionnaire: the client shares whatever they have (schedule, workbook,
+  # monitoring template or a completed limits table) and the OCC extraction
+  # workflow derives the detail after inspection. Narrow follow-up questions
+  # are generated only where a contractual definition stays unresolved.
+  # The completion status is an operator decision — a blank answer can never
+  # masquerade as done (enforced structurally in onboarding/validation.py).
+  # -----------------------------------------------------------------------
+  - key: risk_limits
+    label: Concentration tests and covenants
+    help: >-
+      The portfolio-level tests the funded book is monitored against. Supplied
+      once at onboarding; each test is then reviewed, approved and versioned
+      before it becomes an active control on the Risk Limits dashboard.
+    fields:
+
+      - key: concentration_tests
+        # Funded-book monitoring only exists where the client takes an MI
+        # surface; a pure-regulatory onboarding is not asked.
+        asked_when: "reporting.products contains mi"
+        label: Concentration tests and eligibility limits
+        help: >-
+          Please share all applicable concentration tests, eligibility limits
+          and portfolio-level covenants, including their thresholds and
+          calculation definitions. You may provide the relevant facility
+          schedule, covenant workbook, monitoring workbook or a completed
+          limits table. Where known, include for each test: the test name;
+          threshold; comparison direction; calculation definition; numerator;
+          denominator; aggregation or weighting basis; relevant segmentation;
+          effective date; and any cure, waiver or reporting provisions.
+        scope: risk
+        source: client_supplied
+        type: multiline
+        required: false
+        # Required exactly when the operator records the request as supplied —
+        # the status below is the completion control, and "supplied" with a
+        # blank answer must block.
+        required_when: "risk_limits.concentration_tests_status == supplied"
+        max_length: 20000
+        consumers: [Concentration-test proposals, Risk Limits dashboard,
+                    MI Query, Copilot]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: concentration_tests_status
+        asked_when: "reporting.products contains mi"
+        label: Concentration tests status
+        help: >-
+          Where the concentration-test request stands. Only an operator moves
+          it off "pending client response", and approval is blocked until it
+          is resolved — supplied, confirmed not applicable, or explicitly
+          deferred with a reason.
+        scope: risk
+        source: operator_supplied
+        type: enum
+        options: [pending_client_response, supplied, not_applicable,
+                  deferred_with_reason]
+        default: pending_client_response
+        required: false
+        # Mandatory exactly where the request is asked: every MI client.
+        required_when: "reporting.products contains mi"
+        consumers: [Onboarding readiness, Concentration-test proposals]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: concentration_tests_status_reason
+        asked_when: "reporting.products contains mi"
+        label: Status reason
+        help: >-
+          Why the request is not applicable or deferred — recorded with the
+          operator decision.
+        scope: risk
+        source: operator_supplied
+        type: multiline
+        required: false
+        required_when: "risk_limits.concentration_tests_status in [not_applicable, deferred_with_reason]"
+        max_length: 2000
+        consumers: [Onboarding record, audit]
+        writes_to: onboarding_record
+        amendable: true
+
+  # -----------------------------------------------------------------------
   # Regime standing data. The fields themselves are declared per product in
   # config/regime/onboarding_standing_fields.yaml so that a future regime is a
   # configuration change; this section tells the wizard where to render them.

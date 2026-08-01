@@ -780,6 +780,50 @@ class OccAgentService:
                             "form_hash": form.content_hash})
         return agent_case
 
+    def record_concentration_outcome(self, agent_case: AgentCase, *,
+                                     actor: str, status: str,
+                                     response_text: str = "",
+                                     reason: str = "") -> AgentCase:
+        """Record the operator's decision on the concentration-test request.
+
+        The request is mandatory at the onboarding-control level: approval is
+        blocked while it sits at ``pending_client_response``, and only an
+        operator moves it — to ``supplied`` (with the client's actual
+        response), ``not_applicable`` or ``deferred_with_reason`` (each with a
+        reason). A blank answer can never be recorded as supplied; the
+        catalogue's ``required_when`` and the structural validation rule both
+        refuse it.
+        """
+        allowed = ("supplied", "not_applicable", "deferred_with_reason",
+                   "pending_client_response")
+        if status not in allowed:
+            raise OpsError("OCC_AGENT_INVALID_STATUS",
+                           f"'{status}' is not a concentration-test status.",
+                           http_status=400)
+        if status == "supplied" and not response_text.strip():
+            raise OpsError("OCC_AGENT_BLANK_SUPPLIED",
+                           "A blank answer cannot be recorded as supplied.",
+                           http_status=400)
+        payload: Dict[str, Any] = {"concentration_tests_status": status}
+        if response_text.strip():
+            payload["concentration_tests"] = response_text
+        if reason.strip():
+            payload["concentration_tests_status_reason"] = reason
+        agent_case.case = self.onboarding.save_step(
+            case_id=agent_case.case_ref, step="risk_limits", payload=payload,
+            by=actor)
+        if response_text.strip():
+            agent_case.case = self._mark_client_supplied(
+                agent_case.case, ["risk_limits.concentration_tests"], actor)
+        self._audit(agent_case.run, "concentration_outcome_recorded",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_DETERMINISTIC,
+                    decision_basis=f"operator recorded the request as "
+                                   f"{status}",
+                    detail={"status": status, "reason": reason,
+                            "response_chars": len(response_text)})
+        return agent_case
+
     def _close_request(self, agent_case: AgentCase, request_id: str,
                        actor: str) -> AgentCase:
         """Mark the information request this response answers as reviewed."""
