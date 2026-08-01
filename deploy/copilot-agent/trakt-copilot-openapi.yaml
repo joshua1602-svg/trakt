@@ -15,7 +15,7 @@ info:
     outputs — never from model estimation.
   version: 2.0.0
 servers:
-  - url: https://trakt-mi-api.azurewebsites.net
+  - url: https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net
     description: Trakt MI API (set to your deployment URL before packaging)
 security:
   - entraBearer: []
@@ -116,7 +116,7 @@ components:
           authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
           tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
-            api://TRAKT-COPILOT-APP-ID/Trakt.Copilot: Call Trakt Copilot actions
+            api://42da54dc-bfb0-49b9-8c6b-e5265e91a802/Trakt.Copilot: Call Trakt Copilot actions
   responses:
     Unauthorized:
       description: Missing or invalid bearer token.
