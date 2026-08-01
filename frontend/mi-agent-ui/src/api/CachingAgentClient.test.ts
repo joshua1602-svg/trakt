@@ -36,6 +36,7 @@ function fakeClient(response: AgentResponse): { client: AgentClient; ask: Return
     getConcentrationTests: vi.fn(),
     getConcentrationDrillthrough: vi.fn(),
     getConcentrationHistory: vi.fn(),
+    getConcentrationDrivers: vi.fn(),
     getForecastExtrapolation: vi.fn(),
     getCohortProgression: vi.fn(),
     getMe: vi.fn(),

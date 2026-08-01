@@ -125,6 +125,73 @@ def _resolve_frames(output_root, client_id: str, to_run_id: Optional[str],
     return df, prior_df, reporting_date, prior_reporting_date, run_id
 
 
+def _resolve_pipeline(client_id: str, to_run_id: Optional[str], scope=None
+                      ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+    """The current governed pipeline frame + forecast methodology metadata.
+
+    Reuses the SAME resolution the forecast views use: `datasets` discovers the
+    latest weekly extract and prepares it with the historical completion model
+    (empirical stage rates over the retained weekly-snapshot window, config
+    fallback below the sufficiency floor). Returns (None, meta-with-reason)
+    whenever a forward state cannot be governed — never a guess.
+    """
+    meta: Dict[str, Any] = {"available": False}
+    context_id = getattr(scope, "context_id", None) if scope is not None else None
+    if context_id not in (None, "", "total"):
+        meta["reason"] = (
+            "Forward-looking states are evaluated for the total book only: "
+            "pipeline exposure carries no portfolio provenance, so it cannot "
+            "be narrowed to this portfolio context. Funded results are "
+            "unaffected.")
+        return None, meta
+    try:
+        from . import datasets as datasets_mod
+        source = datasets_mod._resolve_pipeline_source(client_id, to_run_id)
+        if source is None:
+            meta["reason"] = "No governed pipeline source found for this client."
+            return None, meta
+        model = datasets_mod._pipeline_history(client_id)
+        from . import pipeline_contract as pipeline_mod
+        from .pipeline_history import historical_model_evidence
+        df, report = pipeline_mod.load_prepared_pipeline(
+            source, historical_model=model)
+        basis = (report or {}).get("completion_probability_basis") or \
+            (report or {}).get("completionProbabilityBasis")
+        evidence = historical_model_evidence(model, basis)
+        m = model or {}
+        meta = {
+            "available": True,
+            "methodology": "completion_trend_model",
+            "methodologyVersion": "1",
+            "basis": basis,
+            "observationWindowStart": evidence.get("observationWindowStart"),
+            "observationWindowEnd": evidence.get("observationWindowEnd"),
+            "weeklyExtractsUsed": evidence.get("uniqueWeeklyExtractsUsed"),
+            "trackedCaseCount": evidence.get("trackedCaseCount"),
+            "observedCompletionCount": evidence.get("observedCompletionCount"),
+            "minObservations": m.get("minObservations"),
+            "stagesUsingHistoricalRates": evidence.get("stagesUsingHistoricalRates"),
+            "stagesUsingConfigFallback": evidence.get("stagesUsingConfigFallback"),
+            "stageRates": m.get("historicalCompletionRateByStage"),
+            "stageTiming": m.get("historicalCompletionTimingByStage"),
+            "excludedStageCounts": evidence.get("excludedStageCounts"),
+            "currentSnapshot": (source.get("source_file")
+                                if isinstance(source, dict) else str(source)),
+            "pipelineAsOfDate": (source.get("pipeline_as_of_date")
+                                 if isinstance(source, dict) else None),
+            "pointInTimeSafe": False,
+            "pointInTimeNote": (
+                "Stage rates are built from the currently retained weekly "
+                "extracts; historical expected-state comparisons are "
+                "unavailable until point-in-time snapshots are persisted."),
+        }
+        return df, meta
+    except Exception as exc:  # noqa: BLE001 - forward states fail closed
+        logger.warning("pipeline resolution for concentration failed: %s", exc)
+        meta["reason"] = f"The governed pipeline could not be prepared: {exc}"
+        return None, meta
+
+
 def _active_configuration(client_id: str
                           ) -> Tuple[Optional[ActiveConfiguration], str]:
     """(configuration, note). Absent or unreachable → (None, why)."""
@@ -256,11 +323,29 @@ def compute_concentration_tests(output_root, client_id: str,
             df, prior_df, config, lib,
             reporting_date=reporting_date or "",
             prior_reporting_date=prior_reporting_date or "")
+        # Forward-looking states: Expected Forecast (existing completion-trend
+        # model) and Full Pipeline (maximum-exposure stress). Additive — the
+        # funded fields above are never touched; absence is explicit.
+        pipeline_df, forecast_meta = _resolve_pipeline(client_id, to_run_id,
+                                                       scope=scope)
+        if pipeline_df is not None:
+            from mi_agent.concentration_tests import forward as forward_mod
+            evaluated = forward_mod.extend_with_forward_states(
+                evaluated, config, lib, df, pipeline_df,
+                forecast_meta=forecast_meta)
+        else:
+            evaluated["states"] = {"available": False,
+                                   "reason": forecast_meta.get("reason")}
+            evaluated["emergingRisks"] = []
+            from mi_agent.concentration_tests import forward as forward_mod
+            evaluated["emergingRisks"] = forward_mod.identify_emerging_risks(
+                evaluated.get("tests", []))
         return {
             **base,
             "available": bool(evaluated["tests"]),
             "source": SOURCE_APPROVED,
             "approvalStatus": "approved",
+            "forecast": forecast_meta,
             **evaluated,
             "lineage": {
                 "source": SOURCE_APPROVED,
@@ -354,6 +439,43 @@ def compute_drillthrough(output_root, client_id: str, to_run_id: Optional[str],
     out = _drillthrough(df, lib, test, max_rows=max_rows)
     out["reportingDate"] = reporting_date
     out["configurationVersion"] = config.version
+    return out
+
+
+def compute_pipeline_drivers(output_root, client_id: str,
+                             to_run_id: Optional[str], test_id: str, *,
+                             scope=None) -> Dict[str, Any]:
+    """Pipeline cases driving one test's expected movement. Approved
+    configurations only; reconciles to the expected numerator by construction."""
+    config, note = _active_configuration(client_id)
+    if config is None:
+        return {"available": False,
+                "reason": ("Pipeline drivers are available for approved "
+                           "concentration tests only. " + note).strip(),
+                "drivers": []}
+    df, _prior, reporting_date, _pd_, _run = _resolve_frames(
+        output_root, client_id, to_run_id, scope=scope)
+    pipeline_df, forecast_meta = _resolve_pipeline(client_id, to_run_id,
+                                                   scope=scope)
+    if pipeline_df is None:
+        return {"available": False,
+                "reason": forecast_meta.get("reason", "No governed pipeline."),
+                "drivers": []}
+    lib = load_library()
+    evaluated = evaluate_active_tests(df, None, config, lib,
+                                      reporting_date=reporting_date or "")
+    row = next((t for t in evaluated["tests"] if t["testId"] == test_id), None)
+    if row is None:
+        return {"available": False,
+                "reason": "That test is not in the active configuration.",
+                "drivers": []}
+    from mi_agent.concentration_tests import forward as forward_mod
+    out = forward_mod.compute_drivers_for_test(config, lib, test_id, df,
+                                               pipeline_df, row)
+    out["reportingDate"] = reporting_date
+    out["forecast"] = {k: forecast_meta.get(k) for k in
+                       ("methodology", "basis", "observationWindowStart",
+                        "observationWindowEnd", "weeklyExtractsUsed")}
     return out
 
 

@@ -17,6 +17,7 @@ import type {
   PipelineEvolution,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
+  ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
   RiskLimitsSnapshot,
@@ -36,6 +37,7 @@ import { mockGeoExposure } from "@/data/mockGeoExposure";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import {
   mockConcentrationDrillthrough,
+  mockConcentrationDrivers,
   mockConcentrationHistory,
   mockConcentrationTests,
 } from "@/data/mockConcentrationTests";
@@ -155,6 +157,11 @@ export class MockAgentClient implements AgentClient {
   getConcentrationHistory(portfolioId: string, testId?: string):
       Promise<ConcentrationHistory> {
     return Promise.resolve(mockConcentrationHistory(portfolioId, testId));
+  }
+
+  getConcentrationDrivers(portfolioId: string, testId: string):
+      Promise<ConcentrationDrivers> {
+    return Promise.resolve(mockConcentrationDrivers(portfolioId, testId));
   }
 
   getForecastExtrapolation(portfolioId: string): Promise<ForecastExtrapolation> {

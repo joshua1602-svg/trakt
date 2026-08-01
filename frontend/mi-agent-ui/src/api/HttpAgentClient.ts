@@ -21,6 +21,7 @@ import type {
   PipelineEvolution,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
+  ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
   RiskLimitsSnapshot,
@@ -225,6 +226,14 @@ export class HttpAgentClient implements AgentClient {
                           signal?: AbortSignal): Promise<ConcentrationHistory> {
     return this.getJson<ConcentrationHistory>(
       `/mi/concentration-tests/history?${this.scoped(portfolioId, portfolioContext, { testId })}`,
+      signal);
+  }
+
+  getConcentrationDrivers(portfolioId: string, testId: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ConcentrationDrivers> {
+    return this.getJson<ConcentrationDrivers>(
+      `/mi/concentration-tests/drivers?${this.scoped(portfolioId, portfolioContext, { testId })}`,
       signal);
   }
 

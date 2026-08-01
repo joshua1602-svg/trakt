@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { AgentClient } from "@/api/AgentClient";
 import {
   mockConcentrationDrillthrough,
+  mockConcentrationDrivers,
   mockConcentrationHistory,
   mockConcentrationTests,
 } from "@/data/mockConcentrationTests";
@@ -46,6 +47,8 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
       mockConcentrationDrillthrough("client_001", testId)),
     getConcentrationHistory: vi.fn(async (_p: string, testId?: string) =>
       mockConcentrationHistory("client_001", testId)),
+    getConcentrationDrivers: vi.fn(async (_p: string, testId: string) =>
+      mockConcentrationDrivers("client_001", testId)),
     getForecastExtrapolation: vi.fn(),
     getCohortProgression: vi.fn(),
     getMe: vi.fn(),
@@ -58,11 +61,18 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
 }
 
 describe("RiskLimitsWorkspace", () => {
-  it("renders the governed summary with counts and reporting dates", async () => {
+  it("renders the state-grouped summary with counts and reporting dates", async () => {
     render(<RiskLimitsWorkspace client={client()} portfolioId="client_001/mi_2025_11" />);
     await screen.findByTestId("concentration-summary");
-    expect(screen.getByTestId("concentration-overall")).toHaveTextContent("Breach");
     expect(screen.getByTestId("concentration-breaches")).toHaveTextContent("1");
+    expect(screen.getByTestId("concentration-breaches")).toHaveTextContent("contractual");
+    expect(screen.getByTestId("concentration-expected-breaches")).toHaveTextContent("2");
+    expect(screen.getByTestId("concentration-expected-breaches")).toHaveTextContent(
+      "prediction",
+    );
+    expect(screen.getByTestId("concentration-stress-breaches")).toHaveTextContent(
+      "stress — max exposure",
+    );
     expect(screen.getByTestId("concentration-deteriorations")).toHaveTextContent("2");
     expect(screen.getByText(/Reporting date 2025-11-30/)).toBeInTheDocument();
     expect(screen.getByText(/prior 2025-10-31/)).toBeInTheDocument();
@@ -90,15 +100,99 @@ describe("RiskLimitsWorkspace", () => {
     expect(hpi).toHaveTextContent("—");
   });
 
-  it("shows period change and the prior → current status transition", async () => {
+  it("shows all three states with funded-to-expected movement per row", async () => {
     render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
     const table = await screen.findByTestId("concentration-table");
     const row = within(table).getByRole("button", {
       name: /London \+ South East/,
     });
-    expect(row).toHaveTextContent("+3.70pp");
-    expect(row).toHaveTextContent("Pass");
-    expect(row).toHaveTextContent("Warning");
+    expect(row).toHaveTextContent("47.90%"); // Funded (contractual)
+    expect(row).toHaveTextContent("49.20%"); // Expected Forecast
+    expect(row).toHaveTextContent("hd 0.8pp"); // expected headroom
+    expect(row).toHaveTextContent("52.10%"); // Full Pipeline (stress)
+    expect(row).toHaveTextContent("+1.30pp"); // Move F→E
+    expect(row).toHaveTextContent("LOW HEADROOM"); // service risk classification
+  });
+
+  it("renders the service-ranked emerging risks verbatim", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const risks = await screen.findByTestId("emerging-risks");
+    const items = within(risks).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("BREACH");
+    expect(items[1]).toHaveTextContent("EXPECTED BREACH");
+    expect(items[1]).toHaveTextContent("expected to breach");
+    expect(risks).toHaveTextContent(
+      "maximum-exposure scenario, not an expected outcome",
+    );
+  });
+
+  it("distinguishes expected breach and stress-only breach without colour", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const table = await screen.findByTestId("concentration-table");
+    const ea = within(table).getByRole("button", { name: /East Anglia.*breach expected/ });
+    expect(ea).toHaveTextContent("EXPECTED BREACH");
+    // London + SE breaches only under stress; its accessible name says so.
+    within(table).getByRole("button", { name: /London.*stress-only breach/ });
+  });
+
+  it("quick-filters to expected breaches only", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const table = await screen.findByTestId("concentration-table");
+    fireEvent.click(screen.getByRole("button", { name: "Expected breaches only" }));
+    const rows = within(table).getAllByRole("button");
+    expect(rows).toHaveLength(2); // East Anglia + high-value property
+    for (const row of rows) expect(row).not.toHaveTextContent("Net WAC");
+  });
+
+  it("discloses the forecast methodology from the governed payload", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const banner = await screen.findByTestId("forecast-provenance-banner");
+    expect(banner).toHaveTextContent("2025-10-27 → 2025-11-24");
+    expect(banner).toHaveTextContent("sufficiency floor"); // KFI fallback caveat
+    fireEvent.click(within(banner).getByRole("button", { name: "View methodology" }));
+    const block = await screen.findByTestId("methodology-block");
+    expect(block).toHaveTextContent("No machine learning");
+    expect(block).toHaveTextContent("maximum-exposure stress, not a prediction");
+    expect(block).toHaveTextContent("≥ 12 observed cases");
+  });
+
+  it("drills through to pipeline drivers that reconcile", async () => {
+    const c = client();
+    render(<RiskLimitsWorkspace client={c} portfolioId="p" />);
+    const table = await screen.findByTestId("concentration-table");
+    fireEvent.click(within(table).getByRole("button", { name: /East Anglia/ }));
+    await screen.findByTestId("state-comparison");
+    expect(screen.getByTestId("breach-horizon")).toHaveTextContent("2026-02");
+    fireEvent.click(screen.getByRole("button", { name: "Show pipeline drivers" }));
+    await waitFor(() =>
+      expect(c.getConcentrationDrivers).toHaveBeenCalledWith(
+        "p", "ct_east_anglia", undefined),
+    );
+    expect(await screen.findByText("P-1042")).toBeInTheDocument();
+    expect(screen.getByText("tips breach")).toBeInTheDocument();
+    expect(screen.getByTestId("pipeline-drivers")).toHaveTextContent(
+      "reconcile to the Expected Forecast numerator",
+    );
+  });
+
+  it("shows the honest forecast-unavailable state (funded unaffected)", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot,
+            states: { available: false, reason: "No governed pipeline source found." },
+            emergingRisks: [],
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    const note = await screen.findByTestId("forecast-unavailable-banner");
+    expect(note).toHaveTextContent("Funded results are unaffected");
+    // Funded column still renders; expected tile shows a dash, never zero.
+    expect(screen.getByTestId("concentration-expected-breaches")).toHaveTextContent("—");
   });
 
   it("filters by status and searches by name", async () => {

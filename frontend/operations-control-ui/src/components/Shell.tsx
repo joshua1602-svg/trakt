@@ -10,7 +10,7 @@ import {
   FlaskConical,
   Plus,
   SlidersHorizontal,
-} from "lucide-react";
+ Gauge } from "lucide-react";
 import clsx from "clsx";
 import { useSession } from "@/api/session";
 import { copy } from "@/lib/copy";
@@ -24,6 +24,8 @@ const NAV_ITEMS = [
   { to: "/history", label: copy.nav.history, icon: Clock, end: false },
   // A governed capability of its own, not a step of the delivery workflow.
   { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
+  // The concentration-test review surface: client covenants become governed tests.
+  { to: "/concentration", label: copy.nav.concentration, icon: Gauge, end: false },
 ];
 
 /** The OCC Agent tab. Sits alongside the live tabs, behind its feature flag. */

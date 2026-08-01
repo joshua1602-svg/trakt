@@ -52,6 +52,7 @@ function makeClient(): AgentClient {
     getConcentrationTests: any,
     getConcentrationDrillthrough: any,
     getConcentrationHistory: any,
+    getConcentrationDrivers: any,
     getForecastExtrapolation: any,
     getCohortProgression: any,
     getMe: any,

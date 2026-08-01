@@ -108,6 +108,21 @@ _BALANCE_ROLE_FOR_DENOMINATOR = {
     "original_balance": "balance_original",
 }
 
+#: Optional per-row completion-probability column. When the frame carries it
+#: (the forward-looking state frames set 1.0 on funded rows and the governed
+#: stage probability on pipeline rows), every EXPOSURE sum — numerator,
+#: denominator and weighted-average weights — is multiplied by it, so both
+#: sides of a share move consistently. Value comparisons (thresholds, filters,
+#: maxima) always read the REAL columns: a probability never changes what a
+#: loan is, only how much expected exposure it contributes.
+PROBABILITY_COL = "__completion_probability__"
+
+
+def _probability(df: pd.DataFrame) -> Optional[pd.Series]:
+    if PROBABILITY_COL in getattr(df, "columns", []):
+        return coerce_numeric(df[PROBABILITY_COL])
+    return None
+
 #: Which governed role a basis parameter value reads, per parameter name.
 _BASIS_ROLES: Dict[str, Dict[str, str]] = {
     "value_basis": {"original": "valuation_original",
@@ -161,6 +176,11 @@ def _denominator(df: pd.DataFrame, lib: ConcentrationLibrary,
     if col is None:
         return None, None, basis, role_candidates(lib, role)
     bal = coerce_numeric(df[col])
+    prob = _probability(df)
+    if prob is not None:
+        # Expected-exposure basis: a pipeline case contributes balance × p to
+        # BOTH numerator and denominator; a funded row carries p = 1.0.
+        bal = bal * prob
     total = float(bal.sum(skipna=True))
     if not total:
         return bal, None, basis, []
@@ -397,8 +417,25 @@ def _eval_weighted_average(df, lib, metric, params, external=None):
     deduction = params.get("deduction_percent")
     if deduction is not None:
         values = values - float(deduction)
+    prob = _probability(df)
     weighting = str(_param(metric, params, "weighting") or "current_balance")
     if weighting == "unweighted":
+        if prob is not None:
+            # Expected state: the "unweighted" mean becomes the expected-count
+            # weighted mean — Σ(v×p) / Σ(p).
+            mask = values.notna() & prob.notna()
+            denom = float(prob[mask].sum())
+            if not denom:
+                return _no_denominator(metric, "expected_loan_count", len(df))
+            value = round(float((values[mask] * prob[mask]).sum() / denom),
+                          metric.output_precision)
+            return MetricComputation(
+                value=value, unit=metric.unit,
+                numerator_value=round(float((values[mask] * prob[mask]).sum()), 4),
+                denominator_value=round(denom, 4),
+                denominator_basis="expected_loan_count",
+                loans_in_numerator=int(mask.sum()), total_loans=len(df),
+                data_status=DATA_OK, mask=mask, resolved_columns={role: col})
         mask = values.notna()
         if not int(mask.sum()):
             return MetricComputation(
@@ -416,6 +453,8 @@ def _eval_weighted_average(df, lib, metric, params, external=None):
         return MetricComputation.missing(w_role, role_candidates(lib, w_role),
                                          unit=metric.unit, total_loans=len(df))
     weights = coerce_numeric(df[w_col])
+    if prob is not None:
+        weights = weights * prob  # expected-exposure weights
     mask = values.notna() & weights.notna()
     denom = float(weights[mask].sum())
     if not denom:
@@ -438,6 +477,21 @@ def _eval_field_average(df, lib, metric, params, external=None):
         return MetricComputation.missing(role, role_candidates(lib, role),
                                          unit=metric.unit, total_loans=len(df))
     values = coerce_numeric(df[col])
+    prob = _probability(df)
+    if prob is not None:
+        # Expected state: expected balance per expected loan — Σ(v×p) / Σ(p).
+        mask = values.notna() & prob.notna()
+        denom = float(prob[mask].sum())
+        if not denom:
+            return _no_denominator(metric, "expected_loan_count", len(df))
+        total = float((values[mask] * prob[mask]).sum())
+        return MetricComputation(
+            value=round(total / denom, metric.output_precision),
+            unit=metric.unit, numerator_value=round(total, 2),
+            denominator_value=round(denom, 4),
+            denominator_basis="expected_loan_count",
+            loans_in_numerator=int(mask.sum()), total_loans=len(df),
+            data_status=DATA_OK, mask=mask, resolved_columns={role: col})
     mask = values.notna()
     count = int(mask.sum())
     if not count:

@@ -173,6 +173,85 @@ class TestRoutes:
         assert r.json()["available"] is False
 
 
+@pytest.fixture()
+def pipeline_frames(monkeypatch):
+    """Governed pipeline + methodology metadata, patched at the resolver seam
+    (the same place the real weekly-extract discovery plugs in)."""
+    pipeline = pd.DataFrame({
+        "pipeline_case_identifier": ["P1", "P2", "P3"],
+        "current_outstanding_balance": [640_000, 510_000, 900_000],
+        "geographic_region_obligor": ["East Anglia", "East Anglia", "London"],
+        "pipeline_stage": ["OFFER", "APPLICATION", "OFFER"],
+        "pipeline_status": ["pipeline", "pipeline", "pipeline"],
+        "completion_probability": [0.8, 0.5, 0.8],
+        "completion_probability_source": ["historical_stage_rate"] * 3,
+        "expected_completion_month": ["2026-01", "2026-02", "2026-01"],
+    })
+    meta = {
+        "available": True, "methodology": "completion_trend_model",
+        "basis": "historical_observed",
+        "observationWindowStart": "2025-10-27",
+        "observationWindowEnd": "2025-11-24",
+        "weeklyExtractsUsed": 5, "trackedCaseCount": 214,
+        "observedCompletionCount": 41, "minObservations": 12,
+        "stagesUsingHistoricalRates": ["APPLICATION", "OFFER"],
+        "stagesUsingConfigFallback": ["KFI"],
+        "stageRates": {"OFFER": {"rate": 0.8, "observed": 41,
+                                 "sufficient": True}},
+        "excludedStageCounts": {"WITHDRAWN": 7},
+        "pointInTimeNote": "Historical expected-state comparisons are "
+                           "unavailable until point-in-time snapshots are "
+                           "persisted.",
+    }
+    monkeypatch.setattr(conc_mod, "_resolve_pipeline",
+                        lambda client_id, to_run_id, scope=None: (pipeline, meta))
+    return pipeline, meta
+
+
+class TestThreeState:
+    def test_states_ride_on_the_same_envelope(self, approved_config, frames,
+                                              pipeline_frames):
+        out = conc_mod.compute_concentration_tests(None, "client_001", None)
+        [t] = out["tests"]
+        # Funded: 500k/1,000k = 50% (unchanged). Expected adds EA 512k+255k
+        # weighted and 720k London to the denominator.
+        assert t["currentValue"] == 50.0
+        exp_num = 500_000 + 640_000 * 0.8 + 510_000 * 0.5
+        exp_den = 1_000_000 + exp_num - 500_000 + 900_000 * 0.8
+        assert t["expected"]["value"] == pytest.approx(
+            exp_num / exp_den * 100, abs=0.01)
+        assert t["expectedNumerator"] == pytest.approx(exp_num, abs=1)
+        assert t["fullPipeline"]["value"] == pytest.approx(
+            (500_000 + 1_150_000) / (1_000_000 + 2_050_000) * 100, abs=0.01)
+        assert out["forecast"]["observationWindowStart"] == "2025-10-27"
+        assert out["summary"]["expectedBreaches"] == 1
+        # Funded is already in breach here, so the rank-1 rule claims the
+        # test — one risk per test, most severe category wins.
+        assert out["emergingRisks"][0]["category"] == "current_breach"
+
+    def test_scoped_context_disables_forward_states_honestly(
+            self, approved_config, frames):
+        class Scope:
+            context_id = "direct"
+        _df, meta = conc_mod._resolve_pipeline("client_001", None,
+                                               scope=Scope())
+        assert _df is None
+        assert "total book only" in meta["reason"]
+
+    def test_drivers_route_reconciles(self, approved_config, frames,
+                                      pipeline_frames):
+        snapshot = conc_mod.compute_concentration_tests(None, "client_001",
+                                                        None)
+        test_id = snapshot["tests"][0]["testId"]
+        out = conc_mod.compute_pipeline_drivers(None, "client_001", None,
+                                                test_id)
+        assert out["available"] and out["reconciles"]
+        ids = [d["caseId"] for d in out["drivers"]]
+        assert ids == ["P1", "P2"]  # EA numerator cases only, ranked
+        assert out["expectedNumeratorMovement"] == pytest.approx(
+            640_000 * 0.8 + 510_000 * 0.5, abs=1)
+
+
 class _Spec:
     risk_limit_query = True
     risk_limit_category = None
@@ -246,6 +325,55 @@ class TestChatDelegation:
             portfolio_id="client_no_config", as_of=None)
         assert called.get("yes") is True
         assert out["metadata"].get("concentrationIntent") is None
+
+    def test_expected_breach_answer(self, approved_config, frames,
+                                    pipeline_frames):
+        out = self._ask("Are we likely to breach any concentration limits?")
+        assert out["metadata"]["concentrationIntent"] == \
+            "identify_emerging_concentration_risks"
+        assert "expected" in out["answer"].lower()
+
+    def test_full_pipeline_answer_is_labelled_stress(self, approved_config,
+                                                     frames, pipeline_frames):
+        out = self._ask("What happens if all pipeline loans complete?")
+        assert out["metadata"]["concentrationIntent"] == \
+            "list_full_pipeline_concentration_breaches"
+        assert "maximum-exposure stress" in out["answer"]
+        assert "not an expected outcome" in out["answer"]
+
+    def test_methodology_answer_grounds_in_the_engine(self, approved_config,
+                                                      frames, pipeline_frames):
+        out = self._ask("How reliable is this forecast?")
+        assert out["metadata"]["concentrationIntent"] == \
+            "get_forecast_methodology"
+        assert "2025-10-27" in out["answer"]
+        assert "no machine learning" in out["answer"].lower()
+        assert "point-in-time" in out["answer"].lower()
+
+    def test_insufficient_history_caveat_travels_as_a_warning(
+            self, approved_config, frames, pipeline_frames):
+        out = self._ask("Are we breaching any concentration limits?")
+        assert any("sufficiency floor" in w for w in out["warnings"])
+
+    def test_driver_answer_names_the_leading_case(self, approved_config,
+                                                  frames, pipeline_frames):
+        out = self._ask("Which pipeline loans drive the East Anglia increase?")
+        assert out["metadata"]["concentrationIntent"] == \
+            "get_concentration_pipeline_drivers"
+        assert "P1" in out["answer"]
+        tables = [a for a in out["artifacts"] if a["type"] == "table"]
+        assert tables and tables[0]["rows"][0]["caseId"] == "P1"
+
+    def test_unavailable_forecast_is_explicit_not_zero(self, approved_config,
+                                                       frames, monkeypatch):
+        monkeypatch.setattr(
+            conc_mod, "_resolve_pipeline",
+            lambda client_id, to_run_id, scope=None:
+                (None, {"available": False,
+                        "reason": "No governed pipeline source found."}))
+        out = self._ask("What happens if all pipeline loans complete?")
+        assert "not available" in out["answer"]
+        assert "Funded results are unaffected" in out["answer"]
 
     def test_the_chat_never_recalculates_from_raw_rows(self, approved_config,
                                                        frames, monkeypatch):

@@ -1237,6 +1237,30 @@ def concentration_drillthrough(testId: str,
                 "columns": []}
 
 
+@app.get("/mi/concentration-tests/drivers")
+def concentration_drivers(testId: str,
+                          portfolioId: Optional[str] = None,
+                          client_id: Optional[str] = None,
+                          toRunId: Optional[str] = None,
+                          to_run_id: Optional[str] = None,
+                          portfolioContext: Optional[str] = None
+                          ) -> Dict[str, Any]:
+    """Pipeline cases driving one approved test's Expected Forecast movement —
+    the forecast engine's own probabilities and contributions, reconciling to
+    the expected numerator. Never 500s."""
+    from . import concentration_tests_api as conc_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    try:
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        return conc_mod.compute_pipeline_drivers(
+            root, cid, trid, testId,
+            scope=resolved.scope if resolved else None)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("concentration drivers failed: %s", exc)
+        return {"available": False, "reason": str(exc), "drivers": []}
+
+
 @app.get("/mi/concentration-tests/history")
 def concentration_history(portfolioId: Optional[str] = None,
                           client_id: Optional[str] = None,

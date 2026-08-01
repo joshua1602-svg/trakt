@@ -40,6 +40,90 @@ export interface ConcentrationTestProvenance {
   proposalId: string;
 }
 
+/** One forward-looking state block (Expected Forecast / Full Pipeline). */
+export interface ConcentrationStateBlock {
+  value: number | null;
+  status: ConcentrationTestStatus | "indicative_only" | null;
+  headroom: number | null;
+  utilization: number | null;
+  breachAmount: number | null;
+}
+
+export type ForecastTreatment =
+  | "supported_with_exposure_weighting"
+  | "supported_with_scenario_inclusion"
+  | "indicative_only"
+  | "state_independent"
+  | "unsupported";
+
+export interface EmergingRisk {
+  category:
+    | "current_breach"
+    | "expected_breach"
+    | "expected_warning_low_headroom"
+    | "material_deterioration"
+    | "full_pipeline_only_breach"
+    | "data_or_methodology_limitation";
+  rank: number;
+  testId: string | null;
+  displayName: string | null;
+  statement: string;
+  expectedHeadroom: number | null;
+}
+
+export interface ForecastMethodology {
+  available: boolean;
+  reason?: string;
+  methodology?: string;
+  basis?: string | null;
+  observationWindowStart?: string | null;
+  observationWindowEnd?: string | null;
+  weeklyExtractsUsed?: number;
+  trackedCaseCount?: number;
+  observedCompletionCount?: number;
+  minObservations?: number;
+  stagesUsingHistoricalRates?: string[];
+  stagesUsingConfigFallback?: string[];
+  stageRates?: Record<
+    string,
+    { rate: number | null; observed: number; completed?: number; sufficient: boolean }
+  >;
+  stageTiming?: Record<string, { medianDays: number; observed: number }>;
+  excludedStageCounts?: Record<string, number>;
+  currentSnapshot?: string | null;
+  pointInTimeNote?: string;
+}
+
+export interface PipelineDriver {
+  caseId: string;
+  balance: number;
+  stage: string | null;
+  dimensionValue: string | null;
+  completionProbability: number;
+  probabilitySource: string | null;
+  expectedContribution: number;
+  fullContribution: number;
+  expectedCompletionMonth: string | null;
+  impact: "tips_breach" | "tips_warning" | null;
+}
+
+export interface ConcentrationDrivers {
+  available: boolean;
+  reason?: string;
+  testId?: string;
+  displayName?: string;
+  dimensionColumn?: string | null;
+  drivers: PipelineDriver[];
+  driverCount?: number;
+  truncated?: boolean;
+  expectedNumeratorMovement?: number;
+  listedContribution?: number;
+  topShareOfMovement?: number | null;
+  reconciles?: boolean;
+  reportingDate?: string | null;
+  forecast?: Partial<ForecastMethodology>;
+}
+
 export interface ConcentrationTest {
   testId: string;
   metricId: string | null;
@@ -82,6 +166,20 @@ export interface ConcentrationTest {
   configurationVersion: number | null;
   evaluatedAt: string | null;
   legacy?: boolean;
+  // ------ three-state extension (absent on legacy / states-unavailable) ----
+  forecastTreatment?: ForecastTreatment;
+  forecastTreatmentNote?: string;
+  expected?: ConcentrationStateBlock | null;
+  fullPipeline?: ConcentrationStateBlock | null;
+  changeFundedToExpected?: number | null;
+  changeFundedToFullPipeline?: number | null;
+  expectedBreach?: boolean;
+  fullPipelineBreach?: boolean;
+  expectedNumerator?: number | null;
+  expectedDenominator?: number | null;
+  fullPipelineNumerator?: number | null;
+  fullPipelineDenominator?: number | null;
+  expectedBreachHorizon?: { available: boolean; period?: string | null; reason?: string } | null;
 }
 
 export interface ConcentrationSummary {
@@ -97,6 +195,9 @@ export interface ConcentrationSummary {
   priorReportingDate: string | null;
   priorAvailable: boolean;
   deteriorations: number;
+  expectedBreaches?: number;
+  fullPipelineBreaches?: number;
+  expectedWarnings?: number;
   closestToLimit: {
     testId: string;
     displayName: string;
@@ -126,6 +227,9 @@ export interface ConcentrationTestsSnapshot {
   unsupportedProposals?: number;
   tests: ConcentrationTest[];
   summary: ConcentrationSummary;
+  forecast?: ForecastMethodology;
+  states?: { available: boolean; reason?: string } & Record<string, unknown>;
+  emergingRisks?: EmergingRisk[];
   lineage?: Record<string, unknown> & { source?: string; note?: string };
   error?: string;
 }

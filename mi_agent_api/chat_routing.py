@@ -1172,7 +1172,45 @@ def _route_concentration_tests(question, spec, spec_dict, *, client_id,
     result = conc_query.answer(question, envelope)
 
     artifacts: List[Dict[str, Any]] = []
-    if result["intent"] == "get_concentration_test_drillthrough" and \
+    if result["intent"] == "get_concentration_pipeline_drivers" and \
+            result.get("testId"):
+        drivers = conc_mod.compute_pipeline_drivers(output_root, client_id,
+                                                    run_id, result["testId"])
+        answer_text = result["answer"]
+        if not drivers.get("available"):
+            answer_text += (" Pipeline-driver detail is not available: "
+                            f"{drivers.get('reason')}")
+        else:
+            top = drivers["drivers"][:4]
+            share = drivers.get("topShareOfMovement")
+            lead = top[0] if top else None
+            answer_text += (
+                f" {len(top)} pipeline loan(s) drive "
+                + (f"{share * 100:.0f}% of " if share is not None else "")
+                + "the expected increase"
+                + (f", led by {lead['caseId']} at £{lead['balance']:,.0f} "
+                   f"currently at {str(lead.get('stage') or '').title()}"
+                   if lead else "") + ".")
+            artifacts.append(_table_artifact(
+                f"Pipeline drivers — {result['rows'][0].get('displayName', '')}",
+                columns=[
+                    {"key": "caseId", "label": "Case", "align": "left"},
+                    {"key": "balance", "label": "Balance", "align": "right"},
+                    {"key": "stage", "label": "Stage", "align": "left"},
+                    {"key": "completionProbability", "label": "Probability",
+                     "align": "right"},
+                    {"key": "expectedContribution", "label": "Expected contrib.",
+                     "align": "right"},
+                    {"key": "expectedCompletionMonth", "label": "Exp. month",
+                     "align": "left"},
+                    {"key": "impact", "label": "Impact", "align": "left"},
+                ],
+                rows=drivers["drivers"], spec=spec_dict,
+                portfolio_id=portfolio_id, as_of=as_of,
+                description="Forecast-engine probabilities and contributions; "
+                            "reconciles to the expected numerator."))
+        result = {**result, "answer": answer_text}
+    elif result["intent"] == "get_concentration_test_drillthrough" and \
             result.get("testId"):
         drill = conc_mod.compute_drillthrough(output_root, client_id, run_id,
                                               result["testId"])

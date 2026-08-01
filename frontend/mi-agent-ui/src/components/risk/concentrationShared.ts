@@ -93,3 +93,74 @@ export function operatorGlyph(operator: string): string {
 export function formatDate(value: string | null | undefined): string {
   return value ? value.slice(0, 10) : "—";
 }
+
+// ---------------------------------------------------------------------------
+// Three-state presentation: risk classification chips (mapped from the
+// service's emerging-risk categories — the UI never re-ranks or re-derives).
+// ---------------------------------------------------------------------------
+import type { ConcentrationTest, EmergingRisk } from "@/domain";
+
+export const RISK_CHIP: Record<
+  string,
+  { label: string; tone: "mint" | "amber" | "rose" | "navy" | "neutral" }
+> = {
+  current_breach: { label: "BREACH", tone: "rose" },
+  expected_breach: { label: "EXPECTED BREACH", tone: "rose" },
+  expected_warning_low_headroom: { label: "LOW HEADROOM", tone: "amber" },
+  material_deterioration: { label: "DETERIORATION", tone: "amber" },
+  full_pipeline_only_breach: { label: "STRESS ONLY", tone: "navy" },
+  data_or_methodology_limitation: { label: "LIMITED", tone: "neutral" },
+  ok: { label: "OK", tone: "mint" },
+};
+
+/** testId → the service's risk category (one per test; absent = ok). */
+export function riskCategoryByTest(
+  risks: EmergingRisk[] | undefined,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const r of risks ?? []) {
+    if (r.testId && !map.has(r.testId)) map.set(r.testId, r.category);
+  }
+  return map;
+}
+
+/** Sort weight for "expected risk" ordering: service rank, then ascending
+ *  expected headroom, then name. Rows without a risk sort last. */
+export function riskSortKey(
+  t: ConcentrationTest,
+  categoryByTest: Map<string, string>,
+): [number, number, string] {
+  const rankByCategory: Record<string, number> = {
+    current_breach: 1,
+    expected_breach: 2,
+    expected_warning_low_headroom: 3,
+    material_deterioration: 4,
+    full_pipeline_only_breach: 5,
+    data_or_methodology_limitation: 6,
+  };
+  const category = categoryByTest.get(t.testId);
+  const rank = category ? (rankByCategory[category] ?? 7) : 7;
+  const headroom = t.expected?.headroom ?? Number.POSITIVE_INFINITY;
+  return [rank, headroom, t.displayName];
+}
+
+/** One state cell's text: value + headroom/over phrase. */
+export function statePhrase(
+  block: { value: number | null; status: string | null; headroom: number | null } | null | undefined,
+  unit: string | null | undefined,
+): { value: string; sub: string } {
+  if (!block) return { value: "—", sub: "" };
+  if (block.status === "indicative_only") {
+    return { value: "—", sub: "indicative only" };
+  }
+  if (block.value === null) return { value: "—", sub: "" };
+  const hd = block.headroom;
+  const unitSuffix = unit === "percent" ? "pp" : "";
+  const sub =
+    hd === null
+      ? ""
+      : hd < 0
+        ? `over ${Math.abs(hd).toFixed(unit === "percent" ? 1 : 0)}${unitSuffix}`
+        : `hd ${hd.toFixed(unit === "percent" ? 1 : 0)}${unitSuffix}`;
+  return { value: formatValue(block.value, unit), sub };
+}

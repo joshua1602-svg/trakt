@@ -155,6 +155,9 @@ export function withCache(
     getConcentrationHistory: (portfolioId, testId, portfolioContext, signal) =>
       resource(`concentrationHistory|${portfolioId}|${testId ?? ""}|${portfolioContext ?? ""}`,
         () => client.getConcentrationHistory(portfolioId, testId, portfolioContext, signal)),
+    getConcentrationDrivers: (portfolioId, testId, portfolioContext, signal) =>
+      resource(`concentrationDrivers|${portfolioId}|${testId}|${portfolioContext ?? ""}`,
+        () => client.getConcentrationDrivers(portfolioId, testId, portfolioContext, signal)),
     getForecastExtrapolation: (portfolioId, portfolioContext, signal) =>
       resource(`forecastExtrapolation|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getForecastExtrapolation(portfolioId, portfolioContext, signal)),

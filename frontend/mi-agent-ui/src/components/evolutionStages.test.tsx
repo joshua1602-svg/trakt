@@ -31,6 +31,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getConcentrationTests: vi.fn(async () => ({}) as any),
     getConcentrationDrillthrough: vi.fn(async () => ({}) as any),
     getConcentrationHistory: vi.fn(async () => ({}) as any),
+    getConcentrationDrivers: vi.fn(async () => ({}) as any),
     getForecastExtrapolation: vi.fn(async () => mockForecastExtrapolation("client_001")),
     getCohortProgression: vi.fn(),
     getMe: vi.fn(async () => ({ authenticated: true, isOperator: true })),

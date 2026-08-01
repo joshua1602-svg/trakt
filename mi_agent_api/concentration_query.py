@@ -52,6 +52,7 @@ _STATUS_LABEL = {
     "pass": "PASS", "warning": "WARNING", "breach": "BREACH",
     "unavailable": "UNAVAILABLE", "insufficient_data": "INSUFFICIENT DATA",
     "pending_effective_date": "PENDING EFFECTIVE DATE", "expired": "EXPIRED",
+    "indicative_only": "INDICATIVE ONLY",
 }
 
 
@@ -82,6 +83,30 @@ def _test_line(t: Dict[str, Any]) -> str:
 
 def detect_intent(question: str) -> str:
     q = " ".join(str(question).lower().split())
+    if re.search(r"\bwhich pipeline (loans|cases)\b|\bpipeline (loans|cases)? ?driv"
+                 r"|\bdrives? the\b.*\b(increase|rise|movement)\b", q):
+        return "get_concentration_pipeline_drivers"
+    if re.search(r"\bhow (was|is) the (expected )?forecast\b|\bforecast "
+                 r"(methodolog|calculat|assumption)|\bconversion assumptions\b"
+                 r"|\bfive.week\b|\bhow reliable\b|\bforecast confidence\b"
+                 r"|\bmethodology\b", q):
+        return "get_forecast_methodology"
+    if re.search(r"\bif all (the )?pipeline\b|\ball pipeline (loans? )?"
+                 r"(complete|convert)|\bmaximum.exposure\b|\bfull.pipeline\b"
+                 r"|\bstress (scenario|state|case)\b|\bonly breach in\b", q):
+        return "list_full_pipeline_concentration_breaches"
+    if re.search(r"\bwhy is\b.*\bexpected\b|\bexpected concentration change\b"
+                 r"|\bwhy .*\bexpected (to )?(breach|rise|increase|worsen)\b", q):
+        return "explain_expected_concentration_change"
+    if re.search(r"\blikely to breach\b|\bexpected to breach\b|\bexpected "
+                 r"breach|\bgoing to breach\b|\bwill (we )?breach\b"
+                 r"|\bemerging risk|\bheading (for|towards)\b", q):
+        return "identify_emerging_concentration_risks"
+    if re.search(r"\bcompare\b.*\b(states?|funded|expected|pipeline)\b"
+                 r"|\bfunded (vs|versus) expected\b", q):
+        return "compare_concentration_states"
+    if re.search(r"\bexpected headroom\b", q):
+        return "get_concentration_test"
     if re.search(r"\bwhich loans\b|\bcontribut|\bdrill", q):
         return "get_concentration_test_drillthrough"
     if re.search(r"\bdefinition\b|\bdefined\b|\bhow (is|do we|are we) (it |this )?"
@@ -158,7 +183,15 @@ def answer(question: str, envelope: Dict[str, Any]) -> Dict[str, Any]:
     intent = detect_intent(question)
     tests: List[Dict[str, Any]] = list(envelope.get("tests") or [])
     summary = envelope.get("summary") or {}
+    forecast = envelope.get("forecast") or {}
+    states_available = bool((envelope.get("states") or {}).get("available"))
     warnings: List[str] = []
+    if forecast.get("stagesUsingConfigFallback"):
+        warnings.append(
+            "Forecast caveat: stage(s) "
+            + ", ".join(forecast["stagesUsingConfigFallback"])
+            + " fall back to configured assumptions — the observed sample is "
+              "below the sufficiency floor.")
     if envelope.get("source") == "legacy_extracted":
         warnings.append(
             "These are extracted limits pending operator approval — not yet "
@@ -171,6 +204,165 @@ def answer(question: str, envelope: Dict[str, Any]) -> Dict[str, Any]:
     category = _category_filter(question)
     scoped = [t for t in tests if t.get("category") == category] if category else tests
 
+    def _no_states(reason_intent: str) -> Dict[str, Any]:
+        reason = (envelope.get("states") or {}).get("reason") or \
+            forecast.get("reason") or \
+            "no governed pipeline forecast is available"
+        return {"intent": reason_intent,
+                "answer": ("Forward-looking concentration states are not "
+                           f"available: {reason} Funded results are "
+                           "unaffected."),
+                "rows": scoped, "warnings": warnings, "testId": None}
+
+    if intent == "identify_emerging_concentration_risks":
+        risks = envelope.get("emergingRisks") or []
+        if not states_available and not risks:
+            return _no_states(intent)
+        if not risks:
+            text = ("No emerging concentration risks: nothing is in breach, "
+                    "expected to breach, or materially deteriorating"
+                    + (" (based on the current completion-trend model)"
+                       if states_available else "") + ".")
+            return {"intent": intent, "answer": text, "rows": scoped,
+                    "warnings": warnings, "testId": None}
+        parts = [f"{len(risks)} emerging concentration risk(s), ranked:"]
+        for i, r in enumerate(risks[:5], start=1):
+            parts.append(f"{i}. {r['statement']}")
+        rows = [t for t in tests
+                if t.get("testId") in {r.get("testId") for r in risks}]
+        return {"intent": intent, "answer": " ".join(parts),
+                "rows": rows or scoped, "warnings": warnings, "testId": None}
+
+    if intent == "list_full_pipeline_concentration_breaches":
+        if not states_available:
+            return _no_states(intent)
+        rows = [t for t in scoped if t.get("fullPipelineBreach")]
+        stress_only = [t for t in rows
+                       if not t.get("expectedBreach")
+                       and t.get("status") != "breach"]
+        if rows:
+            text = (f"If ALL active pipeline converted — a maximum-exposure "
+                    f"stress, not an expected outcome — {len(rows)} test(s) "
+                    "would breach: "
+                    + "; ".join(
+                        f"{t['displayName']} "
+                        f"({_fmt(t.get('currentValue'), t.get('unit'))} → "
+                        f"{_fmt((t.get('fullPipeline') or {}).get('value'), t.get('unit'))} "
+                        f"vs {_fmt(t.get('threshold'), t.get('unit'))})"
+                        for t in rows[:5]) + ".")
+            if stress_only:
+                text += (f" {len(stress_only)} of these breach ONLY in the "
+                         "stress state — they remain compliant on the funded "
+                         "book and in the expected forecast.")
+        else:
+            text = ("No test would breach even if all active pipeline "
+                    "converted (the maximum-exposure stress state).")
+        return {"intent": intent, "answer": text, "rows": rows or scoped,
+                "warnings": warnings, "testId": None}
+
+    if intent == "get_forecast_methodology":
+        if not forecast.get("available"):
+            return _no_states(intent)
+        rates = forecast.get("stageRates") or {}
+        rate_bits = []
+        for stage in ("KFI", "APPLICATION", "OFFER"):
+            r = rates.get(stage) or {}
+            if r.get("rate") is not None:
+                rate_bits.append(
+                    f"{stage.title()} {r['rate']:.2f} (observed {r.get('observed', 0)}"
+                    + (", sufficient" if r.get("sufficient") else
+                       ", below the sufficiency floor — configured fallback")
+                    + ")")
+        parts = [
+            "The Expected Forecast uses the existing deterministic "
+            "completion-trend model — no machine learning, no invented "
+            "probabilities.",
+            f"Observation window {forecast.get('observationWindowStart')} → "
+            f"{forecast.get('observationWindowEnd')} across "
+            f"{forecast.get('weeklyExtractsUsed')} weekly extract(s), tracking "
+            f"{forecast.get('trackedCaseCount')} case(s) with "
+            f"{forecast.get('observedCompletionCount')} observed completion(s).",
+        ]
+        if rate_bits:
+            parts.append("Stage completion rates: " + "; ".join(rate_bits)
+                         + f". A stage needs at least "
+                           f"{forecast.get('minObservations')} observed cases "
+                           "before its empirical rate is trusted.")
+        excl = forecast.get("excludedStageCounts") or {}
+        if excl:
+            parts.append("Withdrawn/cancelled and unknown-stage cases are "
+                         "never counted or weighted ("
+                         + ", ".join(f"{k.lower()}: {v}" for k, v in excl.items())
+                         + ").")
+        parts.append("Each pipeline case contributes balance × its stage "
+                     "completion probability to both numerator and "
+                     "denominator. Full Pipeline ignores probabilities "
+                     "entirely — it is the maximum-exposure stress, not a "
+                     "prediction.")
+        if forecast.get("pointInTimeNote"):
+            parts.append(forecast["pointInTimeNote"])
+        return {"intent": intent, "answer": " ".join(parts), "rows": [],
+                "warnings": warnings, "testId": None}
+
+    if intent == "compare_concentration_states":
+        if not states_available:
+            return _no_states(intent)
+        t = _find_test(question, scoped) or _find_test(question, tests)
+        rows = [t] if t else scoped
+        if t:
+            expected = t.get("expected") or {}
+            full = t.get("fullPipeline") or {}
+            text = (f"{t['displayName']} — Funded (contractual): "
+                    f"{_fmt(t.get('currentValue'), t.get('unit'))} "
+                    f"[{_STATUS_LABEL.get(t['status'], t['status'])}]; "
+                    f"Expected Forecast: {_fmt(expected.get('value'), t.get('unit'))} "
+                    f"[{_STATUS_LABEL.get(expected.get('status'), expected.get('status') or 'n/a')}]; "
+                    f"Full Pipeline (stress): {_fmt(full.get('value'), t.get('unit'))} "
+                    f"[{_STATUS_LABEL.get(full.get('status'), full.get('status') or 'n/a')}] "
+                    f"against a limit of "
+                    f"{'≤' if t.get('operator') == 'max' else '≥'} "
+                    f"{_fmt(t.get('threshold'), t.get('unit'))}.")
+        else:
+            text = (f"Across {len(scoped)} test(s): "
+                    f"{summary.get('breaches', 0)} funded breach(es), "
+                    f"{summary.get('expectedBreaches', 0)} expected breach(es), "
+                    f"{summary.get('fullPipelineBreaches', 0)} stress-state "
+                    "breach(es).")
+        return {"intent": intent, "answer": text, "rows": rows,
+                "warnings": warnings, "testId": t.get("testId") if t else None}
+
+    if intent in ("explain_expected_concentration_change",
+                  "get_concentration_pipeline_drivers"):
+        if not states_available:
+            return _no_states(intent)
+        t = _find_test(question, scoped) or _find_test(question, tests)
+        if t is None:
+            names = ", ".join(x["displayName"] for x in tests[:8])
+            return {"intent": intent,
+                    "answer": ("I could not match that to an active "
+                               f"concentration test. Active tests: {names}."),
+                    "rows": tests, "warnings": warnings, "testId": None}
+        # The route attaches the drivers table; the text carries the movement.
+        expected = t.get("expected") or {}
+        change = t.get("changeFundedToExpected")
+        text = (f"{t['displayName']}: funded "
+                f"{_fmt(t.get('currentValue'), t.get('unit'))}, expected "
+                f"{_fmt(expected.get('value'), t.get('unit'))}"
+                + (f" ({change:+.2f}pp)" if change is not None
+                   and t.get("unit") == "percent" else "")
+                + f" against {_fmt(t.get('threshold'), t.get('unit'))}.")
+        if t.get("expectedBreach"):
+            over = expected.get("breachAmount")
+            text += (" That is an expected breach"
+                     + (f" of {over:.2f}pp" if over is not None
+                        and t.get("unit") == "percent" else "") + ".")
+        horizon = (t.get("expectedBreachHorizon") or {}).get("period")
+        if horizon:
+            text += f" The expected crossing period is {horizon}."
+        return {"intent": "get_concentration_pipeline_drivers",
+                "answer": text, "rows": [t], "warnings": warnings,
+                "testId": t["testId"]}
+
     if intent == "list_concentration_breaches":
         rows = [t for t in scoped if t["status"] == "breach"]
         if rows:
@@ -178,14 +370,24 @@ def answer(question: str, envelope: Dict[str, Any]) -> Dict[str, Any]:
                     + "; ".join(_test_line(t) for t in rows[:5]) + ".")
         else:
             measured = [t for t in scoped if t.get("currentValue") is not None]
-            text = ("No concentration limits are in breach"
+            text = ("No concentration limits are in breach on the funded book"
                     + (f" ({len(measured)} measured)" if measured else "") + ".")
             un = [t for t in scoped if t["status"] in ("unavailable",
                                                        "insufficient_data")]
             if un:
                 text += (f" {len(un)} test(s) could not be evaluated and are "
                          "reported unavailable, not passing.")
-        return {"intent": intent, "answer": text, "rows": rows or scoped,
+        expected_rows = [t for t in scoped if t.get("expectedBreach")]
+        if expected_rows:
+            text += (f" However, {len(expected_rows)} test(s) are EXPECTED to "
+                     "breach based on the completion-trend model: "
+                     + "; ".join(
+                         f"{t['displayName']} "
+                         f"({_fmt(t.get('currentValue'), t.get('unit'))} → "
+                         f"{_fmt((t.get('expected') or {}).get('value'), t.get('unit'))})"
+                         for t in expected_rows[:3]) + ".")
+        return {"intent": intent, "answer": text,
+                "rows": rows or expected_rows or scoped,
                 "warnings": warnings, "testId": None}
 
     if intent == "list_concentration_warnings":
@@ -290,9 +492,27 @@ def answer(question: str, envelope: Dict[str, Any]) -> Dict[str, Any]:
                     "warnings": warnings, "testId": t["testId"]}
         # get_concentration_test
         parts = [_test_line(t) + "."]
-        parts.append(_headroom_phrase(t).capitalize() + ".")
+        parts.append(_headroom_phrase(t).capitalize() + " on the funded book.")
         if t.get("utilization") is not None:
             parts.append(f"Utilization {t['utilization']:.1f}% of the limit.")
+        expected = t.get("expected") or {}
+        full = t.get("fullPipeline") or {}
+        if expected.get("value") is not None:
+            exp_h = expected.get("headroom")
+            parts.append(
+                f"Expected Forecast: {_fmt(expected['value'], t.get('unit'))}"
+                + (f" (expected headroom {exp_h:,.2f}"
+                   + ("pp" if t.get("unit") == "percent" else "") + ")"
+                   if exp_h is not None else "")
+                + ("— an expected breach." if t.get("expectedBreach") else "."))
+        elif expected.get("status") == "indicative_only":
+            parts.append("The expected state is indicative only for this "
+                         "metric family.")
+        if full.get("value") is not None:
+            parts.append(
+                f"Full Pipeline (maximum-exposure stress, not a prediction): "
+                f"{_fmt(full['value'], t.get('unit'))}"
+                + (" — would breach." if t.get("fullPipelineBreach") else "."))
         parts.append("Movement: " + _movement_phrase(t) + ".")
         if t["status"] in ("unavailable", "insufficient_data"):
             parts.append(f"Data limitation: {t.get('notes') or t['dataStatus']}.")

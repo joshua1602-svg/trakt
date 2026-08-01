@@ -23,6 +23,7 @@ import type {
   GeoExposure,
   PipelineEvolution,
   ConcentrationDrillthrough,
+  ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
   PipelineFunnelEvolution,
@@ -111,6 +112,13 @@ export interface AgentClient {
   getConcentrationHistory(portfolioId: string, testId?: string,
                           portfolioContext?: string,
                           signal?: AbortSignal): Promise<ConcentrationHistory>;
+
+  /** Pipeline cases driving one test's Expected Forecast movement (the
+   *  forecast engine's own probabilities; reconciles to the expected
+   *  numerator). */
+  getConcentrationDrivers(portfolioId: string, testId: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ConcentrationDrivers>;
 
   /** Securitisation scale-up forecast (run-rate / KFI extrapolation + milestones). */
   getForecastExtrapolation(portfolioId: string, portfolioContext?: string,

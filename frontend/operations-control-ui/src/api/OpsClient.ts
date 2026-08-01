@@ -250,4 +250,27 @@ export interface OpsClient {
   getAgentActivation(caseRef: string): Promise<AgentActivation>;
   /** The one call that can reach production, through the server's one gate. */
   confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus>;
+
+  // -- concentration tests --------------------------------------------------- //
+  /** Everything an operator needs to review a client's concentration tests. */
+  getConcentrationReview(client: string): Promise<import("./concentrationTypes").ConcentrationReviewPackage>;
+  /** The governed metric catalogue, for the proposal editor. */
+  getConcentrationLibrary(client: string): Promise<{ libraryVersion: string; metrics: import("./concentrationTypes").LibraryMetricDoc[] }>;
+  /** Extract proposals from the client's response wording or a limits table. */
+  extractConcentrationTests(client: string, sourceReference: string, text: string): Promise<{ proposals: import("./concentrationTypes").TestProposal[]; count: number }>;
+  /** Record the answer to one confirmation question. */
+  answerConcentrationQuestion(client: string, proposalId: string, question: string, answer: string): Promise<import("./concentrationTypes").TestProposal>;
+  /** Operator edit of permitted fields; versioned and audited server-side. */
+  updateConcentrationProposal(client: string, proposalId: string, payload: import("./concentrationTypes").ProposalUpdatePayload): Promise<import("./concentrationTypes").TestProposal>;
+  /** Approve (administrator). Refused while anything is unresolved. */
+  approveConcentrationProposal(client: string, proposalId: string, payload: { effective_date?: string; comments?: string; severity?: string; supersedes_test_id?: string }): Promise<import("./concentrationTypes").TestProposal>;
+  rejectConcentrationProposal(client: string, proposalId: string, reason: string): Promise<import("./concentrationTypes").TestProposal>;
+  markConcentrationUnsupported(client: string, proposalId: string, reason: string): Promise<import("./concentrationTypes").TestProposal>;
+  markConcentrationNotApplicable(client: string, proposalId: string, reason: string): Promise<import("./concentrationTypes").TestProposal>;
+  requestConcentrationClarification(client: string, proposalId: string, question: string): Promise<import("./concentrationTypes").TestProposal>;
+  /** Retire an approved proposal so a replacement can be approved (administrator). */
+  supersedeConcentrationProposal(client: string, proposalId: string, reason: string): Promise<import("./concentrationTypes").TestProposal>;
+  /** Mint the next active version from every approved proposal (administrator). */
+  activateConcentrationTests(client: string, reason?: string): Promise<import("./concentrationTypes").ActiveConfigurationDoc>;
+  getConcentrationVersion(client: string, version: number): Promise<import("./concentrationTypes").ActiveConfigurationDoc>;
 }
