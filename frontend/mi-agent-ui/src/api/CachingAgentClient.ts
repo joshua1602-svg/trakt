@@ -20,8 +20,12 @@
 import type { AgentClient } from "./AgentClient";
 import type { AgentRequest, AgentResponse } from "@/domain";
 
-/** Resource staleTime — within this window a repeat GET reuses the cache. */
-export const RESOURCE_STALE_MS = 7 * 60 * 1000; // 7 minutes (within the 5–10 min guidance)
+/** Resource staleTime — within this window a repeat GET reuses the cache.
+ * Snapshot/forecast payloads are per reporting run and effectively immutable
+ * once computed, and backend snapshot computes can take tens of seconds, so a
+ * generous window makes client/scope switching instant; the header's manual
+ * Refresh (invalidate()) always forces fresh reads. */
+export const RESOURCE_STALE_MS = 30 * 60 * 1000; // 30 minutes
 
 /** A cached GET resource. `at` is when the value resolved (for staleness). */
 interface ResourceEntry {

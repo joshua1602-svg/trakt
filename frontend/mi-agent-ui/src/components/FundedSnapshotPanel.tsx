@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { FundedSnapshot, SnapshotKPI } from "@/domain";
 import { BarList, type BarDatum } from "@/components/pipeline/bits";
+import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
 import { cn, formatDate } from "@/lib/utils";
 
 function deltaColour(intent?: SnapshotKPI["deltaIntent"]) {
@@ -24,7 +25,15 @@ function KpiTile({ kpi }: { kpi: SnapshotKPI }) {
   const Icon = kpi.deltaIntent === "positive" ? ArrowUpRight : kpi.deltaIntent === "negative" ? ArrowDownRight : Minus;
   const dim = kpi.available === false;
   return (
-    <div className={cn("rounded-lg border border-[var(--color-line-soft)] bg-navy-850/60 p-3.5", dim && "opacity-60")}>
+    // Elevated tile: a step lighter than the panel behind it, with a visible
+    // border + top highlight so the KPI grid reads as raised cards.
+    <div
+      className={cn(
+        "rounded-lg border border-navy-600/70 bg-navy-800/80 p-3.5 shadow-sm",
+        "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+        dim && "opacity-60",
+      )}
+    >
       <div className="text-[11px] font-medium uppercase tracking-wider text-ink-400">{kpi.label}</div>
       <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-ink-100">{kpi.value}</div>
       <div className="mt-1.5 flex items-center gap-1.5">
@@ -82,6 +91,17 @@ export function FundedSnapshotPanel({
   const { portfolio, prior } = snapshot;
   const reporting = portfolio.reporting_date ? formatDate(portfolio.reporting_date) : portfolio.run_id;
 
+  // The headline Balance / Loans tiles already carry the month-on-month delta;
+  // the separate "Monthly change" tiles then repeat the same numbers. Hide the
+  // duplicates only when the headline tile really shows the delta, so a payload
+  // without headline deltas keeps its explicit monthly-change tiles.
+  const byId = new Map(snapshot.kpis.map((k) => [k.id, k]));
+  const kpis = snapshot.kpis.filter((k) => {
+    if (k.id === "mom_balance") return !byId.get("balance")?.delta;
+    if (k.id === "mom_loans") return !byId.get("loans")?.delta;
+    return true;
+  });
+
   return (
     <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -97,9 +117,22 @@ export function FundedSnapshotPanel({
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line-soft)] bg-navy-900/60 px-2.5 py-1 text-[11px] font-medium text-ink-200">
-            <CalendarDays size={13} className="text-peri-300" />
-            Reporting Date · {reporting}
+          <span className="inline-flex items-center gap-2">
+            {/* Stale-while-loading: keep the current figures visible but say a
+                new selection is being computed (backend runs can take a while). */}
+            {loading && (
+              <span
+                data-testid="snapshot-updating"
+                className="inline-flex items-center gap-1.5 rounded-md border border-peri-400/30 bg-peri-400/10 px-2 py-1 text-[10px] font-medium text-peri-200"
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-peri-300" />
+                Updating for new selection…
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line-soft)] bg-navy-900/60 px-2.5 py-1 text-[11px] font-medium text-ink-200">
+              <CalendarDays size={13} className="text-peri-300" />
+              Reporting Date · {reporting}
+            </span>
           </span>
           <span className="text-[10px] text-ink-500">
             {prior ? `vs prior run · ${prior.reporting_date ?? prior.run_id}` : "No prior reporting date available"}
@@ -108,7 +141,7 @@ export function FundedSnapshotPanel({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
-        {snapshot.kpis.map((kpi) => (
+        {kpis.map((kpi) => (
           <KpiTile key={kpi.id} kpi={kpi} />
         ))}
       </div>
@@ -120,8 +153,10 @@ export function FundedSnapshotPanel({
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {snapshot.stratifications!.map((s) => {
-              const data: BarDatum[] = s.bars.map((b) => ({
-                label: b.label, value: b.balance, count: b.count,
+              // Natural bucket order (LTV %, age, vintage year, rate… else
+              // alphabetical; Unknown last) + label tidy-ups ("2008.0" → "2008").
+              const data: BarDatum[] = sortStratBars(s.bars).map((b) => ({
+                label: cleanBucketLabel(b.label), value: b.balance, count: b.count,
               }));
               // The backend decides whether a dimension is available, entirely
               // null, not supplied for these portfolios, or only partially
@@ -133,7 +168,7 @@ export function FundedSnapshotPanel({
                 <div key={s.key}
                   data-testid={`strat-${s.key}`}
                   data-availability={state}
-                  className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 p-3">
+                  className="rounded-lg border border-navy-600/60 bg-navy-800/50 p-3 shadow-sm">
                   <div className="mb-2 flex items-baseline justify-between gap-2">
                     <span className="text-[11px] font-medium text-ink-300">{s.label}</span>
                     {state === "partially_available" && (

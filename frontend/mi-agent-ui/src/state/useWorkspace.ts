@@ -41,14 +41,22 @@ import { buildSuggestedActions } from "@/lib/suggestedActions";
 import { presentAnswer } from "@/lib/responsePresenter";
 import { loadState, readUrlContext, saveState } from "./persistence";
 
-function greeting(portfolioLabel: string, asOf: string | null): ChatMessage {
+/** Friendly display name for a client/portfolio label ("acquired_001" → "Acquired 001"). */
+function clientDisplayName(label?: string | null): string | null {
+  if (!label) return null;
+  const pretty = formatHeading(label.toLowerCase());
+  return pretty || label;
+}
+
+function greeting(portfolioLabel: string | null, asOf: string | null): ChatMessage {
+  const name = clientDisplayName(portfolioLabel);
   const date = asOf
     ? new Date(asOf).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
     : "the latest reporting date";
   return {
     id: "greeting",
     role: "assistant",
-    content: `Welcome back. I'm your MI Agent for the ${portfolioLabel} funded portfolio, as of ${date}. The funded book snapshot is on the right — ask me about portfolio movement, concentration, stratifications, risk monitoring or validation to go deeper.`,
+    content: `Welcome back. I'm your MI Agent for the ${name ? `${name} portfolio` : "selected portfolio"}, as of ${date}. Ask me about portfolio movement, concentration, stratifications, risk monitoring or validation.`,
     createdAt: new Date().toISOString(),
   };
 }
@@ -208,10 +216,41 @@ export function useWorkspace(client: AgentClient): Workspace {
   // A ref mirrors the selection so runQuery/drill read the latest value without
   // being re-created on every change.
   const selectedContextRef = useRef<string>("total");
+
+  /** The individual-portfolio context matching an onboarded client id, if any
+   *  (deployments that onboard each book as its own client have both axes). */
+  const contextForClient = useCallback(
+    (clientId: string): PortfolioContextOption | null =>
+      (portfolioContextIndex.contexts ?? []).find(
+        (c) => c.context_kind === "portfolio"
+          && (c.context_id === clientId
+            || (c.portfolio_ids.length === 1 && c.portfolio_ids[0] === clientId)),
+      ) ?? null,
+    [portfolioContextIndex],
+  );
+
   const setSelectedContextId = useCallback((contextId: string) => {
     selectedContextRef.current = contextId;
     setSelectedContextIdState(contextId);
-  }, []);
+    // CLIENT FOLLOWS SCOPE: drilling the scope into an individual portfolio
+    // that is itself an onboarded client switches the workspace to that
+    // client's runs, so the scope shown and the tape being read can never
+    // contradict each other (e.g. "Client: acquired_001 · Scope: Total").
+    const ctx = (portfolioContextIndex.contexts ?? []).find((c) => c.context_id === contextId);
+    if (ctx?.context_kind === "portfolio") {
+      const match = portfolios.find(
+        (p) => p.client_id === contextId
+          || (ctx.portfolio_ids.length === 1 && p.client_id === ctx.portfolio_ids[0]),
+      );
+      if (match) {
+        setSelectedClientId((cur) => (cur === match.client_id ? cur : match.client_id));
+        setSelectedRunId((cur) => {
+          const stillValid = match.runs.some((r) => r.run_id === cur);
+          return stillValid ? cur : (match.runs[match.runs.length - 1]?.run_id ?? null);
+        });
+      }
+    }
+  }, [portfolioContextIndex, portfolios]);
 
   // Resolve the signed-in caller once (drives the header identity + role gating).
   // Degrades silently to null when /me is unreachable (auth removed for testing).
@@ -421,6 +460,33 @@ export function useWorkspace(client: AgentClient): Workspace {
     };
   }, [client, portfolioId, selectedContextId, dataVersion]);
 
+  // Background-warm the OTHER clients' latest runs once the active snapshot has
+  // settled, so switching client hits the session cache instead of waiting out
+  // a full backend snapshot compute. Sequential, bounded and best-effort — a
+  // failure only means the switch falls back to a live fetch as before.
+  useEffect(() => {
+    if (!portfolioId || snapshotLoading || portfolios.length <= 1) return;
+    let cancelled = false;
+    const others = portfolios.filter((p) => p.client_id !== selectedClientId).slice(0, 3);
+    if (others.length === 0) return;
+    const timer = setTimeout(async () => {
+      for (const p of others) {
+        const run = p.runs[p.runs.length - 1];
+        if (!run || cancelled) return;
+        const pid = `${p.client_id}/${run.run_id}`;
+        // Warm with the scope that selecting this client would sync to.
+        const scope = contextForClient(p.client_id)?.context_id ?? selectedContextRef.current;
+        try { await client.getSnapshot(pid, scope); } catch { /* best-effort */ }
+        if (cancelled) return;
+        try { await client.getForecastSnapshot(pid, scope); } catch { /* best-effort */ }
+      }
+    }, 3500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [client, portfolioId, snapshotLoading, portfolios, selectedClientId, contextForClient]);
+
   // Manual refresh: clear the client cache (if it exposes one) and bump the
   // data version so the snapshot/forecast effects and the keyed panels reload.
   const refresh = useCallback(() => {
@@ -433,7 +499,7 @@ export function useWorkspace(client: AgentClient): Workspace {
   }, [client]);
 
   const [messages, setMessages] = useState<ChatMessage[]>(
-    () => persisted?.messages ?? [greeting("selected", persisted?.runId ? null : null)],
+    () => persisted?.messages ?? [greeting(null, null)],
   );
   const [artifacts, setArtifacts] = useState<Artifact[]>(
     () => (persisted?.artifacts ?? []).filter((a) => !a.mock),
@@ -454,14 +520,24 @@ export function useWorkspace(client: AgentClient): Workspace {
   // never touches the loaded portfolio/run data or the active dataset.
   const clearArtifacts = useCallback(() => setArtifacts([]), []);
   const clearChat = useCallback(() => {
-    setMessages([greeting("selected", null)]);
+    setMessages([greeting(activePortfolio?.label ?? null, activeRun?.reporting_date ?? null)]);
     setArtifacts((prev) => prev);  // keep workspace artifacts; chat is independent
-  }, []);
+  }, [activePortfolio?.label, activeRun?.reporting_date]);
   const clearAll = useCallback(() => {
     setArtifacts([]);
-    setMessages([greeting("selected", null)]);
+    setMessages([greeting(activePortfolio?.label ?? null, activeRun?.reporting_date ?? null)]);
     setContext(null);
-  }, [setContext]);
+  }, [setContext, activePortfolio?.label, activeRun?.reporting_date]);
+
+  // Personalise the greeting once the portfolio/run resolves — only while the
+  // chat is pristine (nothing but the greeting), so history is never rewritten.
+  useEffect(() => {
+    setMessages((prev) => {
+      if (prev.length !== 1 || prev[0].id !== "greeting") return prev;
+      const fresh = greeting(activePortfolio?.label ?? null, activeRun?.reporting_date ?? null);
+      return prev[0].content === fresh.content ? prev : [fresh];
+    });
+  }, [activePortfolio?.label, activeRun?.reporting_date]);
 
   const lastQuestion = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -719,8 +795,17 @@ export function useWorkspace(client: AgentClient): Workspace {
       // Default to the latest run of the newly-selected portfolio.
       const pf = portfolios.find((p) => p.client_id === clientId);
       setSelectedRunId(pf?.runs[pf.runs.length - 1]?.run_id ?? null);
+      // SCOPE FOLLOWS CLIENT: when the chosen client is itself a governed
+      // source portfolio, align the scope so the capability gating (pipeline /
+      // forecast / risk) reflects the book actually being read — an acquired
+      // book immediately disables Pipeline + Forecast with the backend's reason.
+      const ctx = contextForClient(clientId);
+      if (ctx && selectedContextRef.current !== ctx.context_id) {
+        selectedContextRef.current = ctx.context_id;
+        setSelectedContextIdState(ctx.context_id);
+      }
     },
-    [portfolios],
+    [portfolios, contextForClient],
   );
 
   const resetWorkspace = useCallback(() => {

@@ -44,6 +44,10 @@ const lineage: ViewLineage = {
 describe("LineagePanel — completion model evidence", () => {
   it("shows UNIQUE weekly extracts (not raw files) and the historical window", () => {
     render(<LineagePanel lineage={lineage} />);
+    // Density: the evidence block lives behind the How-calculated toggle now —
+    // the collapsed panel is a single headline line.
+    expect(screen.queryByText("Completion model evidence")).toBeNull();
+    fireEvent.click(screen.getByText(/How calculated/));
     expect(screen.getByText("Completion model evidence")).toBeInTheDocument();
     // 10 unique weekly extracts · 15,256 historical rows · 1,526 tracked cases · ...
     expect(screen.getByText(/10 unique weekly extracts/)).toBeInTheDocument();
@@ -54,6 +58,7 @@ describe("LineagePanel — completion model evidence", () => {
 
   it("reports both files scanned and duplicates excluded", () => {
     render(<LineagePanel lineage={lineage} />);
+    fireEvent.click(screen.getByText(/How calculated/));
     // 26 scanned, 16 duplicates removed -> 10 unique used.
     expect(screen.getByText(/16 duplicates excluded/)).toBeInTheDocument();
     expect(screen.getByText(/26 files scanned/)).toBeInTheDocument();

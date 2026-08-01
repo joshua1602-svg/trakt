@@ -70,7 +70,9 @@ export function LineagePanel({ lineage }: { lineage: ViewLineage | null | undefi
         </button>
       </div>
 
-      {ev && ev.weeklyFilesUsed > 0 && (
+      {/* Full model evidence lives behind the "How calculated" toggle with the
+          rest of the lineage — the collapsed panel stays a single line. */}
+      {open && ev && ev.weeklyFilesUsed > 0 && (
         <div className="mt-1.5 rounded-md border border-[var(--color-line-soft)] bg-navy-850/50 px-2.5 py-1.5 text-[11px] text-ink-400">
           <div className="font-medium text-ink-300">Completion model evidence</div>
           <div className="mt-0.5 tabular-nums">
