@@ -30,7 +30,7 @@ import type {
 import { EMPTY_PORTFOLIO_CONTEXT } from "@/domain";
 import type { AgentClient } from "@/api";
 import type { UserIdentity } from "@/lib/identity";
-import { uid } from "@/lib/utils";
+import { formatHeading, uid } from "@/lib/utils";
 import {
   type AnalysisContext,
   deriveContext,
@@ -57,6 +57,40 @@ function greeting(portfolioLabel: string, asOf: string | null): ChatMessage {
  *  re-run the same query with an added filter. */
 function stampQuestion(artifacts: Artifact[], question: string): Artifact[] {
   return artifacts.map((a) => ({ ...a, source: { ...a.source, question } }));
+}
+
+/** Ceiling on unpinned artifacts kept in the workspace (localStorage-persisted;
+ *  the oldest fall off the end once the session accumulates past it). */
+const MAX_UNPINNED_ARTIFACTS = 24;
+
+/** The logical-artifact identity the canvas groups by (title + type). */
+function artifactKey(a: Artifact): string {
+  return `${formatHeading(a.title).toLowerCase()}|${a.type}`;
+}
+
+/**
+ * Accumulate fresh artifacts instead of replacing the workspace wholesale:
+ * pinned artifacts stay first, fresh results come next (newest first), and
+ * prior unpinned results are RETAINED so earlier answers stay comparable.
+ * A fresh artifact with the same title + type as an older unpinned one
+ * supersedes it (re-asking or drilling refreshes in place rather than
+ * stacking duplicates into one grouped card).
+ */
+export function mergeArtifacts(prev: Artifact[], fresh: Artifact[]): Artifact[] {
+  const pinned = prev.filter((a) => a.pinned);
+  const pinnedIds = new Set(pinned.map((a) => a.id));
+  const incoming = fresh.filter((a) => !pinnedIds.has(a.id));
+  const incomingIds = new Set(incoming.map((a) => a.id));
+  const incomingKeys = new Set(incoming.map(artifactKey));
+  const kept = prev.filter(
+    (a) => !a.pinned && !incomingIds.has(a.id) && !incomingKeys.has(artifactKey(a)),
+  );
+  return [...pinned, ...[...incoming, ...kept].slice(0, MAX_UNPINNED_ARTIFACTS)];
+}
+
+/** True when the failure is a caller-initiated cancellation, not an error. */
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
 }
 
 export interface Workspace {
@@ -109,6 +143,8 @@ export interface Workspace {
   setPortfolio: (clientId: string) => void;
   setRun: (runId: string) => void;
   ask: (question: string) => void;
+  /** Cancel the in-flight agent request (no-op when nothing is running). */
+  stop: () => void;
   /** Re-run an artifact's query with an added drill-through filter (backend). */
   drill: (artifact: Artifact, filters: Record<string, unknown>) => void;
   /** Spec-level memory of the last successful query (null when inactive). */
@@ -499,12 +535,9 @@ export function useWorkspace(client: AgentClient): Workspace {
             narrative: res.narrative,
             error: res.error,
           });
-          setArtifacts((prev) => {
-            const pinned = prev.filter((a) => a.pinned);
-            const pinnedIds = new Set(pinned.map((a) => a.id));
-            const fresh = stampedArtifacts.filter((a) => !pinnedIds.has(a.id));
-            return [...pinned, ...fresh];
-          });
+          // Accumulate: fresh results land first, prior answers stay for
+          // comparison (same title + type refreshes in place, never duplicates).
+          setArtifacts((prev) => mergeArtifacts(prev, stampedArtifacts));
           setMessages((prev) =>
             prev.map((m) =>
               m.id === pendingId
@@ -554,7 +587,9 @@ export function useWorkspace(client: AgentClient): Workspace {
           }
         })
         .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : "The MI Agent could not complete this request.";
+          const message = isAbortError(err)
+            ? "Request cancelled."
+            : err instanceof Error ? err.message : "The MI Agent could not complete this request.";
           setMessages((prev) =>
             prev.map((m) => (m.id === pendingId ? { ...m, pending: false, error: true, content: message } : m)),
           );
@@ -591,12 +626,14 @@ export function useWorkspace(client: AgentClient): Workspace {
         .ask(request, controller.signal)
         .then((res) => {
           if (!res.ok) return; // keep current artifacts; client-side panel remains
-          setArtifacts((prev) => {
-            const pinned = prev.filter((a) => a.pinned);
-            const pinnedIds = new Set(pinned.map((a) => a.id));
-            const fresh = stampQuestion(res.artifacts.filter((a) => !pinnedIds.has(a.id)), question);
-            return [...pinned, ...fresh];
-          });
+          // Stamp the active drill filters so the card can show removable
+          // filter chips (the breadcrumb back to the unfiltered result).
+          const active = Object.keys(filters).length > 0 ? filters : undefined;
+          const fresh = stampQuestion(res.artifacts, question).map((a) => ({
+            ...a,
+            drillFilters: active,
+          }));
+          setArtifacts((prev) => mergeArtifacts(prev, fresh));
         })
         .catch(() => {
           /* leave artifacts untouched — the client-side drill fallback stays */
@@ -655,6 +692,12 @@ export function useWorkspace(client: AgentClient): Workspace {
     },
     [isWorking, runQuery],
   );
+
+  // Cancel the in-flight request. The abort surfaces through the query's own
+  // catch path, which marks the pending message "Request cancelled." with Retry.
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const retryLast = useCallback(() => {
     if (isWorking || !lastQuestion.current) return;
@@ -718,6 +761,7 @@ export function useWorkspace(client: AgentClient): Workspace {
     setPortfolio,
     setRun: setSelectedRunId,
     ask,
+    stop,
     drill,
     context,
     clearContext,

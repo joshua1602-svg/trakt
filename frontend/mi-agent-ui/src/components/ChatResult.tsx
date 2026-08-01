@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { BarChart3, Sheet } from "lucide-react";
 import type { Artifact, KPIArtifact, Reconciliation } from "@/domain";
 import { isChartArtifact, isTableArtifact, isKPIArtifact } from "@/domain";
@@ -24,17 +25,43 @@ function keyNumbers(artifacts: Artifact[]): { label: string; value: string }[] {
 export function ChatResult({
   artifacts,
   onOpenArtifact,
+  workspaceArtifactIds,
 }: {
   artifacts: Artifact[];
   /** Retained for signature compatibility; pinning happens in the workspace. */
   onTogglePin?: (id: string) => void;
   onOpenArtifact?: (id: string) => void;
+  /** Ids still present in the workspace; links to cleared artifacts go stale. */
+  workspaceArtifactIds?: Set<string>;
 }) {
   if (artifacts.length === 0) return null;
 
   const chart = artifacts.find(isChartArtifact);
   const table = artifacts.find(isTableArtifact);
   const numbers = keyNumbers(artifacts);
+  const isStale = (id: string) =>
+    workspaceArtifactIds ? !workspaceArtifactIds.has(id) : false;
+
+  const openButton = (id: string, icon: ReactNode, label: string) => {
+    const stale = isStale(id);
+    return (
+      <button
+        type="button"
+        disabled={stale}
+        title={stale
+          ? "No longer in the workspace — ask the question again to regenerate it"
+          : undefined}
+        onClick={() => !stale && onOpenArtifact?.(id)}
+        className={
+          stale
+            ? "inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 font-medium text-ink-300 opacity-50"
+            : "inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 font-medium text-ink-300 hover:border-teal-400/40 hover:text-ink-100"
+        }
+      >
+        {icon} {stale ? `${label} (cleared)` : label}
+      </button>
+    );
+  };
 
   return (
     <div className="mt-2 space-y-2" data-testid="chat-result-compact">
@@ -53,24 +80,8 @@ export function ChatResult({
       )}
       {(chart || table) && onOpenArtifact && (
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          {chart && (
-            <button
-              type="button"
-              onClick={() => onOpenArtifact(chart.id)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 font-medium text-ink-300 hover:border-teal-400/40 hover:text-ink-100"
-            >
-              <BarChart3 size={12} /> Open chart in workspace
-            </button>
-          )}
-          {table && (
-            <button
-              type="button"
-              onClick={() => onOpenArtifact(table.id)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 font-medium text-ink-300 hover:border-teal-400/40 hover:text-ink-100"
-            >
-              <Sheet size={12} /> Open table in workspace
-            </button>
-          )}
+          {chart && openButton(chart.id, <BarChart3 size={12} />, "Open chart in workspace")}
+          {table && openButton(table.id, <Sheet size={12} />, "Open table in workspace")}
         </div>
       )}
     </div>

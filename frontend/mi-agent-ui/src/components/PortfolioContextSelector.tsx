@@ -69,7 +69,7 @@ export function PortfolioContextSelector({
       >
         <Building2 size={15} className="text-peri-300" />
         <div className="leading-tight">
-          <div className="text-[10px] uppercase tracking-wider text-ink-500">Portfolio</div>
+          <div className="text-[10px] uppercase tracking-wider text-ink-500">Scope</div>
           <div className="text-[13px] font-medium text-ink-100">{active?.label ?? "Total"}</div>
         </div>
         {!single && (

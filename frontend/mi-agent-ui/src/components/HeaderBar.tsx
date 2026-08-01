@@ -1,8 +1,9 @@
 import { Bell, CalendarDays, RefreshCw, Settings, ShieldCheck } from "lucide-react";
 import { PortfolioSelector } from "@/components/PortfolioSelector";
+import { PortfolioContextSelector } from "@/components/PortfolioContextSelector";
 import { DeckDownloadMenu } from "@/components/DeckDownloadMenu";
 import type { AgentClient } from "@/api";
-import type { SnapshotPortfolio, SnapshotRun } from "@/domain";
+import type { PortfolioContextOption, SnapshotPortfolio, SnapshotRun } from "@/domain";
 import {
   type UserIdentity,
   canSeeAdminControls,
@@ -37,6 +38,9 @@ export function HeaderBar({
   identity,
   onRefresh,
   refreshing,
+  contexts,
+  selectedContextId,
+  onContextChange,
 }: {
   portfolios: SnapshotPortfolio[];
   runs: SnapshotRun[];
@@ -51,6 +55,12 @@ export function HeaderBar({
   identity: UserIdentity | null;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /** Governed portfolio-scope hierarchy: when more than one context exists the
+   *  scope selector renders here, ALWAYS visible next to client + reporting
+   *  date (never inside a collapsible region — it scopes chat and exports too). */
+  contexts?: PortfolioContextOption[];
+  selectedContextId?: string;
+  onContextChange?: (contextId: string) => void;
 }) {
   // Role-based visibility: operators/admins may see settings + notifications;
   // client users get a clean, read-only MI surface (fail-closed when unknown).
@@ -98,6 +108,17 @@ export function HeaderBar({
           ))}
         </select>
       </label>
+
+      {/* ONE portfolio-scope control for the whole workspace (chat, exports and
+          every panel). Lives in the persistent header so collapsing the core
+          dashboard never hides the control that scopes the conversation. */}
+      {contexts && contexts.length > 1 && onContextChange && (
+        <PortfolioContextSelector
+          contexts={contexts}
+          value={selectedContextId ?? "total"}
+          onChange={onContextChange}
+        />
+      )}
 
       <div className="ml-auto flex items-center gap-2.5">
         {/* Environment badge: the mock/staging warning stays prominent (it means

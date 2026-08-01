@@ -25,6 +25,9 @@ export function ArtifactCanvas({
   onDrill,
   onAsk,
   onClear,
+  collapsed: collapsedProp,
+  onToggleCollapsed,
+  highlightIds,
 }: {
   artifacts: Artifact[];
   onTogglePin: (id: string) => void;
@@ -34,19 +37,30 @@ export function ArtifactCanvas({
   onAsk?: (question: string) => void;
   /** Clear the workspace artifacts (view-only; loaded MI data is untouched). */
   onClear?: () => void;
+  /** Controlled collapse (the shell owns it so a completed query can
+   *  auto-expand the workspace). Omit both to keep standalone behaviour. */
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  /** Freshly-arrived artifact ids to flash-highlight (auto-reveal). */
+  highlightIds?: string[];
 }) {
   const [view, setView] = useState<ViewMode>("stack");
   const [activeTab, setActiveTab] = useState(0);
   const [filter, setFilter] = useState<ArtifactType | "all">("all");
-  // Collapse state persists across sessions (declutter, A8).
-  const [collapsed, setCollapsed] = useState<boolean>(
+  // Collapse state persists across sessions (declutter, A8). Used only when
+  // the parent does not control the collapse.
+  const [internalCollapsed, setInternalCollapsed] = useState<boolean>(
     () => (typeof localStorage !== "undefined"
       && localStorage.getItem("mi.artifactWorkspace.collapsed") === "1"));
   useEffect(() => {
+    if (collapsedProp !== undefined) return; // parent persists its own state
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("mi.artifactWorkspace.collapsed", collapsed ? "1" : "0");
+      localStorage.setItem("mi.artifactWorkspace.collapsed", internalCollapsed ? "1" : "0");
     }
-  }, [collapsed]);
+  }, [internalCollapsed, collapsedProp]);
+  const collapsed = collapsedProp ?? internalCollapsed;
+  const toggleCollapsed = onToggleCollapsed ?? (() => setInternalCollapsed((c) => !c));
+  const highlights = useMemo(() => new Set(highlightIds ?? []), [highlightIds]);
 
   // Pinned float to the top; then apply the type filter.
   const ordered = useMemo(
@@ -122,7 +136,7 @@ export function ArtifactCanvas({
           )}
           <button
             type="button"
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand artifact workspace" : "Collapse artifact workspace"}
             aria-expanded={!collapsed}
             className="inline-flex items-center rounded-md px-1.5 py-1 text-ink-400 hover:text-ink-100"
@@ -179,7 +193,8 @@ export function ArtifactCanvas({
                 {g.map((a) => (
                   <span key={a.id} id={`artifact-${a.id}`} aria-hidden className="block scroll-mt-4" />
                 ))}
-                <ArtifactCard artifact={g[0]} views={g} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
+                <ArtifactCard artifact={g[0]} views={g} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk}
+                  refreshing={isWorking} highlight={g.some((a) => highlights.has(a.id))} />
               </div>
             ))}
           </div>
@@ -189,7 +204,8 @@ export function ArtifactCanvas({
               {activeGroup.map((a) => (
                 <span key={a.id} id={`artifact-${a.id}`} aria-hidden className="block scroll-mt-4" />
               ))}
-              <ArtifactCard artifact={activeGroup[0]} views={activeGroup} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk} />
+              <ArtifactCard artifact={activeGroup[0]} views={activeGroup} onTogglePin={onTogglePin} onDrill={onDrill} onAsk={onAsk}
+                refreshing={isWorking} highlight={activeGroup.some((a) => highlights.has(a.id))} />
             </div>
           )
         )}
