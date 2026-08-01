@@ -54,11 +54,19 @@ KIND_PLATFORM_CANONICAL = "platform_canonical"
 KIND_UNAVAILABLE = "unavailable"
 
 
+#: uri -> etag of the copy already downloaded to scratch, so the active
+#: canonical is re-downloaded only when the published blob actually changed
+#: (resolve_data_source runs per request — a per-call download would put a
+#: full blob round-trip in front of every /mi/query).
+_PLATFORM_URI_ETAGS: dict = {}
+
+
 def _resolve_platform_uri(uri: str) -> Optional[Path]:
     """Resolve MI_AGENT_PLATFORM_URI via the storage abstraction.
 
     A ``blob://`` URI may point at the file or its containing ``latest/`` dir; a
-    Blob source is downloaded to a local scratch dir. Returns ``None`` if absent.
+    Blob source is downloaded to a local scratch dir (etag-cached — re-fetched
+    only when the published canonical changed). Returns ``None`` if absent.
     """
     try:
         from apps.blob_trigger_app.storage import open_storage
@@ -73,7 +81,16 @@ def _resolve_platform_uri(uri: str) -> Optional[Path]:
         return Path(str(local))
     scratch_root = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
     dest = Path(scratch_root) / _PLATFORM_CANONICAL_NAME
-    return storage.download_file(candidate, dest)
+    try:
+        etag = storage.etag(candidate)
+    except Exception:  # noqa: BLE001 — no etag → always download
+        etag = None
+    if etag is not None and dest.exists() and _PLATFORM_URI_ETAGS.get(candidate) == etag:
+        return dest
+    downloaded = storage.download_file(candidate, dest)
+    if etag is not None:
+        _PLATFORM_URI_ETAGS[candidate] = etag
+    return downloaded
 
 
 def _resolve_platform_canonical() -> Optional[Path]:
@@ -109,6 +126,16 @@ def _resolve_platform_canonical() -> Optional[Path]:
         p = base / "out_platform" / _PLATFORM_CANONICAL_NAME
         if p.exists():
             return p
+    # A blob:// onboarding output root (the same store the dashboard reads)
+    # publishes a ``latest/`` platform canonical pointer — use it when no
+    # explicit platform env is set, so a deployment that can serve /mi/snapshot
+    # from the governed store never falls back to the synthetic demo for
+    # /mi/query (which the source-approval policy rightly refuses with a 503).
+    onboarding_root = os.environ.get("MI_AGENT_ONBOARDING_OUTPUT_ROOT", "")
+    if onboarding_root.startswith("blob://"):
+        resolved = _resolve_platform_uri(f"{onboarding_root.rstrip('/')}/latest")
+        if resolved is not None:
+            return resolved
     return None
 
 

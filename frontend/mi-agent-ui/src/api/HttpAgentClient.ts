@@ -326,7 +326,20 @@ export class HttpAgentClient implements AgentClient {
     }
 
     if (!res.ok) {
-      throw new AgentError(this.describeStatus(res, "/mi/query"));
+      // Governance refusals (unapproved source, unauthorised portfolio, data
+      // store down) carry a mapped status WITH the full governed envelope —
+      // surface the backend's client-facing reason, not a bare status line.
+      let governedMessage: string | undefined;
+      try {
+        const errBody = (await res.json()) as ApiResponse;
+        governedMessage =
+          (typeof errBody.error === "string" && errBody.error) ||
+          (typeof errBody.answer === "string" && errBody.answer) ||
+          undefined;
+      } catch {
+        /* not a JSON envelope — fall back to the status description */
+      }
+      throw new AgentError(governedMessage ?? this.describeStatus(res, "/mi/query"));
     }
 
     let body: ApiResponse;
