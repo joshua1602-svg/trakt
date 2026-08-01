@@ -631,6 +631,28 @@ def compute_funded_snapshot(
         kpis.append(_kpi("wa_age", "Weighted avg youngest age",
                          _fmt_decimal(wavg), fmt="number", raw=wavg))
 
+    # Single-borrower share (optional). ``borrower_type`` is the prepared
+    # single/joint dimension (derived from second-applicant presence for ERM,
+    # but any asset class that supplies the column gets the tile).
+    if "borrower_type" in df.columns:
+        btype = df["borrower_type"].astype(str).str.strip().str.lower()
+        known = btype.isin(["single", "joint"])
+        if known.any():
+            single = int((btype == "single").sum())
+            pct = single / int(known.sum()) * 100.0
+            kpis.append(_kpi("pct_single_borrowers", "Single borrowers",
+                             _fmt_pct_points(pct), fmt="pct", raw=round(pct, 1),
+                             hint=f"{single:,d} of {int(known.sum()):,d} loans"))
+
+    # Balance-weighted average property value (optional). Uses the same current
+    # valuation input as NNEG/LTV, so it generalises to any collateralised book.
+    if _has_values(df, "current_valuation_amount"):
+        wavg = _weighted_average(df["current_valuation_amount"], bal_series)
+        kpis.append(_kpi("wa_property_value", "Weighted avg property value",
+                         _fmt_gbp(wavg), fmt="gbp",
+                         raw=round(wavg, 2) if wavg is not None else None,
+                         hint="balance-weighted current valuation"))
+
     # ---- month-on-month change vs the prior available run -------------------
     monthly_change: Optional[Dict[str, Any]] = None
     if prior_df is not None:

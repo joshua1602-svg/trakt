@@ -440,25 +440,37 @@ export function useWorkspace(client: AgentClient): Workspace {
 
   // Fetch the deterministic forecast (funded + pipeline) for the same run, so the
   // pipeline + forecast + watchlist sections move with the funded selection.
+  // PRIORITISED: unless a pipeline/forecast view needs it right now, the fetch
+  // waits until the visible funded snapshot has settled — the slow backend
+  // compute serves what's on screen first, then warms the rest.
+  const forecastKeyRef = useRef<string | null>(null);
+  const workspaceUnmounted = useRef(false);
+  useEffect(() => () => { workspaceUnmounted.current = true; }, []);
   useEffect(() => {
     if (!portfolioId) return;
-    let cancelled = false;
+    const needNow = activeView === "pipeline" || activeView === "forecast";
+    const key = `${portfolioId}|${selectedContextId}|${dataVersion}`;
+    if (forecastKeyRef.current === key) return; // already fetched for this selection
+    if (!needNow && snapshotLoading) return;    // let the visible panel land first
+    forecastKeyRef.current = key;
     setForecastLoading(true);
+    // Resolution is guarded by the KEY (not an effect-cleanup flag): dep churn
+    // like snapshotLoading flipping must not cancel the in-flight fetch, and a
+    // late response for a superseded selection is simply ignored.
     client
       .getForecastSnapshot(portfolioId, selectedContextId)
       .then((fc) => {
-        if (!cancelled) setForecast(fc);
+        if (workspaceUnmounted.current || forecastKeyRef.current !== key) return;
+        setForecast(fc);
+        setForecastLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setForecast(null);
-      })
-      .finally(() => {
-        if (!cancelled) setForecastLoading(false);
+        if (workspaceUnmounted.current || forecastKeyRef.current !== key) return;
+        forecastKeyRef.current = null; // a failed fetch stays retryable
+        setForecast(null);
+        setForecastLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [client, portfolioId, selectedContextId, dataVersion]);
+  }, [client, portfolioId, selectedContextId, dataVersion, activeView, snapshotLoading]);
 
   // Background-warm the OTHER clients' latest runs once the active snapshot has
   // settled, so switching client hits the session cache instead of waiting out
