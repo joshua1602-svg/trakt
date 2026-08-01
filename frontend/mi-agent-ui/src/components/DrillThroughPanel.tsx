@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Layers } from "lucide-react";
 import { aggregateSelection, buildDrillModel, type DrillArtifact, type DrillMeasure } from "@/lib/drill";
 import { formatValue } from "@/lib/utils";
@@ -40,16 +40,22 @@ function drillFilterKey(artifact: DrillArtifact, columnKey: string): string {
 export function DrillThroughPanel({
   artifact,
   onDrill,
+  externalSelection,
+  refreshing,
 }: {
   artifact: DrillArtifact;
   onDrill?: (filters: Record<string, unknown>) => void;
+  /** A dimension value picked outside the panel (e.g. by clicking a chart
+   *  bar) — applied exactly as if chosen in the selector. */
+  externalSelection?: string | null;
+  /** A query is in flight — drives the live "refreshing…" note. */
+  refreshing?: boolean;
 }) {
   const model = useMemo(() => buildDrillModel(artifact), [artifact]);
   const [selected, setSelected] = useState<string>("");
 
-  if (!model) return null;
-
   const onSelect = (value: string) => {
+    if (!model) return;
     setSelected(value);
     // Re-run the query against the full dataset, keyed by the registry semantic
     // field. The client-side grid below renders regardless (fallback).
@@ -66,6 +72,17 @@ export function DrillThroughPanel({
     }
     onDrill({ [key]: value });
   };
+
+  // A chart-mark click routes through the same drill path as the selector.
+  useEffect(() => {
+    if (!externalSelection || !model) return;
+    if (!model.values.includes(externalSelection)) return;
+    if (externalSelection === selected) return;
+    onSelect(externalSelection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSelection]);
+
+  if (!model) return null;
 
   const agg = selected ? aggregateSelection(model, selected) : null;
   const primary = model.primary;
@@ -106,7 +123,7 @@ export function DrillThroughPanel({
             {agg.records > 1 && (
               <span className="text-[11px] font-normal text-ink-500">· {agg.records} rows</span>
             )}
-            {onDrill && (
+            {onDrill && refreshing && (
               <span className="text-[10px] font-normal text-ink-500">· refreshing from full dataset…</span>
             )}
           </div>

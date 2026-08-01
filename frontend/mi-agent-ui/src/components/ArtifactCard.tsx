@@ -7,11 +7,13 @@ import {
   Copy,
   Download,
   FileWarning,
+  FilterX,
   FlaskConical,
   LayoutGrid,
   Pin,
   Sheet,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import type { Artifact, ArtifactType } from "@/domain";
 import { Badge, Card, IconButton } from "@/components/ui";
@@ -50,12 +52,24 @@ function orderViews(views: Artifact[]): Artifact[] {
   return [...views].sort((a, b) => VIEW_ORDER.indexOf(a.type) - VIEW_ORDER.indexOf(b.type));
 }
 
+/** Human label for one drill-filter value (handles the "Other" NOT-IN shape). */
+function filterValueLabel(value: unknown): string {
+  if (value && typeof value === "object" && "op" in (value as Record<string, unknown>)) {
+    const v = value as { op?: string; value?: unknown };
+    if (v.op === "not_in") return "Other (outside shown categories)";
+    return `${v.op} ${Array.isArray(v.value) ? v.value.join(", ") : String(v.value ?? "")}`;
+  }
+  return String(value);
+}
+
 export function ArtifactCard({
   artifact,
   views,
   onTogglePin,
   onDrill,
   onAsk,
+  refreshing,
+  highlight,
 }: {
   artifact: Artifact;
   /** Sibling view variants of the SAME logical artifact (e.g. the chart + table
@@ -66,14 +80,31 @@ export function ArtifactCard({
   onDrill?: (artifact: Artifact, filters: Record<string, unknown>) => void;
   /** Dispatch a follow-up question (insight investigations), routed via context. */
   onAsk?: (question: string) => void;
+  /** A query is in flight (drives the drill panel's live "refreshing…" note). */
+  refreshing?: boolean;
+  /** Flash-highlight this card as a freshly-arrived result. */
+  highlight?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
+  // A category picked by clicking a chart mark — forwarded to the drill panel
+  // so clicking a bar behaves exactly like choosing it in the drill selector.
+  const [chartPick, setChartPick] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const allViews = orderViews(views && views.length ? views : [artifact]);
   const [viewIdx, setViewIdx] = useState(0);
   const current = allViews[Math.min(viewIdx, allViews.length - 1)] ?? artifact;
+
+  // Active backend drill filters (stamped by the workspace when a drill re-ran
+  // the query). Rendered as removable chips — the breadcrumb back to unfiltered.
+  const drillFilters = current.drillFilters ?? null;
+  const drillEntries = drillFilters ? Object.entries(drillFilters) : [];
+  const removeDrillFilter = (key: string) => {
+    if (!onDrill || !drillFilters) return;
+    const rest = Object.fromEntries(drillEntries.filter(([k]) => k !== key));
+    onDrill(current, rest); // {} re-runs the originating query unfiltered
+  };
 
   const Icon = KIND_ICON[current.type];
   const exportable = isChartArtifact(current) || isTableArtifact(current);
@@ -101,7 +132,13 @@ export function ArtifactCard({
   const anyPinned = allViews.some((v) => v.pinned);
 
   return (
-    <Card className={cn("animate-fade-in overflow-hidden", anyPinned && "ring-1 ring-peri-400/30")}>
+    <Card
+      className={cn(
+        "animate-fade-in overflow-hidden transition-shadow duration-700",
+        anyPinned && "ring-1 ring-peri-400/30",
+        highlight && "ring-2 ring-teal-400/50 shadow-lg shadow-teal-900/30",
+      )}
+    >
       <div className="flex items-start gap-3 border-b border-[var(--color-line-soft)] px-4 py-3">
         <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-navy-700/60 text-peri-300">
           <Icon size={15} />
@@ -180,15 +217,57 @@ export function ArtifactCard({
         </div>
       </div>
 
+      {/* Active drill-filter chips — the visible state of a backend drill and
+          the way back: removing the last chip re-runs the unfiltered query. */}
+      {drillEntries.length > 0 && (
+        <div
+          data-testid="drill-filter-chips"
+          className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-line-soft)] bg-navy-900/40 px-4 py-2"
+        >
+          <FilterX size={13} className="shrink-0 text-peri-300" />
+          <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
+            Drilled to
+          </span>
+          {drillEntries.map(([key, value]) => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1 rounded-full border border-peri-400/30 bg-peri-400/10 px-2 py-0.5 text-[11px] text-peri-200"
+            >
+              <span className="font-medium">{formatHeading(key)}:</span> {filterValueLabel(value)}
+              {onDrill && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${formatHeading(key)} filter`}
+                  title="Remove this filter (re-runs the query without it)"
+                  onClick={() => removeDrillFilter(key)}
+                  className="ml-0.5 rounded-full p-0.5 text-peri-300/70 hover:bg-peri-400/20 hover:text-peri-100"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
       {!collapsed && (
         <div className="p-4" ref={bodyRef}>
-          <ArtifactRenderer artifact={current} />
+          <ArtifactRenderer
+            artifact={current}
+            // Clicking a bar drills into that category (live backends and the
+            // client-side fallback both route through the drill panel below).
+            onSelectCategory={
+              isChartArtifact(current) ? (v) => setChartPick(v) : undefined
+            }
+          />
           {(isChartArtifact(current) || isTableArtifact(current)) && (
             <>
               <InsightPanel artifact={current} onAsk={onAsk} />
               <DrillThroughPanel
                 artifact={current}
                 onDrill={onDrill ? (filters) => onDrill(current, filters) : undefined}
+                externalSelection={chartPick}
+                refreshing={refreshing}
               />
             </>
           )}

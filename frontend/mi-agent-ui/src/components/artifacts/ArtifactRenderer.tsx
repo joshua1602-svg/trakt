@@ -34,12 +34,17 @@ const RECHARTS_TYPES = new Set<ChartType>(["bar", "line", "area", "scatter", "bu
  * for a chart type with no acceptable native renderer (and is itself
  * re-skinned to the dark theme by PlotlyArtifactView).
  */
-function renderChart(artifact: Extract<Artifact, { type: "chart" }>) {
+function renderChart(
+  artifact: Extract<Artifact, { type: "chart" }>,
+  onSelectCategory?: (value: string) => void,
+) {
   const ct = artifact.chartType;
   const figure = artifact.source.figure;
 
   // 1. Standard charts → native Recharts.
-  if (RECHARTS_TYPES.has(ct)) return <ChartArtifactView artifact={artifact} />;
+  if (RECHARTS_TYPES.has(ct)) {
+    return <ChartArtifactView artifact={artifact} onSelectCategory={onSelectCategory} />;
+  }
 
   // 2. heatmap → native custom grid when the matrix data is present.
   if (ct === "heatmap") {
@@ -71,9 +76,16 @@ function renderChart(artifact: Extract<Artifact, { type: "chart" }>) {
   );
 }
 
-export function ArtifactRenderer({ artifact }: { artifact: Artifact }) {
+export function ArtifactRenderer({
+  artifact,
+  onSelectCategory,
+}: {
+  artifact: Artifact;
+  /** Category picked by clicking a chart mark (drives drill-through). */
+  onSelectCategory?: (value: string) => void;
+}) {
   if (isKPIArtifact(artifact)) return <KPIArtifactView artifact={artifact} />;
-  if (isChartArtifact(artifact)) return renderChart(artifact);
+  if (isChartArtifact(artifact)) return renderChart(artifact, onSelectCategory);
   if (isTableArtifact(artifact)) return <TableArtifactView artifact={artifact} />;
   if (isValidationArtifact(artifact)) return <ValidationArtifactView artifact={artifact} />;
   if (isRiskArtifact(artifact)) return <RiskArtifactView artifact={artifact} />;

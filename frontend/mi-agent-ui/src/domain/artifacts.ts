@@ -93,6 +93,10 @@ interface ArtifactBase {
   reconciliation?: Reconciliation;
   /** Field-provenance notes surfaced in the query lineage. */
   sourceNotes?: SourceNote[];
+  /** Active drill-through filters this artifact was computed under (stamped
+   * client-side when a backend drill re-runs the originating query). Drives the
+   * removable filter chips on the card; absent on unfiltered results. */
+  drillFilters?: Record<string, unknown>;
 }
 
 /* ------------------------------- KPI -------------------------------- */

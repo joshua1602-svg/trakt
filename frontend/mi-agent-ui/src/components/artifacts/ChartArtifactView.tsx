@@ -120,7 +120,22 @@ function Legend({ artifact }: { artifact: ChartArtifact }) {
 
 const H = 300;
 
-function Body({ artifact }: { artifact: ChartArtifact }) {
+function Body({
+  artifact,
+  onSelectCategory,
+}: {
+  artifact: ChartArtifact;
+  onSelectCategory?: (value: string) => void;
+}) {
+  // Click-to-drill for categorical bars: clicking a bar picks its x category.
+  // Recharts passes the row payload on the bar's onClick.
+  const pickCategory = onSelectCategory
+    ? (d: unknown) => {
+        const payload = (d as { payload?: Record<string, unknown> })?.payload;
+        const v = payload?.[artifact.xKey];
+        if (v !== undefined && v !== null) onSelectCategory(String(v));
+      }
+    : undefined;
   // Format the value axis/tooltip from the value column's display hint (so a
   // fraction-stored percent renders as points), falling back to valueFormat.
   const valueCol = artifact.series[0]?.key ?? artifact.valueKey;
@@ -168,7 +183,15 @@ function Body({ artifact }: { artifact: ChartArtifact }) {
           {yAxis}
           {tip}
           {artifact.series.map((s) => (
-            <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} />
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              name={s.label}
+              fill={s.color}
+              radius={[3, 3, 0, 0]}
+              onClick={pickCategory}
+              cursor={pickCategory ? "pointer" : undefined}
+            />
           ))}
         </BarChart>
       </ResponsiveContainer>
@@ -255,11 +278,18 @@ function Body({ artifact }: { artifact: ChartArtifact }) {
   );
 }
 
-export function ChartArtifactView({ artifact }: { artifact: ChartArtifact }) {
+export function ChartArtifactView({
+  artifact,
+  onSelectCategory,
+}: {
+  artifact: ChartArtifact;
+  /** Invoked with the x category when a bar is clicked (drill-through). */
+  onSelectCategory?: (value: string) => void;
+}) {
   return (
     <div>
       <Legend artifact={artifact} />
-      <Body artifact={artifact} />
+      <Body artifact={artifact} onSelectCategory={onSelectCategory} />
     </div>
   );
 }

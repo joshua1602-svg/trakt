@@ -23,3 +23,13 @@ if (typeof window !== "undefined") {
   window.HTMLElement.prototype.scrollIntoView =
     window.HTMLElement.prototype.scrollIntoView || (() => {});
 }
+
+// The shell mirrors navigation (view / sub-tab / scope) into the URL so views
+// are shareable. Reset it between tests so one test's navigation doesn't
+// deep-link-restore into the next test's fresh render.
+import { beforeEach } from "vitest";
+beforeEach(() => {
+  if (typeof window !== "undefined" && window.history?.replaceState) {
+    window.history.replaceState(null, "", window.location.pathname);
+  }
+});

@@ -1,7 +1,36 @@
-import { AlertTriangle, FileBarChart, RefreshCw, Sparkles, User } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, ChevronDown, FileBarChart, RefreshCw, Sparkles, User } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/domain";
 import { ChatResult } from "@/components/ChatResult";
 import { cn, formatTime } from "@/lib/utils";
+
+/** Secondary provenance (assumptions) behind a one-line disclosure so a busy
+ *  answer doesn't stack meta boxes; warnings + coverage stay always-visible. */
+function AssumptionsDisclosure({ assumptions }: { assumptions: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-ink-500 hover:text-ink-300"
+      >
+        <ChevronDown size={12} className={cn("transition-transform", !open && "-rotate-90")} />
+        Assumptions ({assumptions.length})
+      </button>
+      {open && (
+        <div className="mt-1 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2">
+          <ul className="list-disc space-y-0.5 pl-4 text-[11px] leading-relaxed text-ink-400">
+            {assumptions.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ChatMessage({
   message,
@@ -9,6 +38,7 @@ export function ChatMessage({
   onRetry,
   onAsk,
   onTogglePin,
+  workspaceArtifactIds,
 }: {
   message: ChatMessageType;
   onOpenArtifact?: (id: string) => void;
@@ -16,6 +46,9 @@ export function ChatMessage({
   /** Dispatch a suggested follow-up question (routes through context). */
   onAsk?: (question: string) => void;
   onTogglePin?: (id: string) => void;
+  /** Ids still present in the artifact workspace. When provided, links to
+   *  artifacts that were since cleared render stale instead of no-opping. */
+  workspaceArtifactIds?: Set<string>;
 }) {
   const isUser = message.role === "user";
   const hasInlineResult = !isUser && !!message.artifacts && message.artifacts.length > 0;
@@ -116,14 +149,7 @@ export function ChatMessage({
         )}
 
         {message.assumptions && message.assumptions.length > 0 && (
-          <div className="mt-2 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-500">Assumptions</div>
-            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] leading-relaxed text-ink-400">
-              {message.assumptions.map((a, i) => (
-                <li key={i}>{a}</li>
-              ))}
-            </ul>
-          </div>
+          <AssumptionsDisclosure assumptions={message.assumptions} />
         )}
 
         {message.warnings && message.warnings.length > 0 && (
@@ -141,26 +167,39 @@ export function ChatMessage({
             artifacts={message.artifacts!}
             onTogglePin={onTogglePin}
             onOpenArtifact={onOpenArtifact}
+            workspaceArtifactIds={workspaceArtifactIds}
           />
         )}
 
         {/* Fallback navigation links only when the result isn't embedded inline. */}
         {!hasInlineResult && message.artifactRefs && message.artifactRefs.length > 0 && (
           <div className="mt-2 flex flex-col gap-1">
-            {message.artifactRefs.map((ref) => (
-              <button
-                key={ref.id}
-                type="button"
-                onClick={() => onOpenArtifact?.(ref.id)}
-                className="group inline-flex items-center gap-2 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1.5 text-left text-[11px] text-ink-300 transition-colors hover:border-teal-400/40 hover:text-ink-100"
-              >
-                <FileBarChart size={13} className="text-teal-300" />
-                <span className="truncate">{ref.title}</span>
-                <span className="ml-auto text-[10px] uppercase tracking-wider text-ink-500 group-hover:text-teal-300">
-                  {ref.type} →
-                </span>
-              </button>
-            ))}
+            {message.artifactRefs.map((ref) => {
+              const stale = workspaceArtifactIds ? !workspaceArtifactIds.has(ref.id) : false;
+              return (
+                <button
+                  key={ref.id}
+                  type="button"
+                  disabled={stale}
+                  title={stale
+                    ? "No longer in the workspace — ask the question again to regenerate it"
+                    : undefined}
+                  onClick={() => !stale && onOpenArtifact?.(ref.id)}
+                  className={cn(
+                    "group inline-flex items-center gap-2 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1.5 text-left text-[11px] text-ink-300 transition-colors",
+                    stale
+                      ? "cursor-not-allowed opacity-50"
+                      : "hover:border-teal-400/40 hover:text-ink-100",
+                  )}
+                >
+                  <FileBarChart size={13} className="text-teal-300" />
+                  <span className="truncate">{ref.title}</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wider text-ink-500 group-hover:text-teal-300">
+                    {stale ? "cleared" : `${ref.type} →`}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 

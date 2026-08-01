@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, LayoutDashboard } from "lucide-react";
 import { HeaderBar } from "@/components/HeaderBar";
 import { AgentChatPanel } from "@/components/AgentChatPanel";
@@ -13,10 +13,9 @@ import { RiskLimitsWorkspace } from "@/components/risk/RiskLimitsWorkspace";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { SubTabs } from "@/components/SubTabs";
-import { PortfolioContextSelector } from "@/components/PortfolioContextSelector";
 import { PortfolioScopeBanner } from "@/components/PortfolioScopeBanner";
 import { LineagePanel } from "@/components/LineagePanel";
-import type { ViewLineage } from "@/domain";
+import type { ViewLineage, WorkspaceView } from "@/domain";
 import { createAgentClient, resolveAgentClientConfig } from "@/api";
 import { useWorkspace } from "@/state/useWorkspace";
 
@@ -67,6 +66,41 @@ const VIEW_SUBTITLES: Record<string, string> = {
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
 };
 
+type FundedTab = "strat" | "geo" | "evo" | "cohorts";
+type PipelineTab = "strat" | "evo";
+type ForecastTab = "projection" | "evolution";
+
+const WORKSPACE_VIEWS: WorkspaceView[] = ["funded", "pipeline", "forecast", "risk_limits"];
+
+/** Read the shareable navigation params off the entry URL (view, sub-tabs,
+ *  scope). Client / run / question stay handled by the workspace hook. */
+function readNavParams(): {
+  view: WorkspaceView | null;
+  funded: FundedTab | null;
+  pipeline: PipelineTab | null;
+  forecast: ForecastTab | null;
+  scope: string | null;
+} {
+  const empty = { view: null, funded: null, pipeline: null, forecast: null, scope: null } as const;
+  if (typeof window === "undefined" || !window.location?.search) return { ...empty };
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const pick = <T extends string>(key: string, valid: readonly T[]): T | null => {
+      const v = p.get(key);
+      return v && (valid as readonly string[]).includes(v) ? (v as T) : null;
+    };
+    return {
+      view: pick("view", WORKSPACE_VIEWS),
+      funded: pick("ftab", ["strat", "geo", "evo", "cohorts"] as const),
+      pipeline: pick("ptab", ["strat", "evo"] as const),
+      forecast: pick("xtab", ["projection", "evolution"] as const),
+      scope: p.get("scope"),
+    };
+  } catch {
+    return { ...empty };
+  }
+}
+
 export function AppShell() {
   // One client for the app lifetime; swap createAgentClient() for the real
   // backend later with zero component changes.
@@ -82,12 +116,8 @@ export function AppShell() {
     ? `${ws.selectedClientId ?? ""}/${ws.selectedRunId}`
     : (ws.selectedClientId ?? "");
 
-  const openArtifact = useCallback((id: string) => {
-    document.getElementById(`artifact-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, []);
-
   // A — core-dashboard collapse (persisted), distinct from the artifact-workspace
-  // collapse owned by ArtifactCanvas. Clearing never touches loaded MI data.
+  // collapse below. Clearing never touches loaded MI data.
   const [dashCollapsed, setDashCollapsed] = useState<boolean>(
     () => (typeof localStorage !== "undefined"
       && localStorage.getItem("mi.coreDashboard.collapsed") === "1"));
@@ -97,12 +127,112 @@ export function AppShell() {
     }
   }, [dashCollapsed]);
 
+  // Artifact-workspace collapse is owned HERE (same persisted key the canvas
+  // used) so a completed query can auto-expand the workspace before revealing
+  // its result — a collapsed workspace no longer swallows new answers.
+  const [wsCollapsed, setWsCollapsed] = useState<boolean>(
+    () => (typeof localStorage !== "undefined"
+      && localStorage.getItem("mi.artifactWorkspace.collapsed") === "1"));
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("mi.artifactWorkspace.collapsed", wsCollapsed ? "1" : "0");
+    }
+  }, [wsCollapsed]);
+
+  // Deep-linkable navigation: view + sub-tabs + scope restore from the URL.
+  const nav = useRef(readNavParams()).current;
+
   // Sub-tab state per top-level workspace (Funded / Pipeline / Forecast). Each is
   // independent so switching top-level tabs preserves the last sub-view.
-  const [fundedTab, setFundedTab] =
-    useState<"strat" | "geo" | "evo" | "cohorts" | "risk">("strat");
-  const [pipelineTab, setPipelineTab] = useState<"strat" | "evo">("strat");
-  const [forecastTab, setForecastTab] = useState<"projection" | "evolution">("projection");
+  const [fundedTab, setFundedTab] = useState<FundedTab>(nav.funded ?? "strat");
+  const [pipelineTab, setPipelineTab] = useState<PipelineTab>(nav.pipeline ?? "strat");
+  const [forecastTab, setForecastTab] = useState<ForecastTab>(nav.forecast ?? "projection");
+
+  // Apply the URL's view + scope once on mount (workspace owns those states).
+  const applied = useRef(false);
+  useEffect(() => {
+    if (applied.current) return;
+    applied.current = true;
+    if (nav.view) ws.setActiveView(nav.view);
+    if (nav.scope) ws.setSelectedContextId(nav.scope);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Mirror the current navigation into the URL (replaceState — no history spam)
+  // so any view is shareable and survives a refresh. Existing params (client,
+  // run, q, filters) are preserved, not clobbered.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.history?.replaceState) return;
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const set = (k: string, v: string | null | undefined) => {
+        if (v) p.set(k, v);
+        else p.delete(k);
+      };
+      set("client", ws.selectedClientId);
+      set("run", ws.selectedRunId);
+      set("view", ws.activeView !== "funded" ? ws.activeView : null);
+      set("scope", ws.selectedContextId !== "total" ? ws.selectedContextId : null);
+      set("ftab", fundedTab !== "strat" ? fundedTab : null);
+      set("ptab", pipelineTab !== "strat" ? pipelineTab : null);
+      set("xtab", forecastTab !== "projection" ? forecastTab : null);
+      const qs = p.toString();
+      window.history.replaceState(
+        null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`,
+      );
+    } catch {
+      /* URL sync is best-effort — never break the app for it */
+    }
+  }, [ws.selectedClientId, ws.selectedRunId, ws.activeView, ws.selectedContextId,
+      fundedTab, pipelineTab, forecastTab]);
+
+  const scrollToArtifact = useCallback((id: string) => {
+    // Guarded: jsdom (tests) has no scrollIntoView.
+    document.getElementById(`artifact-${id}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const openArtifact = useCallback((id: string) => {
+    // A collapsed workspace renders no anchors — expand it first, then scroll
+    // on the next frame so the link never silently does nothing.
+    setWsCollapsed((collapsed) => {
+      if (collapsed) {
+        window.setTimeout(() => scrollToArtifact(id), 80);
+        return false;
+      }
+      scrollToArtifact(id);
+      return collapsed;
+    });
+  }, [scrollToArtifact]);
+
+  // Auto-reveal: when a query lands new artifacts, expand the workspace, scroll
+  // to the newest result and flash-highlight the new cards. The initial render
+  // (persisted artifacts) seeds the baseline without yanking the viewport.
+  const [highlightIds, setHighlightIds] = useState<string[]>([]);
+  const prevArtifactIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = new Set(ws.artifacts.map((a) => a.id));
+    const prev = prevArtifactIds.current;
+    prevArtifactIds.current = ids;
+    if (!prev) return; // first render — nothing "new"
+    const added = ws.artifacts.filter((a) => !prev.has(a.id));
+    if (added.length === 0) return;
+    setWsCollapsed(false);
+    setHighlightIds(added.map((a) => a.id));
+    const target = added[0].id;
+    const scrollTimer = window.setTimeout(() => scrollToArtifact(target), 80);
+    const clearTimer = window.setTimeout(() => setHighlightIds([]), 2600);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [ws.artifacts, scrollToArtifact]);
+
+  // Ids currently present in the workspace, so the chat can mark links to
+  // since-cleared artifacts as stale instead of silently doing nothing.
+  const workspaceArtifactIds = useMemo(
+    () => new Set(ws.artifacts.map((a) => a.id)),
+    [ws.artifacts],
+  );
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -130,6 +260,11 @@ export function AppShell() {
         identity={ws.identity}
         onRefresh={ws.refresh}
         refreshing={ws.refreshing}
+        // ONE portfolio-scope control for the whole workspace, in the permanent
+        // header (it scopes chat + exports, so it must never collapse away).
+        contexts={ws.portfolioContexts}
+        selectedContextId={ws.selectedContextId}
+        onContextChange={ws.setSelectedContextId}
       />
       <div className="flex min-h-0 flex-1">
         <AgentChatPanel
@@ -138,12 +273,14 @@ export function AppShell() {
           mock={client.mock}
           initialInput={ws.initialQuestion}
           onSubmit={ws.ask}
+          onStop={ws.stop}
           onOpenArtifact={openArtifact}
           onRetry={ws.retryLast}
           context={ws.context}
           onClearContext={ws.clearContext}
           onClearChat={ws.clearChat}
           onTogglePin={ws.togglePin}
+          workspaceArtifactIds={workspaceArtifactIds}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* Region 3/4 — CORE DASHBOARD: neutral panel, distinct from the grey
@@ -170,9 +307,8 @@ export function AppShell() {
                 <ChevronDown size={15} className={dashCollapsed ? "-rotate-90 transition-transform" : "transition-transform"} />
               </button>
             </header>
-            {/* Dashboard navigation: the lens tabs span the full panel width; the
-                portfolio-scope selector sits alongside, visually separated so it
-                reads as a selector rather than another tab. */}
+            {/* Dashboard navigation: the lens tabs span the full panel width.
+                The portfolio-scope selector lives in the permanent header. */}
             {!dashCollapsed && (
               <div className="flex flex-wrap items-center gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
                 <ViewToggle
@@ -182,19 +318,6 @@ export function AppShell() {
                   disabledReasons={ws.disabledViewReasons}
                   className="min-w-0 flex-1"
                 />
-                {/* ONE portfolio control for the whole workspace. There is no
-                    second scope toggle anywhere in the app — this selection is
-                    sent to every backend call, including chat and exports. */}
-                {ws.portfolioContexts.length > 1 && (
-                  <>
-                    <div className="h-6 w-px shrink-0 bg-[var(--surface-dashboard-line)]" />
-                    <PortfolioContextSelector
-                      contexts={ws.portfolioContexts}
-                      value={ws.selectedContextId}
-                      onChange={ws.setSelectedContextId}
-                    />
-                  </>
-                )}
               </div>
             )}
             {!dashCollapsed && (
@@ -214,7 +337,9 @@ export function AppShell() {
                   context={ws.activeContext}
                   capability={ws.capabilities[VIEW_CAPABILITY[ws.activeView]]}
                 />
-                {/* FUNDED — stratifications · geography · evolution · cohorts */}
+                {/* FUNDED — stratifications · geography · evolution · cohorts.
+                    Risk Limits lives ONCE, as the top-level tab (no duplicate
+                    sub-tab entry pointing at the same workspace). */}
                 {ws.activeView === "funded" && (
                   <div className="space-y-4">
                     <SubTabs ariaLabel="Funded sub-view" testId="funded-subtabs"
@@ -224,7 +349,6 @@ export function AppShell() {
                         { id: "geo", label: "Geography" },
                         { id: "evo", label: "Evolution" },
                         { id: "cohorts", label: "Cohorts" },
-                        { id: "risk", label: "Risk Limits" },
                       ]} />
                     {fundedTab === "strat" && (
                       <>
@@ -245,13 +369,6 @@ export function AppShell() {
                     {fundedTab === "cohorts" && (
                       <EvolutionPanel key={`evo-cohorts-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
                         tabs={["cohorts"]} client={client} portfolioId={workspacePortfolioId}
-                        portfolioContext={ws.selectedContextId} />
-                    )}
-                    {/* Funded → Risk Limits — same governed workspace as the
-                        top-level Risk Limits tab; one evaluation service. */}
-                    {fundedTab === "risk" && ws.capabilityEnabled("risk") && (
-                      <RiskLimitsWorkspace key={`risk-funded-${ws.dataVersion}-${ws.selectedContextId}`}
-                        client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
                     )}
                   </div>
@@ -333,6 +450,9 @@ export function AppShell() {
               onTogglePin={ws.togglePin}
               isWorking={ws.isWorking}
               portfolioName={ws.portfolio.name}
+              collapsed={wsCollapsed}
+              onToggleCollapsed={() => setWsCollapsed((c) => !c)}
+              highlightIds={highlightIds}
               // Backend drill-through only when wired to a live backend; the mock
               // client keeps the client-side drill panel as the fallback.
               onDrill={client.mock ? undefined : ws.drill}
