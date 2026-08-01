@@ -136,6 +136,9 @@ describe("PortfolioScopeBanner", () => {
     // The workspace still reads as Total — no silent switch to Direct.
     expect(banner.textContent).toContain("Total workspace");
     expect(banner.textContent).toContain("Pipeline is sourced from originating portfolios only.");
+    // The portfolio lists sit behind the Details toggle (density), not deleted.
+    expect(banner.textContent).not.toContain("Contributing: direct_001, direct_002");
+    fireEvent.click(screen.getByTestId("scope-banner-details"));
     expect(banner.textContent).toContain("Contributing: direct_001, direct_002");
     expect(banner.textContent).toContain("Excluded: acquired_001, acquired_002");
   });

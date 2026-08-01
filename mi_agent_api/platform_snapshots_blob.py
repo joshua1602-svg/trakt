@@ -11,9 +11,16 @@ managed pipeline publishes a dated platform canonical per funded reporting cut:
 onboarding 18_ tape layout), so it cannot enumerate these — leaving
 ``/mi/snapshots`` empty. This module lists the dated platform canonicals via the
 storage abstraction and builds the SAME ``{portfolios:[{…, runs:[…]}]}`` index
-the loaded-canonical path produces — keyed by ``source_portfolio_id`` (so
-``direct_001`` is the selectable funded portfolio) — but with one run per dated
-cut instead of a single ``latest``.
+the loaded-canonical path produces — ONE client entry (the tenant) whose runs
+are the dated cuts, each run covering the WHOLE canonical (all source
+portfolios combined).
+
+The client is the TENANT axis only. Source portfolios (``direct_001`` /
+``acquired_001``…) are the PORTFOLIO axis, served by ``/mi/portfolio-context``
+and applied by the routes via the governed scope resolver — mirroring the
+loaded-canonical index, which was reworked for exactly this reason: per-source
+client entries made ``Client: acquired_001 · Scope: Total`` a reachable,
+self-contradictory state, and left no selectable combined book.
 
 Read-through caching keeps repeated dropdown calls cheap; a re-published dated
 canonical (etag change) is picked up automatically.
@@ -89,67 +96,37 @@ def _read(uri: str, storage) -> Optional[pd.DataFrame]:
         return None
 
 
-def _portfolios_from_frame(df: pd.DataFrame, date: str, *,
-                           label_fn, balance_fn) -> List[Dict[str, Any]]:
-    """Per-``source_portfolio_id`` run rows for one dated canonical, mirroring the
-    loaded-canonical index. Falls back to a single client entry when the canonical
-    carries no provenance."""
-    run_common = {"run_id": date, "reporting_date": date}
-    rows: List[Dict[str, Any]] = []
-    if "source_portfolio_id" in df.columns:
-        ids = df["source_portfolio_id"].dropna().astype(str).str.strip()
-        for pid in sorted({p for p in ids.unique() if p and p.lower() != "nan"}):
-            sub = df[ids == pid]
-            rows.append({
-                "source_portfolio_id": pid,
-                "label": label_fn(sub, pid),
-                "run": {**run_common, "loan_count": int(len(sub)),
-                        "current_outstanding_balance": round(balance_fn(sub), 2)},
-            })
-    if not rows:
-        rows.append({
-            "source_portfolio_id": None, "label": None,
-            "run": {**run_common, "loan_count": int(len(df)),
-                    "current_outstanding_balance": round(balance_fn(df), 2)}})
-    return rows
-
-
-def build_index(root: str, storage, *, label_fn, balance_fn,
+def build_index(root: str, storage, *, label_fn=None, balance_fn,
                 default_client_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Build ``{"portfolios": [...], "source": root}`` from the dated platform
-    canonicals under a ``blob://`` root, each portfolio carrying one run per dated
-    cut (oldest → newest). Returns ``None`` when there is nothing dated to
-    enumerate (the caller then falls back to the loaded-canonical index)."""
+    canonicals under a ``blob://`` root: ONE tenant client whose runs are the
+    dated cuts (oldest → newest), each run covering the whole canonical — all
+    source portfolios combined. Portfolio scoping happens via the governed
+    portfolio context, never here. Returns ``None`` when there is nothing dated
+    to enumerate (the caller then falls back to the loaded-canonical index).
+
+    ``label_fn`` is accepted for call-site stability but no longer used — the
+    tenant label is the client id, not a row value from the tape."""
+    del label_fn  # tenant axis only; no per-source labelling
     dated = list_dated_platform_canonicals(root, storage)
     if not dated:
         return None
-    portfolios: Dict[str, Dict[str, Any]] = {}
+    client_id = default_client_id or "platform"
+    runs: List[Dict[str, Any]] = []
     for d in dated:
         df = _read(d["uri"], storage)
         if df is None or df.empty:
             continue
-        for row in _portfolios_from_frame(df, d["date"], label_fn=label_fn,
-                                          balance_fn=balance_fn):
-            pid = row["source_portfolio_id"]
-            key = pid if pid is not None else (default_client_id or "platform")
-            label = row["label"] or str(key).upper()
-            pf = portfolios.setdefault(key, {
-                "client_id": key, "label": label,
-                **({"source_portfolio_id": pid} if pid is not None else {}),
-                "runs": {}})
-            pf["runs"][row["run"]["run_id"]] = row["run"]
-    if not portfolios:
+        runs.append({"run_id": d["date"], "reporting_date": d["date"],
+                     "loan_count": int(len(df)),
+                     "current_outstanding_balance": round(balance_fn(df), 2)})
+    if not runs:
         return None
-    out: List[Dict[str, Any]] = []
-    for pf in portfolios.values():
-        runs = sorted(pf["runs"].values(),
-                      key=lambda r: (r["reporting_date"] or "", r["run_id"]))
-        entry = {"client_id": pf["client_id"], "label": pf["label"], "runs": runs}
-        if "source_portfolio_id" in pf:
-            entry["source_portfolio_id"] = pf["source_portfolio_id"]
-        out.append(entry)
-    out.sort(key=lambda p: p["client_id"])
-    return {"portfolios": out, "source": root}
+    runs.sort(key=lambda r: (r["reporting_date"] or "", r["run_id"]))
+    return {"portfolios": [{"client_id": client_id,
+                            "label": str(client_id).upper(),
+                            "runs": runs}],
+            "source": root}
 
 
 _TOTAL_SCOPES = {"total", "all", "client_001", "platform", ""}
@@ -207,6 +184,19 @@ def build_funded_evolution_frames(root: str, storage, scope: Optional[str],
         frames.append({"run_id": d["date"], "reporting_date": d["date"],
                        "df": prepared, "source": d["uri"]})
     return frames
+
+
+def canonical_etag(root: str, storage, run_id: str) -> Optional[str]:
+    """The storage etag of the dated canonical for ``run_id``, or ``None`` when
+    the root/run don't address one (or the backend can't answer). Lets callers
+    key derived caches on content identity without downloading anything."""
+    if not is_blob_root(root) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(run_id)):
+        return None
+    uri = f"{root.rstrip('/')}/{run_id}/{_PLATFORM_CANONICAL_NAME}"
+    try:
+        return storage.etag(uri)
+    except Exception:  # noqa: BLE001 - caching is additive
+        return None
 
 
 def resolve_run_frame(root: str, storage, source_portfolio_id: Optional[str],

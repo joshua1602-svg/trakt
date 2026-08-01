@@ -297,6 +297,15 @@ def _blob_funded_evolution(root: str, cid: str, trid: Optional[str],
     return result
 
 
+#: (root, client_id, run_id) -> (etag, (prepared_df, prep_report)). Funded prep
+#: over a full canonical is the expensive part of every snapshot/forecast/query
+#: request; a dated canonical is immutable per etag, so the prepared result is
+#: reused until the canonical is re-published. Consumers never mutate the frame
+#: (scoping filters into new frames), so sharing it is safe.
+_PREPARED_BLOB_RUN_CACHE: Dict[Tuple[str, str, str], Tuple[str, Tuple[Any, Any]]] = {}
+_PREPARED_BLOB_RUN_CACHE_MAX = 24
+
+
 def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
     """``(df, prep_report)`` for a specific run, preferring on-disk discovery and
     falling back to the active env-configured dataframe for the active run."""
@@ -306,11 +315,21 @@ def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
     if root and platform_blob_mod.is_blob_root(root):
         try:
             from apps.blob_trigger_app.storage import open_storage
-            raw = platform_blob_mod.resolve_run_frame(
-                root, open_storage(), client_id, run_id)
+            storage = open_storage()
+            key = (str(root), str(client_id), str(run_id))
+            etag = platform_blob_mod.canonical_etag(root, storage, run_id)
+            cached = _PREPARED_BLOB_RUN_CACHE.get(key)
+            if cached is not None and etag is not None and cached[0] == etag:
+                return cached[1]
+            raw = platform_blob_mod.resolve_run_frame(root, storage, client_id, run_id)
             if raw is not None and not raw.empty:
                 from .funded_prep import prepare_funded_mi_dataset
-                return prepare_funded_mi_dataset(raw)
+                prepared = prepare_funded_mi_dataset(raw)
+                if etag is not None:
+                    while len(_PREPARED_BLOB_RUN_CACHE) >= _PREPARED_BLOB_RUN_CACHE_MAX:
+                        _PREPARED_BLOB_RUN_CACHE.pop(next(iter(_PREPARED_BLOB_RUN_CACHE)))
+                    _PREPARED_BLOB_RUN_CACHE[key] = (etag, prepared)
+                return prepared
         except Exception as exc:  # noqa: BLE001 - fall back to active source
             logger.warning("blob platform run resolution failed for %s/%s: %s",
                            client_id, run_id, exc)

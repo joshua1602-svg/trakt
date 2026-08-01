@@ -33,7 +33,15 @@ export function StatTile({
 }) {
   const Icon = deltaIntent === "positive" ? ArrowUpRight : deltaIntent === "negative" ? ArrowDownRight : Minus;
   return (
-    <div className={cn("rounded-lg border border-[var(--color-line-soft)] bg-navy-850/60 p-3.5", dim && "opacity-60")}>
+    // Elevated tile: a step lighter than the panel behind it, with a visible
+    // border + top highlight so the KPI grid reads as raised cards.
+    <div
+      className={cn(
+        "rounded-lg border border-navy-600/70 bg-navy-800/80 p-3.5 shadow-sm",
+        "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+        dim && "opacity-60",
+      )}
+    >
       <div className="text-[11px] font-medium uppercase tracking-wider text-ink-400">{label}</div>
       <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-ink-100">{value}</div>
       {delta != null && (
@@ -58,6 +66,10 @@ export interface BarDatum {
 /**
  * A deterministic horizontal bar list (no chart dependency). Values are
  * formatted as GBP by default; bar widths are proportional to the max value.
+ *
+ * All rows share ONE grid, so the value column resolves to a single width
+ * across the whole list and every bar track is identical — bars stay
+ * apples-to-apples regardless of how long each row's value text is.
  */
 export function BarList({
   data,
@@ -73,9 +85,9 @@ export function BarList({
   }
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
-    <div className="space-y-1.5">
+    <div className="grid grid-cols-[7rem_1fr_auto] items-center gap-x-2 gap-y-1.5">
       {data.map((d) => (
-        <div key={d.label} className="grid grid-cols-[7rem_1fr_auto] items-center gap-2">
+        <div key={d.label} className="contents">
           <span className="truncate text-[11px] text-ink-300" title={d.label}>
             {d.label}
           </span>

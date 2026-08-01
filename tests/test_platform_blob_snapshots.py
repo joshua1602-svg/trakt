@@ -11,8 +11,10 @@ Layout under the root (blob://processed-v2/platform/ERE/):
 
 Covered:
   * dated platform canonicals listed, latest/ excluded, chronological;
-  * /mi/snapshots returns portfolios keyed by source_portfolio_id, each with one
-    run per dated cut (> 1 run);
+  * /mi/snapshots returns ONE tenant client whose runs are the dated cuts, each
+    covering the WHOLE canonical (all source portfolios combined) — source
+    portfolios are the portfolio-context axis, not clients;
+  * the combined book serves Total figures and narrows via portfolioContext;
   * a selected historical run loads THAT dated canonical (not the latest);
   * an on-disk (filesystem) root is unaffected.
 
@@ -33,14 +35,14 @@ if str(_REPO) not in sys.path:
 
 
 def _canonical_csv(direct_balance: int, acquired_balance: int, cut: str) -> str:
-    # Two source portfolios so the index is keyed by source_portfolio_id, plus a
-    # reporting_date column carrying the funded cut.
+    # Two source portfolios (the portfolio-context axis), a reporting_date column
+    # carrying the funded cut, plus borrower/valuation inputs for the KPI tiles.
     return (
         "loan_id,source_portfolio_id,source_portfolio_type,source_portfolio_label,"
-        "current_outstanding_balance,reporting_date\n"
-        f"L1,direct_001,direct,Direct Book,{direct_balance},{cut}\n"
-        f"L2,direct_001,direct,Direct Book,{direct_balance},{cut}\n"
-        f"L3,acquired_001,acquired,Acquired Book,{acquired_balance},{cut}\n")
+        "current_outstanding_balance,reporting_date,borrower_type,current_valuation_amount\n"
+        f"L1,direct_001,direct,Direct Book,{direct_balance},{cut},single,10000000\n"
+        f"L2,direct_001,direct,Direct Book,{direct_balance},{cut},joint,10000000\n"
+        f"L3,acquired_001,acquired,Acquired Book,{acquired_balance},{cut},single,10000000\n")
 
 
 class _EnvGuard:
@@ -94,7 +96,9 @@ class _BlobPlatformFixture:
 
 def _reset_read_cache():
     import mi_agent_api.platform_snapshots_blob as pb
+    import mi_agent_api.datasets as datasets
     pb._READ_CACHE.clear()
+    datasets._PREPARED_BLOB_RUN_CACHE.clear()
 
 
 class TestBlobPlatformListing(unittest.TestCase):
@@ -113,7 +117,7 @@ class TestBlobPlatformListing(unittest.TestCase):
 
 class TestSnapshotsEndpoint(unittest.TestCase):
 
-    def test_enumerates_runs_per_source_portfolio(self):
+    def test_one_tenant_client_with_combined_runs(self):
         import mi_agent_api.app as app
         with tempfile.TemporaryDirectory() as td:
             fx = _BlobPlatformFixture(td)
@@ -121,17 +125,46 @@ class TestSnapshotsEndpoint(unittest.TestCase):
             with fx.env():
                 resp = app.snapshots()
         self.assertEqual(resp["source"], fx.ROOT)
-        pfs = {p["client_id"]: p for p in resp["portfolios"]}
-        self.assertIn("direct_001", pfs)
-        self.assertIn("acquired_001", pfs)
-        direct = pfs["direct_001"]
-        run_dates = [r["reporting_date"] for r in direct["runs"]]
+        # ONE client (the tenant axis). Source portfolios are NOT clients — they
+        # are the portfolio-context axis, so the combined book is selectable and
+        # "Client: acquired_001 · Scope: Total" is unrepresentable.
+        self.assertEqual(len(resp["portfolios"]), 1)
+        pf = resp["portfolios"][0]
+        self.assertEqual(pf["client_id"], "platform")   # no MI_AGENT_CLIENT_ID set
+        run_dates = [r["reporting_date"] for r in pf["runs"]]
         self.assertEqual(run_dates, ["2025-10-31", "2025-11-30"])   # > 1 run, sorted
-        # Direct Oct balance = 2 loans * 5,000,000.
-        oct_run = direct["runs"][0]
-        self.assertEqual(oct_run["loan_count"], 2)
-        self.assertEqual(oct_run["current_outstanding_balance"], 10_000_000.0)
-        self.assertEqual(direct["label"], "Direct Book")
+        # Oct = whole canonical: direct (2 × 5M) + acquired (1 × 2M).
+        oct_run = pf["runs"][0]
+        self.assertEqual(oct_run["loan_count"], 3)
+        self.assertEqual(oct_run["current_outstanding_balance"], 12_000_000.0)
+
+    def test_combined_book_serves_total_and_narrows_by_context(self):
+        import mi_agent_api.app as app
+        with tempfile.TemporaryDirectory() as td:
+            fx = _BlobPlatformFixture(td)
+            _reset_read_cache()
+            with fx.env():
+                total = app.snapshot(client_id="platform", run_id="2025-11-30",
+                                     portfolioContext="total")
+                direct = app.snapshot(client_id="platform", run_id="2025-11-30",
+                                      portfolioContext="direct_001")
+        self.assertTrue(total.get("ok"))
+        self.assertTrue(direct.get("ok"))
+        by_id = {k["id"]: k for k in total["kpis"]}
+        # Nov total = direct (2 × 6M) + acquired (1 × 2.5M) = 14,500,000.
+        self.assertEqual(by_id["balance"]["raw"], 14_500_000.0)
+        self.assertEqual(by_id["loans"]["raw"], 3)
+        # The governed context narrows the SAME combined tape to one portfolio.
+        direct_by_id = {k["id"]: k for k in direct["kpis"]}
+        self.assertEqual(direct_by_id["balance"]["raw"], 12_000_000.0)
+        self.assertEqual(direct_by_id["loans"]["raw"], 2)
+        # New tiles: single-borrower share (2 of 3 loans) and the balance-
+        # weighted average property value (all valuations equal → exactly 10M).
+        self.assertEqual(by_id["pct_single_borrowers"]["raw"], 66.7)
+        self.assertEqual(by_id["pct_single_borrowers"]["hint"], "2 of 3 loans")
+        self.assertEqual(by_id["wa_property_value"]["raw"], 10_000_000.0)
+        # And they scope with the context like every other KPI (direct = 1 of 2).
+        self.assertEqual(direct_by_id["pct_single_borrowers"]["raw"], 50.0)
 
     def test_selected_historical_run_loads_that_cut(self):
         import mi_agent_api.app as app

@@ -54,6 +54,8 @@ const NOV_SNAPSHOT: FundedSnapshot = {
     kpi({ id: "wa_rate", label: "Weighted avg interest rate", value: "3.2%", format: "pct", raw: 3.2 }),
     kpi({ id: "mom_loans", label: "Monthly change · loans", value: "+40", raw: 40, deltaIntent: "positive", hint: "vs 2025-10-31" }),
     kpi({ id: "mom_balance", label: "Monthly change · balance", value: "+£4.7MM", format: "gbp", raw: 4_695_000, deltaIntent: "positive", hint: "+111.5%" }),
+    kpi({ id: "pct_single_borrowers", label: "Single borrowers", value: "38.4%", format: "pct", raw: 38.4, hint: "28 of 73 loans" }),
+    kpi({ id: "wa_property_value", label: "Weighted avg property value", value: "£412K", format: "gbp", raw: 412_000, hint: "balance-weighted current valuation" }),
     kpi({ id: "exited_loans", label: "Exited / redeemed loans", value: "0", raw: 0, deltaIntent: "neutral" }),
     kpi({ id: "nneg_risk", label: "NNEG exposure (current)", value: "£0", format: "gbp", raw: 0, deltaIntent: "positive", hint: "0 loan(s) with balance above current valuation" }),
   ],

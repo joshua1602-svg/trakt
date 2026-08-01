@@ -4,6 +4,7 @@ import type { PipelineSnapshot } from "@/domain";
 import { Badge } from "@/components/ui";
 import { BarList, StatTile, type BarDatum, type DeltaIntent } from "@/components/pipeline/bits";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
+import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
 import { cn, formatGBP } from "@/lib/utils";
 
 /**
@@ -118,11 +119,15 @@ export function PipelineSnapshotPanel({
     value: b.pipelineAmount,
     count: b.caseCount,
   }));
-  const byRegion: BarDatum[] = (snapshot.regionBreakdown ?? []).map((r) => ({
-    label: r.key,
-    value: r.pipelineAmount,
-    count: r.caseCount,
-  }));
+  // Regions read alphabetically (Unknown last); funnel stages and broker
+  // ranking keep their inherent order (sequence / concentration ranking).
+  const byRegion: BarDatum[] = sortStratBars(
+    (snapshot.regionBreakdown ?? []).map((r) => ({
+      label: cleanBucketLabel(r.key),
+      value: r.pipelineAmount,
+      count: r.caseCount,
+    })),
+  );
 
   return (
     <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">

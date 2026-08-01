@@ -14,16 +14,30 @@ describe("FundedSnapshotPanel", () => {
     expect(screen.getByText("73")).toBeInTheDocument();
   });
 
-  it("shows month-on-month change versus the prior run", () => {
+  it("shows month-on-month change on the headline tiles without duplicate tiles", () => {
     render(<FundedSnapshotPanel snapshot={mockSnapshot("client_001/mi_2025_11")} />);
-    expect(screen.getByText("Monthly change · loans")).toBeInTheDocument();
-    // "+40" appears as both the loans-funded delta and the dedicated tile value.
+    // The delta lives on the headline Loans-funded tile…
     expect(screen.getAllByText("+40").length).toBeGreaterThanOrEqual(1);
+    // …so the separate "Monthly change" tiles (same numbers again) are hidden.
+    expect(screen.queryByText("Monthly change · loans")).toBeNull();
+    expect(screen.queryByText("Monthly change · balance")).toBeNull();
     // The duplicate "New loans since prior run" tile is replaced by a
     // portfolio-aware risk tile (NNEG for ERM).
     expect(screen.queryByText("New loans since prior run")).toBeNull();
     expect(screen.getByText("NNEG exposure (current)")).toBeInTheDocument();
     expect(screen.getByText(/vs prior run · 2025-10-31/)).toBeInTheDocument();
+  });
+
+  it("keeps explicit monthly-change tiles when the headline tiles carry no delta", () => {
+    const base = mockSnapshot("client_001/mi_2025_11");
+    const snap: FundedSnapshot = {
+      ...base,
+      kpis: base.kpis.map((k) =>
+        k.id === "balance" || k.id === "loans" ? { ...k, delta: null } : k),
+    };
+    render(<FundedSnapshotPanel snapshot={snap} />);
+    expect(screen.getByText("Monthly change · loans")).toBeInTheDocument();
+    expect(screen.getByText("Monthly change · balance")).toBeInTheDocument();
   });
 
   it("renders point-in-time stratifications (balance by dimension)", () => {

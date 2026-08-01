@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Layers } from "lucide-react";
 import type { SnapshotPortfolio } from "@/domain";
-import { cn } from "@/lib/utils";
+import { cn, formatHeading } from "@/lib/utils";
+
+/** Friendly display name: "acquired_001" / "CLIENT_001" → "Acquired 001". */
+function displayName(label?: string | null): string {
+  if (!label) return "";
+  return formatHeading(label.toLowerCase()) || label;
+}
 
 /**
  * Data-driven CLIENT selector — which onboarded client's platform the workspace
@@ -46,7 +52,9 @@ export function PortfolioSelector({
         <Layers size={15} className="text-peri-300" />
         <div className="leading-tight">
           <div className="text-[10px] uppercase tracking-wider text-ink-500">Client</div>
-          <div className="text-[13px] font-medium text-ink-100">{active?.label ?? "No client"}</div>
+          <div className="text-[13px] font-medium text-ink-100">
+            {active ? displayName(active.label) : "No client"}
+          </div>
         </div>
         {!single && (
           <ChevronDown size={14} className={cn("text-ink-400 transition-transform", open && "rotate-180")} />
@@ -66,7 +74,7 @@ export function PortfolioSelector({
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-navy-800"
             >
               <div className="flex-1">
-                <div className="text-[13px] font-medium text-ink-100">{p.label}</div>
+                <div className="text-[13px] font-medium text-ink-100">{displayName(p.label)}</div>
                 <div className="text-[10px] text-ink-400">{p.runs.length} reporting run{p.runs.length === 1 ? "" : "s"}</div>
               </div>
               {p.client_id === active?.client_id && <Check size={14} className="text-peri-300" />}
