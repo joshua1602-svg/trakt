@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { FlaskConical, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { FlaskConical, Loader2, Plus } from "lucide-react";
 import clsx from "clsx";
 import { useOpsClient } from "@/api/context";
-import type { CaseSummary, ScenarioSummary } from "@/api/agentTypes";
+import type { AgentStatus, CaseSummary, ScenarioSummary } from "@/api/agentTypes";
 import { ErrorNote } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
 import { StatusChip } from "@/components/StatusChip";
@@ -21,6 +21,13 @@ const FILTERS = [
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
+
+/** Openers for the home page's quick actions. Wording only — nothing is sent. */
+const INTENT_PROMPTS: Record<string, string> = {
+  onboard: "Onboard ",
+  portfolio: "Add a portfolio for ",
+  delivery: "Prepare a reporting delivery for ",
+};
 
 function matches(row: CaseSummary, filter: FilterKey): boolean {
   if (filter === "all") return true;
@@ -41,46 +48,81 @@ function matches(row: CaseSummary, filter: FilterKey): boolean {
   );
 }
 
+/**
+ * A created case must never appear to do nothing: the response is checked for
+ * the reference the next screen needs, and a response without one is treated
+ * as a failure to OPEN — the creation itself is reported, and the refreshed
+ * list shows the case.
+ */
+function caseRefOf(status: AgentStatus | undefined | null): string {
+  const ref = status?.case_ref ?? status?.run?.case_ref ?? "";
+  return typeof ref === "string" ? ref : "";
+}
+
 export function AgentCasesScreen() {
   const client = useOpsClient();
   const navigate = useNavigate();
   const toast = useToast();
-  const [filter, setFilter] = useState<FilterKey>("all");
-  const [instruction, setInstruction] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [params] = useSearchParams();
+  const [filter, setFilter] = useState<FilterKey>(() =>
+    FILTERS.some((f) => f.key === params.get("filter"))
+      ? (params.get("filter") as FilterKey)
+      : "all",
+  );
+  const [instruction, setInstruction] = useState(
+    () => INTENT_PROMPTS[params.get("intent") ?? ""] ?? "",
+  );
+  /** Which action is running: "create", or the fixture id of a preset. */
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [createdNotOpened, setCreatedNotOpened] = useState(false);
+  const busy = busyAction !== null;
 
   const meta = useLoad(() => client.getAgentMeta(), []);
   const cases = useLoad(() => client.listAgentCases(), []);
+
+  useEffect(() => {
+    const wanted = params.get("filter");
+    if (wanted && FILTERS.some((f) => f.key === wanted)) setFilter(wanted as FilterKey);
+  }, [params]);
 
   const rows = useMemo(
     () => (cases.data ?? []).filter((row) => matches(row, filter)),
     [cases.data, filter],
   );
 
-  async function create() {
-    if (!instruction.trim() || busy) return;
-    setBusy(true);
+  /** The whole preset/create sequence: loading → create → refresh → open. */
+  async function start(key: string, run: () => Promise<AgentStatus>) {
+    if (busy) return; // duplicate-click protection
+    setBusyAction(key);
+    setCreatedNotOpened(false);
     try {
-      const status = await client.createAgentCase(instruction.trim());
-      navigate(`/agent/${status.case_ref}`);
+      const status = await run();
+      const caseRef = caseRefOf(status);
+      // The list is refreshed BEFORE navigating, so coming back — or failing
+      // to navigate — still shows the created case.
+      await cases.reload({ quiet: true });
+      if (!caseRef) {
+        setCreatedNotOpened(true);
+        return;
+      }
+      navigate(`/agent/${caseRef}`);
     } catch (err) {
-      toast.show(errorMessage(err));
+      toast.show(errorMessage(err), "error");
+      // The backend may have created the case before failing; show it.
+      void cases.reload({ quiet: true });
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
-  async function runScenario(scenario: ScenarioSummary) {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const status = await client.runAgentScenario(scenario.fixture_id);
-      navigate(`/agent/${status.case_ref}`);
-    } catch (err) {
-      toast.show(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+  function create() {
+    const text = instruction.trim();
+    if (!text) return;
+    void start("create", () => client.createAgentCase(text));
+  }
+
+  function runScenario(scenario: ScenarioSummary) {
+    void start(scenario.fixture_id, () => client.runAgentScenario(scenario.fixture_id));
   }
 
   if (meta.error) {
@@ -109,13 +151,26 @@ export function AgentCasesScreen() {
         <button
           type="button"
           disabled={busy || !instruction.trim()}
-          onClick={() => void create()}
+          onClick={create}
           className="mt-3 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          <Plus className="h-4 w-4" aria-hidden />
-          {busy ? copy.agent.sending : copy.agent.createButton}
+          {busyAction === "create" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Plus className="h-4 w-4" aria-hidden />
+          )}
+          {busyAction === "create" ? copy.agent.sending : copy.agent.createButton}
         </button>
       </section>
+
+      {createdNotOpened && (
+        <div
+          role="status"
+          className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {copy.agent.scenarioCreatedButNotOpened}
+        </div>
+      )}
 
       {(meta.data?.scenarios?.length ?? 0) > 0 && (
         <section className="mt-6">
@@ -139,10 +194,15 @@ export function AgentCasesScreen() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void runScenario(scenario)}
-                  className="mt-3 rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                  onClick={() => runScenario(scenario)}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
                 >
-                  {copy.agent.scenarioRun}
+                  {busyAction === scenario.fixture_id && (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  )}
+                  {busyAction === scenario.fixture_id
+                    ? copy.agent.scenarioRunning
+                    : copy.agent.scenarioRun}
                 </button>
               </li>
             ))}

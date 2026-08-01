@@ -101,7 +101,7 @@ _DATE = f"(?:{_ISO_DATE}|{_LONG_DATE}|{_MONTH_YEAR})"
 #: Six digits before three: alternation is first-match, and "#112233"
 #: read as "#112" is worse than not reading it at all.
 _COLOUR = r"#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})"
-_NAME_RUN = r"[A-Z][\w&'’-]*(?:\s+[A-Z][\w&'’-]*){0,4}"
+_NAME_RUN = r"[A-Z][\w&'’-]*(?:\s+[A-Z0-9][\w&'’-]*){0,4}"
 _COUNTRY_CODE = r"[A-Z]{2}"
 
 #: Patterns that match almost any word. Fine when the operator named the field

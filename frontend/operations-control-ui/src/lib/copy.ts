@@ -11,10 +11,13 @@ export const copy = {
     workflows: "Workflows",
     rules: "Rules",
     history: "History",
-    agent: "Onboarding Agent",
+    agent: "OCC Agent",
     admin: "Platform configuration",
     onboarding: "Client onboarding",
+    manual: "Manual delivery",
+    specialistHeading: "Specialist",
     startNew: "Create a manual delivery",
+    startAgent: "Start with OCC Agent",
   },
 
   onboarding: {
@@ -160,6 +163,23 @@ export const copy = {
   home: {
     title: "Trakt Operations",
     subtitle: "What Trakt is preparing for you, and what needs you.",
+    heroHeading: "Tell Trakt what needs to happen",
+    heroBody:
+      "The OCC Agent will create the case, gather what is required, guide approvals, and " +
+      "hand off to the governed workflow.",
+    heroCta: "Start with OCC Agent",
+    quickHeading: "Quick actions",
+    quick: {
+      onboardClient: "Onboard a new client",
+      addPortfolio: "Add a portfolio",
+      prepareDelivery: "Prepare a reporting delivery",
+      reviewBlocked: "Review a blocked case",
+      investigateFailed: "Investigate a failed run",
+    },
+    manualNote:
+      "OCC Agent is the preferred route. Manual delivery remains available for specialist " +
+      "and exceptional cases.",
+    manualCta: "Create a manual delivery",
     tiles: {
       new_deliveries: "New deliveries",
       needs_attention: "Needs your attention",
@@ -341,18 +361,17 @@ export const copy = {
     empty: "No reports yet.",
   },
 
-  // The OCC Agent tab. A rehearsal space: the operator works the whole
-  // onboarding process in conversation, against synthetic cases only.
+  // The OCC Agent. The primary operating entry point: the operator describes
+  // what needs to happen and Trakt creates and guides the case chronologically.
   agent: {
-    title: "Onboarding Agent",
-    subtitle: "Work through an onboarding in conversation, on a practice case.",
+    title: "OCC Agent",
+    subtitle: "Tell Trakt what needs to happen. It creates and guides the case, step by step.",
     syntheticChip: "Practice case",
     syntheticBanner:
-      "Everything in this tab is a practice case. It uses the real onboarding, the real agents " +
-      "and the real controls, but Trakt never activates a configuration, writes files, starts " +
-      "the pipeline, sends an email or publishes anything from here.",
+      "Practice mode uses the real onboarding controls but does not activate configuration, " +
+      "send email, or start the live pipeline.",
     newCase: "Start a new practice case",
-    newCaseHeading: "What needs onboarding?",
+    newCaseHeading: "What needs to happen?",
     newCasePrompt:
       "Tell Trakt in your own words. For example: “Onboard Northstar Lending. It is a UK " +
       "equity-release portfolio. They need monthly management information. The first files will " +
@@ -361,7 +380,13 @@ export const copy = {
     createButton: "Start",
     scenariosHeading: "Or start from a prepared example",
     scenarioRun: "Run this example",
+    scenarioRunning: "Creating the practice case…",
     scenarioExpected: "Expected outcome",
+    scenarioCreatedButNotOpened:
+      "The practice case was created but could not be opened automatically. It appears in " +
+      "the case list below.",
+    openCase: "Open case",
+    caseCreated: "Practice case created",
     casesHeading: "Practice cases",
     caseEmpty: "No practice cases yet.",
     filterAll: "All",
@@ -370,8 +395,46 @@ export const copy = {
     filterReady: "Ready for execution",
     disabledTitle: "Not switched on",
     disabled:
-      "The Onboarding Agent is not switched on for this environment. Ask your Trakt " +
-      "administrator.",
+      "The OCC Agent is not switched on for this environment. Ask your Trakt administrator.",
+
+    // The route-level safety net: a failed action or a rendering fault shows a
+    // card and keeps the rest of the OCC standing, never a blank page.
+    errorTitle: "The OCC Agent hit a problem",
+    errorBody:
+      "The case and its record are safe. Try again, or open the case list. If this keeps " +
+      "happening, tell your Trakt administrator.",
+    errorRetry: "Try again",
+    errorBack: "Back to the case list",
+
+    // The compact case summary at the top of every case.
+    summaryClient: "Client",
+    summaryMode: "Mode",
+    summaryModePractice: "Practice",
+    summaryModeLive: "Live",
+    summaryStage: "Current stage",
+    summaryStreams: "Streams",
+    streamPurpose: "Purpose",
+    streamCadence: "Cadence",
+    streamCadencePending: "pending confirmation",
+    streamFile: "Required file",
+    streamRegime: "Regime",
+    streamRegimeNone: "Not applicable",
+    streamRegimePotential: "Potentially applicable, subject to product selection",
+    streamRegimeConfigured: "Configured",
+    streamRegimeNotEligible: "Not eligible",
+    streamsNone: "No streams declared yet. Tell Trakt what the client will provide.",
+
+    // The chronological workflow.
+    timelineHeading: "The onboarding, step by step",
+    stageDone: "Done",
+    stageCurrent: "Now",
+    stageFuture: "Later",
+    stageBlockedChip: "Blocked",
+    stageLiveOnly: "Live onboarding only — practice stops before this",
+    stageWhatRemains: "What remains",
+    stageCompletedHeading: "What Trakt has completed",
+    stageNoAction: "Nothing for you here right now — Trakt will move on on its own.",
+    stageDetails: "Details",
 
     conversationHeading: "Conversation",
     conversationPlaceholder: "Tell Trakt what to do, or ask what is still needed…",
@@ -532,6 +595,26 @@ export const copy = {
     manifestHeading: "Machine-readable summary",
     downloadPackage: "Show the readiness package",
     hidePackage: "Hide the readiness package",
+
+    // The operator journey, in order. Labels only — where each stage starts
+    // and ends is decided from the case's own states, never here.
+    stages: {
+      define: "Define onboarding",
+      scope: "Confirm scope",
+      pack_prepare: "Prepare onboarding pack",
+      pack_review: "Review and approve the pack",
+      pack_issue: "Record or issue the request",
+      responses: "Receive client responses",
+      artefacts: "Receive required artefacts",
+      configure: "Generate configuration",
+      config_review: "Review configuration",
+      rehearsal: "Run rehearsal",
+      exceptions: "Resolve exceptions",
+      readiness: "Review readiness",
+      approve_activation: "Approve activation",
+      confirm_activation: "Confirm activation",
+      ingestion: "Ingestion started",
+    } as Record<string, string>,
 
     stageOutcomes: {
       deterministic_execution_completed: "Ran for real",

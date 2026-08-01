@@ -53,7 +53,7 @@ def configure(service: OccAgentService) -> None:
 def get_service() -> OccAgentService:
     if _service is None:  # pragma: no cover — configure() runs at mount
         raise OpsError("OCC_AGENT_UNAVAILABLE",
-                       "The onboarding agent is not available.",
+                       "The OCC Agent is not available.",
                        http_status=503)
     return _service
 
@@ -62,7 +62,7 @@ def _require_feature() -> None:
     if not feature_enabled():
         raise OpsError(
             "OCC_AGENT_DISABLED",
-            "The onboarding agent is not switched on for this environment.",
+            "The OCC Agent is not switched on for this environment.",
             http_status=404)
 
 

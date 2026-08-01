@@ -113,6 +113,12 @@ class Interpretation:
     reporting_period: str = ""
     #: Answers for every derived delivery — cadence, channel, format, sender.
     delivery: Dict[str, Any] = field(default_factory=dict)
+    #: The operational data streams the instruction declared, in the order it
+    #: named them — the governed dataset vocabulary ("funded", "pipeline").
+    #: A stream is a SEPARATE source registration, never a blanket delivery
+    #: answer: "a pipeline and a funded book" is two registrations, and folding
+    #: both into one ``delivery.dataset`` would silently drop one of them.
+    streams: List[str] = field(default_factory=list)
     #: Semantic input roles the instruction said the client would send.
     expected_artefacts: List[str] = field(default_factory=list)
     #: ``section.field`` -> one of PROVENANCE_SOURCES.
@@ -133,7 +139,7 @@ class Interpretation:
     @property
     def empty(self) -> bool:
         return not (self.steps or self.reporting_period or self.delivery
-                    or self.expected_artefacts)
+                    or self.streams or self.expected_artefacts)
 
     @property
     def complete(self) -> bool:
@@ -161,6 +167,14 @@ class Interpretation:
         delivery_section = cat.section(DELIVERY_SECTION)
         if self.delivery and delivery_section is not None:
             _check_keys(delivery_section, self.delivery, DELIVERY_SECTION)
+        if self.streams:
+            dataset_field = cat.field(DELIVERY_SECTION, "dataset")
+            allowed = {str(o.get("value"))
+                       for o in ((dataset_field.options if dataset_field
+                                  else None) or [])}
+            for stream in self.streams:
+                if allowed and stream not in allowed:
+                    raise InterpretationError(f"unknown stream '{stream}'")
         if self.reporting_period and not re.fullmatch(
                 r"\d{4}-\d{2}-\d{2}", self.reporting_period):
             raise InterpretationError("reporting period")
@@ -239,7 +253,9 @@ class Interpreter(Protocol):
 #: "Onboard Northstar Lending." — the client name is the proper-noun run after
 #: the verb. The verb is case-insensitive; the NAME is not, because
 #: capitalisation is the evidence that it IS a name. A full stop ends the run.
-_NAME_RUN = r"[A-Z][\w&'’-]*(?:\s+[A-Z][\w&'’-]*){0,4}"
+#: A continuation token may be numeric — "Capital 123" is one name, and a
+#: digit cannot carry capitalisation evidence either way.
+_NAME_RUN = r"[A-Z][\w&'’-]*(?:\s+[A-Z0-9][\w&'’-]*){0,4}"
 _ONBOARD_RE = re.compile(
     r"\b(?i:onboard(?:ing)?|set\s+up|bring\s+on)\s+"
     r"(?i:a\s+new\s+|the\s+|new\s+)?(?i:client\s+|portfolio\s+|lender\s+)?"
@@ -306,6 +322,19 @@ class DeterministicInterpreter:
         # Every catalogue field the text named, grouped by section.
         blocks: Dict[str, Dict[str, Any]] = {}
         for hit in reading.found:
+            if hit.ref.section == DELIVERY_SECTION \
+                    and hit.ref.key == "dataset":
+                # A dataset mention declares a STREAM — a separate source
+                # registration — never a blanket answer for every delivery.
+                # "a pipeline and a funded book" is two registrations, and one
+                # ``delivery.dataset`` value would silently drop one of them.
+                for value in (hit.value if isinstance(hit.value, list)
+                              else [hit.value]):
+                    stream = str(value)
+                    if stream and stream not in out.streams:
+                        out.streams.append(stream)
+                out.provenance[hit.ref.path] = PROV_HUMAN
+                continue
             target = (out.delivery if hit.ref.section == DELIVERY_SECTION
                       else blocks.setdefault(hit.ref.section, {}))
             target[hit.ref.key] = hit.value
@@ -317,6 +346,20 @@ class DeterministicInterpreter:
         # The telegraphic shape of an opening instruction.
         rows: Dict[str, List[Dict[str, Any]]] = {}
         consumed = self._read_instruction_shape(raw, blocks, rows, out)
+
+        # A declared stream needs a book to hang off. If the instruction named
+        # streams but no portfolio, propose one carrying the client's name —
+        # the identifier is minted by inference, and the funded and pipeline
+        # registrations are then derived from it separately.
+        if out.streams and not blocks.get("portfolios") \
+                and not rows.get("portfolios"):
+            client_name = str((blocks.get("client") or {})
+                              .get("client_name") or "")
+            if client_name:
+                blocks["portfolios"] = {
+                    "display_name": f"{client_name} portfolio"}
+                out.provenance["portfolios.display_name"] = PROV_AGENT
+                out.confidence["portfolios.display_name"] = 0.6
 
         for section_key, values in blocks.items():
             section = self.catalogue.section(section_key)
@@ -529,7 +572,7 @@ def _says_something(interpretation: Interpretation,
     """
     if interpretation.reporting_period or interpretation.delivery:
         return True
-    if interpretation.expected_artefacts:
+    if interpretation.streams or interpretation.expected_artefacts:
         return True
     for step, payload in (interpretation.steps or {}).items():
         if step == "client":
