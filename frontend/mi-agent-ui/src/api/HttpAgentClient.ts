@@ -20,6 +20,10 @@ import type {
   MIQuerySpec,
   PipelineEvolution,
   PipelineFunnelEvolution,
+  ConcentrationDrillthrough,
+  ConcentrationDrivers,
+  ConcentrationHistory,
+  ConcentrationTestsSnapshot,
   RiskLimitsSnapshot,
   SnapshotIndex,
 } from "@/domain";
@@ -200,6 +204,37 @@ export class HttpAgentClient implements AgentClient {
                signal?: AbortSignal): Promise<RiskLimitsSnapshot> {
     return this.getJson<RiskLimitsSnapshot>(
       `/mi/risk-limits?${this.scoped(portfolioId, portfolioContext)}`, signal);
+  }
+
+  getConcentrationTests(portfolioId: string, portfolioContext?: string,
+                        signal?: AbortSignal): Promise<ConcentrationTestsSnapshot> {
+    return this.getJson<ConcentrationTestsSnapshot>(
+      `/mi/concentration-tests?${this.scoped(portfolioId, portfolioContext)}`,
+      signal);
+  }
+
+  getConcentrationDrillthrough(portfolioId: string, testId: string,
+                               portfolioContext?: string,
+                               signal?: AbortSignal): Promise<ConcentrationDrillthrough> {
+    return this.getJson<ConcentrationDrillthrough>(
+      `/mi/concentration-tests/drillthrough?${this.scoped(portfolioId, portfolioContext, { testId })}`,
+      signal);
+  }
+
+  getConcentrationHistory(portfolioId: string, testId?: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ConcentrationHistory> {
+    return this.getJson<ConcentrationHistory>(
+      `/mi/concentration-tests/history?${this.scoped(portfolioId, portfolioContext, { testId })}`,
+      signal);
+  }
+
+  getConcentrationDrivers(portfolioId: string, testId: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ConcentrationDrivers> {
+    return this.getJson<ConcentrationDrivers>(
+      `/mi/concentration-tests/drivers?${this.scoped(portfolioId, portfolioContext, { testId })}`,
+      signal);
   }
 
   getForecastExtrapolation(portfolioId: string, portfolioContext?: string,

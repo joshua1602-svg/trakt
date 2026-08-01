@@ -146,6 +146,18 @@ export function withCache(
     getRiskLimits: (portfolioId, portfolioContext, signal) =>
       resource(`riskLimits|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getRiskLimits(portfolioId, portfolioContext, signal)),
+    getConcentrationTests: (portfolioId, portfolioContext, signal) =>
+      resource(`concentrationTests|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getConcentrationTests(portfolioId, portfolioContext, signal)),
+    getConcentrationDrillthrough: (portfolioId, testId, portfolioContext, signal) =>
+      resource(`concentrationDrill|${portfolioId}|${testId}|${portfolioContext ?? ""}`,
+        () => client.getConcentrationDrillthrough(portfolioId, testId, portfolioContext, signal)),
+    getConcentrationHistory: (portfolioId, testId, portfolioContext, signal) =>
+      resource(`concentrationHistory|${portfolioId}|${testId ?? ""}|${portfolioContext ?? ""}`,
+        () => client.getConcentrationHistory(portfolioId, testId, portfolioContext, signal)),
+    getConcentrationDrivers: (portfolioId, testId, portfolioContext, signal) =>
+      resource(`concentrationDrivers|${portfolioId}|${testId}|${portfolioContext ?? ""}`,
+        () => client.getConcentrationDrivers(portfolioId, testId, portfolioContext, signal)),
     getForecastExtrapolation: (portfolioId, portfolioContext, signal) =>
       resource(`forecastExtrapolation|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getForecastExtrapolation(portfolioId, portfolioContext, signal)),

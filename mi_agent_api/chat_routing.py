@@ -1141,8 +1141,155 @@ def _route_scenario(question, spec, spec_dict, *, client_id, run_id, output_root
 # --------------------------------------------------------------------------- #
 # D. Risk limits / concentration
 # --------------------------------------------------------------------------- #
+_CONCENTRATION_TEST_COLUMNS = [
+    {"key": "test", "label": "Test", "align": "left"},
+    {"key": "category", "label": "Category", "align": "left"},
+    {"key": "current", "label": "Current", "align": "right"},
+    {"key": "limit", "label": "Limit", "align": "right"},
+    {"key": "headroom", "label": "Headroom", "align": "right"},
+    {"key": "change", "label": "Period change", "align": "right"},
+    {"key": "status", "label": "Status", "align": "left"},
+]
+
+
+def _route_concentration_tests(question, spec, spec_dict, *, client_id,
+                               run_id, output_root, portfolio_id, as_of
+                               ) -> Optional[Dict[str, Any]]:
+    """Answer a limit question from the approved concentration-test service.
+
+    Returns None when no approved configuration exists (the legacy Schedule 8
+    route then answers, unchanged). Every number comes from the ONE evaluation
+    service — nothing here recalculates from raw rows, invents a threshold or
+    reports an unavailable value as zero.
+    """
+    from . import concentration_query as conc_query
+    from . import concentration_tests_api as conc_mod
+
+    envelope = conc_mod.compute_concentration_tests(output_root, client_id,
+                                                    run_id)
+    if envelope.get("source") != conc_mod.SOURCE_APPROVED:
+        return None
+    result = conc_query.answer(question, envelope)
+
+    artifacts: List[Dict[str, Any]] = []
+    if result["intent"] == "get_concentration_pipeline_drivers" and \
+            result.get("testId"):
+        drivers = conc_mod.compute_pipeline_drivers(output_root, client_id,
+                                                    run_id, result["testId"])
+        answer_text = result["answer"]
+        if not drivers.get("available"):
+            answer_text += (" Pipeline-driver detail is not available: "
+                            f"{drivers.get('reason')}")
+        else:
+            top = drivers["drivers"][:4]
+            share = drivers.get("topShareOfMovement")
+            lead = top[0] if top else None
+            answer_text += (
+                f" {len(top)} pipeline loan(s) drive "
+                + (f"{share * 100:.0f}% of " if share is not None else "")
+                + "the expected increase"
+                + (f", led by {lead['caseId']} at £{lead['balance']:,.0f} "
+                   f"currently at {str(lead.get('stage') or '').title()}"
+                   if lead else "") + ".")
+            artifacts.append(_table_artifact(
+                f"Pipeline drivers — {result['rows'][0].get('displayName', '')}",
+                columns=[
+                    {"key": "caseId", "label": "Case", "align": "left"},
+                    {"key": "balance", "label": "Balance", "align": "right"},
+                    {"key": "stage", "label": "Stage", "align": "left"},
+                    {"key": "completionProbability", "label": "Probability",
+                     "align": "right"},
+                    {"key": "expectedContribution", "label": "Expected contrib.",
+                     "align": "right"},
+                    {"key": "expectedCompletionMonth", "label": "Exp. month",
+                     "align": "left"},
+                    {"key": "impact", "label": "Impact", "align": "left"},
+                ],
+                rows=drivers["drivers"], spec=spec_dict,
+                portfolio_id=portfolio_id, as_of=as_of,
+                description="Forecast-engine probabilities and contributions; "
+                            "reconciles to the expected numerator."))
+        result = {**result, "answer": answer_text}
+    elif result["intent"] == "get_concentration_test_drillthrough" and \
+            result.get("testId"):
+        drill = conc_mod.compute_drillthrough(output_root, client_id, run_id,
+                                              result["testId"])
+        test = result["rows"][0] if result.get("rows") else {}
+        if not drill.get("available"):
+            answer_text = (f"The contributing loans for "
+                           f"{test.get('displayName', 'that test')} are not "
+                           f"available: {drill.get('reason')}")
+        else:
+            answer_text = (
+                f"{drill['loansInNumerator']} loan(s) contribute to "
+                f"{test.get('displayName')} — numerator "
+                f"{drill['numeratorValue']:,.0f} of denominator "
+                f"{drill['denominatorValue']:,.0f} "
+                f"({drill['denominatorBasis'].replace('_', ' ')}). "
+                "The population below is the exact evaluated numerator.")
+            artifacts.append(_table_artifact(
+                f"Contributing loans — {test.get('displayName')}",
+                columns=[{"key": c, "label": c.replace("_", " ").title(),
+                          "align": "left"} for c in drill["columns"]],
+                rows=drill["rows"], spec=spec_dict,
+                portfolio_id=portfolio_id, as_of=as_of,
+                description="Drill-through reuses the evaluator's own filter "
+                            "and denominator."))
+        result = {**result, "answer": answer_text}
+    elif result.get("rows"):
+        def _cell(v, unit):
+            if v is None:
+                return "—"
+            if unit == "percent":
+                return f"{v:.2f}%"
+            if unit == "count":
+                return f"{v:.0f}"
+            return f"{v:,.0f}"
+        trows = [{
+            "test": t["displayName"], "category": t["category"],
+            "current": _cell(t.get("currentValue"), t.get("unit")),
+            "limit": ("≤ " if t.get("operator") == "max" else "≥ ")
+                     + _cell(t.get("threshold"), t.get("unit")),
+            "headroom": _cell(t.get("headroom"), t.get("unit")),
+            "change": ("—" if t.get("absoluteChange") is None
+                       else f"{t['absoluteChange']:+.2f}"),
+            "status": t["status"],
+        } for t in result["rows"]]
+        artifacts.append(_table_artifact(
+            "Concentration tests (approved configuration "
+            f"v{envelope.get('configurationVersion')})",
+            columns=_CONCENTRATION_TEST_COLUMNS, rows=trows, spec=spec_dict,
+            portfolio_id=portfolio_id, as_of=as_of,
+            description="Approved contractual limits vs the funded book, from "
+                        "the governed evaluation service."))
+
+    warnings = list(result.get("warnings") or [])
+    envelope_out = _envelope(
+        ok=True, question=question, answer=result["answer"], spec=spec_dict,
+        artifacts=artifacts, route="risk_limits", warnings=warnings)
+    envelope_out["metadata"]["concentrationIntent"] = result["intent"]
+    envelope_out["metadata"]["configurationVersion"] = \
+        envelope.get("configurationVersion")
+    envelope_out["sourceNotes"].append({
+        "label": "Concentration tests",
+        "note": (f"Approved configuration v{envelope.get('configurationVersion')} "
+                 f"(activated {str(envelope.get('activatedAt') or '')[:10]} by "
+                 f"{envelope.get('activatedBy') or 'operator'}), evaluated at "
+                 f"{envelope.get('reportingDate') or 'the latest snapshot'}."),
+    })
+    return envelope_out
+
+
 def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
                 portfolio_id, as_of) -> Dict[str, Any]:
+    # The operator-APPROVED concentration-test configuration is the governed
+    # truth for limit questions; the Schedule 8 extracted monitor remains the
+    # calculator only while no approved configuration exists.
+    approved = _route_concentration_tests(
+        question, spec, spec_dict, client_id=client_id, run_id=run_id,
+        output_root=output_root, portfolio_id=portfolio_id, as_of=as_of)
+    if approved is not None:
+        return approved
     rl = risk_mod.compute_risk_limits(output_root, client_id, run_id)
     summ = rl.get("summary", {})
     tests = rl.get("tests", [])

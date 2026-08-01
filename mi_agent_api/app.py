@@ -1179,6 +1179,111 @@ def risk_limits(portfolioId: Optional[str] = None, client_id: Optional[str] = No
                 "error": str(exc)}
 
 
+@app.get("/mi/concentration-tests")
+def concentration_tests(portfolioId: Optional[str] = None,
+                        client_id: Optional[str] = None,
+                        toRunId: Optional[str] = None,
+                        to_run_id: Optional[str] = None,
+                        portfolioContext: Optional[str] = None
+                        ) -> Dict[str, Any]:
+    """Governed concentration-test monitor: the operator-APPROVED, versioned
+    configuration evaluated deterministically against the funded book (current
+    + prior period, headroom, utilization, status transitions), falling back to
+    the legacy extracted limits — explicitly marked unapproved — where no
+    approved configuration exists. Never 500s."""
+    from . import concentration_tests_api as conc_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    try:
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        result = conc_mod.compute_concentration_tests(
+            root, cid, trid, scope=resolved.scope if resolved else None)
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+        return result
+    except Exception as exc:  # noqa: BLE001 - the monitor must never 500
+        logger.warning("concentration-tests failed: %s", exc)
+        return {"portfolioId": cid, "toRunId": trid, "available": False,
+                "source": "none", "approvalStatus": None, "tests": [],
+                "summary": {"overallStatus": "unavailable", "activeTests": 0,
+                            "breaches": 0, "warnings": 0, "passes": 0,
+                            "unavailable": 0, "deteriorations": 0,
+                            "closestToLimit": None, "priorAvailable": False},
+                "error": str(exc)}
+
+
+@app.get("/mi/concentration-tests/drillthrough")
+def concentration_drillthrough(testId: str,
+                               portfolioId: Optional[str] = None,
+                               client_id: Optional[str] = None,
+                               toRunId: Optional[str] = None,
+                               to_run_id: Optional[str] = None,
+                               portfolioContext: Optional[str] = None
+                               ) -> Dict[str, Any]:
+    """Contributing-loan population for one approved concentration test —
+    the SAME mask the evaluator used, so it reconciles exactly to the
+    numerator. Never 500s."""
+    from . import concentration_tests_api as conc_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    try:
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        return conc_mod.compute_drillthrough(
+            root, cid, trid, testId,
+            scope=resolved.scope if resolved else None)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("concentration drill-through failed: %s", exc)
+        return {"available": False, "reason": str(exc), "rows": [],
+                "columns": []}
+
+
+@app.get("/mi/concentration-tests/drivers")
+def concentration_drivers(testId: str,
+                          portfolioId: Optional[str] = None,
+                          client_id: Optional[str] = None,
+                          toRunId: Optional[str] = None,
+                          to_run_id: Optional[str] = None,
+                          portfolioContext: Optional[str] = None
+                          ) -> Dict[str, Any]:
+    """Pipeline cases driving one approved test's Expected Forecast movement —
+    the forecast engine's own probabilities and contributions, reconciling to
+    the expected numerator. Never 500s."""
+    from . import concentration_tests_api as conc_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    try:
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        return conc_mod.compute_pipeline_drivers(
+            root, cid, trid, testId,
+            scope=resolved.scope if resolved else None)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("concentration drivers failed: %s", exc)
+        return {"available": False, "reason": str(exc), "drivers": []}
+
+
+@app.get("/mi/concentration-tests/history")
+def concentration_history(portfolioId: Optional[str] = None,
+                          client_id: Optional[str] = None,
+                          toRunId: Optional[str] = None,
+                          to_run_id: Optional[str] = None,
+                          testId: Optional[str] = None,
+                          portfolioContext: Optional[str] = None
+                          ) -> Dict[str, Any]:
+    """Metric history for the approved tests across real governed snapshots
+    (no fabricated history). Never 500s."""
+    from . import concentration_tests_api as conc_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    try:
+        resolved = _resolve_portfolio_context(portfolioContext, cid)
+        return conc_mod.compute_history(
+            root, cid, trid, test_id=testId,
+            scope=resolved.scope if resolved else None)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("concentration history failed: %s", exc)
+        return {"available": False, "reason": str(exc), "series": []}
+
+
 @app.get("/mi/evolution/compare")
 def evolution_compare(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                       toRunId: Optional[str] = None, to_run_id: Optional[str] = None,

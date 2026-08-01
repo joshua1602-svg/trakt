@@ -9,7 +9,7 @@ import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { ForecastView } from "@/components/ForecastView";
 import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPanel";
 import { EvolutionPanel } from "@/components/EvolutionPanel";
-import { RiskLimitsPanel } from "@/components/RiskLimitsPanel";
+import { RiskLimitsWorkspace } from "@/components/risk/RiskLimitsWorkspace";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { SubTabs } from "@/components/SubTabs";
@@ -99,7 +99,8 @@ export function AppShell() {
 
   // Sub-tab state per top-level workspace (Funded / Pipeline / Forecast). Each is
   // independent so switching top-level tabs preserves the last sub-view.
-  const [fundedTab, setFundedTab] = useState<"strat" | "geo" | "evo" | "cohorts">("strat");
+  const [fundedTab, setFundedTab] =
+    useState<"strat" | "geo" | "evo" | "cohorts" | "risk">("strat");
   const [pipelineTab, setPipelineTab] = useState<"strat" | "evo">("strat");
   const [forecastTab, setForecastTab] = useState<"projection" | "evolution">("projection");
 
@@ -223,6 +224,7 @@ export function AppShell() {
                         { id: "geo", label: "Geography" },
                         { id: "evo", label: "Evolution" },
                         { id: "cohorts", label: "Cohorts" },
+                        { id: "risk", label: "Risk Limits" },
                       ]} />
                     {fundedTab === "strat" && (
                       <>
@@ -243,6 +245,13 @@ export function AppShell() {
                     {fundedTab === "cohorts" && (
                       <EvolutionPanel key={`evo-cohorts-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
                         tabs={["cohorts"]} client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId} />
+                    )}
+                    {/* Funded → Risk Limits — same governed workspace as the
+                        top-level Risk Limits tab; one evaluation service. */}
+                    {fundedTab === "risk" && ws.capabilityEnabled("risk") && (
+                      <RiskLimitsWorkspace key={`risk-funded-${ws.dataVersion}-${ws.selectedContextId}`}
+                        client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
                     )}
                   </div>
@@ -304,7 +313,7 @@ export function AppShell() {
                 )}
 
                 {ws.activeView === "risk_limits" && ws.capabilityEnabled("risk") && (
-                  <RiskLimitsPanel key={`risk-${ws.dataVersion}-${ws.selectedContextId}`}
+                  <RiskLimitsWorkspace key={`risk-${ws.dataVersion}-${ws.selectedContextId}`}
                     client={client} portfolioId={workspacePortfolioId}
                     portfolioContext={ws.selectedContextId} />
                 )}

@@ -72,6 +72,10 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     getFunnelEvolution: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getRiskLimits: async () => ({}) as any,
+    getConcentrationTests: async () => ({}) as any,
+    getConcentrationDrillthrough: async () => ({}) as any,
+    getConcentrationHistory: async () => ({}) as any,
+    getConcentrationDrivers: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getForecastExtrapolation: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -10,6 +10,11 @@ import {
 import { mockFunnelEvolution } from "@/data/mockFunnel";
 import { mockCohorts, mockCohortProgression } from "@/data/mockCohorts";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
+import {
+  mockConcentrationDrillthrough,
+  mockConcentrationHistory,
+  mockConcentrationTests,
+} from "@/data/mockConcentrationTests";
 import { mockForecastExtrapolation } from "@/data/mockForecastExtrapolation";
 
 // recharts needs a non-zero layout in jsdom; stub ResponsiveContainer dimensions.
@@ -38,6 +43,10 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getForecastEvolution: vi.fn(async () => mockForecastEvolution("client_001")),
     getFunnelEvolution: vi.fn(async () => mockFunnelEvolution("client_001")),
     getRiskLimits: vi.fn(async () => mockRiskLimits("client_001")),
+    getConcentrationTests: vi.fn(async () => mockConcentrationTests("client_001")),
+    getConcentrationDrillthrough: vi.fn(async () => mockConcentrationDrillthrough("client_001", "ct_east_anglia")),
+    getConcentrationHistory: vi.fn(async () => mockConcentrationHistory("client_001")),
+    getConcentrationDrivers: vi.fn(async () => ({}) as any),
     getForecastExtrapolation: vi.fn(async () => mockForecastExtrapolation("client_001")),
     getMe: vi.fn(async () => ({ authenticated: true, isOperator: true })),
     getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),

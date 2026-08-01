@@ -1,4 +1,5 @@
 import { MockAgent } from "./MockAgent";
+import { MockConcentration } from "./MockConcentration";
 import { MockConfigAdmin } from "./MockConfigAdmin";
 import { MockOnboarding } from "./MockOnboarding";
 import { OpsError, type OpsClient } from "./OpsClient";
@@ -122,6 +123,7 @@ export class MockOpsClient implements OpsClient {
   private readonly config = new MockConfigAdmin();
   private readonly agent = new MockAgent();
   private readonly onboarding = new MockOnboarding();
+  private readonly concentration = new MockConcentration();
   private nextId = 6000;
   /** Counts reads of a running workflow so it visibly "finishes" while polling. */
   private runningTicks = new Map<string, number>();
@@ -1928,5 +1930,87 @@ export class MockOpsClient implements OpsClient {
   async confirmAgentActivation(caseRef: string, confirmation: string): Promise<AgentStatus> {
     await this.wait();
     return this.agent.step(caseRef, "activation/confirm", { confirmation });
+  }
+
+  // -- concentration tests --------------------------------------------------- //
+  async getConcentrationReview(client: string) {
+    await this.wait();
+    return this.concentration.review(client);
+  }
+
+  async getConcentrationLibrary(_client: string) {
+    await this.wait();
+    return this.concentration.library();
+  }
+
+  async extractConcentrationTests(client: string, sourceReference: string, text: string) {
+    await this.wait();
+    const proposals = this.concentration.extract(client, sourceReference, text);
+    return { proposals, count: proposals.length };
+  }
+
+  async answerConcentrationQuestion(
+    client: string, proposalId: string, question: string, answer: string,
+  ) {
+    await this.wait();
+    return this.concentration.answer(client, proposalId, question, answer);
+  }
+
+  async updateConcentrationProposal(
+    client: string, proposalId: string,
+    payload: import("./concentrationTypes").ProposalUpdatePayload,
+  ) {
+    await this.wait();
+    return this.concentration.update(client, proposalId, payload);
+  }
+
+  async approveConcentrationProposal(
+    client: string, proposalId: string,
+    payload: { effective_date?: string; comments?: string; severity?: string;
+               supersedes_test_id?: string },
+  ) {
+    await this.wait();
+    this.requireAdmin();
+    return this.concentration.approve(client, proposalId, payload);
+  }
+
+  async rejectConcentrationProposal(client: string, proposalId: string, reason: string) {
+    await this.wait();
+    return this.concentration.decide(client, proposalId, "rejected", `Rejected: ${reason}`);
+  }
+
+  async markConcentrationUnsupported(client: string, proposalId: string, reason: string) {
+    await this.wait();
+    return this.concentration.decide(client, proposalId, "unsupported", `Unsupported: ${reason}`);
+  }
+
+  async markConcentrationNotApplicable(client: string, proposalId: string, reason: string) {
+    await this.wait();
+    return this.concentration.decide(
+      client, proposalId, "not_applicable", `Not applicable: ${reason}`);
+  }
+
+  async requestConcentrationClarification(
+    client: string, proposalId: string, question: string,
+  ) {
+    await this.wait();
+    return this.concentration.decide(client, proposalId, "clarification_requested", question);
+  }
+
+  async supersedeConcentrationProposal(client: string, proposalId: string, reason: string) {
+    await this.wait();
+    this.requireAdmin();
+    return this.concentration.supersede(client, proposalId, reason);
+  }
+
+  async activateConcentrationTests(client: string, reason = "") {
+    await this.wait();
+    this.requireAdmin();
+    return this.concentration.activate(client, reason);
+  }
+
+  async getConcentrationVersion(client: string, version: number) {
+    await this.wait();
+    return this.concentration.version(client, version);
   }
 }

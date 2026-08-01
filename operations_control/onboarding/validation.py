@@ -163,6 +163,34 @@ class Validator:
         client = case.answers.get("client") or {}
         client_id = str(client.get("client_id") or "").strip()
 
+        # The concentration-test request may not sit unresolved at approval: a
+        # blank answer cannot masquerade as completion, and only an operator
+        # decision (supplied / not_applicable / deferred_with_reason) closes
+        # it. Applies only where the request is asked at all (MI clients).
+        status_field = self.catalogue.field("risk_limits",
+                                            "concentration_tests_status")
+        if status_field is not None and \
+                self.catalogue.is_asked(status_field, case.answers):
+            risk = case.answers.get("risk_limits") or {}
+            status = str(risk.get("concentration_tests_status") or "").strip()
+            # A missing status is already reported by the catalogue's own
+            # required_when; the structural rules cover what the catalogue
+            # cannot say: "pending" is not a completion, and "supplied" with a
+            # blank answer is not supplied.
+            if status == "pending_client_response":
+                out.append(Problem(
+                    "risk_limits", "concentration_tests_status",
+                    "The concentration-test request is still awaiting the "
+                    "client's response. Record it as supplied, not "
+                    "applicable, or deferred with a reason before approval.",
+                    owner="client"))
+            elif status == "supplied" and \
+                    not _present(risk.get("concentration_tests")):
+                out.append(Problem(
+                    "risk_limits", "concentration_tests",
+                    "The request is marked supplied but no response is "
+                    "recorded — a blank answer cannot count as supplied."))
+
         # A new client may not take an identifier already in use. An amendment
         # or migration keeps the identifier it already has, so the collision
         # check applies only where the case is creating one.

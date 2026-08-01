@@ -196,6 +196,11 @@ def test_a_practice_run_can_be_started_in_the_background(service):
         agent_case, request_id=request.request_id, actor=ACTOR,
         answers=client_answers(agent_case.case, request.items,
                                scenario.client_response))
+    # The mandatory concentration-test request blocks approval until an
+    # operator records its outcome — the scenario's client supplied wording.
+    agent_case = service.record_concentration_outcome(
+        agent_case, actor=ACTOR, status="supplied",
+        response_text=scenario.client_response["risk_limits.concentration_tests"])
     agent_case = service.submit_for_approval(agent_case, actor=ACTOR)
     agent_case = service.approve_onboarding(agent_case, actor=ACTOR)
 

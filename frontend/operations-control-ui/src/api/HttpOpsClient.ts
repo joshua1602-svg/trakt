@@ -803,4 +803,108 @@ export class HttpOpsClient implements OpsClient {
       { confirmation },
     );
   }
+
+  // -- concentration tests --------------------------------------------------- //
+  private conc(client: string, rest = ""): string {
+    return `/ops/concentration/${encodeURIComponent(client)}${rest}`;
+  }
+
+  async getConcentrationReview(client: string) {
+    return this.request<import("./concentrationTypes").ConcentrationReviewPackage>(
+      this.conc(client, "/review"),
+    );
+  }
+
+  async getConcentrationLibrary(client: string) {
+    return this.request<{
+      libraryVersion: string;
+      metrics: import("./concentrationTypes").LibraryMetricDoc[];
+    }>(this.conc(client, "/library"));
+  }
+
+  async extractConcentrationTests(client: string, sourceReference: string, text: string) {
+    return this.post<{
+      proposals: import("./concentrationTypes").TestProposal[];
+      count: number;
+    }>(this.conc(client, "/extract"), { source_reference: sourceReference, text });
+  }
+
+  async answerConcentrationQuestion(
+    client: string, proposalId: string, question: string, answer: string,
+  ) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/answer`),
+      { question, answer },
+    );
+  }
+
+  async updateConcentrationProposal(
+    client: string, proposalId: string,
+    payload: import("./concentrationTypes").ProposalUpdatePayload,
+  ) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/update`),
+      payload,
+    );
+  }
+
+  async approveConcentrationProposal(
+    client: string, proposalId: string,
+    payload: { effective_date?: string; comments?: string; severity?: string;
+               supersedes_test_id?: string },
+  ) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/approve`),
+      payload,
+    );
+  }
+
+  async rejectConcentrationProposal(client: string, proposalId: string, reason: string) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/reject`),
+      { reason },
+    );
+  }
+
+  async markConcentrationUnsupported(client: string, proposalId: string, reason: string) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/unsupported`),
+      { reason },
+    );
+  }
+
+  async markConcentrationNotApplicable(client: string, proposalId: string, reason: string) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/not-applicable`),
+      { reason },
+    );
+  }
+
+  async requestConcentrationClarification(
+    client: string, proposalId: string, question: string,
+  ) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/clarify`),
+      { question },
+    );
+  }
+
+  async supersedeConcentrationProposal(client: string, proposalId: string, reason: string) {
+    return this.post<import("./concentrationTypes").TestProposal>(
+      this.conc(client, `/proposals/${encodeURIComponent(proposalId)}/supersede`),
+      { reason },
+    );
+  }
+
+  async activateConcentrationTests(client: string, reason = "") {
+    return this.post<import("./concentrationTypes").ActiveConfigurationDoc>(
+      this.conc(client, "/activate"), { reason },
+    );
+  }
+
+  async getConcentrationVersion(client: string, version: number) {
+    return this.request<import("./concentrationTypes").ActiveConfigurationDoc>(
+      this.conc(client, `/versions/${version}`),
+    );
+  }
 }

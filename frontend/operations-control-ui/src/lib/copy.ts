@@ -14,6 +14,7 @@ export const copy = {
     agent: "OCC Agent",
     admin: "Platform configuration",
     onboarding: "Client onboarding",
+    concentration: "Concentration tests",
     manual: "Manual delivery",
     specialistHeading: "Specialist",
     startNew: "Create a manual delivery",
@@ -849,7 +850,80 @@ export const copy = {
     },
   },
 
+  concentration: {
+    title: "Concentration tests",
+    subtitle:
+      "Review what the client supplied, decide each proposed test, and activate "
+      + "the approved set as the next governed version.",
+    pickClient: "Choose a client to review their concentration tests.",
+    open: "Open review",
+    extractHeading: "Client response",
+    extractHelp:
+      "Paste the client's covenant wording or limits table exactly as supplied. "
+      + "Trakt reads it deterministically; anything unclear becomes a question, "
+      + "never a guess.",
+    sourceReference: "Where this wording came from",
+    responseText: "Response wording",
+    extract: "Read the response",
+    noResponse:
+      "No client response has been read yet. Paste the covenant wording or "
+      + "limits table above — or record the onboarding outcome as not "
+      + "applicable if this client has no concentration tests.",
+    noneFound:
+      "Nothing extractable was found in that wording. Tests need a comparison "
+      + "and a number; ask the client for the schedule if this looks wrong.",
+    proposalsHeading: "Proposed tests",
+    filterAll: "All statuses",
+    detailHeading: "Proposal detail",
+    selectPrompt: "Select a proposal to review its wording, mapping and concerns.",
+    sourceWording: "Source wording",
+    proposedMetric: "Proposed measure",
+    matchOutcome: "Match",
+    parameters: "Parameters",
+    threshold: "Threshold",
+    operator: "Direction",
+    confidence: "Confidence",
+    concerns: "Concerns",
+    questions: "Confirmation questions",
+    answerLabel: "Answer",
+    recordAnswer: "Record answer",
+    editHeading: "Edit permitted fields",
+    parametersJson: "Parameters (JSON)",
+    effectiveDate: "Effective date",
+    saveEdits: "Save edits",
+    approvalBlockedHeading: "Approval is blocked",
+    approve: "Approve",
+    approveComments: "Approval comments",
+    reject: "Reject",
+    unsupported: "Mark unsupported",
+    notApplicable: "Not applicable",
+    clarify: "Ask the client",
+    clarifyQuestion: "What should the client be asked?",
+    supersede: "Supersede",
+    reasonLabel: "Reason",
+    activationHeading: "Activation",
+    activationIntro:
+      "Activating creates the next governed version from every approved "
+      + "proposal. Nothing else is included.",
+    willActivate: "These tests will become active:",
+    nothingToActivate:
+      "Nothing is approved yet, so there is nothing to activate.",
+    activate: "Activate approved tests",
+    currentVersion: "Active version",
+    versionsHeading: "Version history",
+    auditHeading: "Decision history",
+    invalidJson: "The parameters are not valid JSON.",
+    extractionFailed:
+      "The response could not be read. Nothing was saved; the wording is "
+      + "unchanged.",
+    permissionNote: "Approval, supersede and activation need an administrator.",
+  },
+
   statusLabels: {
+    pending_confirmation: "Pending confirmation",
+    pending_approval: "Pending approval",
+    clarification_requested: "Clarification requested",
+    proposed: "Proposed",
     received: "Received",
     running: "In progress",
     needs_review: "Needs review",

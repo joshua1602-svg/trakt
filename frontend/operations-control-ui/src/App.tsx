@@ -22,6 +22,10 @@ import { AgentCasesScreen } from "@/screens/agent/AgentCases";
 import { AgentOnly } from "@/screens/agent/AgentLayout";
 import { OnboardingCaseScreen } from "@/screens/onboarding/CaseWizard";
 import { OnboardingClientScreen } from "@/screens/onboarding/ClientView";
+import {
+  ConcentrationClientsScreen,
+  ConcentrationReviewScreen,
+} from "@/screens/concentration/ConcentrationReview";
 import { OnboardingHomeScreen } from "@/screens/onboarding/Home";
 import { AdminOnly } from "@/screens/admin/AdminLayout";
 import { ConfigAssetsScreen } from "@/screens/admin/ConfigAssets";
@@ -78,7 +82,9 @@ export default function App() {
                 {/* Client Onboarding — standing configuration. It sits beside
                     Operations: Operations processes deliveries, Onboarding
                     creates the configuration those deliveries resolve with. */}
-                <Route path="/onboarding" element={<OnboardingHomeScreen />} />
+                <Route path="/concentration" element={<ConcentrationClientsScreen />} />
+          <Route path="/concentration/:client" element={<ConcentrationReviewScreen />} />
+          <Route path="/onboarding" element={<OnboardingHomeScreen />} />
                 <Route path="/onboarding/cases/:id" element={<OnboardingCaseScreen />} />
                 <Route path="/onboarding/clients/:id" element={<OnboardingClientScreen />} />
                 {/* The OCC Agent. Flag-gated, synthetic behind the guard — the

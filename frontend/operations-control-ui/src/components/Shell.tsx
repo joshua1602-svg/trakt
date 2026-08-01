@@ -12,6 +12,7 @@ import {
   Send,
   SlidersHorizontal,
   Wrench,
+  Gauge,
 } from "lucide-react";
 import clsx from "clsx";
 import { useSession } from "@/api/session";
@@ -34,6 +35,8 @@ const MANUAL_FIRST_NAV: NavEntry[] = [
   { to: "/history", label: copy.nav.history, icon: Clock, end: false },
   // A governed capability of its own, not a step of the delivery workflow.
   { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
+  // The concentration-test review surface: client covenants become governed tests.
+  { to: "/concentration", label: copy.nav.concentration, icon: Gauge, end: false },
 ];
 
 /**
@@ -45,6 +48,8 @@ const AGENT_FIRST_NAV: NavEntry[] = [
   { to: "/", label: copy.nav.home, icon: Home, end: true },
   { to: "/agent", label: copy.nav.agent, icon: Bot, end: false },
   { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
+  // Onboarding produces the proposals; this is where they are decided.
+  { to: "/concentration", label: copy.nav.concentration, icon: Gauge, end: false },
   { to: "/reviews", label: copy.nav.review, icon: ListChecks, end: false },
   { to: "/workflows", label: copy.nav.workflows, icon: GitBranch, end: false },
   { to: "/history", label: copy.nav.history, icon: Clock, end: false },

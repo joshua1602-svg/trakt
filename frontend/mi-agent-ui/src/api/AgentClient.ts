@@ -22,6 +22,10 @@ import type {
   FundedSnapshot,
   GeoExposure,
   PipelineEvolution,
+  ConcentrationDrillthrough,
+  ConcentrationDrivers,
+  ConcentrationHistory,
+  ConcentrationTestsSnapshot,
   PipelineFunnelEvolution,
   PortfolioContextIndex,
   RiskLimitsSnapshot,
@@ -92,6 +96,29 @@ export interface AgentClient {
   /** Governed risk-limit / concentration monitor (Schedule 8 vs funded actuals). */
   getRiskLimits(portfolioId: string, portfolioContext?: string,
                signal?: AbortSignal): Promise<RiskLimitsSnapshot>;
+
+  /** Approved concentration tests evaluated against the funded book (one
+   *  governed evaluation service; legacy extracted limits marked unapproved). */
+  getConcentrationTests(portfolioId: string, portfolioContext?: string,
+                        signal?: AbortSignal): Promise<ConcentrationTestsSnapshot>;
+
+  /** Contributing-loan population for one approved test — the evaluator's own
+   *  mask, reconciling exactly to the numerator. */
+  getConcentrationDrillthrough(portfolioId: string, testId: string,
+                               portfolioContext?: string,
+                               signal?: AbortSignal): Promise<ConcentrationDrillthrough>;
+
+  /** Metric history across real governed snapshots (never fabricated). */
+  getConcentrationHistory(portfolioId: string, testId?: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ConcentrationHistory>;
+
+  /** Pipeline cases driving one test's Expected Forecast movement (the
+   *  forecast engine's own probabilities; reconciles to the expected
+   *  numerator). */
+  getConcentrationDrivers(portfolioId: string, testId: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<ConcentrationDrivers>;
 
   /** Securitisation scale-up forecast (run-rate / KFI extrapolation + milestones). */
   getForecastExtrapolation(portfolioId: string, portfolioContext?: string,
