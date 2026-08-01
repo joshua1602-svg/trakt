@@ -13,6 +13,7 @@ import { RiskLimitsWorkspace } from "@/components/risk/RiskLimitsWorkspace";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { SubTabs } from "@/components/SubTabs";
+import { ErrorState } from "@/components/states/States";
 import { PortfolioScopeBanner } from "@/components/PortfolioScopeBanner";
 import { LineagePanel } from "@/components/LineagePanel";
 import type { ViewLineage, WorkspaceView } from "@/domain";
@@ -331,6 +332,14 @@ export function AppShell() {
               </p>
             ) : (
               <div className="space-y-4 p-4">
+                {/* Discovery failure (API unreachable / unauthorised) renders as
+                    a visible error — never a bare "No client" header. */}
+                {ws.portfolios.length === 0 && ws.portfoliosError && (
+                  <ErrorState
+                    message={`The MI Agent API could not be reached — ${ws.portfoliosError}`}
+                    onRetry={ws.refresh}
+                  />
+                )}
                 {/* Governed disclosure for the active view: which portfolios
                     contribute, which are excluded and why. Backend prose only. */}
                 <PortfolioScopeBanner
@@ -352,6 +361,14 @@ export function AppShell() {
                       ]} />
                     {fundedTab === "strat" && (
                       <>
+                        {/* A failed load renders a VISIBLE error with the real
+                            reason + retry — never a silent blank panel. */}
+                        {!ws.snapshot && !ws.snapshotLoading && ws.snapshotError && (
+                          <ErrorState
+                            message={`Funded Book Snapshot could not be loaded — ${ws.snapshotError}`}
+                            onRetry={ws.refresh}
+                          />
+                        )}
                         <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
                         <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
                       </>
@@ -388,6 +405,12 @@ export function AppShell() {
                       ]} />
                     {pipelineTab === "strat" && (
                       <>
+                        {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
+                          <ErrorState
+                            message={`Pipeline snapshot could not be loaded — ${ws.forecastError}`}
+                            onRetry={ws.refresh}
+                          />
+                        )}
                         <PipelineSnapshotPanel
                           snapshot={ws.forecast?.pipelineSnapshot ?? null}
                           loading={ws.forecastLoading}
@@ -415,6 +438,12 @@ export function AppShell() {
                       ]} />
                     {forecastTab === "projection" && (
                       <>
+                        {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
+                          <ErrorState
+                            message={`Forecast could not be loaded — ${ws.forecastError}`}
+                            onRetry={ws.refresh}
+                          />
+                        )}
                         <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
                         <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}-${ws.selectedContextId}`}
                           client={client} portfolioId={workspacePortfolioId}

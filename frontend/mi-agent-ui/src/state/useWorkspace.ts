@@ -104,6 +104,9 @@ function isAbortError(err: unknown): boolean {
 export interface Workspace {
   /** Discovered funded portfolios (data-driven dropdown source). */
   portfolios: SnapshotPortfolio[];
+  /** Why portfolio discovery failed (null when it succeeded) — surfaces an
+   *  unreachable/unauthorised API instead of a silent "No client" header. */
+  portfoliosError: string | null;
   /** Reporting runs available for the selected portfolio. */
   runs: SnapshotRun[];
   selectedClientId: string | null;
@@ -113,9 +116,14 @@ export interface Workspace {
   /** Deterministic landing-page funded snapshot for the selected run. */
   snapshot: FundedSnapshot | null;
   snapshotLoading: boolean;
+  /** Why the snapshot fetch failed (null when it succeeded / is loading) — a
+   *  failed load must render as a visible error, never as a blank panel. */
+  snapshotError: string | null;
   /** Deterministic funded + pipeline forecast snapshot for the selected run. */
   forecast: ForecastSnapshot | null;
   forecastLoading: boolean;
+  /** Why the forecast fetch failed (null when it succeeded / is loading). */
+  forecastError: string | null;
   /** Active workspace view (funded | pipeline | forecast). */
   activeView: WorkspaceView;
   setActiveView: (view: WorkspaceView) => void;
@@ -183,14 +191,17 @@ export function useWorkspace(client: AgentClient): Workspace {
   const urlContext = useRef(readUrlContext()).current;
 
   const [portfolios, setPortfolios] = useState<SnapshotPortfolio[]>([]);
+  const [portfoliosError, setPortfoliosError] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(
     urlContext.clientId ?? persisted?.clientId ?? null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(
     urlContext.runId ?? persisted?.runId ?? null);
   const [snapshot, setSnapshot] = useState<FundedSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [forecast, setForecast] = useState<ForecastSnapshot | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState<string | null>(null);
   // Signed-in caller (header identity + role gating) and manual-refresh plumbing.
   const [identity, setIdentity] = useState<UserIdentity | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
@@ -351,6 +362,7 @@ export function useWorkspace(client: AgentClient): Workspace {
         if (cancelled) return;
         const pfs = index.portfolios ?? [];
         setPortfolios(pfs);
+        setPortfoliosError(null);
         // Diagnostic: what the store received + how it auto-selected (visible in
         // the browser console on the live app).
         console.debug("[useWorkspace] /mi/snapshots", {
@@ -383,13 +395,16 @@ export function useWorkspace(client: AgentClient): Workspace {
       })
       .catch((err) => {
         console.warn("[useWorkspace] /mi/snapshots failed", err);
-        if (!cancelled) setPortfolios([]);
+        if (cancelled) return;
+        setPortfolios([]);
+        setPortfoliosError(err instanceof Error ? err.message
+          : "The MI Agent API could not be reached.");
       });
     return () => {
       cancelled = true;
     };
   }, [client, persisted?.clientId, persisted?.runId,
-      urlContext.clientId, urlContext.runId]);
+      urlContext.clientId, urlContext.runId, dataVersion]);
 
   const activePortfolio = useMemo(
     () => portfolios.find((p) => p.client_id === selectedClientId) ?? portfolios[0] ?? null,
@@ -425,10 +440,16 @@ export function useWorkspace(client: AgentClient): Workspace {
     client
       .getSnapshot(portfolioId, selectedContextId)
       .then((snap) => {
-        if (!cancelled) setSnapshot(snap);
+        if (cancelled) return;
+        setSnapshot(snap);
+        setSnapshotError(null);
       })
-      .catch(() => {
-        if (!cancelled) setSnapshot(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A failed load must be VISIBLE — keep the reason for the error panel.
+        setSnapshot(null);
+        setSnapshotError(err instanceof Error ? err.message
+          : "The funded snapshot could not be loaded.");
       })
       .finally(() => {
         if (!cancelled) setSnapshotLoading(false);
@@ -462,12 +483,15 @@ export function useWorkspace(client: AgentClient): Workspace {
       .then((fc) => {
         if (workspaceUnmounted.current || forecastKeyRef.current !== key) return;
         setForecast(fc);
+        setForecastError(null);
         setForecastLoading(false);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (workspaceUnmounted.current || forecastKeyRef.current !== key) return;
         forecastKeyRef.current = null; // a failed fetch stays retryable
         setForecast(null);
+        setForecastError(err instanceof Error ? err.message
+          : "The pipeline / forecast snapshot could not be loaded.");
         setForecastLoading(false);
       });
   }, [client, portfolioId, selectedContextId, dataVersion, activeView, snapshotLoading]);
@@ -829,6 +853,7 @@ export function useWorkspace(client: AgentClient): Workspace {
 
   return {
     portfolios,
+    portfoliosError,
     runs,
     selectedClientId: activePortfolio?.client_id ?? null,
     selectedRunId: activeRun?.run_id ?? null,
@@ -836,8 +861,10 @@ export function useWorkspace(client: AgentClient): Workspace {
     reporting,
     snapshot,
     snapshotLoading,
+    snapshotError,
     forecast,
     forecastLoading,
+    forecastError,
     activeView,
     setActiveView,
     sourceLenses,
