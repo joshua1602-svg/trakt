@@ -410,6 +410,9 @@ export class MockAgent {
       ],
     });
     this.onboarding.saveStep(opened.case_id, "reporting", { products: facts.products });
+    if (facts.pipeline) {
+      this.onboarding.addPipelineBook(opened.case_id, facts.portfolioId);
+    }
 
     const doc = this.blankRun(opened.case_id, instruction, scenario, facts.reportingPeriod);
     const stored: StoredRun = {
@@ -455,6 +458,7 @@ export class MockAgent {
       summary: this.summary(stored),
       onboarding,
       facts,
+      streams: this.streamSummaries(onboarding),
       state: lifecycle(stored.doc.state).find((s) => s.state === stored.doc.state)!,
       lifecycle: lifecycle(stored.doc.state, stored.reached),
       stage_outcomes: stored.doc.stage_outcomes,
@@ -499,6 +503,47 @@ export class MockAgent {
       anything_blocked: stored.doc.state === S.BLOCKED,
       configuration_written: onboarding.status === "activated",
     };
+  }
+
+  /**
+   * The streams projection, from the onboarding case's own source rows —
+   * the same shape the server derives, with the same regime rule: pipeline
+   * never feeds a regime, funded may where the products permit.
+   */
+  private streamSummaries(onboarding: OnboardingCase): AgentStatus["streams"] {
+    const sources = (onboarding.answers.sources ?? []) as Record<string, unknown>[];
+    const products = ((onboarding.answers.reporting ?? {}) as { products?: string[] })
+      .products ?? [];
+    const regimeChosen = products.includes("esma_annex2");
+    return sources.map((source) => {
+      const dataset = String(source.dataset ?? "");
+      const capable = dataset === "funded";
+      return {
+        source_key: String(source.source_key ?? ""),
+        portfolio_id: String(source.portfolio_id ?? ""),
+        dataset,
+        label: dataset ? dataset[0].toUpperCase() + dataset.slice(1) : "Stream",
+        purpose:
+          dataset === "pipeline"
+            ? "Pipeline MI only"
+            : "Funded MI, risk monitoring and reporting as configured",
+        cadence: String(source.cadence ?? ""),
+        cadence_confirmed: false,
+        required_file: dataset === "pipeline" ? "Pipeline Report" : "Primary loan tape",
+        expected_files: (source.expected_files as string[] | undefined) ?? [],
+        regime_capable: capable,
+        regime_status: !capable
+          ? "not_applicable"
+          : regimeChosen
+            ? "configured"
+            : "potential",
+        regime_note: !capable
+          ? "Pipeline data feeds pipeline MI only. It never feeds a regulatory regime."
+          : regimeChosen
+            ? "Regime reporting is configured."
+            : "Potentially applicable, subject to product selection.",
+      };
+    });
   }
 
   // -- the client pack ----------------------------------------------------- //
@@ -1867,6 +1912,9 @@ function interpret(instruction: string) {
   return {
     clientName,
     portfolioId,
+    // A declared pipeline stream is a SEPARATE registration, mirroring the
+    // server: "a pipeline and a funded book" is two streams, never one.
+    pipeline: /\bpipeline\b/.test(lower),
     products,
     jurisdiction: /\buk\b|united kingdom|british/.test(lower) ? "GB" : "",
     reportingPeriod:

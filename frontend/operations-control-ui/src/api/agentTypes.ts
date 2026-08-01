@@ -135,6 +135,27 @@ export interface Readiness {
   outstanding: ReadinessCriterion[];
 }
 
+/**
+ * One operational data stream — a projection of Client Onboarding's own
+ * source registrations. Pipeline and funded are separate rows, never merged.
+ */
+export interface StreamSummary {
+  source_key: string;
+  portfolio_id: string;
+  /** The governed dataset: "funded" | "pipeline". */
+  dataset: string;
+  label: string;
+  purpose: string;
+  cadence: string;
+  cadence_confirmed: boolean;
+  required_file: string;
+  expected_files: string[];
+  regime_capable: boolean;
+  /** "not_applicable" | "potential" | "configured" | "not_eligible" */
+  regime_status: string;
+  regime_note: string;
+}
+
 /** The execution facts read off the onboarding case. Never entered by hand. */
 export interface ExecutionFacts {
   client_id: string;
@@ -456,6 +477,8 @@ export interface AgentStatus {
   /** Client Onboarding's own presentation of the case, unchanged. */
   onboarding: OnboardingCase;
   facts: ExecutionFacts;
+  /** The declared operational data streams, one row per source registration. */
+  streams: StreamSummary[];
   state: LifecycleState;
   lifecycle: LifecycleState[];
   stage_outcomes: Record<string, string>;

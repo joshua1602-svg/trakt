@@ -146,6 +146,9 @@ class ApplicationPlan:
     #: Delivery facts, which are the run's rather than the case's.
     reporting_period: str = ""
     cadence: str = ""
+    #: Operational data streams the instruction declared ("funded",
+    #: "pipeline"), each becoming its own source registration on apply.
+    streams: List[str] = field(default_factory=list)
     expected_artefacts: List[str] = field(default_factory=list)
     #: Provenance per ``section.field``, carried through to the case.
     provenance: Dict[str, str] = field(default_factory=dict)
@@ -158,6 +161,7 @@ class ApplicationPlan:
             "unrecognised": list(self.unrecognised),
             "reporting_period": self.reporting_period,
             "cadence": self.cadence,
+            "streams": list(self.streams),
             "expected_artefacts": list(self.expected_artefacts),
             "provenance": dict(self.provenance),
             "changes": self.change_count,
@@ -173,7 +177,8 @@ class ApplicationPlan:
     @property
     def empty(self) -> bool:
         return not (self.change_count or self.reporting_period or self.cadence
-                    or self.expected_artefacts or self.questions)
+                    or self.streams or self.expected_artefacts
+                    or self.questions)
 
     @property
     def complete(self) -> bool:
@@ -197,6 +202,10 @@ class ApplicationPlan:
             parts.append("; ".join(c.sentence() for c in changes[:6]))
             if len(changes) > 6:
                 parts.append(f"and {len(changes) - 6} more")
+        if self.streams:
+            parts.append("Streams: "
+                         + " and ".join(f"a {s} book" for s in self.streams)
+                         + ", registered separately")
         if self.reporting_period:
             parts.append(f"Reporting period: {self.reporting_period}")
         if self.cadence:
@@ -207,7 +216,9 @@ class ApplicationPlan:
         """The four things every turn must report, in operator words."""
         return {
             "understood": [c.sentence() for c in self.understood
-                           if c.action != UNCHANGED],
+                           if c.action != UNCHANGED]
+                          + [f"A {s} stream will be registered"
+                             for s in self.streams],
             "proposed": self.summary(),
             "questions": [q.question for q in self.questions],
             "unrecognised": list(self.unrecognised),

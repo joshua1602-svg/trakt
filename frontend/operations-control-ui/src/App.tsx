@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import { createOpsClient, isMockMode } from "@/api";
 import { OpsClientProvider } from "@/api/context";
 import { SessionProvider } from "@/api/session";
+import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { Shell } from "@/components/Shell";
 import { SignIn } from "@/components/SignIn";
 import { ToastProvider } from "@/components/Toast";
@@ -80,14 +81,18 @@ export default function App() {
                 <Route path="/onboarding" element={<OnboardingHomeScreen />} />
                 <Route path="/onboarding/cases/:id" element={<OnboardingCaseScreen />} />
                 <Route path="/onboarding/clients/:id" element={<OnboardingClientScreen />} />
-                {/* The OCC Agent tab. Flag-gated, and synthetic behind the
-                    guard — the backend refuses these routes outright when the
-                    same flag is off in its own environment. */}
+                {/* The OCC Agent. Flag-gated, synthetic behind the guard — the
+                    backend refuses these routes outright when the same flag is
+                    off in its own environment — and wrapped in a route-level
+                    error boundary so a rendering fault shows a card and keeps
+                    the OCC shell standing instead of blanking the page. */}
                 <Route
                   path="/agent"
                   element={
                     <AgentOnly>
-                      <AgentCasesScreen />
+                      <RouteErrorBoundary>
+                        <AgentCasesScreen />
+                      </RouteErrorBoundary>
                     </AgentOnly>
                   }
                 />
@@ -95,7 +100,9 @@ export default function App() {
                   path="/agent/:caseId"
                   element={
                     <AgentOnly>
-                      <AgentCaseScreen />
+                      <RouteErrorBoundary>
+                        <AgentCaseScreen />
+                      </RouteErrorBoundary>
                     </AgentOnly>
                   }
                 />

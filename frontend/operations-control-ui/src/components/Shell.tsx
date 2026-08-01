@@ -7,16 +7,26 @@ import {
   BookOpen,
   Clock,
   Building2,
-  FlaskConical,
+  Bot,
   Plus,
+  Send,
   SlidersHorizontal,
+  Wrench,
 } from "lucide-react";
 import clsx from "clsx";
 import { useSession } from "@/api/session";
 import { copy } from "@/lib/copy";
 import { occAgentEnabled } from "@/lib/features";
 
-const NAV_ITEMS = [
+interface NavEntry {
+  to: string;
+  label: string;
+  icon: typeof Home;
+  end: boolean;
+}
+
+/** The manual-first navigation, unchanged for environments without the agent. */
+const MANUAL_FIRST_NAV: NavEntry[] = [
   { to: "/", label: copy.nav.home, icon: Home, end: true },
   { to: "/reviews", label: copy.nav.review, icon: ListChecks, end: false },
   { to: "/workflows", label: copy.nav.workflows, icon: GitBranch, end: false },
@@ -26,66 +36,102 @@ const NAV_ITEMS = [
   { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
 ];
 
-/** The OCC Agent tab. Sits alongside the live tabs, behind its feature flag. */
-const AGENT_ITEM = {
-  to: "/agent",
-  label: copy.nav.agent,
-  icon: FlaskConical,
-  end: false,
-};
+/**
+ * The agent-first hierarchy. The OCC Agent is the operating entry point;
+ * manual delivery stays reachable below as the specialist route — for
+ * exceptions, recovery, legacy cases and direct operator control.
+ */
+const AGENT_FIRST_NAV: NavEntry[] = [
+  { to: "/", label: copy.nav.home, icon: Home, end: true },
+  { to: "/agent", label: copy.nav.agent, icon: Bot, end: false },
+  { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
+  { to: "/reviews", label: copy.nav.review, icon: ListChecks, end: false },
+  { to: "/workflows", label: copy.nav.workflows, icon: GitBranch, end: false },
+  { to: "/history", label: copy.nav.history, icon: Clock, end: false },
+];
+
+const AGENT_FIRST_SPECIALIST: NavEntry[] = [
+  { to: "/new", label: copy.nav.manual, icon: Wrench, end: false },
+  { to: "/rules", label: copy.nav.rules, icon: BookOpen, end: false },
+];
 
 /** Administrator-only entry. Hidden for ordinary operators — the backend still
  *  refuses the route and every request behind it. */
-const ADMIN_ITEM = {
+const ADMIN_ITEM: NavEntry = {
   to: "/admin/config",
   label: copy.nav.admin,
   icon: SlidersHorizontal,
   end: false,
 };
 
+function NavItem({ to, label, icon: Icon, end, compact }: NavEntry & { compact?: boolean }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        clsx(
+          "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+          compact && "shrink-0",
+          isActive
+            ? "bg-stone-900 text-white"
+            : "text-stone-600 hover:bg-stone-100 hover:text-stone-900",
+        )
+      }
+    >
+      <Icon className="h-4 w-4" aria-hidden />
+      <span>{label}</span>
+    </NavLink>
+  );
+}
+
 function NavItems({ compact }: { compact?: boolean }) {
   const { isAdmin } = useSession();
-  const items = [
-    ...NAV_ITEMS,
-    ...(occAgentEnabled() ? [AGENT_ITEM] : []),
-    ...(isAdmin ? [ADMIN_ITEM] : []),
-  ];
+  if (!occAgentEnabled()) {
+    const items = [...MANUAL_FIRST_NAV, ...(isAdmin ? [ADMIN_ITEM] : [])];
+    return (
+      <>
+        {items.map((item) => (
+          <NavItem key={item.to} {...item} compact={compact} />
+        ))}
+      </>
+    );
+  }
+  const specialist = [...AGENT_FIRST_SPECIALIST, ...(isAdmin ? [ADMIN_ITEM] : [])];
   return (
     <>
-      {items.map(({ to, label, icon: Icon, end }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          className={({ isActive }) =>
-            clsx(
-              "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-              compact && "shrink-0",
-              isActive
-                ? "bg-stone-900 text-white"
-                : "text-stone-600 hover:bg-stone-100 hover:text-stone-900",
-            )
-          }
-        >
-          <Icon className="h-4 w-4" aria-hidden />
-          <span>{label}</span>
-        </NavLink>
+      {AGENT_FIRST_NAV.map((item) => (
+        <NavItem key={item.to} {...item} compact={compact} />
+      ))}
+      {!compact && (
+        <p className="mt-4 px-3 text-xs font-semibold uppercase tracking-wide text-stone-400">
+          {copy.nav.specialistHeading}
+        </p>
+      )}
+      {specialist.map((item) => (
+        <NavItem key={item.to} {...item} compact={compact} />
       ))}
     </>
   );
 }
 
+/** The primary start action: the OCC Agent when enabled, manual otherwise. */
 function StartButton({ className }: { className?: string }) {
+  const agentFirst = occAgentEnabled();
   return (
     <Link
-      to="/new"
+      to={agentFirst ? "/agent" : "/new"}
       className={clsx(
         "flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700",
         className,
       )}
     >
-      <Plus className="h-4 w-4" aria-hidden />
-      {copy.nav.startNew}
+      {agentFirst ? (
+        <Send className="h-4 w-4" aria-hidden />
+      ) : (
+        <Plus className="h-4 w-4" aria-hidden />
+      )}
+      {agentFirst ? copy.nav.startAgent : copy.nav.startNew}
     </Link>
   );
 }
