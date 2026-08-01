@@ -56,6 +56,7 @@ env:
   # it into the bundle at build time. It is deliberately NOT an App Service
   # setting: the API never reads it.
   VITE_OPS_API_URL: https://trakt-ops-api-bveyecbeh6ebarfa.westeurope-01.azurewebsites.net
+  VITE_OCC_AGENT_SYNTHETIC_ENABLED: "true"
 
 jobs:
   build_and_deploy:
