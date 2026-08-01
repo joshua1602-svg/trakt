@@ -34,6 +34,7 @@ coupling MI's worker count to the OCC's concurrency requirement.
 | `deploy/trakt-ops-api/deploy_async.sh` | submits with `isAsync=true` and polls, so the ~230s SCM front-end timeout cannot mask a long build |
 | `deploy/trakt-ops-api/oryx_manifest.py` | reads `oryx-manifest.toml` and reports the build mode and which artefact should exist |
 | `deploy/trakt-ops-api/verify_oryx_output.sh` | post-deploy evidence: manifest present and its declared output on the site. **Not** the gate |
+| `deploy/trakt-ops-api/probe_health.sh` | the gate's `/health` retry loop, sized for a cold start and safe under `set -e` |
 | `deploy/trakt-ops-api/collect_diagnostics.sh` | runs on any failure: deployment record, Oryx build log, container logs, site config |
 | `.github/workflows/deploy-ops-api.yml` | test + build + OIDC deploy, scoped to `trakt-ops-api` |
 | `requirements.txt` (repo root) | Oryx install set — already carries `fastapi` / `uvicorn[standard]` / `gunicorn` / `uvicorn-worker` / `PyYAML` / `pandas` / `lxml` |
@@ -245,6 +246,36 @@ In that mode `/home/site/wwwroot` holds a single compressed artefact
 startup. No expanded directory is published, so the assertion reported a build
 that had installed 91 packages — including `pyyaml==6.0.3`, with the deployment
 record showing `complete=true` and `status=4` (Success) — as a hard failure.
+
+#### The probe must outlive a cold start, and must survive its own timeouts
+
+`probe_health.sh` owns the retry loop. Two properties matter, and both were
+learned from a failure:
+
+* **A curl timeout is a result, not an abort.** The loop used to live inline as
+  `CODE="$(curl … --max-time 20 …)"` under `set -euo pipefail`. A standalone
+  assignment takes its command substitution's exit status, so the first
+  `--max-time` expiry (curl exit `28`) ended the step on attempt one — defeating
+  the eight retries written directly beneath it and skipping the container-log
+  dump. The job reported a bare `exit code 28` on a deployment Kudu had recorded
+  as `status=4` (Success). curl's failure is now absorbed and surfaced as
+  HTTP `000`.
+* **The budget is a cold-start budget.** This site runs `alwaysOn=false` with a
+  `--compress-destination-dir` build, so the first request after a deploy waits
+  for `output.tar.zst` to be extracted and then for `operations_control`,
+  `mi_agent`, `analytics_lib` and pandas to import. Twenty seconds only ever
+  passed when the container was already warm. The default is now 10 attempts
+  × 60s with 20s gaps, returning immediately on the first `200`.
+
+`tests/test_health_probe.sh` stubs curl and pins both, and fails the build if an
+unguarded `VAR="$(curl …)"` reappears anywhere in the workflow. It does not scan
+`deploy_async.sh` or `collect_diagnostics.sh`: those run under `set -uo pipefail`
+with no `-e`, which is why their unguarded substitutions are correct — the poller
+has to survive a transient failure and the diagnostics must never abort part-way.
+
+Enabling **Always On** would remove the cold start from the gate's path
+entirely. It is a site setting with a cost implication, so it is a decision, not
+something this workflow changes.
 
 A completed deployment (`complete=true`, `status=4`) has completed. A verification
 failure after it is a fault in the verification until proven otherwise, and is not

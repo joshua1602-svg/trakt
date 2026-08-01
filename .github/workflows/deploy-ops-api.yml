@@ -90,11 +90,17 @@ jobs:
         #  * replay — drives the real deploy script through that run's status
         #    sequence end to end, plus a genuine failure and a never-completing
         #    build, so the classifier AND its wiring are both covered.
+        #  * health probe — the gate's retry loop under the gate's own shell
+        #    options. Its inline predecessor aborted on the FIRST curl timeout
+        #    because `set -e` propagates a failing command substitution, so the
+        #    eight retries written above it never ran and a successful
+        #    deployment failed with a bare "exit code 28" and no diagnostics.
         run: |
           bash deploy/trakt-ops-api/tests/test_host_discovery.sh
           bash deploy/trakt-ops-api/tests/test_kudu_status.sh
           bash deploy/trakt-ops-api/tests/test_deploy_async_replay.sh
           bash deploy/trakt-ops-api/tests/test_oryx_manifest.sh
+          bash deploy/trakt-ops-api/tests/test_health_probe.sh
 
       - name: Build deployment package
         # The runtime closure of operations_control.api.app, established by
@@ -301,20 +307,17 @@ jobs:
         run: |
           set -euo pipefail
           echo "probing https://${OPS_APP_HOST}/health"
-          CODE=000
-          for attempt in 1 2 3 4 5 6 7 8; do
-            CODE="$(curl -sS -o health.json -w '%{http_code}' --max-time 20 \
-                     "https://${OPS_APP_HOST}/health" 2>/dev/null)"
-            CODE="${CODE:-000}"
-            echo "attempt $attempt: HTTP $CODE"
-            [ "$CODE" = "200" ] && break
-            sleep 20
-          done
+          . deploy/trakt-ops-api/probe_health.sh
+          CODE="$(probe_health "$OPS_APP_HOST")"
 
           if [ "$CODE" != "200" ]; then
             echo "FAIL: /health returned HTTP $CODE, not 200. The service is not"
             echo "      serving after this deployment."
-            [ -s health.json ] && sed 's/^/      /' health.json
+            # `if`, not `[ … ] && …`: an && list that evaluates false is itself a
+            # failing command, so under `set -e` an empty body file would end the
+            # step here — losing the container log printed below, which is the
+            # whole reason this block exists.
+            if [ -s health.json ]; then sed 's/^/      /' health.json; fi
             echo
             echo "--- application startup log (most recent container output) ---"
             # Read the startup log HERE, next to the failure, rather than leaving
@@ -364,9 +367,13 @@ jobs:
             echo "         deployment. Add the secret to enable this check."
             exit 0
           fi
-          CODE="$(curl -sS -o me.json -w '%{http_code}' --max-time 20 \
+          # `|| true` is load-bearing, for the same reason as in the /health
+          # probe: a standalone assignment adopts its command substitution's
+          # exit status, so without it a curl timeout would kill this step
+          # before the case below could explain the status it got.
+          CODE="$(curl -sS -o me.json -w '%{http_code}' --max-time 60 \
                    -H "X-Operator-Token: ${OPS_SMOKE_TOKEN}" \
-                   "https://${OPS_APP_HOST}/ops/me" 2>/dev/null)"
+                   "https://${OPS_APP_HOST}/ops/me" 2>/dev/null || true)"
           echo "GET /ops/me -> HTTP ${CODE:-000}"
           case "${CODE:-000}" in
             # One line on purpose: an un-indented multi-line script inside a YAML
@@ -382,8 +389,12 @@ jobs:
             503) echo "FAIL: HTTP 503 — TRAKT_OPS_OPERATORS is not set on the App"
                  echo "      Service, so every authenticated route refuses."
                  exit 1 ;;
+            000) echo "FAIL: no response within 60s. /health answered moments ago,"
+                 echo "      so this is a slow or hanging authenticated path, not a"
+                 echo "      service that failed to start."
+                 exit 1 ;;
             *) echo "FAIL: unexpected status $CODE from /ops/me"
-               [ -s me.json ] && sed 's/^/      /' me.json
+               if [ -s me.json ]; then sed 's/^/      /' me.json; fi
                exit 1 ;;
           esac
           rm -f me.json
