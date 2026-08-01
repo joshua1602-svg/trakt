@@ -34,6 +34,7 @@ KNOWN_EVALUATORS = (
     "largest_group_share", "distinct_group_count", "weighted_average",
     "field_average", "field_maximum", "field_minimum", "largest_by_field_share",
     "top_n_share", "max_count_per_group", "multi_loan_borrower_share",
+    "borrower_aggregate_share",
     "joint_borrower_share", "arrears_share", "dimension_share",
     "vintage_share", "external_index_ratio", "filtered_share",
 )

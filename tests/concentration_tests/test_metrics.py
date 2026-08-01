@@ -166,6 +166,24 @@ class TestBorrowers:
                 {"min_loans": 3})
         assert r.value == 30.0
 
+    def test_aggregate_lending_is_struck_per_borrower(self, lib, funded_frame):
+        # Aggregate ORIGINAL balances: B1 = 120+160+60 = 340k, B3 = 1,200k.
+        # Only B3 breaches £1m, contributing L4's current balance of 200k.
+        r = run(lib, funded_frame, "borrower_aggregate_balance_share",
+                {"amount": 1_000_000, "aggregate_basis": "original"})
+        assert r.value == 20.0
+        assert r.loans_in_numerator == 1
+
+    def test_no_borrower_breaches_a_higher_aggregate(self, lib, funded_frame):
+        r = run(lib, funded_frame, "borrower_aggregate_balance_share",
+                {"amount": 5_000_000, "aggregate_basis": "original"})
+        assert r.value == 0.0
+
+    def test_aggregate_threshold_must_be_configured(self, lib, funded_frame):
+        r = run(lib, funded_frame, "borrower_aggregate_balance_share", {})
+        assert r.value is None
+        assert r.data_status == DATA_MISSING
+
     def test_joint_share_by_structure_flag(self, lib, funded_frame):
         # Joint: L1, L2, L4, L7 → 100+150+200+120 = 570k → 57%
         r = run(lib, funded_frame, "borrower_joint_share",
@@ -262,6 +280,70 @@ class TestExternalIndex:
                  "_reporting_date": "2025-11-30"},
                 external=Provider())
         assert r.value == 92.5
+
+
+class TestFlooredDenominator:
+    """A facility may define its denominator as "the greater of £X and the
+    portfolio balance", which makes every share smaller while the book is
+    small. The floor is contractual, so it is disclosed whether or not it
+    binds — a reader must never have to infer it from the number."""
+
+    def test_a_binding_floor_replaces_the_portfolio_balance(self, lib,
+                                                            funded_frame):
+        # Wales = 80k. Against the £1m book that is 8%; against a £2m floor, 4%.
+        r = run(lib, funded_frame, "geo_region_share",
+                {"regions": ["Wales"], "denominator_floor": 2_000_000})
+        assert r.value == 4.0
+        assert r.denominator_value == 2_000_000
+        assert r.denominator_basis == "current_balance (floored at 2,000,000)"
+
+    def test_a_floor_below_the_book_changes_nothing_but_is_disclosed(
+            self, lib, funded_frame):
+        r = run(lib, funded_frame, "geo_region_share",
+                {"regions": ["Wales"], "denominator_floor": 500_000})
+        assert r.value == 8.0
+        assert r.denominator_value == 1_000_000
+        assert r.denominator_basis == "current_balance (floor 500,000 not binding)"
+
+    def test_without_a_floor_the_basis_is_unchanged(self, lib, funded_frame):
+        r = run(lib, funded_frame, "geo_region_share", {"regions": ["Wales"]})
+        assert r.value == 8.0
+        assert r.denominator_basis == "current_balance"
+
+    def test_a_book_at_ramp_up_measures_against_the_floor(self, lib):
+        # The commercial point of a floor: while the facility is small, a
+        # single loan cannot breach a regional limit on its own.
+        ramp_up = pd.DataFrame({
+            "loan_id": ["L1"],
+            "current_outstanding_balance": [50_000],
+            "collateral_geography": ["Wales"],
+        })
+        r = run(lib, ramp_up, "geo_region_share",
+                {"regions": ["Wales"], "denominator_floor": 2_000_000})
+        assert r.value == 2.5
+        # Unfloored, one loan in Wales would read as the entire portfolio.
+        assert run(lib, ramp_up, "geo_region_share",
+                   {"regions": ["Wales"]}).value == 100.0
+
+    def test_a_book_with_no_balance_yet_reports_zero_not_nothing(self, lib):
+        drawn = pd.DataFrame({
+            "loan_id": ["L1"],
+            "current_outstanding_balance": [0],
+            "collateral_geography": ["Wales"],
+        })
+        r = run(lib, drawn, "geo_region_share",
+                {"regions": ["Wales"], "denominator_floor": 2_000_000})
+        assert r.value == 0.0
+        assert r.data_status == DATA_OK
+
+    def test_the_floor_applies_to_expected_exposure_too(self, lib, funded_frame):
+        # Half the book expected to complete → 40k of Wales against the same
+        # contractual £2m floor, because the floor is an absolute amount.
+        frame = funded_frame.assign(**{"__completion_probability__": 0.5})
+        r = run(lib, frame, "geo_region_share",
+                {"regions": ["Wales"], "denominator_floor": 2_000_000})
+        assert r.value == 2.0
+        assert r.denominator_value == 2_000_000
 
 
 class TestDrillMask:

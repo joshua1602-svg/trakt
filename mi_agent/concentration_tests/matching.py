@@ -56,6 +56,17 @@ UK_REGIONS = (
     "scotland", "northern ireland",
 )
 
+#: ITL1 (formerly NUTS1) statistical codes, as used in limits tables that name
+#: the region by code as well as by label. Every value is a member of
+#: ``UK_REGIONS`` so a code and a label collapse to one canonical region.
+_ITL1_CODES = {
+    "ukc": "north east", "ukd": "north west", "uke": "yorkshire and the humber",
+    "ukf": "east midlands", "ukg": "west midlands", "ukh": "east of england",
+    "uki": "london", "ukj": "south east", "ukk": "south west",
+    "ukl": "wales", "ukm": "scotland", "ukn": "northern ireland",
+}
+_ITL1_CODE_RE = re.compile(r"\bUK([C-N])\b", re.I)
+
 _WORD_NUMBERS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
     "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -78,16 +89,18 @@ _EFFECTIVE_RE = re.compile(
     r"(?:with effect from|effective(?: date)?(?: of| from)?)\s+(\d{4}-\d{2}-\d{2}|"
     r"\d{1,2}\s+\w+\s+\d{4})", re.I)
 
+#: Modal verbs vary by drafter ("must", "shall", "will", "may") so the markers
+#: below are written without them wherever the rest of the phrase is decisive.
 _MAX_MARKERS = (
     "must not exceed", "may not exceed", "shall not exceed", "not to exceed",
     "not exceed",
-    "no more than", "not more than", "less than or equal", "must not be more",
-    "capped at", "maximum of", "up to", "<=", "≤", "must not be greater",
+    "no more than", "not more than", "less than or equal", "not be more",
+    "capped at", "maximum of", "up to", "<=", "≤", "not be greater",
     "cannot exceed",
 )
 _MIN_MARKERS = (
-    "at least", "no less than", "not less than", "must not be less",
-    "must not fall below", "minimum of", "must be at least", ">=", "≥",
+    "at least", "no less than", "not less than", "not be less",
+    "not fall below", "minimum of", ">=", "≥",
     "greater than or equal", "must remain above", "must exceed",
 )
 _ZERO_MARKERS = ("no such loans", "none permitted", "not permitted",
@@ -95,6 +108,30 @@ _ZERO_MARKERS = ("no such loans", "none permitted", "not permitted",
 
 _CLAUSE_SPLIT_RE = re.compile(r"\n+|(?<=\.)\s+(?=\d+\.\d+\s)")
 _CLAUSE_NUM_RE = re.compile(r"^\s*(\d+(?:\.\d+)+)\s+")
+
+#: Facility documents bracket a negotiated number until the document is
+#: agreed — "[50]%", "£[1,500,000]", "[3.75]% per annum". The brackets are a
+#: drafting convention, not arithmetic, so they are removed before any number
+#: is read. Only digit-bearing brackets are touched: "[Reserved]", "[sic]" and
+#: cross-references such as "[Schedule 8]" are left exactly as drafted.
+_BRACKET_NUMBER_RE = re.compile(r"\[\s*([\d,]+(?:\.\d+)?)\s*\]")
+_AMPERSAND_RE = re.compile(r"\s*&\s*")
+
+#: A defined term introduced as: "Concentration Limit Denominator" means …
+_DEFINED_TERM_RE = re.compile(
+    r"[“”‘’\"']\s*([A-Za-z][A-Za-z0-9 ()/-]{2,79}?)\s*"
+    r"[“”‘’\"']\s+means\b",
+    re.I)
+#: … an amount equal to the greater of: (a) £33,000,000 and (b) the Current
+#: Balance of the portfolio. A floored denominator, not a test in its own right.
+_GREATER_OF_RE = re.compile(r"\bgreater of\b", re.I)
+_BALANCE_LIMB_RE = re.compile(r"\b(?:current|principal|outstanding)\s+balance\b",
+                              re.I)
+
+#: A sentence that introduces a limits table rather than stating a limit
+#: itself: the comparison lives here, the numbers live in the rows below.
+_TABLE_LEAD_IN_MARKERS = ("set out below", "set out in the table", "as follows",
+                          "listed below", "specified below")
 
 
 @dataclass
@@ -111,6 +148,32 @@ class ExtractedTest:
     effective_date: str = ""
     extraction_confidence: float = 0.0
     raw: Dict[str, Any] = field(default_factory=dict)
+    #: The sentence that governs this row when the limit came from a table —
+    #: it carries the comparison and the denominator the row omits. Read for
+    #: interpretation and shown to the reviewer alongside the row.
+    context_text: str = ""
+
+    @property
+    def interpretation_text(self) -> str:
+        """Everything the mapper is entitled to read for this test."""
+        return " ".join(p for p in (self.context_text, self.source_text) if p)
+
+    @property
+    def evidence_text(self) -> str:
+        """What the reviewer is shown: the row never appears without the
+        sentence that gives it its comparison."""
+        return "\n".join(p for p in (self.context_text, self.source_text) if p)
+
+
+@dataclass(frozen=True)
+class DefinedDenominator:
+    """A contractually defined denominator carrying a floor, e.g. the
+    "Concentration Limit Denominator" — the greater of a fixed amount and the
+    portfolio balance. Applies to every clause that references the term."""
+
+    term: str
+    floor_amount: float
+    source_text: str
 
 
 class ExtractionAssist(Protocol):
@@ -170,6 +233,63 @@ def _parse_count(text: str) -> Optional[float]:
 # --------------------------------------------------------------------------- #
 # Extraction
 # --------------------------------------------------------------------------- #
+def normalise_source_text(text: str) -> str:
+    """Remove drafting conventions that hide numbers from the reader.
+
+    Strips the square brackets around negotiated figures and expands "&" to
+    "and" so region labels match the statistical vocabulary. Nothing is
+    reworded and no number is changed — the evidence a reviewer sees is still
+    the client's own wording, only readable.
+    """
+    out = str(text or "")
+    out = _BRACKET_NUMBER_RE.sub(r"\1", out)
+    out = _AMPERSAND_RE.sub(" and ", out)
+    return out
+
+
+def _definition_match(clause: str) -> Optional[str]:
+    m = _DEFINED_TERM_RE.search(clause)
+    return m.group(1).strip() if m else None
+
+
+def _is_definition_only(clause: str) -> bool:
+    """A clause that defines a term and states no comparison is a definition,
+    not a test. A clause that does both (a limit that defines its own basis
+    inline) stays a test."""
+    return _definition_match(clause) is not None and _parse_operator(clause) is None
+
+
+def extract_definitions(text: str) -> Dict[str, DefinedDenominator]:
+    """Find denominators defined as a floor — "the greater of £X and the
+    Current Balance …" — keyed by lower-cased term.
+
+    A floored denominator changes every percentage in the schedule, so it is
+    read once from the definitions and applied wherever the term appears,
+    rather than being re-guessed clause by clause.
+    """
+    found: Dict[str, DefinedDenominator] = {}
+    for clause in split_clauses(normalise_source_text(text)):
+        term = _definition_match(clause)
+        if not term or not _GREATER_OF_RE.search(clause):
+            continue
+        if not _BALANCE_LIMB_RE.search(clause):
+            continue
+        amount = _parse_money(clause)
+        if amount is None:
+            continue
+        found[term.lower()] = DefinedDenominator(
+            term=term, floor_amount=amount, source_text=clause)
+    return found
+
+
+def _is_table_lead_in(clause: str) -> bool:
+    """A sentence that states the comparison and defers the numbers to a table
+    below it."""
+    lowered = clause.lower()
+    return clause.rstrip().endswith(":") or any(
+        marker in lowered for marker in _TABLE_LEAD_IN_MARKERS)
+
+
 def split_clauses(text: str) -> List[str]:
     clauses: List[str] = []
     for part in _CLAUSE_SPLIT_RE.split(str(text or "")):
@@ -179,38 +299,95 @@ def split_clauses(text: str) -> List[str]:
     return clauses
 
 
+def _build_extraction(clause: str, *, operator: Optional[str],
+                      pct: Optional[float], amount: Optional[float],
+                      count: Optional[float], context: str = "",
+                      confidence: float) -> ExtractedTest:
+    num_m = _CLAUSE_NUM_RE.match(clause)
+    eff = _EFFECTIVE_RE.search(clause)
+    return ExtractedTest(
+        source_text=clause,
+        locator=f"clause {num_m.group(1)}" if num_m else "",
+        name=clause[:80],
+        threshold_percent=pct,
+        threshold_amount=amount,
+        threshold_count=count,
+        operator=operator,
+        effective_date=eff.group(1) if eff else "",
+        extraction_confidence=confidence,
+        context_text=context,
+    )
+
+
 def extract_from_text(text: str) -> List[ExtractedTest]:
     """Deterministically extract candidate tests from free text / covenant
     wording. A clause qualifies when it carries a comparison marker together
-    with a number; everything else is left for the operator, not guessed."""
+    with a number; everything else is left for the operator, not guessed.
+
+    Two document structures are handled explicitly, because both are ordinary
+    drafting rather than anything a reader would call ambiguous:
+
+    * a **definition** ("X" means …) states no limit and is not proposed as a
+      test — but a floored denominator it defines is collected separately;
+    * a **limits table** puts the comparison in a lead-in sentence and the
+      numbers in the rows beneath it, so each row inherits that sentence. The
+      lead-in is only consumed when rows actually follow it; otherwise it is
+      emitted on its own so nothing is silently dropped.
+    """
     out: List[ExtractedTest] = []
-    for clause in split_clauses(text):
+    lead_in: Optional[str] = None
+    lead_in_operator: Optional[str] = None
+    lead_in_rows = 0
+
+    def _flush_lead_in() -> None:
+        nonlocal lead_in, lead_in_operator, lead_in_rows
+        if lead_in is not None and lead_in_rows == 0:
+            out.append(_build_extraction(
+                lead_in, operator=lead_in_operator, pct=None, amount=None,
+                count=None, confidence=0.6))
+        lead_in, lead_in_operator, lead_in_rows = None, None, 0
+
+    for clause in split_clauses(normalise_source_text(text)):
+        if _is_definition_only(clause):
+            continue
         operator = _parse_operator(clause)
         pct = _parse_percent(clause)
         amount = _parse_money(clause)
         count = _parse_count(clause)
-        if operator is None and pct is None and amount is None:
-            continue
         lowered = clause.lower()
         if operator is None and any(m in lowered for m in _ZERO_MARKERS):
             operator = OPERATOR_MAX
         if pct is None and any(m in lowered for m in _ZERO_MARKERS):
             pct = 0.0
-        num_m = _CLAUSE_NUM_RE.match(clause)
-        eff = _EFFECTIVE_RE.search(clause)
-        confidence = 0.9 if (operator and (pct is not None or amount is not None
-                                           or count is not None)) else 0.6
-        out.append(ExtractedTest(
-            source_text=clause,
-            locator=f"clause {num_m.group(1)}" if num_m else "",
-            name=clause[:80],
-            threshold_percent=pct,
-            threshold_amount=amount,
-            threshold_count=count,
-            operator=operator,
-            effective_date=eff.group(1) if eff else "",
-            extraction_confidence=confidence,
-        ))
+
+        has_number = pct is not None or amount is not None
+        if operator is not None and not has_number and _is_table_lead_in(clause):
+            _flush_lead_in()
+            lead_in, lead_in_operator, lead_in_rows = clause, operator, 0
+            continue
+        if operator is not None:
+            # A clause that states its own comparison ends the table above it.
+            _flush_lead_in()
+        elif lead_in is not None and has_number:
+            lead_in_rows += 1
+            row = _build_extraction(
+                clause, operator=lead_in_operator, pct=pct, amount=amount,
+                count=count, context=lead_in, confidence=0.85)
+            if not row.locator:
+                # A table row is located by the clause that introduces it.
+                lead_num = _CLAUSE_NUM_RE.match(lead_in)
+                if lead_num:
+                    row.locator = f"clause {lead_num.group(1)}"
+            out.append(row)
+            continue
+
+        if operator is None and not has_number:
+            continue
+        confidence = 0.9 if (operator and (has_number or count is not None)) else 0.6
+        out.append(_build_extraction(
+            clause, operator=operator, pct=pct, amount=amount, count=count,
+            confidence=confidence))
+    _flush_lead_in()
     return out
 
 
@@ -246,11 +423,11 @@ def extract_from_rows(rows: Sequence[Dict[str, Any]]) -> List[ExtractedTest]:
         definition = " ".join(
             str(norm[k]) for k in _ROW_DEFINITION_KEYS
             if norm.get(k) not in (None, ""))
-        text = " — ".join(p for p in (name, definition) if p)
+        text = normalise_source_text(" — ".join(p for p in (name, definition) if p))
 
         pct = amount = None
         if threshold_raw is not None:
-            token = str(threshold_raw).strip()
+            token = normalise_source_text(str(threshold_raw)).strip()
             if token.endswith("%") or unit in ("percent", "%", "pct"):
                 pct = _parse_percent(token) or _parse_percent(token + "%")
                 if pct is None:
@@ -337,15 +514,27 @@ def _question(codes: Iterable[str]) -> List[str]:
 # Mapping
 # --------------------------------------------------------------------------- #
 def _regions_in(text: str) -> List[str]:
-    lowered = text.lower()
+    """Regions named in the text, by label or by ITL1 code. A row that gives
+    both ("UKI + UKJ | London and South East") yields one entry per region,
+    not one per spelling."""
+    lowered = " ".join(str(text).lower().split())
     found: List[str] = []
+
+    def _add(region: str) -> None:
+        # "london" inside "greater london" — keep the most specific only.
+        if any(region != other and region in other for other in found):
+            return
+        found[:] = [f for f in found if not (f != region and f in region)]
+        if region not in found:
+            found.append(region)
+
     for region in UK_REGIONS:
         if region in lowered:
-            # "london" inside "greater london" — keep the most specific only.
-            if any(region != other and region in other for other in found):
-                continue
-            found = [f for f in found if not (f != region and f in region)]
-            found.append(region)
+            _add(region)
+    for m in _ITL1_CODE_RE.finditer(lowered):
+        region = _ITL1_CODES.get("uk" + m.group(1).lower())
+        if region:
+            _add(region)
     return [r.title() for r in found]
 
 
@@ -356,13 +545,23 @@ class _MappingContext:
     portfolio_id: str
     onboarding_run_id: str
     source_reference: str
+    #: Floored denominators defined elsewhere in the same document, keyed by
+    #: lower-cased term.
+    definitions: Dict[str, DefinedDenominator] = field(default_factory=dict)
+
+    def denominator_for(self, text: str) -> Optional[DefinedDenominator]:
+        lowered = " ".join(str(text).lower().split())
+        for term, definition in self.definitions.items():
+            if term in lowered:
+                return definition
+        return None
 
 
 def map_extracted_test(ext: ExtractedTest, ctx: _MappingContext) -> TestProposal:
     """Map one extracted test onto the library. Deterministic and total: every
     input yields a proposal; anything unclear degrades to ambiguous or
     unsupported with named concerns."""
-    text = ext.source_text
+    text = ext.interpretation_text
     lowered = text.lower()
     concerns: List[str] = []
     params: Dict[str, Any] = {}
@@ -483,8 +682,45 @@ def map_extracted_test(ext: ExtractedTest, ctx: _MappingContext) -> TestProposal
                 outcome = MATCH_AMBIGUOUS
             threshold, unit = ext.threshold_percent, "percent"
         elif mid == "borrower_joint_share":
-            concerns.append(ConcernCode.JOINT_DEFINITION_UNCERTAIN)
-            outcome = MATCH_AMBIGUOUS
+            # "loans which have two Borrowers" states the basis outright — the
+            # covenant counts borrowers, so there is nothing to ask. Wording
+            # that names the CONCEPT ("joint borrowers") still asks: it says
+            # nothing about whether the book encodes jointness as a
+            # classification flag or as a borrower count, and the two can
+            # disagree on the same loan.
+            if any(t in lowered for t in ("two borrowers", "2 borrowers",
+                                          "more than one borrower",
+                                          "number of borrowers",
+                                          "multiple borrowers")):
+                params["joint_basis"] = "borrower_count"
+                outcome = MATCH_COMPOSED
+            else:
+                concerns.append(ConcernCode.JOINT_DEFINITION_UNCERTAIN)
+                outcome = MATCH_AMBIGUOUS
+            if any(t in lowered for t in ("single borrowers", "sole borrowers")):
+                params["invert"] = True
+            threshold, unit = ext.threshold_percent, "percent"
+        elif mid == "borrower_aggregate_balance_share":
+            amount = ext.threshold_amount
+            if amount is None:
+                concerns.append(ConcernCode.THRESHOLD_UNIT_UNCERTAIN)
+                outcome = MATCH_AMBIGUOUS
+            else:
+                params["amount"] = amount
+                outcome = MATCH_COMPOSED
+            # Which balance the per-borrower aggregate is struck on. "initial"
+            # and "original" are the same thing in facility drafting.
+            if "initial" in lowered or "original" in lowered:
+                params["aggregate_basis"] = "original"
+            elif "current" in lowered:
+                params["aggregate_basis"] = "current"
+            else:
+                concerns.append(ConcernCode.BALANCE_BASIS_UNDEFINED)
+                outcome = MATCH_AMBIGUOUS
+            if any(t in lowered for t in ("less than", "below", "under")):
+                params["comparison"] = "below"
+            else:
+                params["comparison"] = "above"
             threshold, unit = ext.threshold_percent, "percent"
         elif mid == "borrower_multi_loan_share":
             count = ext.threshold_count or _parse_count(text)
@@ -548,6 +784,21 @@ def map_extracted_test(ext: ExtractedTest, ctx: _MappingContext) -> TestProposal
             unit = metric.unit
             outcome = MATCH_MATCHED
 
+    # --- contractual denominator -------------------------------------------- #
+    # A term such as "Concentration Limit Denominator" — the greater of a fixed
+    # amount and the portfolio balance — is read once from the definitions and
+    # applied to every clause that references it. A metric that cannot carry
+    # the floor says so rather than quietly measuring against the wrong base.
+    definition = ctx.denominator_for(text)
+    if definition is not None and metric is not None:
+        if "denominator_floor" in metric.parameters:
+            params["denominator_floor"] = definition.floor_amount
+            spec = metric.parameters.get("denominator") or {}
+            if "current_balance" in (spec.get("values") or []):
+                params["denominator"] = "current_balance"
+        elif ConcernCode.DENOMINATOR_UNDEFINED not in concerns:
+            concerns.append(ConcernCode.DENOMINATOR_UNDEFINED)
+
     # --- shared checks ------------------------------------------------------ #
     operator = ext.operator or ""
     if metric is not None and not operator:
@@ -595,7 +846,7 @@ def map_extracted_test(ext: ExtractedTest, ctx: _MappingContext) -> TestProposal
         client_id=ctx.client_id,
         portfolio_id=ctx.portfolio_id,
         evidence=SourceEvidence(source_reference=ctx.source_reference,
-                                source_text=ext.source_text,
+                                source_text=ext.evidence_text,
                                 locator=ext.locator),
         extracted_test_name=ext.name,
         extracted_category=metric.category if metric else "",
@@ -666,7 +917,8 @@ def build_proposals(*, lib: ConcentrationLibrary, client_id: str,
     ctx = _MappingContext(lib=lib, client_id=client_id,
                           portfolio_id=portfolio_id,
                           onboarding_run_id=onboarding_run_id,
-                          source_reference=source_reference)
+                          source_reference=source_reference,
+                          definitions=extract_definitions(text) if text else {})
     extracted: List[ExtractedTest] = []
     if text:
         extracted.extend(extract_from_text(text))
