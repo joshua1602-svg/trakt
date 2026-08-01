@@ -105,10 +105,17 @@ jobs:
         #                        with cwd = the package root
         #   apps/                blob_trigger_app storage / layout / persistence
         #   trakt_core/          governed context, errors, tenancy, policy
-        #   mi_agent/            reached only through guarded (try/except) imports
-        #                        in the onboarding path; shipped so risk-limit
-        #                        config and LLM cost estimation are not silently
-        #                        degraded
+        #   mi_agent/            now a HARD dependency: api/app.py imports
+        #                        concentration_routes at module level, which
+        #                        reaches mi_agent.concentration_tests for the
+        #                        governed metric registry. Importing any
+        #                        mi_agent submodule executes mi_agent/__init__,
+        #                        which loads the MI query executor — hence
+        #                        analytics_lib below. Still also reached through
+        #                        the guarded onboarding imports.
+        #   analytics_lib/       pulled in by mi_agent/__init__ (numeric/date
+        #                        coercion). Absent, the app cannot import at all
+        #                        and every worker dies at start.
         #   config/              every governed YAML the packages are seeded from,
         #                        plus the Annex 2 XSD under config/system/
         #   the repo-root Annex 2 mapping workbook, passed to the XML builder as
@@ -126,6 +133,7 @@ jobs:
             apps/ \
             trakt_core/ \
             mi_agent/ \
+            analytics_lib/ \
             config/ \
             requirements.txt \
             deploy/trakt-ops-api/startup-ops.sh \
