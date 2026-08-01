@@ -35,6 +35,7 @@ coupling MI's worker count to the OCC's concurrency requirement.
 | `deploy/trakt-ops-api/oryx_manifest.py` | reads `oryx-manifest.toml` and reports the build mode and which artefact should exist |
 | `deploy/trakt-ops-api/verify_oryx_output.sh` | post-deploy evidence: manifest present and its declared output on the site. **Not** the gate |
 | `deploy/trakt-ops-api/probe_health.sh` | the gate's `/health` retry loop, sized for a cold start and safe under `set -e` |
+| `deploy/trakt-ops-api/container_log.sh` | follows `/api/logs/docker` (an **index**) to the newest log file and reads its text |
 | `deploy/trakt-ops-api/collect_diagnostics.sh` | runs on any failure: deployment record, Oryx build log, container logs, site config |
 | `.github/workflows/deploy-ops-api.yml` | test + build + OIDC deploy, scoped to `trakt-ops-api` |
 | `requirements.txt` (repo root) | Oryx install set — already carries `fastapi` / `uvicorn[standard]` / `gunicorn` / `uvicorn-worker` / `PyYAML` / `pandas` / `lxml` |

@@ -101,6 +101,7 @@ jobs:
           bash deploy/trakt-ops-api/tests/test_deploy_async_replay.sh
           bash deploy/trakt-ops-api/tests/test_oryx_manifest.sh
           bash deploy/trakt-ops-api/tests/test_health_probe.sh
+          bash deploy/trakt-ops-api/tests/test_container_log.sh
 
       - name: Build deployment package
         # The runtime closure of operations_control.api.app, established by
@@ -323,16 +324,15 @@ jobs:
             # Read the startup log HERE, next to the failure, rather than leaving
             # it to the diagnostics step: the import error that explains a
             # non-serving worker is in this stream.
+            #
+            # via container_log.sh, because /api/logs/docker returns an INDEX of
+            # log files rather than their contents — tailing it printed
+            # filenames and byte counts where the error was supposed to be.
             TOKEN="$(az account get-access-token --resource https://management.azure.com/ \
                       --query accessToken -o tsv 2>/dev/null || true)"
-            if [ -n "${TOKEN:-}" ]; then
-              curl -sS --max-time 90 -H "Authorization: Bearer $TOKEN" \
-                "https://${OPS_SCM_HOST}/api/logs/docker" 2>/dev/null \
-                | tail -c 20000 | sed 's/^/      /' \
-                || echo "      (could not read the container log stream)"
-            else
-              echo "      (no token; the diagnostics step below prints the logs)"
-            fi
+            . deploy/trakt-ops-api/container_log.sh
+            fetch_container_log "$OPS_SCM_HOST" "${TOKEN:-}" container.log 200 \
+              | sed 's/^/      /'
             echo
             echo "      Full diagnostics follow in the next step."
             exit 1

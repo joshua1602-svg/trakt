@@ -187,9 +187,18 @@ done
 
 section "G. CONTAINER / RUNTIME LOGS — Kudu docker log stream"
 # If the build succeeded and the CONTAINER failed to start, the reason is here:
-# this is where "ModuleNotFoundError", a bad startup command, or a port-binding
-# timeout appears.
+# "ModuleNotFoundError", a bad startup command, or a port-binding timeout.
+#
+# /api/logs/docker returns an INDEX of log files, not their contents. Printing
+# only the index is what left a real incident unexplained: the service answered
+# nothing to three separate clients, and this section showed two filenames and
+# their sizes. The log has to be fetched.
 kudu "/api/logs/docker"
+echo
+echo "  --- contents of the most recently written container log ---"
+# shellcheck source=deploy/trakt-ops-api/container_log.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/container_log.sh"
+fetch_container_log "$SCM_HOST" "$TOKEN" "$OUT/container.log" 200 | sed 's/^/  /'
 
 section "H. RUNTIME LOG BUNDLE — az webapp log download"
 if az webapp log download -g "$RG" -n "$APP" --log-file "$OUT/runtime_logs.zip" >/dev/null 2>&1; then
