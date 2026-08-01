@@ -25,12 +25,24 @@ from pathlib import Path
 #: administrator configuration area.
 REQUIRED_ROUTES = ("/health", "/ops/me", "/ops/admin/config")
 
+#: Routes contributed by INCLUDED routers. This FastAPI version keeps an included
+#: router as a single object in ``app.routes`` rather than flattening its children,
+#: so these are checked against the OpenAPI document, which does flatten. Without
+#: this, a router that failed to mount would leave the artefact looking healthy.
+REQUIRED_ROUTER_ROUTES = (
+    "/ops/onboarding/home",
+    "/ops/concentration/{client}/review",
+)
+
 #: Governed configuration read from disk at runtime by RELATIVE path, so it has to
 #: be present in the artefact next to the code.
 REQUIRED_FILES = (
     "config/system/fields_registry.yaml",
     "config/regime/annex2_delivery_rules.yaml",
     "config/asset/product_profiles.yaml",
+    # The governed concentration-test metric registry, resolved relative to the
+    # artefact root by mi_agent.concentration_tests.library.
+    "config/risk/concentration_test_library.yaml",
 )
 
 #: Executed as subprocesses by the Annex 2 delivery stages (not imported), so an
@@ -81,7 +93,17 @@ def main() -> None:
     if missing:
         fail(f"application is missing route(s): {', '.join(missing)}")
 
-    print(f"artefact OK: {app.title} — {len(paths)} routes, "
+    try:
+        served = set(app.openapi().get("paths") or {})
+    except Exception as exc:  # noqa: BLE001 — report, do not raise
+        fail(f"could not build the OpenAPI document ({type(exc).__name__}: {exc})")
+        return
+    missing_router = [r for r in REQUIRED_ROUTER_ROUTES if r not in served]
+    if missing_router:
+        fail("application is missing included-router route(s): "
+             + ", ".join(missing_router))
+
+    print(f"artefact OK: {app.title} — {len(served)} served paths, "
           f"{len(REQUIRED_FILES)} governed config files, "
           f"{len(REQUIRED_SCRIPTS)} delivery scripts")
 
