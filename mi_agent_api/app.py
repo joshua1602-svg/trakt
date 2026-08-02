@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -75,6 +75,7 @@ from trakt_core.errors import TraktError
 from trakt_core.runtime import runtime_mode, validate_runtime_mode
 from trakt_core import perf
 
+from . import http_cache
 from . import perf_http
 
 from . import artefacts as artefacts_mod
@@ -212,6 +213,19 @@ API_PREFIX = gateway.install_gateway_prefix(app)
 # invokes the app, which is what lets the synchronous routes below see it.
 # Disable with TRAKT_PERF_INSTRUMENTATION=off; see trakt_core/perf.py.
 app.add_middleware(perf_http.PerfMiddleware, api_prefix=API_PREFIX)
+
+
+@app.exception_handler(http_cache.NotModified)
+async def _not_modified_handler(_request: Request,
+                                exc: http_cache.NotModified) -> Response:
+    """304 for a caller whose validator still matches.
+
+    Reached only from inside a route body, i.e. AFTER the global auth guard has
+    authenticated the caller — a conditional request is authorised exactly like
+    an unconditional one.
+    """
+    return Response(status_code=304, headers={
+        "ETag": exc.etag, "Cache-Control": http_cache.CACHE_CONTROL})
 
 
 @app.exception_handler(TraktError)
@@ -546,7 +560,9 @@ def snapshots() -> Dict[str, Any]:
 def snapshot(portfolioId: Optional[str] = None,
              client_id: Optional[str] = None,
              run_id: Optional[str] = None,
-             portfolioContext: Optional[str] = None) -> Dict[str, Any]:
+             portfolioContext: Optional[str] = None,
+             request: Request = None,
+             response: Response = None) -> Dict[str, Any]:
     """Deterministic funded-book snapshot (KPIs + month-on-month change) for a run.
 
     ``portfolioId`` is ``"<client_id>/<run_id>"`` (matching the /mi/query contract);
@@ -561,6 +577,10 @@ def snapshot(portfolioId: Optional[str] = None,
     if not client_id or not run_id:
         return {"ok": False, "error": "portfolioId (client_id/run_id) is required",
                 "kpis": [], "warnings": [], "diagnostics": []}
+
+    etag = http_cache.begin(
+        request, route="mi.snapshot", scope=portfolioContext,
+        identity=http_cache.dataset_identity(client_id, run_id))
 
     root = _onboarding_output_root()
     df, prep_report = _resolve_run_dataframe(client_id, run_id, root)
@@ -617,7 +637,7 @@ def snapshot(portfolioId: Optional[str] = None,
         result["portfolioScope"] = block
     for d in result.get("diagnostics", []):
         logger.info("snapshot diagnostic [%s/%s]: %s", client_id, run_id, d)
-    return result
+    return http_cache.finish(response, etag, result)
 
 
 @app.get("/mi/pipeline/snapshots")
@@ -696,7 +716,9 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
                       client_id: Optional[str] = None,
                       runId: Optional[str] = None,
                       run_id: Optional[str] = None,
-                      portfolioContext: Optional[str] = None) -> Dict[str, Any]:
+                      portfolioContext: Optional[str] = None,
+                      request: Request = None,
+                      response: Response = None) -> Dict[str, Any]:
     """Deterministic funded + pipeline forecast bridge for a selected run.
 
     Composes the funded snapshot balance/count, the Phase 1 pipeline snapshot, and
@@ -711,6 +733,11 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
     if not run_id:
         return {"ok": False, "error": "portfolioId (client_id/run_id) is required",
                 "forecastBridge": None, "pipelineSnapshot": None, "watchlist": []}
+
+    etag = http_cache.begin(
+        request, route="mi.forecast.snapshot", scope=portfolioContext,
+        identity=http_cache.dataset_identity(client_id, run_id,
+                                             include_pipeline=True))
 
     semantics = load_mi_semantics(semantics_path())
 
@@ -798,13 +825,14 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
         except Exception as exc:  # noqa: BLE001 - projection must never 500
             logger.warning("portfolio projections failed for %s/%s: %s",
                            client_id, run_id, exc)
-    return envelope
+    return http_cache.finish(response, etag, envelope)
 
 
 @app.get("/mi/evolution/funded")
 def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                      toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
-                     portfolioContext: Optional[str] = None
+                     portfolioContext: Optional[str] = None,
+                     request: Request = None, response: Response = None
                      ) -> Dict[str, Any]:
     """Funded time series across monthly runs up to ``toRunId`` (per-period
     reconciliation + lineage), narrowed to the governed ``portfolioContext``.
@@ -815,6 +843,9 @@ def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
         return {"dataset": "funded", "portfolioId": cid, "toRunId": trid,
                 "periods": [], "breakdowns": {}, "singlePeriod": True,
                 "error": "no onboarding output root configured"}
+    etag = http_cache.begin(
+        request, route="mi.evolution.funded", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, trid))
     resolved = _resolve_portfolio_context(portfolioContext, cid)
     scope = resolved.scope if resolved else None
     try:
@@ -824,7 +855,7 @@ def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
             result = evolution_mod.funded_evolution(root, cid, trid, scope=scope)
         if scope is not None:
             result["portfolioScope"] = scope.to_dict()
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001 - evolution must never 500
         logger.warning("funded evolution failed: %s", exc)
         return {"dataset": "funded", "portfolioId": cid, "toRunId": trid,
@@ -834,7 +865,8 @@ def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 @app.get("/mi/evolution/pipeline")
 def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                        toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
-                       portfolioContext: Optional[str] = None
+                       portfolioContext: Optional[str] = None,
+                       request: Request = None, response: Response = None
                        ) -> Dict[str, Any]:
     """Pipeline time series across governed weekly extracts (amount / cases / by
     stage over time), with per-period reconciliation + lineage."""
@@ -853,6 +885,10 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
         return {"dataset": "pipeline", "portfolioId": cid, "toRunId": pipeline_cut,
                 "periods": [], "byStage": [], "singlePeriod": True,
                 "error": "no pipeline root configured"}
+    etag = http_cache.begin(
+        request, route="mi.evolution.pipeline", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, _funded_trid,
+                                             include_pipeline=True))
     try:
         result = evolution_mod.pipeline_evolution(
             root, cid, pipeline_cut, historical_model=_pipeline_history(cid))
@@ -870,7 +906,7 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
             state = resolved.capability(CAP_PIPELINE)
             if state is not None:
                 result["pipelineCapability"] = state.to_dict()
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001
         logger.warning("pipeline evolution failed: %s", exc)
         return {"dataset": "pipeline", "portfolioId": cid, "toRunId": pipeline_cut,
@@ -880,7 +916,8 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
 @app.get("/mi/evolution/funnel")
 def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                      toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
-                     portfolioContext: Optional[str] = None
+                     portfolioContext: Optional[str] = None,
+                     request: Request = None, response: Response = None
                      ) -> Dict[str, Any]:
     """Weekly origination funnel trends (KFI / Application / Offer / Completion
     value + count, 5-week average, latest week, delta vs prior week). Never 500s."""
@@ -899,6 +936,10 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,
                 "stages": [], "weeks": [], "series": {}, "summary": {},
                 "singlePeriod": True, "error": "no pipeline root configured"}
+    etag = http_cache.begin(
+        request, route="mi.evolution.funnel", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, _funded_trid,
+                                             include_pipeline=True))
     try:
         model = _pipeline_history(cid)  # built once: feeds both the lag and the cohort funnel
         lag_weeks = _kfi_lag_weeks_from_model(model)
@@ -915,7 +956,7 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
             state = resolved.capability(CAP_PIPELINE)
             if state is not None:
                 result["pipelineCapability"] = state.to_dict()
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001
         logger.warning("funnel evolution failed: %s", exc)
         return {"dataset": "pipeline_funnel", "portfolioId": cid, "toRunId": pipeline_cut,
@@ -927,7 +968,9 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
 def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
             runId: Optional[str] = None, run_id: Optional[str] = None,
             grain: str = "Y", dimension: str = "vintage",
-            portfolioContext: Optional[str] = None) -> Dict[str, Any]:
+            portfolioContext: Optional[str] = None,
+            request: Request = None,
+            response: Response = None) -> Dict[str, Any]:
     """Funded origination-vintage (static-pool) cohort analysis for a run.
 
     Balance / loan count / book share and balance-weighted LTV, rate and
@@ -944,6 +987,9 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,
                 "reason": "portfolioId (client_id/run_id) is required",
                 "cohorts": [], "metricsAvailable": []}
+    etag = http_cache.begin(
+        request, route=f"mi.cohorts.{grain}.{dimension}", scope=portfolioContext,
+        identity=http_cache.dataset_identity(client_id, run_id))
     try:
         root = _onboarding_output_root()
         df, _report = _resolve_run_dataframe(client_id, run_id, root)
@@ -955,7 +1001,7 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
         block = _scope_block(df, resolved)
         if block is not None:
             result["portfolioScope"] = block
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001 - cohort analysis must never 500
         logger.warning("cohort analysis failed for %s: %s", pid, exc)
         return {"dataset": "cohorts", "portfolioId": pid, "available": False,
@@ -965,7 +1011,9 @@ def cohorts(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
 @app.get("/mi/geo/exposure")
 def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                  runId: Optional[str] = None, run_id: Optional[str] = None,
-                 portfolioContext: Optional[str] = None) -> Dict[str, Any]:
+                 portfolioContext: Optional[str] = None,
+                 request: Request = None,
+                 response: Response = None) -> Dict[str, Any]:
     """Funded exposure per UK ITL3 area (e.g. Bristol) for a run — the DATA layer
     for the geographic view. ITL3 comes from the tape's ITL3 field or is derived
     from the property postcode via the in-repo master lookup. Returns
@@ -978,6 +1026,9 @@ def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = N
     if not run_id:
         return {"dataset": "geo_itl3", "portfolioId": pid, "available": False,
                 "reason": "portfolioId (client_id/run_id) is required", "areas": []}
+    etag = http_cache.begin(
+        request, route="mi.geo.exposure", scope=portfolioContext,
+        identity=http_cache.dataset_identity(client_id, run_id))
     try:
         df, _report = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
         currency_mod.resolve_and_set(df)
@@ -988,7 +1039,7 @@ def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = N
         block = _scope_block(df, resolved)
         if block is not None:
             result["portfolioScope"] = block
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001 - geo view must never 500
         logger.warning("geo exposure failed for %s: %s", pid, exc)
         return {"dataset": "geo_itl3", "portfolioId": pid, "available": False,
@@ -1091,7 +1142,8 @@ def download_deck(request: Request, portfolioId: Optional[str] = None,
 @app.get("/mi/evolution/forecast")
 def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                        toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
-                       portfolioContext: Optional[str] = None
+                       portfolioContext: Optional[str] = None,
+                       request: Request = None, response: Response = None
                        ) -> Dict[str, Any]:
     """Forecast bridge over time (funded balance + weighted pipeline per run),
     narrowed to the governed ``portfolioContext``. The pipeline contribution is
@@ -1104,6 +1156,9 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
                 "periods": [], "singlePeriod": True,
                 "error": "no onboarding output root configured"}
+    etag = http_cache.begin(
+        request, route="mi.evolution.forecast", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
     try:
         # Weight the pipeline by the governed historical stage rates (same basis
         # as the point-in-time bridge and the scale-up forecast) so every forecast
@@ -1116,7 +1171,7 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
             include_pipeline=_originates(resolved, portfolioContext))
         if resolved is not None:
             result["portfolioScope"] = _scope_block(None, resolved) or scope.to_dict()
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001
         logger.warning("forecast evolution failed: %s", exc)
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
@@ -1126,7 +1181,8 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
 @app.get("/mi/forecast/extrapolation")
 def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                            toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
-                           portfolioContext: Optional[str] = None
+                           portfolioContext: Optional[str] = None,
+                           request: Request = None, response: Response = None
                            ) -> Dict[str, Any]:
     """Securitisation scale-up forecast: completion run-rate + KFI-conversion
     extrapolation with downside/base/upside bands and milestone dates to funding
@@ -1142,6 +1198,9 @@ def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optiona
                                               "status": "insufficient_data",
                                               "caveat": "no onboarding output root configured"},
                 "dataSufficiency": "insufficient_data"}
+    etag = http_cache.begin(
+        request, route="mi.forecast.extrapolation", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
     try:
         history = _pipeline_history(cid)
         resolved = _resolve_portfolio_context(portfolioContext, cid)
@@ -1150,7 +1209,7 @@ def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optiona
                                             scope=resolved.scope if resolved else None)
         if resolved is not None:
             result["portfolioScope"] = resolved.scope.to_dict()
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001 - forecast must never 500
         logger.warning("forecast extrapolation failed: %s", exc)
         return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
@@ -1163,7 +1222,8 @@ def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optiona
 @app.get("/mi/risk-limits")
 def risk_limits(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                 toRunId: Optional[str] = None, to_run_id: Optional[str] = None,
-                portfolioContext: Optional[str] = None
+                portfolioContext: Optional[str] = None,
+                request: Request = None, response: Response = None
                 ) -> Dict[str, Any]:
     """Governed risk-limit / concentration monitor: Schedule 8 extracted limits
     vs funded actual exposure, headroom, pass/warn/fail status, source, confidence
@@ -1172,13 +1232,16 @@ def risk_limits(portfolioId: Optional[str] = None, client_id: Optional[str] = No
     from . import risk_limits as risk_mod
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
+    etag = http_cache.begin(
+        request, route="mi.risk-limits", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, trid))
     try:
         resolved = _resolve_portfolio_context(portfolioContext, cid)
         result = risk_mod.compute_risk_limits(
             root, cid, trid, scope=resolved.scope if resolved else None)
         if resolved is not None:
             result["portfolioScope"] = resolved.scope.to_dict()
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001 - risk monitor must never 500
         logger.warning("risk-limits failed: %s", exc)
         return {"portfolioId": cid, "toRunId": trid, "available": False,
@@ -1195,7 +1258,8 @@ def concentration_tests(portfolioId: Optional[str] = None,
                         client_id: Optional[str] = None,
                         toRunId: Optional[str] = None,
                         to_run_id: Optional[str] = None,
-                        portfolioContext: Optional[str] = None
+                        portfolioContext: Optional[str] = None,
+                        request: Request = None, response: Response = None
                         ) -> Dict[str, Any]:
     """Governed concentration-test monitor: the operator-APPROVED, versioned
     configuration evaluated deterministically against the funded book (current
@@ -1205,13 +1269,16 @@ def concentration_tests(portfolioId: Optional[str] = None,
     from . import concentration_tests_api as conc_mod
     cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
     root = _onboarding_output_root()
+    etag = http_cache.begin(
+        request, route="mi.concentration-tests", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
     try:
         resolved = _resolve_portfolio_context(portfolioContext, cid)
         result = conc_mod.compute_concentration_tests(
             root, cid, trid, scope=resolved.scope if resolved else None)
         if resolved is not None:
             result["portfolioScope"] = resolved.scope.to_dict()
-        return result
+        return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001 - the monitor must never 500
         logger.warning("concentration-tests failed: %s", exc)
         return {"portfolioId": cid, "toRunId": trid, "available": False,
