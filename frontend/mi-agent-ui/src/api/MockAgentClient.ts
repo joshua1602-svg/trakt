@@ -22,6 +22,8 @@ import type {
   ConcentrationTestsSnapshot,
   RiskLimitsSnapshot,
   SnapshotIndex,
+  MovementDetail,
+  MovementDetailType,
 } from "@/domain";
 import { buildAgentResponse } from "@/data/mockResponses";
 import { MOCK_SNAPSHOT_INDEX, mockSnapshot } from "@/data/mockSnapshots";
@@ -131,6 +133,29 @@ export class MockAgentClient implements AgentClient {
 
   getPipelineEvolution(portfolioId: string): Promise<PipelineEvolution> {
     return Promise.resolve(mockPipelineEvolution(portfolioId));
+  }
+
+  /**
+   * The demo build has no governed weekly extracts to compare, so it reports a
+   * controlled "no detail" rather than inventing contributors. A fabricated
+   * attribution in a demo is worse than none: it would be indistinguishable
+   * from a real one.
+   */
+  getMovementDetail(portfolioId: string,
+                   detailType: MovementDetailType): Promise<MovementDetail> {
+    return Promise.resolve({
+      detail_type: detailType,
+      portfolio_id: portfolioId,
+      scope: "total",
+      as_of_date: null,
+      comparison_date: null,
+      available: false,
+      reason: "Movement detail is not available in the demo dataset.",
+      headline_metric: null,
+      counts: null,
+      contributors: {},
+      components: null,
+    });
   }
 
   getForecastEvolution(portfolioId: string): Promise<ForecastEvolution> {

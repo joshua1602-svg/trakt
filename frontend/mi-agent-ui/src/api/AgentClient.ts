@@ -21,6 +21,8 @@ import type {
   FundedEvolution,
   FundedSnapshot,
   GeoExposure,
+  MovementDetail,
+  MovementDetailType,
   PipelineEvolution,
   ConcentrationDrillthrough,
   ConcentrationDrivers,
@@ -92,6 +94,22 @@ export interface AgentClient {
   /** Weekly origination funnel trends (KFI / Application / Offer / Completion). */
   getFunnelEvolution(portfolioId: string, portfolioContext?: string,
                     signal?: AbortSignal): Promise<PipelineFunnelEvolution>;
+
+  /**
+   * OPTIONAL week-on-week movement detail for one point on a weekly chart.
+   *
+   * Phase 2A, additive: this is the only client method whose endpoint may not
+   * exist. It is absent on a deployment that has not enabled the hover layer,
+   * and an implementation is free to reject rather than fabricate — callers
+   * must treat a rejection as "no detail", never as an error worth surfacing.
+   *
+   * OPTIONAL on the interface on purpose: a client that does not implement it
+   * is still a valid AgentClient, so removing this phase removes it cleanly and
+   * no existing implementation or test double has to know it ever existed.
+   */
+  getMovementDetail?(portfolioId: string, detailType: MovementDetailType,
+                   asOf?: string, portfolioContext?: string,
+                   signal?: AbortSignal): Promise<MovementDetail>;
 
   /** Governed risk-limit / concentration monitor (Schedule 8 vs funded actuals). */
   getRiskLimits(portfolioId: string, portfolioContext?: string,

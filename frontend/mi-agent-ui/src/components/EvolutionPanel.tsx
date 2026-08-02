@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState,
+  type ReactElement, type ReactNode } from "react";
 import {
   Bar, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
@@ -20,6 +21,9 @@ import type {
   StagePoint,
 } from "@/domain";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
+import { InsightLineChart } from "@/components/insight/InsightLineChart";
+import { enhancedHoversEnabled } from "@/lib/featureFlags";
+import { DETAIL_PIPELINE } from "@/domain";
 import { cn, formatGBP } from "@/lib/utils";
 
 type EvoView = "funded" | "pipeline" | "forecast" | "origination" | "cohorts";
@@ -106,8 +110,9 @@ export function pipelineXValue(
  * render, and the evolution views render several of these at once. With stable
  * props (the series are `useMemo`'d by the caller) a parent re-render caused by
  * an unrelated toggle no longer redraws every chart. */
-const EvoLineChart = memo(function EvoLineChart({
+export const EvoLineChart = memo(function EvoLineChart({
   title, data, lines, valueFormat = "gbp", source, asOf,
+  tooltipContent, onActivePoint, onPointClick,
 }: {
   title: string;
   data: Array<Record<string, number | string | null>>;
@@ -115,12 +120,29 @@ const EvoLineChart = memo(function EvoLineChart({
   valueFormat?: "gbp" | "count" | "pct" | "pct_points";
   source?: string | null;
   asOf?: string | null;
+  /** OPTIONAL (Phase 2A): replaces the tooltip BODY only. Absent on every
+   * chart that has not opted in, which is all of them by default — the
+   * rendering below is then byte-for-byte what it has always been. */
+  tooltipContent?: ReactElement;
+  /** OPTIONAL: the x value under the pointer, emitted only when it CHANGES.
+   * Recharts fires onMouseMove continuously; de-duplicating here is what stops
+   * a pointer sweep turning into a request per pixel. */
+  onActivePoint?: (period: string | null) => void;
+  /** OPTIONAL: click/tap a point. Also reachable by keyboard on the wrapper. */
+  onPointClick?: (period: string) => void;
 }) {
   const fmt = (v: number) =>
     valueFormat === "gbp" ? gbpCompact(v)
       : valueFormat === "pct" ? `${(v * 100).toFixed(1)}%`
         : valueFormat === "pct_points" ? `${v.toFixed(1)}%`
           : v.toLocaleString("en-GB");
+  const lastActive = useRef<string | null>(null);
+  const emit = (next: string | null) => {
+    if (!onActivePoint || lastActive.current === next) return;
+    lastActive.current = next;
+    onActivePoint(next);
+  };
+  const interactive = Boolean(onActivePoint || onPointClick);
   return (
     <div className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4">
       <div className="mb-2 text-[12px] font-semibold text-ink-200">{title}</div>
@@ -129,13 +151,22 @@ const EvoLineChart = memo(function EvoLineChart({
       ) : (
         <div style={{ width: "100%", height: 200 }}>
           <ResponsiveContainer>
-            <LineChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
+            <LineChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}
+              {...(interactive ? {
+                onMouseMove: (s: { activeLabel?: string | number }) =>
+                  emit(s?.activeLabel != null ? String(s.activeLabel) : null),
+                onMouseLeave: () => emit(null),
+                onClick: (s: { activeLabel?: string | number }) => {
+                  if (onPointClick && s?.activeLabel != null) onPointClick(String(s.activeLabel));
+                },
+              } : {})}>
               <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
               <XAxis dataKey="period" tick={{ fill: "#8a97ad", fontSize: 11 }} />
               <YAxis tickFormatter={fmt} tick={{ fill: "#8a97ad", fontSize: 11 }} width={64} />
               <Tooltip
                 formatter={(v: number) => fmt(Number(v))}
                 contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }}
+                {...(tooltipContent ? { content: tooltipContent } : {})}
               />
               {lines.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
               {lines.map((l, i) => (
@@ -753,6 +784,9 @@ export function EvolutionPanel({
   const [showCumulative, setShowCumulative] = useState(false);
   // Which origination stage (if any) is enlarged in the focus modal.
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  // Phase 2A hover layer — build-time flag, read once. Off in every build that
+  // has not explicitly opted in, in which case nothing below changes.
+  const enhancedHovers = useMemo(() => enhancedHoversEnabled(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -922,9 +956,14 @@ export function EvolutionPanel({
 
       {view === "pipeline" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <EvoLineChart title="Pipeline amount by week" data={pipelineSeries}
+          {/* Phase 2A: the ONE chart carrying the optional movement hover. With
+              the flag off `InsightLineChart` renders exactly `EvoLineChart`
+              with these same props, which is what every sibling below does. */}
+          <InsightLineChart title="Pipeline amount by week" data={pipelineSeries}
             lines={[{ key: "pipeline_amount", label: "Pipeline amount" }]} valueFormat="gbp"
-            source={pipeline?.sourceFiles?.[0]} />
+            source={pipeline?.sourceFiles?.[0]}
+            enabled={enhancedHovers} client={client} portfolioId={portfolioId}
+            portfolioContext={portfolioContext} detailType={DETAIL_PIPELINE} />
           <EvoLineChart title="Weighted expected funded by week" data={pipelineSeries}
             lines={[{ key: "weighted_expected_funded_amount", label: "Weighted expected" }]}
             valueFormat="gbp" source="weekly pipeline extracts" />
