@@ -50,7 +50,9 @@ Mutually exclusive and exhaustive, so they always sum to the headline:
 They are never silently combined: a caller that cannot distinguish them would
 be reading a different metric.
 
-This module performs NO I/O. It is handed two already-prepared frames.
+The attribution engine performs NO I/O — it is handed two already-prepared
+frames, which keeps it testable and reusable. Frame RESOLUTION is a separate,
+clearly marked section at the end of this file.
 """
 
 from __future__ import annotations
@@ -428,4 +430,127 @@ def build_movement_detail(detail_type: str,
             "current": source_file,
             "comparison": comparison_source_file,
         },
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Feature flag
+# --------------------------------------------------------------------------- #
+#: Off unless a deployment explicitly turns it on. Same mechanism as the Phase
+#: 1A kill switches — no new feature-flag framework for one phase.
+FLAG_ENV = "TRAKT_MI_ENHANCED_HOVERS"
+_ON = ("1", "true", "on", "yes", "enabled")
+
+
+def enhanced_hovers_enabled() -> bool:
+    """True only when this deployment has explicitly enabled the hover layer.
+
+    Read per call rather than cached at import so a test (and an operator
+    restart-free toggle) can change it without reloading the module.
+    """
+    import os
+    return (os.environ.get(FLAG_ENV) or "").strip().lower() in _ON
+
+
+# --------------------------------------------------------------------------- #
+# Resolution — the only part of this module that touches storage
+# --------------------------------------------------------------------------- #
+def select_pair(extracts: List[Dict[str, Any]],
+                as_of: Optional[str] = None
+                ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """``(current, comparison)`` weekly extracts for ``as_of``.
+
+    ``as_of`` picks the point the user hovered; without it the latest extract is
+    used. The comparison is the immediately preceding governed extract — the
+    same neighbour the chart draws its line between, so the movement shown is
+    the movement plotted. Returns ``(current, None)`` for the first extract in
+    the series, which has nothing to compare against.
+    """
+    dated = sorted((e for e in extracts if e.get("pipeline_extract_date")),
+                   key=lambda e: e["pipeline_extract_date"])
+    if not dated:
+        return None, None
+    if as_of:
+        idx = next((i for i, e in enumerate(dated)
+                    if e["pipeline_extract_date"] == as_of), None)
+        if idx is None:
+            return None, None
+    else:
+        idx = len(dated) - 1
+    return dated[idx], (dated[idx - 1] if idx > 0 else None)
+
+
+def resolve_movement_detail(root: str, client_id: str, detail_type: str, *,
+                            as_of: Optional[str] = None,
+                            historical_model: Optional[Dict[str, Any]] = None,
+                            scope: Optional[str] = None,
+                            top_n: int = 3) -> Dict[str, Any]:
+    """Build the detail for one weekly point from the governed weekly extracts.
+
+    ``historical_model`` is passed straight through to
+    ``load_prepared_pipeline`` for one reason only: it makes this reuse the
+    frames the pipeline evolution and funnel views have ALREADY prepared and
+    cached, instead of preparing every extract a second time under a different
+    cache key (the defect Phase 1B-1 removed). It cannot change any number here
+    — the model affects only the probability / weighted-expectation columns, and
+    nothing in this module reads them.
+    """
+    from . import pipeline_contract as pipeline_mod
+
+    inv = pipeline_mod.weekly_extract_inventory(root, client_id)
+    cur_e, pri_e = select_pair(inv.get("extracts", []), as_of)
+    if cur_e is None:
+        return unavailable(detail_type, client_id, scope=scope, as_of=as_of,
+                           reason="No governed weekly pipeline extract matches "
+                                  "this point.")
+    if pri_e is None:
+        return unavailable(
+            detail_type, client_id, scope=scope,
+            as_of=cur_e.get("pipeline_extract_date"),
+            reason="This is the earliest governed weekly extract, so there is "
+                   "no prior week to compare it against.")
+
+    cur, _ = pipeline_mod.load_prepared_pipeline(
+        cur_e, historical_model=historical_model)
+    pri, _ = pipeline_mod.load_prepared_pipeline(
+        pri_e, historical_model=historical_model)
+
+    return build_movement_detail(
+        detail_type, cur, pri,
+        as_of_date=cur_e.get("pipeline_extract_date"),
+        comparison_date=pri_e.get("pipeline_extract_date"),
+        portfolio_id=client_id, scope=scope,
+        run_id=cur_e.get("run_id"),
+        source_file=_basename(cur_e.get("source_file")),
+        comparison_source_file=_basename(pri_e.get("source_file")),
+        top_n=top_n)
+
+
+def _basename(path: Optional[str]) -> Optional[str]:
+    """The file name only — never a storage path, which is deployment detail."""
+    if not path:
+        return None
+    return str(path).replace("\\", "/").rsplit("/", 1)[-1] or None
+
+
+def unavailable(detail_type: str, portfolio_id: str, *,
+                scope: Optional[str] = None, as_of: Optional[str] = None,
+                reason: str) -> Dict[str, Any]:
+    """A controlled "no detail" envelope — never a partial or invented one."""
+    return {
+        "detail_type": detail_type,
+        "portfolio_id": portfolio_id,
+        "scope": scope or "total",
+        "as_of_date": as_of,
+        "comparison_date": None,
+        "available": False,
+        "reason": reason,
+        "headline_metric": None,
+        "counts": None,
+        "contributors": {key: [] for key, _col in DIMENSIONS},
+        "components": None,
+        "methodology": {"movement_basis": "net", "attribution": ATTRIBUTION,
+                        "version": METHODOLOGY_VERSION},
+        "source_dates": {"pipeline_as_of": as_of, "pipeline_comparison": None,
+                         "funded_as_of": None, "forecast_generated_at": None},
     }
