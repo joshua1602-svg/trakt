@@ -2338,7 +2338,7 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             handle=lambda r: _route_scenario(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
-                pipeline_root=r.pipeline_root, history_model=r.history_model,
+                pipeline_root=r.pipeline_root, history_model=r.resolve_history_model(),
                 portfolio_id=r.portfolio_id, as_of=r.as_of)),
 
         # 2. Cohort-tracked conversion is the canonical "conversion" answer and
@@ -2349,7 +2349,7 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             description="Cumulative cohort conversion KFI → Funded.",
             recognise=lambda r: _is_conversion(r.question),
             handle=lambda r: _route_conversion(
-                r.question, r.spec_dict, history_model=r.history_model,
+                r.question, r.spec_dict, history_model=r.resolve_history_model(),
                 portfolio_id=r.portfolio_id, as_of=r.as_of)),
 
         # 3. Run-rate / scale-up extrapolation.
@@ -2361,7 +2361,7 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             handle=lambda r: _route_forecast(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
-                pipeline_root=r.pipeline_root, history_model=r.history_model,
+                pipeline_root=r.pipeline_root, history_model=r.resolve_history_model(),
                 portfolio_id=r.portfolio_id, as_of=r.as_of)),
 
         # 4. Funded-balance attribution bridge.
@@ -2533,6 +2533,7 @@ _register_default_recognisers(REGISTRY)
 def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               output_root: Optional[str], pipeline_root: Optional[str],
               semantics: Dict[str, Any], history_model: Optional[Dict[str, Any]] = None,
+              history_model_provider: Optional[Callable[[], Optional[Dict[str, Any]]]] = None,
               as_of: Optional[str] = None,
               source_lens: Optional[Any] = None,
               frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None,
@@ -2543,6 +2544,13 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               ) -> Optional[Dict[str, Any]]:
     """Route a question to a governed capability, or return ``None`` to defer to
     the point-in-time MI Agent path.
+
+    ``history_model_provider`` defers the historical completion model until a
+    handler that genuinely needs it asks for it (scenario / cohort conversion /
+    run-rate forecast). Building that model replays every retained weekly
+    extract, so passing it eagerly — as the serving path used to — charged every
+    MI and Copilot question for analysis almost none of them use. Pass
+    ``history_model`` instead to supply an already-built model; it still wins.
 
     ``parsed`` is the SINGLE :class:`~mi_agent.parsed_question.ParsedQuestion`
     for this request. The caller (``mi_service``) parses once and passes it here
@@ -2570,7 +2578,8 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         question=question, spec=spec, spec_dict=spec.to_dict(),
         semantics=semantics, view=view, client_id=client_id, run_id=run_id,
         portfolio_id=portfolio_id, output_root=output_root,
-        pipeline_root=pipeline_root, history_model=history_model, as_of=as_of,
+        pipeline_root=pipeline_root, history_model=history_model,
+        history_model_provider=history_model_provider, as_of=as_of,
         source_lens=source_lens, frame_resolver=frame_resolver,
         parse_meta=parsed.meta, semantics_context=parsed.semantics_context)
 

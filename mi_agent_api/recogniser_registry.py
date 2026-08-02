@@ -99,7 +99,15 @@ class RouteRequest:
     portfolio_id: Optional[str]
     output_root: Optional[str] = None
     pipeline_root: Optional[str] = None
+    #: An ALREADY-BUILT historical completion model. Direct callers and tests
+    #: still pass one; the serving path passes ``history_model_provider``
+    #: instead so the (expensive) build is deferred. When both are supplied the
+    #: eager value wins, so an existing caller's behaviour is unchanged.
     history_model: Optional[Mapping[str, Any]] = None
+    #: Builds the historical completion model ON DEMAND. Called at most once per
+    #: request, and ONLY by a handler that actually needs it — see
+    #: :meth:`resolve_history_model`.
+    history_model_provider: Optional[Callable[[], Optional[Mapping[str, Any]]]] = None
     as_of: Optional[str] = None
     source_lens: Optional[Any] = None
     frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None
@@ -109,6 +117,36 @@ class RouteRequest:
     #: is wired in. Empty today; recognisers may read it without a signature
     #: change once it is populated.
     semantics_context: Mapping[str, Any] = field(default_factory=dict)
+    #: Memo for :meth:`resolve_history_model`. A mutable default on a frozen
+    #: dataclass is fine — ``frozen`` prevents rebinding the attribute, not
+    #: mutating the object it points at. Excluded from equality/repr so two
+    #: otherwise-identical requests still compare equal.
+    _history_memo: Dict[str, Any] = field(
+        default_factory=dict, repr=False, compare=False)
+
+    def resolve_history_model(self) -> Optional[Mapping[str, Any]]:
+        """The historical completion model for this request, built on first use.
+
+        Building it reads and replays EVERY retained weekly extract, so it must
+        never happen for a question that does not need it. Recognition never
+        touches this — only a matched handler calls it — which is what keeps an
+        ordinary MI or Copilot question off that path entirely.
+
+        Memoised per request: a handler that asks twice pays once. A provider
+        that raises is treated as "no model available", exactly as a ``None``
+        eager value already was, so a history fault degrades the answer's
+        precision rather than failing the request.
+        """
+        if self.history_model is not None:
+            return self.history_model
+        if self.history_model_provider is None:
+            return None
+        if "value" not in self._history_memo:
+            try:
+                self._history_memo["value"] = self.history_model_provider()
+            except Exception:  # noqa: BLE001 - history is additive, never fatal
+                self._history_memo["value"] = None
+        return self._history_memo["value"]
 
 
 @dataclass(frozen=True)

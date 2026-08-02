@@ -526,7 +526,12 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             output_root=ds._onboarding_output_root(),
             pipeline_root=ds._pipeline_discovery_root(),
             semantics=semantics,
-            history_model=ds._pipeline_history(client_id), as_of=req.as_of_date,
+            # DEFERRED, not built here: the historical completion model replays
+            # every retained weekly extract, and only the scenario / cohort
+            # conversion / run-rate forecast routes use it. Passing the builder
+            # means an ordinary question ("balance by region") never pays for it.
+            history_model_provider=lambda: ds._pipeline_history(client_id),
+            as_of=req.as_of_date,
             source_lens=req.source_portfolio_lens or None,
             frame_resolver=_routed_frame,
             extra_filters=req.filters or None,
