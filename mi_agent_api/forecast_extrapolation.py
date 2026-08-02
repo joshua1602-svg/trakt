@@ -369,10 +369,14 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     forecast = evolution_mod.forecast_evolution(
         output_root, pipeline_root, client_id, to_run_id, historical_model=history_model,
         scope=scope)
-    try:
-        pipeline = evolution_mod.pipeline_evolution(pipeline_root, client_id, to_run_id)
-    except Exception:  # noqa: BLE001
-        pipeline = {"periods": [], "byStage": []}
+    # NOTE: a third traversal of the weekly pipeline series used to sit here —
+    # ``pipeline = evolution_mod.pipeline_evolution(...)`` — whose result was
+    # never read by anything below (verified by AST: the name had zero Load
+    # references and this function uses no locals()/eval indirection). It
+    # prepared every retained weekly extract a second time, which on a 26-week
+    # root was ~6.4s of the cold request for a value that was discarded.
+    # ``forecast_evolution`` above already traverses the same series, with the
+    # governed historical model applied, and Model C reads its output.
 
     funded_periods = funded.get("periods", [])
     latest = funded_periods[-1] if funded_periods else None
@@ -409,7 +413,9 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
         lag_weeks = max(1, round(median_days / 7)) if median_days else None
     try:
         funnel = evolution_mod.pipeline_funnel_evolution(
-            pipeline_root, client_id, to_run_id, lag_weeks=lag_weeks)
+            pipeline_root, client_id, to_run_id, lag_weeks=lag_weeks,
+            # Reuses the frames forecast_evolution already prepared above.
+            historical_model=history_model)
     except Exception:  # noqa: BLE001 - forecast must not 500 on a funnel error
         funnel = {"summary": {}}
     fsum = funnel.get("summary", {}) or {}

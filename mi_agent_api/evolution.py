@@ -674,7 +674,9 @@ def _lagged_value(series: List[Optional[float]], lag: int) -> Tuple[Optional[flo
 @_perf.stage_fn("pipeline_funnel_series")
 def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
                               to_run_id: Optional[str] = None,
-                              lag_weeks: Optional[int] = None) -> Dict[str, Any]:
+                              lag_weeks: Optional[int] = None, *,
+                              historical_model: Optional[Dict[str, Any]] = None
+                              ) -> Dict[str, Any]:
     """Weekly origination funnel: KFI / Application / Offer / Completion per
     governed weekly extract, FLOW-FIRST.
 
@@ -717,7 +719,17 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
         if cut_ym and edate and edate[:7] > cut_ym:
             continue
         try:
-            df, _report = pipeline_mod.load_prepared_pipeline(ext)
+            # ``historical_model`` is passed purely so this shares the prepared
+            # frame with ``pipeline_evolution`` instead of preparing every
+            # extract a second time under a different cache key. It cannot
+            # change this function's output: the model affects only
+            # ``completion_probability``, ``completion_probability_source`` and
+            # ``weighted_expected_funded_amount``, and the funnel reads neither
+            # — only ``pipeline_stage`` and ``current_outstanding_balance``,
+            # which are byte-identical with and without it (asserted by
+            # tests/test_funnel_model_invariance.py).
+            df, _report = pipeline_mod.load_prepared_pipeline(
+                ext, historical_model=historical_model)
         except Exception:  # noqa: BLE001
             continue
         weeks.append(edate)

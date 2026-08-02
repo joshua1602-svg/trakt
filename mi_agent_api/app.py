@@ -944,7 +944,10 @@ def funnel_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
         model = _pipeline_history(cid)  # built once: feeds both the lag and the cohort funnel
         lag_weeks = _kfi_lag_weeks_from_model(model)
         result = evolution_mod.pipeline_funnel_evolution(
-            root, cid, pipeline_cut, lag_weeks=lag_weeks)
+            root, cid, pipeline_cut, lag_weeks=lag_weeks,
+            # Share the prepared weekly frames with the pipeline series rather
+            # than preparing every extract again under a different cache key.
+            historical_model=model)
         # Canonical conversion = cumulative cohort progression (% of the KFI
         # cohort reaching each milestone to date). The weekly-flow rate on each
         # stage stays available as an operational velocity, not "conversion".
