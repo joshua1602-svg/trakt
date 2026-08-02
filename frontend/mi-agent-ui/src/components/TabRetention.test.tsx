@@ -21,13 +21,16 @@ import type { AgentClient } from "@/api";
 
 function countingClient(): { client: AgentClient; calls: Record<string, number> } {
   const calls: Record<string, number> = {};
-  const base = new MockAgentClient(0) as unknown as AgentClient;
-  const wrap = <T extends keyof AgentClient>(name: T) => {
-    const original = (base[name] as unknown) as (...a: unknown[]) => unknown;
+  // No simulated latency: these tests assert CALL COUNTS, not timing.
+  const base = new MockAgentClient({ latencyMs: 0 }) as unknown as AgentClient;
+  const mutable = base as unknown as Record<string, unknown>;
+  const wrap = (name: keyof AgentClient) => {
+    const original = mutable[name as string];
     if (typeof original !== "function") return;
-    (base as Record<string, unknown>)[name as string] = (...args: unknown[]) => {
+    const fn = original as (...a: unknown[]) => unknown;
+    mutable[name as string] = (...args: unknown[]) => {
       calls[name as string] = (calls[name as string] ?? 0) + 1;
-      return original.apply(base, args);
+      return fn.apply(base, args);
     };
   };
   (["getFundedEvolution", "getPipelineEvolution", "getFunnelEvolution",
