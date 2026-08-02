@@ -221,29 +221,47 @@ describe("useMovementDetail request discipline", () => {
 
 // --------------------------------------------------------------------------
 describe("EnhancedMetricTooltip", () => {
-  const base = <div data-testid="base-tooltip">original content</div>;
+  // Mirrors how Recharts calls it: props are injected into the TOP-LEVEL
+  // tooltip element only, so the base must be a render function that receives
+  // them. Passing a pre-built node here would hide the very bug this shape
+  // exists to prevent.
+  const renderBase = (p: { active?: boolean; label?: string | number }) => (
+    <div data-testid="base-tooltip">
+      {p.active ? `original content @ ${p.label}` : "original content"}
+    </div>
+  );
 
   it("always renders the chart's own tooltip content first", () => {
-    render(<EnhancedMetricTooltip base={base} detail={null} />);
+    render(<EnhancedMetricTooltip renderBase={renderBase} detail={null} />);
     expect(screen.getByTestId("base-tooltip")).toBeTruthy();
     expect(screen.queryByTestId("movement-detail-body")).toBeNull();
   });
 
+  it("forwards Recharts' own props to the base renderer", () => {
+    // The regression a browser run caught: the base was a pre-built node, so
+    // Recharts' active/payload/label never reached it and the chart's own
+    // tooltip content silently vanished behind the enhancement.
+    render(<EnhancedMetricTooltip renderBase={renderBase} detail={detail()}
+      active label="2026-08-07" payload={[{ name: "Pipeline amount", value: 1 }]} />);
+    expect(screen.getByTestId("base-tooltip").textContent)
+      .toBe("original content @ 2026-08-07");
+  });
+
   it("shows a loading state without hiding the original numbers", () => {
-    render(<EnhancedMetricTooltip base={base} detail={null} loading />);
+    render(<EnhancedMetricTooltip renderBase={renderBase} detail={null} loading />);
     expect(screen.getByTestId("base-tooltip")).toBeTruthy();
     expect(screen.getByTestId("movement-detail-loading")).toBeTruthy();
   });
 
   it("explains why there is no detail rather than showing nothing", () => {
-    render(<EnhancedMetricTooltip base={base}
+    render(<EnhancedMetricTooltip renderBase={renderBase}
       detail={detail({ available: false, reason: "No prior week." })} unavailable />);
     expect(screen.getByTestId("movement-detail-unavailable").textContent)
       .toContain("No prior week.");
   });
 
   it("shows the movement, both contributor lists and the case count", () => {
-    render(<EnhancedMetricTooltip base={base} detail={detail()} />);
+    render(<EnhancedMetricTooltip renderBase={renderBase} detail={detail()} />);
     const body = screen.getByTestId("movement-detail-body");
     expect(body.textContent).toContain("Pipeline balance");
     expect(body.textContent).toContain("+4.9%");
@@ -254,7 +272,7 @@ describe("EnhancedMetricTooltip", () => {
   });
 
   it("states both dates so a weekly movement cannot read as a funded refresh", () => {
-    render(<EnhancedMetricTooltip base={base} detail={detail()} />);
+    render(<EnhancedMetricTooltip renderBase={renderBase} detail={detail()} />);
     const body = screen.getByTestId("movement-detail-body");
     expect(body.textContent).toContain("2026-08-07");
     expect(body.textContent).toContain("2026-07-31");
@@ -262,7 +280,7 @@ describe("EnhancedMetricTooltip", () => {
   });
 
   it("renders a negative movement as negative", () => {
-    render(<EnhancedMetricTooltip base={base} detail={detail({
+    render(<EnhancedMetricTooltip renderBase={renderBase} detail={detail({
       headline_metric: { label: "Pipeline balance", value: 1, change: -9_093_043,
                          change_pct: -19.4 },
     })} />);
@@ -273,9 +291,9 @@ describe("EnhancedMetricTooltip", () => {
 
   it("only hints at a drill-down when one is actually wired up", () => {
     const { rerender } = render(
-      <EnhancedMetricTooltip base={base} detail={detail()} />);
+      <EnhancedMetricTooltip renderBase={renderBase} detail={detail()} />);
     expect(screen.queryByText(/Click the chart/)).toBeNull();
-    rerender(<EnhancedMetricTooltip base={base} detail={detail()} showDrillHint />);
+    rerender(<EnhancedMetricTooltip renderBase={renderBase} detail={detail()} showDrillHint />);
     expect(screen.getByText(/Click the chart/)).toBeTruthy();
   });
 });

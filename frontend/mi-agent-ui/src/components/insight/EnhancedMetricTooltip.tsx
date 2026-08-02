@@ -16,9 +16,24 @@ import type { MovementDetail } from "@/domain";
 import { ContributorList } from "./ContributorList";
 import { cn, formatGBP, formatSignedPct } from "@/lib/utils";
 
-export interface EnhancedMetricTooltipProps {
-  /** The chart's own tooltip content — always rendered, always first. */
-  base: React.ReactNode;
+/** The shape Recharts injects into a custom tooltip via `cloneElement`. */
+export interface RechartsTooltipProps {
+  active?: boolean;
+  payload?: Array<{ name?: string; value?: number | string }>;
+  label?: string | number;
+}
+
+export interface EnhancedMetricTooltipProps extends RechartsTooltipProps {
+  /**
+   * Renders the chart's own tooltip content — always rendered, always first.
+   *
+   * A FUNCTION, not a node, and deliberately so: Recharts clones only the
+   * element passed as `content` and injects `active`/`payload`/`label` into
+   * that one element. A pre-built child node would never receive them and would
+   * silently render nothing — which is exactly what happened until a browser
+   * run caught it.
+   */
+  renderBase: (props: RechartsTooltipProps) => React.ReactNode;
   detail: MovementDetail | null;
   loading?: boolean;
   unavailable?: boolean;
@@ -31,14 +46,15 @@ function signed(v: number): string {
 }
 
 export function EnhancedMetricTooltip({
-  base, detail, loading = false, unavailable = false, showDrillHint = false,
+  renderBase, detail, loading = false, unavailable = false, showDrillHint = false,
+  active, payload, label,
 }: EnhancedMetricTooltipProps) {
   const head = detail?.available ? detail.headline_metric : null;
 
   return (
     <div className="max-w-[280px] rounded-md border border-[#23304d] bg-[#0f1626] p-2 text-[12px]"
       data-testid="enhanced-metric-tooltip">
-      {base}
+      {renderBase({ active, payload, label })}
 
       {loading && (
         <div className="mt-2 border-t border-[#23304d] pt-2 text-[11px] text-ink-500"

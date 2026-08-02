@@ -79,7 +79,7 @@ export function InsightLineChart({
   const tooltip = useMemo(
     () => (
       <EnhancedMetricTooltip
-        base={<BaseBody format={format} />}
+        renderBase={(p) => <BaseBody {...p} format={format} />}
         detail={state.detail}
         loading={state.loading}
         unavailable={state.unavailable}
