@@ -500,10 +500,16 @@ export function useWorkspace(client: AgentClient): Workspace {
   // settled, so switching client hits the session cache instead of waiting out
   // a full backend snapshot compute. Sequential, bounded and best-effort — a
   // failure only means the switch falls back to a live fetch as before.
+  //
+  // NARROWED to ONE other client (was three). These are the two most expensive
+  // endpoints in the app, and the API serves them from a small worker pool, so
+  // speculative warming competed with whatever the user was actually waiting
+  // for. Server-side caching now makes a cold client switch far cheaper, which
+  // is what this loop existed to hide.
   useEffect(() => {
     if (!portfolioId || snapshotLoading || portfolios.length <= 1) return;
     let cancelled = false;
-    const others = portfolios.filter((p) => p.client_id !== selectedClientId).slice(0, 3);
+    const others = portfolios.filter((p) => p.client_id !== selectedClientId).slice(0, 1);
     if (others.length === 0) return;
     const timer = setTimeout(async () => {
       for (const p of others) {

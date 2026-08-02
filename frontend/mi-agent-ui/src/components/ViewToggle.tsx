@@ -32,6 +32,7 @@ export function ViewToggle({
   onChange,
   disabledViews = [],
   disabledReasons = {},
+  onPrefetch,
   className,
 }: {
   active: WorkspaceView;
@@ -39,6 +40,10 @@ export function ViewToggle({
   disabledViews?: WorkspaceView[];
   /** Backend-authored business reason per disabled view, shown on hover. */
   disabledReasons?: Record<string, string>;
+  /** Warm a view's data on hover/focus, BEFORE the click. Optional and
+   *  best-effort: the caller de-duplicates, so pointing at a tab several times
+   *  issues at most one request, and never issues one for a disabled view. */
+  onPrefetch?: (view: WorkspaceView) => void;
   /** Optional wrapper classes (e.g. `flex-1` to span the dashboard width). */
   className?: string;
 }) {
@@ -77,6 +82,8 @@ export function ViewToggle({
                   : undefined}
                 data-disabled-reason={isDisabled ? (disabledReasons[id] ?? undefined) : undefined}
                 onClick={() => !isDisabled && onChange(id)}
+                onMouseEnter={!isDisabled && onPrefetch ? () => onPrefetch(id) : undefined}
+                onFocus={!isDisabled && onPrefetch ? () => onPrefetch(id) : undefined}
                 className={cn(
                   // Each tab flexes to share the row evenly across the full width.
                   "inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all",

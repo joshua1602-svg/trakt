@@ -13,6 +13,7 @@ import { RiskLimitsWorkspace } from "@/components/risk/RiskLimitsWorkspace";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { SubTabs } from "@/components/SubTabs";
+import { KeepMounted } from "@/components/KeepMounted";
 import { ErrorState } from "@/components/states/States";
 import { PortfolioScopeBanner } from "@/components/PortfolioScopeBanner";
 import { LineagePanel } from "@/components/LineagePanel";
@@ -187,6 +188,28 @@ export function AppShell() {
   }, [ws.selectedClientId, ws.selectedRunId, ws.activeView, ws.selectedContextId,
       fundedTab, pipelineTab, forecastTab]);
 
+  // Warm a top-level view's data when the user points at its tab, so the click
+  // lands on data that is already in flight or already cached. De-duplicated
+  // here (a hover fires repeatedly) AND again by the caching client's in-flight
+  // map, so pointing at a tab can never issue a second identical request.
+  const prefetched = useRef<Set<string>>(new Set());
+  const prefetchView = useCallback((view: WorkspaceView) => {
+    if (!workspacePortfolioId) return;
+    const key = `${view}|${workspacePortfolioId}|${ws.selectedContextId}|${ws.dataVersion}`;
+    if (prefetched.current.has(key)) return;
+    prefetched.current.add(key);
+    const scope = ws.selectedContextId;
+    const swallow = () => { /* best-effort: a failed warm just means a live fetch */ };
+    if (view === "pipeline" || view === "forecast") {
+      // Both views render from the forecast snapshot (it embeds the pipeline).
+      client.getForecastSnapshot(workspacePortfolioId, scope).catch(swallow);
+    } else if (view === "risk_limits") {
+      client.getConcentrationTests(workspacePortfolioId, scope).catch(swallow);
+    } else {
+      client.getSnapshot(workspacePortfolioId, scope).catch(swallow);
+    }
+  }, [client, workspacePortfolioId, ws.selectedContextId, ws.dataVersion]);
+
   const scrollToArtifact = useCallback((id: string) => {
     // Guarded: jsdom (tests) has no scrollIntoView.
     document.getElementById(`artifact-${id}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
@@ -317,6 +340,7 @@ export function AppShell() {
                   onChange={ws.setActiveView}
                   disabledViews={ws.disabledViews}
                   disabledReasons={ws.disabledViewReasons}
+                  onPrefetch={prefetchView}
                   className="min-w-0 flex-1"
                 />
               </div>
@@ -359,35 +383,33 @@ export function AppShell() {
                         { id: "evo", label: "Evolution" },
                         { id: "cohorts", label: "Cohorts" },
                       ]} />
-                    {fundedTab === "strat" && (
-                      <>
-                        {/* A failed load renders a VISIBLE error with the real
-                            reason + retry — never a silent blank panel. */}
-                        {!ws.snapshot && !ws.snapshotLoading && ws.snapshotError && (
-                          <ErrorState
-                            message={`Funded Book Snapshot could not be loaded — ${ws.snapshotError}`}
-                            onRetry={ws.refresh}
-                          />
-                        )}
-                        <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
-                        <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
-                      </>
-                    )}
-                    {fundedTab === "geo" && (
+                    <KeepMounted active={fundedTab === "strat"} testId="funded-strat-pane">
+                      {/* A failed load renders a VISIBLE error with the real
+                          reason + retry — never a silent blank panel. */}
+                      {!ws.snapshot && !ws.snapshotLoading && ws.snapshotError && (
+                        <ErrorState
+                          message={`Funded Book Snapshot could not be loaded — ${ws.snapshotError}`}
+                          onRetry={ws.refresh}
+                        />
+                      )}
+                      <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
+                      <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
+                    </KeepMounted>
+                    <KeepMounted active={fundedTab === "geo"} testId="funded-geo-pane">
                       <GeographyPanel key={`geo-${ws.dataVersion}-${ws.selectedContextId}`}
                         client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
-                    )}
-                    {fundedTab === "evo" && (
+                    </KeepMounted>
+                    <KeepMounted active={fundedTab === "evo"} testId="funded-evo-pane">
                       <EvolutionPanel key={`evo-funded-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
                         tabs={["funded"]} client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
-                    )}
-                    {fundedTab === "cohorts" && (
+                    </KeepMounted>
+                    <KeepMounted active={fundedTab === "cohorts"} testId="funded-cohorts-pane">
                       <EvolutionPanel key={`evo-cohorts-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
                         tabs={["cohorts"]} client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
-                    )}
+                    </KeepMounted>
                   </div>
                 )}
 
@@ -403,27 +425,25 @@ export function AppShell() {
                         { id: "strat", label: "Stratifications" },
                         { id: "evo", label: "Evolution" },
                       ]} />
-                    {pipelineTab === "strat" && (
-                      <>
-                        {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
-                          <ErrorState
-                            message={`Pipeline snapshot could not be loaded — ${ws.forecastError}`}
-                            onRetry={ws.refresh}
-                          />
-                        )}
-                        <PipelineSnapshotPanel
-                          snapshot={ws.forecast?.pipelineSnapshot ?? null}
-                          loading={ws.forecastLoading}
+                    <KeepMounted active={pipelineTab === "strat"} testId="pipeline-strat-pane">
+                      {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
+                        <ErrorState
+                          message={`Pipeline snapshot could not be loaded — ${ws.forecastError}`}
+                          onRetry={ws.refresh}
                         />
-                        <LineagePanel lineage={ws.forecast?.lineage ?? pipelineLineage(ws.forecast)} />
-                        <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
-                      </>
-                    )}
-                    {pipelineTab === "evo" && (
+                      )}
+                      <PipelineSnapshotPanel
+                        snapshot={ws.forecast?.pipelineSnapshot ?? null}
+                        loading={ws.forecastLoading}
+                      />
+                      <LineagePanel lineage={ws.forecast?.lineage ?? pipelineLineage(ws.forecast)} />
+                      <PipelineWatchlist items={ws.forecast?.watchlist ?? []} />
+                    </KeepMounted>
+                    <KeepMounted active={pipelineTab === "evo"} testId="pipeline-evo-pane">
                       <EvolutionPanel key={`evo-pipeline-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
                         tabs={["pipeline", "origination"]} client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
-                    )}
+                    </KeepMounted>
                   </div>
                 )}
 
@@ -436,25 +456,23 @@ export function AppShell() {
                         { id: "projection", label: "Projection" },
                         { id: "evolution", label: "Forecast Evolution" },
                       ]} />
-                    {forecastTab === "projection" && (
-                      <>
-                        {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
-                          <ErrorState
-                            message={`Forecast could not be loaded — ${ws.forecastError}`}
-                            onRetry={ws.refresh}
-                          />
-                        )}
-                        <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
-                        <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}-${ws.selectedContextId}`}
-                          client={client} portfolioId={workspacePortfolioId}
-                          portfolioContext={ws.selectedContextId} />
-                      </>
-                    )}
-                    {forecastTab === "evolution" && (
+                    <KeepMounted active={forecastTab === "projection"} testId="forecast-projection-pane">
+                      {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
+                        <ErrorState
+                          message={`Forecast could not be loaded — ${ws.forecastError}`}
+                          onRetry={ws.refresh}
+                        />
+                      )}
+                      <ForecastView forecast={ws.forecast} loading={ws.forecastLoading} />
+                      <ForecastExtrapolationPanel key={`fx-${ws.dataVersion}-${ws.selectedContextId}`}
+                        client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId} />
+                    </KeepMounted>
+                    <KeepMounted active={forecastTab === "evolution"} testId="forecast-evolution-pane">
                       <EvolutionPanel key={`evo-forecast-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
                         tabs={["forecast"]} client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
-                    )}
+                    </KeepMounted>
                   </div>
                 )}
 
