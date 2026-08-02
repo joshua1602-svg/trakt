@@ -18,6 +18,8 @@ import type {
   FundedSnapshot,
   Intent,
   MIQuerySpec,
+  MovementDetail,
+  MovementDetailType,
   PipelineEvolution,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
@@ -186,6 +188,14 @@ export class HttpAgentClient implements AgentClient {
                       signal?: AbortSignal): Promise<PipelineEvolution> {
     return this.getJson<PipelineEvolution>(
       `/mi/evolution/pipeline?${this.scoped(portfolioId, portfolioContext)}`, signal);
+  }
+
+  getMovementDetail(portfolioId: string, detailType: MovementDetailType,
+                   asOf?: string, portfolioContext?: string,
+                   signal?: AbortSignal): Promise<MovementDetail> {
+    return this.getJson<MovementDetail>(
+      `/mi/insight/movement-detail?${this.scoped(portfolioId, portfolioContext,
+        { detailType, asOf })}`, signal);
   }
 
   getForecastEvolution(portfolioId: string, portfolioContext?: string,

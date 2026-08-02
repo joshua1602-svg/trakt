@@ -147,6 +147,21 @@ export function withCache(
     getFunnelEvolution: (portfolioId, portfolioContext, signal) =>
       resource(`funnelEvolution|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getFunnelEvolution(portfolioId, portfolioContext, signal)),
+    // Movement detail is keyed by the WEEK as well as the scope, so hovering
+    // back and forth along a series fetches each point at most once per session
+    // and re-hovering the same point never fetches again. In-flight requests are
+    // shared by the same mechanism, so a pointer crossing several points cannot
+    // stack duplicate calls for one of them.
+    getMovementDetail: (portfolioId, detailType, asOf, portfolioContext, signal) =>
+      resource(
+        `movementDetail|${portfolioId}|${detailType}|${asOf ?? "latest"}|${portfolioContext ?? ""}`,
+        () => {
+          // The underlying client need not implement the optional capability.
+          const fetchDetail = client.getMovementDetail?.bind(client);
+          return fetchDetail
+            ? fetchDetail(portfolioId, detailType, asOf, portfolioContext, signal)
+            : Promise.reject(new Error("movement detail is not supported"));
+        }),
     getRiskLimits: (portfolioId, portfolioContext, signal) =>
       resource(`riskLimits|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getRiskLimits(portfolioId, portfolioContext, signal)),

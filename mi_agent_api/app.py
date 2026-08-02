@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -911,6 +911,72 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
         logger.warning("pipeline evolution failed: %s", exc)
         return {"dataset": "pipeline", "portfolioId": cid, "toRunId": pipeline_cut,
                 "periods": [], "byStage": [], "singlePeriod": True, "error": str(exc)}
+
+
+@app.get("/mi/insight/movement-detail")
+def movement_detail(detailType: str,
+                    portfolioId: Optional[str] = None,
+                    client_id: Optional[str] = None,
+                    asOf: Optional[str] = None,
+                    portfolioContext: Optional[str] = None,
+                    request: Request = None, response: Response = None
+                    ) -> Dict[str, Any]:
+    """OPTIONAL week-on-week movement detail for one point on a weekly chart.
+
+    Phase 2A, additive and independently removable. Every existing route is
+    untouched: this is a separate endpoint precisely so no chart, no Copilot
+    route and no cached response changes shape when the capability is off.
+
+    Off unless ``TRAKT_MI_ENHANCED_HOVERS`` is set, in which case it 404s and no
+    aggregation runs at all. It answers only from the SAME governed weekly
+    extracts, already prepared and cached by the chart the user is looking at —
+    it never reads a source file, builds a model or recomputes a forecast for a
+    hover. Never 500s.
+    """
+    from . import movement_detail as detail_mod
+    if not detail_mod.enhanced_hovers_enabled():
+        raise HTTPException(status_code=404, detail="movement detail is not enabled")
+    if detailType not in (detail_mod.DETAIL_PIPELINE, detail_mod.DETAIL_COMPLETIONS):
+        raise HTTPException(status_code=400,
+                            detail=f"unknown detailType {detailType!r}")
+
+    cid, _funded_trid = _evo_ids(portfolioId, client_id, None, None)
+    # Weekly pipeline data, so the FUNDED reporting date must not truncate it —
+    # the same rule the pipeline evolution and funnel routes follow.
+    resolved, refusal = _pipeline_scope_gate(
+        portfolioContext, cid, "movement_detail", portfolioId=cid,
+        detailType=detailType, available=False, contributors={})
+    if refusal is not None:
+        return refusal
+    root = _pipeline_discovery_root()
+    if not root:
+        return detail_mod.unavailable(
+            detailType, cid, as_of=asOf,
+            scope=(resolved.scope.context_id if resolved else None),
+            reason="No governed pipeline root is configured.")
+    etag = http_cache.begin(
+        request, route="mi.insight.movement-detail",
+        scope=f"{portfolioContext or 'total'}|{detailType}|{asOf or 'latest'}",
+        identity=http_cache.dataset_identity(cid, _funded_trid,
+                                             include_pipeline=True))
+    try:
+        result = detail_mod.resolve_movement_detail(
+            root, cid, detailType, as_of=asOf,
+            # Shares the frames the chart already prepared instead of preparing
+            # every extract again under a different key (the Phase 1B-1 defect).
+            historical_model=_pipeline_history(cid),
+            scope=(resolved.scope.context_id if resolved else None))
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+        return http_cache.finish(response, etag, result)
+    except http_cache.NotModified:
+        raise
+    except Exception as exc:  # noqa: BLE001 - an optional hover must never 500
+        logger.warning("movement detail failed: %s", exc)
+        return detail_mod.unavailable(
+            detailType, cid, as_of=asOf,
+            scope=(resolved.scope.context_id if resolved else None),
+            reason="Movement detail could not be produced for this point.")
 
 
 @app.get("/mi/evolution/funnel")
