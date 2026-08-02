@@ -670,6 +670,8 @@ export function RiskLimitsWorkspace({
           test={selected}
           forecast={snapshot.forecast}
           statesAvailable={statesAvailable}
+          fundedReportingDate={snapshot.reportingDate}
+          statesReason={snapshot.states?.reason ?? null}
           onClose={() => setSelectedId(null)}
         />
       )}

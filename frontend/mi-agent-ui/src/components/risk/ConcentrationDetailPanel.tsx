@@ -30,6 +30,8 @@ import type {
 } from "@/domain";
 import { Badge, Card } from "@/components/ui";
 import { MethodologyBlock } from "./MethodologyBlock";
+import { ConcentrationContext } from "@/components/insight/ConcentrationContext";
+import { enhancedHoversEnabled } from "@/lib/featureFlags";
 import {
   STATUS_LABEL,
   STATUS_GLYPH,
@@ -459,6 +461,8 @@ export function ConcentrationDetailPanel({
   test,
   forecast,
   statesAvailable,
+  fundedReportingDate,
+  statesReason,
   onClose,
 }: {
   client: AgentClient;
@@ -467,12 +471,23 @@ export function ConcentrationDetailPanel({
   test: ConcentrationTest;
   forecast?: ForecastMethodology;
   statesAvailable?: boolean;
+  /** Phase 2A: the FUNDED reporting date, so the current position is dated to
+   * the monthly cut it actually comes from rather than to the weekly pipeline. */
+  fundedReportingDate?: string | null;
+  statesReason?: string | null;
   onClose: () => void;
 }) {
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  // Phase 2A: presentation only — every field below is already in this payload.
+  const enhanced = enhancedHoversEnabled();
   const params = Object.entries(test.parameters ?? {});
   return (
     <Card className="p-4" testId="concentration-detail">
+      {enhanced && (
+        <ConcentrationContext test={test} forecast={forecast}
+          fundedReportingDate={fundedReportingDate}
+          statesAvailable={statesAvailable} statesReason={statesReason} />
+      )}
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="text-[14px] font-semibold text-ink-100">{test.displayName}</h3>

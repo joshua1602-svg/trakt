@@ -22,8 +22,10 @@ import type {
 } from "@/domain";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { InsightLineChart } from "@/components/insight/InsightLineChart";
+import { ConversionContext } from "@/components/insight/ConversionContext";
+import { InsightStageCard } from "@/components/insight/InsightStageCard";
 import { enhancedHoversEnabled } from "@/lib/featureFlags";
-import { DETAIL_PIPELINE } from "@/domain";
+import { DETAIL_COMPLETIONS, DETAIL_PIPELINE } from "@/domain";
 import { cn, formatGBP } from "@/lib/utils";
 
 type EvoView = "funded" | "pipeline" | "forecast" | "origination" | "cohorts";
@@ -280,10 +282,13 @@ function pct1(v: number | null | undefined): string {
  * this milestone to date) — and shows the weekly completion velocity below it as
  * a labelled operational/forecast input, NOT as "conversion". Hidden until
  * expanded to keep the card calm. */
-function ConversionDisclosure({ stage, conversion, cohortPct }: {
+function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWeek }: {
   stage: string;
   conversion: FunnelConversion;
   cohortPct: number | null;
+  /** Phase 2A: append the governed evidence block. Off by default. */
+  enhanced?: boolean;
+  latestWeek?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const lagLabel = conversion.lagApplied && conversion.lagWeeks != null
@@ -321,6 +326,10 @@ function ConversionDisclosure({ stage, conversion, cohortPct }: {
               Velocity provisional — {conversion.weeksInWindow} of {conversion.minWeeks}+ weeks; too few to forecast off yet.
             </div>
           )}
+          {enhanced && (
+            <ConversionContext stage={stage} conversion={conversion}
+              cohortPct={cohortPct} latestWeek={latestWeek} />
+          )}
         </div>
       )}
     </div>
@@ -331,8 +340,9 @@ function ConversionDisclosure({ stage, conversion, cohortPct }: {
  * stock line, a 5-week trailing average of the WEEKLY FLOW, the Δ vs prior week
  * (flow − prior flow), and a collapsed conversion-vs-KFI disclosure. Renders
  * compact in the 2×2 grid and larger inside the focus modal (``large``). */
-function FunnelStageCard({
+export function FunnelStageCard({
   stage, label, points, flowPoints, summary, conversion, cohortPct, showCumulative, large, onExpand,
+  enhanced, latestWeek, tooltipContent, onActivePoint, onPointClick,
 }: {
   stage: string;
   label: string;
@@ -347,6 +357,15 @@ function FunnelStageCard({
   large?: boolean;
   /** Open this stage in the focus modal (compact card only). */
   onExpand?: () => void;
+  /** Phase 2A: append the governed conversion evidence. Off by default. */
+  enhanced?: boolean;
+  latestWeek?: string | null;
+  /** OPTIONAL (Phase 2A): replaces the tooltip BODY only. */
+  tooltipContent?: ReactElement;
+  /** OPTIONAL: the week under the pointer, emitted only when it CHANGES. */
+  onActivePoint?: (week: string | null) => void;
+  /** OPTIONAL: click/tap a bar. */
+  onPointClick?: (week: string) => void;
 }) {
   // Join the weekly-flow bars with the stock level per week. Memoised: this ran
   // on every render (four of these cards are on screen at once), so toggling
@@ -361,6 +380,14 @@ function FunnelStageCard({
   );
   const avgFlow = summary?.fiveWeekAvgFlowValue ?? null;
   const hasFlow = useMemo(() => data.some((d) => d.flow != null), [data]);
+  // Emit the active week only when it CHANGES — Recharts fires onMouseMove
+  // continuously, and a request per pixel is exactly what must not happen.
+  const lastWeekRef = useRef<string | null>(null);
+  const emitWeek = (next: string | null) => {
+    if (!onActivePoint || lastWeekRef.current === next) return;
+    lastWeekRef.current = next;
+    onActivePoint(next);
+  };
   return (
     <div className={cn("rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4", large && "h-full")}
       data-testid={`funnel-stage-${stage}`}>
@@ -392,7 +419,15 @@ function FunnelStageCard({
       ) : (
         <div style={{ width: "100%", height: large ? 380 : 160 }}>
           <ResponsiveContainer>
-            <ComposedChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}>
+            <ComposedChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 4 }}
+              {...(onActivePoint || onPointClick ? {
+                onMouseMove: (st: { activeLabel?: string | number }) =>
+                  emitWeek(st?.activeLabel != null ? String(st.activeLabel) : null),
+                onMouseLeave: () => emitWeek(null),
+                onClick: (st: { activeLabel?: string | number }) => {
+                  if (onPointClick && st?.activeLabel != null) onPointClick(String(st.activeLabel));
+                },
+              } : {})}>
               <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
               <XAxis dataKey="week" tick={{ fill: "#8a97ad", fontSize: large ? 11 : 10 }} />
               <YAxis yAxisId="flow" tickFormatter={gbpCompact}
@@ -403,7 +438,8 @@ function FunnelStageCard({
               )}
               <Tooltip
                 formatter={(v: number, name: string) => [gbpCompact(Number(v)), name]}
-                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }} />
+                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }}
+                {...(tooltipContent ? { content: tooltipContent } : {})} />
               {avgFlow != null && (
                 <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeDasharray="4 3"
                   label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
@@ -457,7 +493,8 @@ function FunnelStageCard({
           </div>
         </div>
       )}
-      {conversion && <ConversionDisclosure stage={stage} conversion={conversion} cohortPct={cohortPct} />}
+      {conversion && <ConversionDisclosure stage={stage} conversion={conversion}
+        cohortPct={cohortPct} enhanced={enhanced} latestWeek={latestWeek} />}
     </div>
   );
 }
@@ -963,7 +1000,8 @@ export function EvolutionPanel({
             lines={[{ key: "pipeline_amount", label: "Pipeline amount" }]} valueFormat="gbp"
             source={pipeline?.sourceFiles?.[0]}
             enabled={enhancedHovers} client={client} portfolioId={portfolioId}
-            portfolioContext={portfolioContext} detailType={DETAIL_PIPELINE} />
+            portfolioContext={portfolioContext} detailType={DETAIL_PIPELINE}
+            drillDown />
           <EvoLineChart title="Weighted expected funded by week" data={pipelineSeries}
             lines={[{ key: "weighted_expected_funded_amount", label: "Weighted expected" }]}
             valueFormat="gbp" source="weekly pipeline extracts" />
@@ -1031,13 +1069,20 @@ export function EvolutionPanel({
           </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {orderStages(funnel?.stages ?? []).map((stage) => (
-              <FunnelStageCard key={stage} stage={stage}
+              <InsightStageCard key={stage} stage={stage}
+                client={client} portfolioId={portfolioId}
+                portfolioContext={portfolioContext}
+                detailType={DETAIL_COMPLETIONS}
+                movement={normaliseStage(stage) === "COMPLETED"}
+                drillDown={normaliseStage(stage) === "COMPLETED"}
                 label={funnel?.stageLabels?.[stage] ?? stage}
                 points={funnel?.series?.[stage] ?? []}
                 flowPoints={funnel?.flowSeries?.[stage] ?? []}
                 summary={funnel?.summary?.[stage]}
                 conversion={funnel?.summary?.[stage]?.conversion ?? null}
                 cohortPct={cohortPctFor(stage)}
+                enhanced={enhancedHovers}
+                latestWeek={funnel?.weeks?.[(funnel?.weeks?.length ?? 1) - 1] ?? null}
                 showCumulative={showCumulative}
                 onExpand={() => setExpandedStage(stage)} />
             ))}
@@ -1060,6 +1105,8 @@ export function EvolutionPanel({
                 summary={funnel.summary?.[expandedStage]}
                 conversion={funnel.summary?.[expandedStage]?.conversion ?? null}
                 cohortPct={cohortPctFor(expandedStage)}
+                enhanced={enhancedHovers}
+                latestWeek={funnel.weeks?.[(funnel.weeks?.length ?? 1) - 1] ?? null}
                 showCumulative={showCumulative}
                 large />
             </ChartFocusModal>

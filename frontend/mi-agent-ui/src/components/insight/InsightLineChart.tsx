@@ -15,6 +15,7 @@ import type { AgentClient } from "@/api";
 import type { MovementDetailType } from "@/domain";
 import { EvoLineChart } from "@/components/EvolutionPanel";
 import { EnhancedMetricTooltip } from "./EnhancedMetricTooltip";
+import { InsightDetailDrawer } from "./InsightDetailDrawer";
 import { useMovementDetail } from "@/hooks/useMovementDetail";
 import { formatGBP } from "@/lib/utils";
 
@@ -31,8 +32,8 @@ export interface InsightLineChartProps {
   portfolioId: string;
   detailType: MovementDetailType;
   portfolioContext?: string;
-  /** Opens the drill panel for a week. Absent until the drawer is wired up. */
-  onOpenDetail?: (week: string) => void;
+  /** Enables the contained drill panel. No route change, no page reload. */
+  drillDown?: boolean;
 }
 
 /** Recharts hands the tooltip `{active, payload, label}`; this renders the same
@@ -58,14 +59,20 @@ function BaseBody({ active, payload, label, format }: {
 }
 
 export function InsightLineChart({
-  enabled, client, portfolioId, detailType, portfolioContext, onOpenDetail,
+  enabled, client, portfolioId, detailType, portfolioContext, drillDown = false,
   ...chart
 }: InsightLineChartProps) {
   const [active, setActive] = useState<string | null>(null);
+  // The week the drawer is pinned to. Separate from `active` so moving the
+  // pointer away does not change what the open panel is showing.
+  const [pinned, setPinned] = useState<string | null>(null);
 
   const state = useMovementDetail({
-    client, portfolioId, detailType, portfolioContext, enabled, asOf: active,
+    client, portfolioId, detailType, portfolioContext, enabled,
+    asOf: pinned ?? active,
   });
+
+  const onOpenDetail = drillDown ? setPinned : undefined;
 
   const format = useCallback(
     (v: number) => (chart.valueFormat === "count"
@@ -116,6 +123,12 @@ export function InsightLineChart({
         onActivePoint={setActive}
         onPointClick={onOpenDetail}
       />
+      {pinned && (
+        // The SAME MovementDetail the tooltip is holding — one payload, one
+        // calculation, so the hover and the panel cannot disagree.
+        <InsightDetailDrawer detail={state.detail} loading={state.loading}
+          onClose={() => setPinned(null)} />
+      )}
     </div>
   );
 }

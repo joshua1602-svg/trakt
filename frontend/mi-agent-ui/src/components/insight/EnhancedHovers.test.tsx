@@ -109,19 +109,51 @@ describe("InsightLineChart containment", () => {
     expect(screen.getByText("Pipeline amount by week")).toBeTruthy();
   });
 
-  it("exposes a keyboard route to the detail, so hover is not the only way in", () => {
-    const onOpen = vi.fn();
+  it("exposes a keyboard route to the detail, so hover is not the only way in", async () => {
     render(
       <InsightLineChart title="Pipeline amount by week" data={SERIES}
         lines={[{ key: "pipeline_amount", label: "Pipeline amount" }]}
-        enabled client={client(vi.fn())} portfolioId="ERE"
-        detailType={DETAIL_PIPELINE} onOpenDetail={onOpen} />,
+        enabled client={client(vi.fn().mockResolvedValue(detail()))}
+        portfolioId="ERE" detailType={DETAIL_PIPELINE} drillDown />,
     );
     const el = screen.getByTestId("insight-line-chart");
     expect(el.getAttribute("tabindex")).toBe("0");
     expect(el.getAttribute("role")).toBe("button");
     fireEvent.keyDown(el, { key: "Enter" });
-    expect(onOpen).toHaveBeenCalledWith("2026-08-07");   // the latest week
+    // Opens the SAME contained panel a click opens, on the latest week.
+    await waitFor(() => expect(screen.getByTestId("insight-drawer")).toBeTruthy());
+  });
+
+  it("closes the drill panel on Escape and on the close button", async () => {
+    render(
+      <InsightLineChart title="Pipeline amount by week" data={SERIES}
+        lines={[{ key: "pipeline_amount", label: "Pipeline amount" }]}
+        enabled client={client(vi.fn().mockResolvedValue(detail()))}
+        portfolioId="ERE" detailType={DETAIL_PIPELINE} drillDown />,
+    );
+    fireEvent.keyDown(screen.getByTestId("insight-line-chart"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("insight-drawer")).toBeTruthy());
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("insight-drawer")).toBeNull());
+
+    fireEvent.keyDown(screen.getByTestId("insight-line-chart"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("insight-drawer")).toBeTruthy());
+    fireEvent.click(screen.getByLabelText("Close details"));
+    await waitFor(() => expect(screen.queryByTestId("insight-drawer")).toBeNull());
+  });
+
+  it("reuses ONE payload for the hover and the panel — no second fetch", async () => {
+    const spy = vi.fn().mockResolvedValue(detail());
+    render(
+      <InsightLineChart title="Pipeline amount by week" data={SERIES}
+        lines={[{ key: "pipeline_amount", label: "Pipeline amount" }]}
+        enabled client={client(spy)} portfolioId="ERE"
+        detailType={DETAIL_PIPELINE} drillDown />,
+    );
+    fireEvent.keyDown(screen.getByTestId("insight-line-chart"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("insight-drawer")).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 400));
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("does not remount the chart when the detail arrives", async () => {
@@ -148,8 +180,8 @@ describe("InsightLineChart containment", () => {
     render(
       <InsightLineChart title="Pipeline amount by week" data={SERIES}
         lines={[{ key: "pipeline_amount", label: "Pipeline amount" }]}
-        enabled client={client(vi.fn())} portfolioId="ERE"
-        detailType={DETAIL_PIPELINE} onOpenDetail={vi.fn()} />,
+        enabled client={client(vi.fn().mockResolvedValue(detail()))}
+        portfolioId="ERE" detailType={DETAIL_PIPELINE} drillDown />,
     );
     fireEvent.keyDown(screen.getByTestId("insight-line-chart"), { key: "Enter" });
     expect(window.location.href).toBe(before);
