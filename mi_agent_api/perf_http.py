@@ -27,6 +27,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from trakt_core import perf
 
+from . import request_scope
+
 logger = logging.getLogger("mi_agent_api.perf")
 
 #: Paths that are pure liveness/probe noise — instrumented but not logged, so a
@@ -111,8 +113,12 @@ class PerfMiddleware:
                     pass
                 await send(message)
 
+            # The request scope rides with the collector: one governed
+            # revalidation per request instead of one per call site. See
+            # mi_agent_api/request_scope.py.
             try:
-                await self.app(scope, receive, _send)
+                with request_scope.scope():
+                    await self.app(scope, receive, _send)
             finally:
                 if collector is not None and route not in _QUIET_PATHS:
                     _emit(collector, status=state["status"], size=state["bytes"])

@@ -44,6 +44,7 @@ from mi_agent.mi_query_validator import load_mi_semantics
 from trakt_core import perf
 
 from . import currency as currency_mod
+from . import request_scope as _request_scope
 from . import evolution as evolution_mod
 from . import pipeline_contract as pipeline_mod
 from . import pipeline_history
@@ -459,6 +460,20 @@ _PIPELINE_MIRROR_CACHE: Dict[str, Any] = {"root": None, "sig": None, "local": No
 
 @perf.stage_fn("pipeline_root_mirror")
 def _materialise_pipeline_root(root: Optional[str]) -> Optional[str]:
+    """Request-scoped wrapper over the mirror below.
+
+    Computing the mirror's freshness signature costs one storage HEAD per dated
+    snapshot, and this is called by nine helpers on the pipeline-family routes —
+    so a single request re-asked storage about the same prefix many times over.
+    The result is now reused for the REST OF THE REQUEST and revalidated on the
+    next one, so freshness at the request boundary is unchanged. Outside an HTTP
+    request there is no scope and behaviour is exactly as before.
+    """
+    return _request_scope.memo(
+        f"pipeline_root_mirror|{root}", lambda: _materialise_pipeline_root_uncached(root))
+
+
+def _materialise_pipeline_root_uncached(root: Optional[str]) -> Optional[str]:
     """Return a LOCAL discovery root for ``root``.
 
     Filesystem roots are returned unchanged (fixtures behave exactly as before).

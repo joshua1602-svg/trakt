@@ -146,6 +146,22 @@ def _infer_client(path: Path, root: Path) -> Optional[str]:
     return None
 
 
+def _file_set_identity(files: List[Path]) -> Optional[List[Any]]:
+    """Immutable identity of a discovered file set (path + ``mtime_ns:size``).
+
+    Discovery is a pure function of the files it finds, so this is a complete
+    identity for its result. Any file that cannot be stat'd collapses it to
+    ``None`` and the caller does not cache.
+    """
+    identity: List[Any] = []
+    for path in files:
+        marker = _serving_cache.file_identity(path)
+        if marker is None:
+            return None
+        identity.append((str(path), marker))
+    return identity
+
+
 def discover_pipeline_sources(root: str | os.PathLike,
                               client_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Discover governed weekly pipeline sources under ``root``, grouped by scope.
@@ -161,6 +177,13 @@ def discover_pipeline_sources(root: str | os.PathLike,
          weekly_files}
 
     Ordered oldest -> newest by folder/as-of date.
+
+    Memoised on the immutable identity of the discovered file set. Discovery
+    opens EVERY scope's latest file to record its row count, and each dated
+    weekly folder is its own scope — so on a root holding N weekly extracts this
+    performed N full CSV reads. It is called by the portfolio-context, geo,
+    cohort and pipeline routes, which paid that on every request. A new,
+    replaced or removed extract changes the identity and is rediscovered.
     """
     root = Path(root)
     if not root.exists():
@@ -174,6 +197,21 @@ def discover_pipeline_sources(root: str | os.PathLike,
     if not files:
         files = _collect_files(root, _FALLBACK_PIPELINE_GLOBS)
 
+    key = _serving_cache.key_for(
+        tenant=_serving_cache.resolved_tenant(),
+        scope=f"client={client_id or '-'}",
+        identity=[str(root), *(_file_set_identity(files) or [None])])
+    cached = _DISCOVERY_CACHE.get_or_build(
+        key, lambda: _discover_pipeline_sources_uncached(files, root, client_id))
+    # Deep-copied: callers annotate the returned scope dicts (weekly_files,
+    # run ids), so a shared list could be mutated by a later request.
+    return copy.deepcopy(cached) if key is not None else cached
+
+
+def _discover_pipeline_sources_uncached(files: List[Path], root: Path,
+                                        client_id: Optional[str]
+                                        ) -> List[Dict[str, Any]]:
+    """The discovery body. Unchanged behaviour; see the caller for caching."""
     # Group weekly files by (client, source folder) scope.
     scopes: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for path in files:
@@ -439,6 +477,8 @@ def collect_weekly_history(root: str | os.PathLike,
 #: rolling window of weekly extracts. See mi_agent_api/serving_cache.py.
 _HISTORY_CACHE = _serving_cache.BoundedCache("history_model", max_entries=16)
 _PIPELINE_PREP_CACHE = _serving_cache.BoundedCache("pipeline_prep", max_entries=64)
+#: Governed pipeline SOURCE DISCOVERY (see discover_pipeline_sources).
+_DISCOVERY_CACHE = _serving_cache.BoundedCache("pipeline_discovery", max_entries=16)
 
 
 def _extract_set_identity(extracts: List[Dict[str, Any]]) -> Optional[List[Any]]:
