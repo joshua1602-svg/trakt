@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from trakt_core import perf as _perf
 from trakt_core.audit import emit_audit_event
 from trakt_core.context import SCOPE_MI_QUERY, ExecutionContext
 from trakt_core.envelope import (
@@ -490,18 +491,20 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         ds._apply_request_currency(client_id, portfolio_id)
     except Exception as exc:  # noqa: BLE001 - currency must never fail a query
         logger.info("request currency resolution skipped: %s", exc)
-    df, frame_error = _resolve_frame(ds, view, portfolio_id)
+    with _perf.stage("mi_query.resolve_frame"):
+        df, frame_error = _resolve_frame(ds, view, portfolio_id)
 
     try:
-        parsed = ParsedQuestion.parse(
-            req.question, semantics,
-            available_columns=set(df.columns) if df is not None else None,
-            llm_enabled=llm_cfg.enabled, model=llm_cfg.model,
-            # Extension point: supply a Business Semantics Registry resolver here
-            # to attach governed business-term metadata to every parse. It flows
-            # to every recogniser via ``RouteRequest.semantics_context`` with no
-            # further plumbing.
-            semantics_resolver=deps.semantics_resolver)
+        with _perf.stage("mi_query.parse"):
+            parsed = ParsedQuestion.parse(
+                req.question, semantics,
+                available_columns=set(df.columns) if df is not None else None,
+                llm_enabled=llm_cfg.enabled, model=llm_cfg.model,
+                # Extension point: supply a Business Semantics Registry resolver
+                # here to attach governed business-term metadata to every parse.
+                # It flows to every recogniser via
+                # ``RouteRequest.semantics_context`` with no further plumbing.
+                semantics_resolver=deps.semantics_resolver)
     except Exception:  # noqa: BLE001 - a parser fault is a controlled failure
         logger.exception("MI query parse failed for question=%r", req.question)
         return _error_envelope("The MI Agent could not interpret this question.",

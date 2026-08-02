@@ -40,6 +40,7 @@ from mi_agent.concentration_tests.models import (
 from mi_agent.concentration_tests.store import ConcentrationStore
 
 from . import snapshots as snap
+from trakt_core import perf as _perf
 
 logger = logging.getLogger("mi_agent_api.concentration_tests")
 
@@ -295,6 +296,7 @@ def _adapt_legacy(legacy: Dict[str, Any]) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Entry points
 # --------------------------------------------------------------------------- #
+@_perf.stage_fn("concentration_evaluate")
 def compute_concentration_tests(output_root, client_id: str,
                                 to_run_id: Optional[str], *,
                                 scope=None) -> Dict[str, Any]:
@@ -479,6 +481,7 @@ def compute_pipeline_drivers(output_root, client_id: str,
     return out
 
 
+@_perf.stage_fn("concentration_history")
 def compute_history(output_root, client_id: str, to_run_id: Optional[str],
                     *, scope=None, test_id: Optional[str] = None,
                     max_periods: int = 24) -> Dict[str, Any]:

@@ -36,6 +36,7 @@ import pandas as pd
 
 from analytics_lib.dates import coerce_dates
 from analytics_lib.numeric import coerce_numeric
+from trakt_core import perf as _perf
 
 from engine import region_taxonomy as _region
 
@@ -427,6 +428,7 @@ def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], Li
     return out, derived, basis, dedup
 
 
+@_perf.stage_fn("funded_prep")
 def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Return ``(analytics_ready_df, report)`` for a funded central lender tape."""
     out, derived, ltv_basis, dedup = _derive_source_fields(df)

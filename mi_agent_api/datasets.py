@@ -41,6 +41,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from mi_agent.mi_query_validator import load_mi_semantics
+from trakt_core import perf
 
 from . import currency as currency_mod
 from . import evolution as evolution_mod
@@ -306,6 +307,7 @@ _PREPARED_BLOB_RUN_CACHE: Dict[Tuple[str, str, str], Tuple[str, Tuple[Any, Any]]
 _PREPARED_BLOB_RUN_CACHE_MAX = 24
 
 
+@perf.stage_fn("resolve_run_dataframe")
 def _resolve_run_dataframe(client_id: str, run_id: str, root: Optional[str]):
     """``(df, prep_report)`` for a specific run, preferring on-disk discovery and
     falling back to the active env-configured dataframe for the active run."""
@@ -455,6 +457,7 @@ def _blob_dated_snapshots(root: str, storage) -> List[Dict[str, str]]:
 _PIPELINE_MIRROR_CACHE: Dict[str, Any] = {"root": None, "sig": None, "local": None}
 
 
+@perf.stage_fn("pipeline_root_mirror")
 def _materialise_pipeline_root(root: Optional[str]) -> Optional[str]:
     """Return a LOCAL discovery root for ``root``.
 
@@ -593,6 +596,7 @@ def _weekly_files_window(client_id: str, as_of: Optional[str]) -> list:
     return extracts
 
 
+@perf.stage_fn("resolve_pipeline_source")
 def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[Dict[str, Any]]:
     """The governed pipeline scope for a client/run (blob URI, explicit env, or
     discovery). Returns a scope dict with the separated date concepts (folder /
@@ -630,6 +634,7 @@ def _resolve_pipeline_source(client_id: str, run_id: Optional[str]) -> Optional[
     return None
 
 
+@perf.stage_fn("pipeline_history_model")
 def _pipeline_history(client_id: str) -> Optional[Dict[str, Any]]:
     """The historical completion-rate model from a client's weekly pipeline files.
 

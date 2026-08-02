@@ -73,6 +73,9 @@ from trakt_core.portfolio import (
 )
 from trakt_core.errors import TraktError
 from trakt_core.runtime import runtime_mode, validate_runtime_mode
+from trakt_core import perf
+
+from . import perf_http
 
 from . import artefacts as artefacts_mod
 from . import identity as identity_mod
@@ -201,6 +204,14 @@ app.add_middleware(
 # for why: without it, the Static Web Apps linked-backend topology forwards
 # /api/mi/query to an app that only serves /mi/query, and every question 404s.
 API_PREFIX = gateway.install_gateway_prefix(app)
+
+# Performance instrumentation. Installed LAST so it is the outermost layer and
+# therefore times the whole request — including the gateway rewrite, CORS and
+# the auth guard — rather than only the route body. Pure ASGI (not
+# BaseHTTPMiddleware) so the collector's ContextVar is set in the same task that
+# invokes the app, which is what lets the synchronous routes below see it.
+# Disable with TRAKT_PERF_INSTRUMENTATION=off; see trakt_core/perf.py.
+app.add_middleware(perf_http.PerfMiddleware, api_prefix=API_PREFIX)
 
 
 @app.exception_handler(TraktError)

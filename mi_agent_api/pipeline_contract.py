@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+from trakt_core import perf as _perf
 
 from .mi_dataset_contract import build_dataset_contract
 from .pipeline_prep import (
@@ -73,12 +74,13 @@ _NON_CLIENT_PARTS = {"output", "outputs", "runs", "onboarding", "central",
 #                                 from the FOLDER month (e.g. ``mi_2025_11``).
 # --------------------------------------------------------------------------- #
 def _read_source(path: Path) -> Optional[pd.DataFrame]:
-    try:
-        if path.suffix.lower() in (".xlsx", ".xls"):
-            return pd.read_excel(path)
-        return pd.read_csv(path, low_memory=False)
-    except Exception:  # noqa: BLE001 - a bad file must not break discovery
-        return None
+    with _perf.counted("file.read.pipeline_source"):
+        try:
+            if path.suffix.lower() in (".xlsx", ".xls"):
+                return pd.read_excel(path)
+            return pd.read_csv(path, low_memory=False)
+        except Exception:  # noqa: BLE001 - a bad file must not break discovery
+            return None
 
 
 def _date_in(text: str) -> Optional[str]:
@@ -367,6 +369,7 @@ def weekly_extract_inventory(root: str | os.PathLike,
     }
 
 
+@_perf.stage_fn("pipeline_prep")
 def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
                            as_of_date: Optional[str] = None,
                            historical_model: Optional[Dict[str, Any]] = None

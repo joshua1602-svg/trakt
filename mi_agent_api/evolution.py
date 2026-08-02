@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from analytics_lib.dates import coerce_dates
+from trakt_core import perf as _perf
 from analytics_lib.numeric import coerce_numeric
 from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
@@ -180,6 +181,7 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
     }
 
 
+@_perf.stage_fn("funded_frames")
 def funded_frames(output_root: str | os.PathLike, client_id: str,
                   to_run_id: Optional[str] = None,
                   scope=None) -> List[Dict[str, Any]]:
@@ -499,6 +501,7 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
 # --------------------------------------------------------------------------- #
 # Pipeline evolution (governed weekly extracts)
 # --------------------------------------------------------------------------- #
+@_perf.stage_fn("pipeline_evolution_series")
 def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
                        to_run_id: Optional[str] = None, *,
                        historical_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -668,6 +671,7 @@ def _lagged_value(series: List[Optional[float]], lag: int) -> Tuple[Optional[flo
     return series[idx], idx
 
 
+@_perf.stage_fn("pipeline_funnel_series")
 def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
                               to_run_id: Optional[str] = None,
                               lag_weeks: Optional[int] = None) -> Dict[str, Any]:

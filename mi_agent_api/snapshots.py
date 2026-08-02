@@ -34,6 +34,7 @@ from analytics_lib.numeric import coerce_numeric
 from . import currency as currency_mod
 from .funded_prep import prepare_funded_mi_dataset
 from .mi_dataset_contract import build_dataset_contract
+from trakt_core import perf as _perf
 
 _CENTRAL_TAPE_NAME = "18_central_lender_tape.csv"
 
@@ -549,6 +550,7 @@ def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]
     return out
 
 
+@_perf.stage_fn("funded_snapshot_compute")
 def compute_funded_snapshot(
     df: pd.DataFrame,
     semantics: dict,
@@ -760,6 +762,7 @@ def _prepared_run_key(path: Path) -> Optional[str]:
     return f"{path}:{st.st_mtime_ns}:{st.st_size}"
 
 
+@_perf.stage_fn("load_prepared_run")
 def load_prepared_run(tape_path: str | os.PathLike) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Read a central lender tape and apply the funded MI preparation layer.
 

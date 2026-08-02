@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .pipeline_prep import ACTIVE_STAGES, case_stage_frame
+from trakt_core import perf as _perf
 
 # Minimum observed cases at a stage before its empirical rate is trusted. Short
 # windows under-observe early-stage completions, so we keep this conservative.
@@ -42,6 +43,7 @@ def _read(path: Path) -> Optional[pd.DataFrame]:
         return None
 
 
+@_perf.stage_fn("historical_completion_model_build")
 def build_historical_completion_model(
     weekly_entries: List[Dict[str, Any]],
     *,

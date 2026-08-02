@@ -14,17 +14,57 @@ existing local behaviour is unchanged.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import shutil
 import traceback
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 BLOB_SCHEME = "blob://"
 
 logger = logging.getLogger("trakt.blob_trigger.storage")
+
+
+def _observed(op: str) -> Callable:
+    """Count and time a storage READ primitive on the active perf collector.
+
+    A pure no-op unless a caller has opened a :func:`trakt_core.perf.collect`
+    block — which only the MI API middleware does. Ingestion therefore pays a
+    single ``ContextVar.get()`` per call and behaves identically to before.
+    Never alters the return value and never raises on its own account.
+
+    Only ``list`` / ``etag`` / ``download_file`` / ``read_bytes`` / ``exists``
+    are instrumented: those are the round-trips the serving layer is being tuned
+    against. ``read_text`` is not counted directly — on the Blob backend it
+    delegates to ``read_bytes``, so counting both would double-count one
+    round-trip.
+    """
+    def decorate(fn: Callable) -> Callable:
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            try:
+                from trakt_core import perf
+            except Exception:  # noqa: BLE001 - storage must not depend on perf
+                return fn(self, *args, **kwargs)
+            collector = perf.active()
+            if collector is None:
+                return fn(self, *args, **kwargs)
+            import time as _time
+            t0 = _time.perf_counter()
+            try:
+                return fn(self, *args, **kwargs)
+            finally:
+                try:
+                    collector.add_count(
+                        f"storage.{self._backend_name}.{op}", 1,
+                        (_time.perf_counter() - t0) * 1000.0)
+                except Exception:  # noqa: BLE001
+                    pass
+        return wrapper
+    return decorate
 
 
 @contextmanager
@@ -82,12 +122,14 @@ class Storage:
         return Path(uri)
 
     # -- primitives -------------------------------------------------------- #
+    @_observed("exists")
     def exists(self, uri: str) -> bool:
         return self._local_path(uri).exists()
 
     def read_text(self, uri: str) -> str:
         return self._local_path(uri).read_text(encoding="utf-8")
 
+    @_observed("read_bytes")
     def read_bytes(self, uri: str) -> bytes:
         return self._local_path(uri).read_bytes()
 
@@ -114,6 +156,7 @@ class Storage:
             shutil.copyfile(str(local_path), str(p))
         return uri
 
+    @_observed("download_file")
     def download_file(self, uri: str, local_path: str | os.PathLike) -> Path:
         with _write_guard(f"download_file->{local_path}", uri, self._backend_name):
             dest = Path(local_path)
@@ -121,6 +164,7 @@ class Storage:
             shutil.copyfile(str(self._local_path(uri)), str(dest))
         return dest
 
+    @_observed("list")
     def list(self, prefix_uri: str) -> List[str]:
         """Return the URIs of files under ``prefix_uri`` (recursive)."""
         base = self._local_path(prefix_uri)
@@ -133,6 +177,7 @@ class Storage:
                 out.append(join_uri(prefix_uri, rel))
         return out
 
+    @_observed("etag")
     def etag(self, uri: str) -> Optional[str]:
         """A cheap change-token for ``uri`` (no full read): filesystem uses
         ``mtime_ns:size``. ``None`` when the target does not exist. Callers use it
@@ -167,9 +212,11 @@ class BlobStorage(Storage):
         container, key = split_blob_uri(uri)
         return self._svc().get_blob_client(container, key)
 
+    @_observed("exists")
     def exists(self, uri: str) -> bool:
         return self._client(uri).exists()
 
+    @_observed("read_bytes")
     def read_bytes(self, uri: str) -> bytes:
         return self._client(uri).download_blob().readall()
 
@@ -193,18 +240,22 @@ class BlobStorage(Storage):
         return uri
 
     def download_file(self, uri: str, local_path: str | os.PathLike) -> Path:
+        # NOT decorated: this delegates to ``read_bytes``, which is. Counting
+        # both would report two round-trips for one download.
         with _write_guard(f"download_file->{local_path}", uri, self._backend_name):
             dest = Path(local_path)
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(self.read_bytes(uri))
         return dest
 
+    @_observed("list")
     def list(self, prefix_uri: str) -> List[str]:
         container, key = split_blob_uri(prefix_uri)
         cc = self._svc().get_container_client(container)
         return [f"{BLOB_SCHEME}{container}/{b.name}"
                 for b in cc.list_blobs(name_starts_with=key)]
 
+    @_observed("etag")
     def etag(self, uri: str) -> Optional[str]:
         """The blob's ETag via a cheap properties HEAD (no download). ``None`` when
         absent — so the MI API re-reads a re-published canonical only when it

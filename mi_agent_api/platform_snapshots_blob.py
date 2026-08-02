@@ -34,6 +34,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from trakt_core import perf as _perf
+
 _PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
 #: A DATED platform canonical under a blob:// platform root. ``latest/`` is
 #: excluded because ``latest`` is not a ``YYYY-MM-DD`` date.
@@ -77,7 +79,9 @@ def _read(uri: str, storage) -> Optional[pd.DataFrame]:
         et = storage.etag(uri)
         cached = _READ_CACHE.get(uri)
         if cached is not None and cached[0] == et:
+            _perf.cache_event("canonical_raw", _perf.CACHE_HIT)
             return cached[1]
+        _perf.cache_event("canonical_raw", _perf.CACHE_MISS)
         from pathlib import Path as _Path
         local = storage._local_path(uri)
         if _Path(str(local)).exists():
@@ -89,7 +93,8 @@ def _read(uri: str, storage) -> Optional[pd.DataFrame]:
             dest = _Path(scratch) / "platform_runs" / "_".join(tail)
             dest.parent.mkdir(parents=True, exist_ok=True)
             path = str(storage.download_file(uri, dest))
-        df = pd.read_csv(path, low_memory=False)
+        with _perf.counted("file.read.platform_canonical"):
+            df = pd.read_csv(path, low_memory=False)
         _READ_CACHE[uri] = (et, df)
         return df
     except Exception:  # noqa: BLE001 - a bad canonical must not break discovery
