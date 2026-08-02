@@ -365,8 +365,14 @@ def compute_concentration_tests(output_root, client_id: str,
     # Legacy fallback — the existing extracted monitor, explicitly unapproved.
     from . import risk_limits as risk_mod
     try:
-        legacy = risk_mod.compute_risk_limits(output_root, client_id,
-                                              to_run_id, scope=scope)
+        # ``_resolve_frames`` above already ran the identical governed
+        # resolution — same discovery, same loaders, same scope narrowing — for
+        # this same (client_id, to_run_id, scope). Hand those frames straight to
+        # the legacy monitor instead of letting it resolve and re-prepare the
+        # whole funded series a second time inside one request.
+        legacy = risk_mod.compute_risk_limits(
+            output_root, client_id, to_run_id, scope=scope,
+            prepared_funded=(df, prior_df, reporting_date))
     except Exception as exc:  # noqa: BLE001 - never 500
         logger.warning("legacy risk-limits fallback failed: %s", exc)
         legacy = {"tests": [], "available": False, "limitsSource": "error",
