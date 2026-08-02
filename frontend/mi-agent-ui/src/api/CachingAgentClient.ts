@@ -152,6 +152,15 @@ export function withCache(
     // and re-hovering the same point never fetches again. In-flight requests are
     // shared by the same mechanism, so a pointer crossing several points cannot
     // stack duplicate calls for one of them.
+    // One request per portfolio + scope + week, reused for the session.
+    getWeeklyBrief: (portfolioId, portfolioContext, asOf, signal) =>
+      resource(`weeklyBrief|${portfolioId}|${portfolioContext ?? ""}|${asOf ?? "latest"}`,
+        () => {
+          const fetchBrief = client.getWeeklyBrief?.bind(client);
+          return fetchBrief
+            ? fetchBrief(portfolioId, portfolioContext, asOf, signal)
+            : Promise.reject(new Error("weekly brief is not supported"));
+        }),
     getMovementDetail: (portfolioId, detailType, asOf, portfolioContext, signal) =>
       resource(
         `movementDetail|${portfolioId}|${detailType}|${asOf ?? "latest"}|${portfolioContext ?? ""}`,

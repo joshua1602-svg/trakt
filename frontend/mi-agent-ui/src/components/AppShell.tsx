@@ -14,6 +14,7 @@ import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
 import { SubTabs } from "@/components/SubTabs";
 import { KeepMounted } from "@/components/KeepMounted";
+import { WeeklyBriefPanel } from "@/components/insight/WeeklyBriefPanel";
 import { ErrorState } from "@/components/states/States";
 import { PortfolioScopeBanner } from "@/components/PortfolioScopeBanner";
 import { LineagePanel } from "@/components/LineagePanel";
@@ -307,6 +308,15 @@ export function AppShell() {
           workspaceArtifactIds={workspaceArtifactIds}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* Phase 3A — OPTIONAL Weekly Portfolio Brief. Renders nothing at all
+              unless its flag is on AND the API returned insights, so a build
+              without it is byte-identical to today. Replaces no chart. */}
+          <WeeklyBriefPanel
+            client={client}
+            portfolioId={workspacePortfolioId}
+            portfolioContext={ws.selectedContextId}
+          />
+
           {/* Region 3/4 — CORE DASHBOARD: neutral panel, distinct from the grey
               artifact workspace below. Collapsible to focus the chart area. */}
           <section

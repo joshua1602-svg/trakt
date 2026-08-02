@@ -13,3 +13,4 @@ export * from "./cohorts";
 export * from "./geo";
 export * from "./portfolio";
 export * from "./insightDetail";
+export * from "./insights";

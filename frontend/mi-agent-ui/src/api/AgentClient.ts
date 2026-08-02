@@ -23,6 +23,7 @@ import type {
   GeoExposure,
   MovementDetail,
   MovementDetailType,
+  WeeklyBrief,
   PipelineEvolution,
   ConcentrationDrillthrough,
   ConcentrationDrivers,
@@ -110,6 +111,16 @@ export interface AgentClient {
   getMovementDetail?(portfolioId: string, detailType: MovementDetailType,
                    asOf?: string, portfolioContext?: string,
                    signal?: AbortSignal): Promise<MovementDetail>;
+
+  /**
+   * OPTIONAL Weekly Portfolio Brief (Phase 3A).
+   *
+   * Optional on the interface for the same reason as `getMovementDetail`: a
+   * client that does not implement it is still a valid AgentClient, so the
+   * phase can be removed cleanly and no existing test double had to change.
+   */
+  getWeeklyBrief?(portfolioId: string, portfolioContext?: string,
+                 asOf?: string, signal?: AbortSignal): Promise<WeeklyBrief>;
 
   /** Governed risk-limit / concentration monitor (Schedule 8 vs funded actuals). */
   getRiskLimits(portfolioId: string, portfolioContext?: string,
