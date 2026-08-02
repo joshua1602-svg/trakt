@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .pipeline_prep import ACTIVE_STAGES, case_stage_frame
+from trakt_core import perf as _perf
 
 # Minimum observed cases at a stage before its empirical rate is trusted. Short
 # windows under-observe early-stage completions, so we keep this conservative.
@@ -42,6 +43,7 @@ def _read(path: Path) -> Optional[pd.DataFrame]:
         return None
 
 
+@_perf.stage_fn("historical_completion_model_build")
 def build_historical_completion_model(
     weekly_entries: List[Dict[str, Any]],
     *,
@@ -79,19 +81,33 @@ def build_historical_completion_model(
             stable_identifier = _identifier_used(df)
         if extract_date:
             dates.append(extract_date)
-        for _, row in csf.iterrows():
-            cid = str(row["case_id"]).strip()
+        # Column-wise extraction rather than ``csf.iterrows()``. iterrows builds
+        # a fresh Series per row — ~1.5k rows x 26 snapshots was ~39k Series
+        # constructions, and it dominated this function's cost. Zipping the
+        # underlying arrays walks the SAME rows in the SAME order with the same
+        # per-row logic below; only the row-access mechanism changed.
+        case_ids = csf["case_id"].to_numpy()
+        stages = csf["stage"].to_numpy()
+        completion_dates = (csf["completion_date"].to_numpy()
+                            if "completion_date" in csf.columns
+                            else [None] * len(csf))
+        for cid_raw, stage_raw, cd in zip(case_ids, stages, completion_dates):
+            cid = str(cid_raw).strip()
             if not cid or cid.lower() in ("nan", "none", ""):
                 continue
-            stage = str(row["stage"])
+            stage = str(stage_raw)
             t = timelines.setdefault(cid, {"stages": {}, "completed_on": None, "ever": set()})
             t["ever"].add(stage)
             # First snapshot at which the case was seen at this stage.
             if stage not in t["stages"]:
                 t["stages"][stage] = extract_date
             if stage == COMPLETED:
-                cd = row.get("completion_date")
-                done = (cd.date().isoformat() if isinstance(cd, pd.Timestamp) and pd.notna(cd)
+                # ``to_numpy()`` on a datetime64 column yields numpy datetime64,
+                # where ``iterrows`` yielded pd.Timestamp. Normalise back to a
+                # Timestamp so the isinstance/NaT check below is unchanged.
+                cd_ts = pd.Timestamp(cd) if cd is not None and not pd.isna(cd) else None
+                done = (cd_ts.date().isoformat()
+                        if isinstance(cd_ts, pd.Timestamp) and pd.notna(cd_ts)
                         else extract_date)
                 if t["completed_on"] is None or (done or "") < t["completed_on"]:
                     t["completed_on"] = done
@@ -101,6 +117,12 @@ def build_historical_completion_model(
     completed: Dict[str, int] = {s: 0 for s in ACTIVE_STAGES}
     elapsed: Dict[str, List[int]] = {s: [] for s in ACTIVE_STAGES}
 
+    # Elapsed-day pairs are COLLECTED here and converted in ONE vectorised pass
+    # below. Previously each pair called ``pd.to_datetime`` on two scalars, and
+    # each such call re-guessed the datetime format and built a one-element
+    # Series — profiling showed 8,420 format guesses per model build, which was
+    # the single largest cost in this function.
+    pending: Dict[str, List[tuple]] = {s: [] for s in ACTIVE_STAGES}
     for cid, t in timelines.items():
         ever_completed = COMPLETED in t["ever"]
         for stage in ACTIVE_STAGES:
@@ -112,12 +134,18 @@ def build_historical_completion_model(
                 first = t["stages"][stage]
                 done = t["completed_on"]
                 if first and done:
-                    try:
-                        d = (pd.to_datetime(done) - pd.to_datetime(first)).days
-                        if d >= 0:
-                            elapsed[stage].append(int(d))
-                    except Exception:  # noqa: BLE001
-                        pass
+                    pending[stage].append((first, done))
+
+    for stage, pairs in pending.items():
+        if not pairs:
+            continue
+        firsts = pd.to_datetime([p[0] for p in pairs], errors="coerce")
+        dones = pd.to_datetime([p[1] for p in pairs], errors="coerce")
+        # ``errors="coerce"`` yields NaT for anything unparseable, which becomes
+        # NaN days and is dropped below — the same outcome as the previous
+        # per-pair try/except, which skipped a pair it could not parse.
+        days = (dones - firsts).days
+        elapsed[stage].extend(int(d) for d in days if pd.notna(d) and d >= 0)
 
     rate_by_stage: Dict[str, Any] = {}
     timing_by_stage: Dict[str, Any] = {}

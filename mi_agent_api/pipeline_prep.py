@@ -435,18 +435,29 @@ def _derive_expected_completion(out: pd.DataFrame, rep_ts: Optional[pd.Timestamp
     base = rep_ts if rep_ts is not None else out.get("pipeline_stage_date")
     if base is None:
         return
-    filled = 0
-    for idx in out.index:
-        if pd.notna(out.at[idx, "expected_completion_date"]):
-            continue
-        stage = str(out.at[idx, "pipeline_stage"])
-        if stage not in days_to_fund:
-            continue
-        base_ts = base if isinstance(base, pd.Timestamp) else base.get(idx)
-        if base_ts is None or pd.isna(base_ts):
-            continue
-        out.at[idx, "expected_completion_date"] = base_ts + pd.Timedelta(days=days_to_fund[stage])
-        filled += 1
+
+    # Vectorised equivalent of the previous per-row loop. Each condition below
+    # is the same test the loop applied, expressed as a mask; a row is filled
+    # only when ALL of them hold, in the same combination and with the same
+    # arithmetic (base + N days). Rows the loop skipped are simply excluded
+    # from the mask, so their existing value is untouched.
+    existing = out["expected_completion_date"]
+    #   loop: `if pd.notna(existing): continue`
+    fill = existing.isna()
+    #   loop: `if stage not in days_to_fund: continue`
+    offsets = out["pipeline_stage"].astype(str).map(days_to_fund)
+    fill &= offsets.notna()
+    #   loop: `base_ts = base if Timestamp else base.get(idx)`
+    base_series = (pd.Series(base, index=out.index) if isinstance(base, pd.Timestamp)
+                   else pd.to_datetime(base, errors="coerce"))
+    #   loop: `if base_ts is None or pd.isna(base_ts): continue`
+    fill &= base_series.notna()
+
+    filled = int(fill.sum())
+    if filled:
+        out.loc[fill, "expected_completion_date"] = (
+            base_series[fill]
+            + pd.to_timedelta(offsets[fill].astype("int64"), unit="D"))
     if filled and not have_explicit and "expected_completion_date" not in derived:
         derived.append("expected_completion_date")
 
@@ -465,7 +476,6 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
       5. UNKNOWN / unmapped stage -> no probability             -> ``missing_stage``
       6. otherwise no probability                               -> ``unavailable``
     """
-    n = len(out)
     explicit = (coerce_numeric(out["completion_probability"])
                 if "completion_probability" in out.columns
                 else pd.Series(np.nan, index=out.index))
@@ -474,20 +484,38 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
 
     prob = pd.Series(np.nan, index=out.index, dtype="float64")
     source = pd.Series("unavailable", index=out.index, dtype="object")
-    for idx in out.index:
-        s = stage.loc[idx]
-        if pd.notna(explicit.loc[idx]):
-            prob.loc[idx] = float(explicit.loc[idx]); source.loc[idx] = "row_level"
-        elif s == "WITHDRAWN":
-            source.loc[idx] = "excluded_withdrawn"          # NaN -> not weighted
-        elif s in historical_rates:
-            prob.loc[idx] = float(historical_rates[s]); source.loc[idx] = "historical_stage_rate"
-        elif s in stage_probs:
-            prob.loc[idx] = float(stage_probs[s]); source.loc[idx] = "configured_stage_rate"
-        elif s in ("UNKNOWN", "", "nan", "None"):
-            source.loc[idx] = "missing_stage"
-        else:
-            source.loc[idx] = "unavailable"
+
+    # The governed hierarchy above, applied as successive masks instead of a
+    # per-row if/elif chain. ``remaining`` carries the elif semantics exactly:
+    # a row that matched a higher tier is removed from it, so each tier sees
+    # precisely the rows the loop's `elif` would have reached, and the default
+    # for anything unmatched stays "unavailable".
+    remaining = pd.Series(True, index=out.index)
+
+    tier_row_level = explicit.notna()
+    prob[tier_row_level] = explicit[tier_row_level].astype("float64")
+    source[tier_row_level] = "row_level"
+    remaining &= ~tier_row_level
+
+    tier_withdrawn = remaining & (stage == "WITHDRAWN")
+    source[tier_withdrawn] = "excluded_withdrawn"           # NaN -> not weighted
+    remaining &= ~tier_withdrawn
+
+    tier_historical = remaining & stage.isin(list(historical_rates))
+    if tier_historical.any():
+        prob[tier_historical] = stage[tier_historical].map(historical_rates).astype("float64")
+        source[tier_historical] = "historical_stage_rate"
+    remaining &= ~tier_historical
+
+    tier_configured = remaining & stage.isin(list(stage_probs))
+    if tier_configured.any():
+        prob[tier_configured] = stage[tier_configured].map(stage_probs).astype("float64")
+        source[tier_configured] = "configured_stage_rate"
+    remaining &= ~tier_configured
+
+    tier_missing = remaining & stage.isin(("UNKNOWN", "", "nan", "None"))
+    source[tier_missing] = "missing_stage"
+    # Anything still remaining keeps the "unavailable" default, as before.
 
     out["completion_probability"] = prob
     out["completion_probability_source"] = source

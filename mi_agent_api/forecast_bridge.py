@@ -24,6 +24,7 @@ import pandas as pd
 from analytics_lib.numeric import coerce_numeric
 
 from .pipeline_prep import classify_forecast_gaps, diagnostics_by_severity
+from trakt_core import perf as _perf
 
 # Deterministic watchlist thresholds (documented heuristics, not probabilities).
 CONCENTRATION_SHARE = 0.40   # top broker / region share of pipeline amount
@@ -344,6 +345,7 @@ def portfolio_projections(
     }
 
 
+@_perf.stage_fn("forecast_bridge")
 def compute_forecast_bridge(
     *,
     client_id: str,

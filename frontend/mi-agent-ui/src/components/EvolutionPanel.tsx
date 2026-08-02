@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bar, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
@@ -100,8 +100,13 @@ export function pipelineXValue(
   return p.week ?? p.extract_date ?? p.period;
 }
 
-/** A single labelled line chart over periods, with a source/coverage footer. */
-function EvoLineChart({
+/** A single labelled line chart over periods, with a source/coverage footer.
+ *
+ * `memo`'d: Recharts re-measures and re-renders the whole SVG on every parent
+ * render, and the evolution views render several of these at once. With stable
+ * props (the series are `useMemo`'d by the caller) a parent re-render caused by
+ * an unrelated toggle no longer redraws every chart. */
+const EvoLineChart = memo(function EvoLineChart({
   title, data, lines, valueFormat = "gbp", source, asOf,
 }: {
   title: string;
@@ -148,7 +153,7 @@ function EvoLineChart({
       </div>
     </div>
   );
-}
+});
 
 export type StageMetric = "value" | "count";
 export type StageViewMode = "amount" | "count" | "conversion";
@@ -170,11 +175,23 @@ export function pivotStage(rows: StagePoint[], metric: StageMetric = "value"): {
   const stages = orderStages(Array.from(new Set(rows.map((r) => r.stage))));
   const pick = (r: StagePoint) =>
     metric === "count" ? (r.count ?? 0) : (typeof r.value === "number" ? r.value : 0);
+  // Single pass. This previously re-scanned the whole `rows` array once per
+  // (period, stage) cell, which is quadratic in the by-stage series and made
+  // the stage chart jank on every mode/KFI toggle and window resize. Output is
+  // unchanged: same periods, same stage order, same sums, same zero-fill.
+  const totals = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    let byStage = totals.get(r.period);
+    if (!byStage) {
+      byStage = new Map<string, number>();
+      totals.set(r.period, byStage);
+    }
+    byStage.set(r.stage, (byStage.get(r.stage) ?? 0) + pick(r));
+  }
   const data = periods.map((p) => {
     const row: Record<string, number | string> = { period: p };
-    for (const s of stages) {
-      row[s] = rows.filter((r) => r.period === p && r.stage === s).reduce((a, r) => a + pick(r), 0);
-    }
+    const byStage = totals.get(p);
+    for (const s of stages) row[s] = byStage?.get(s) ?? 0;
     return row;
   });
   return { data, stages };
@@ -300,14 +317,19 @@ function FunnelStageCard({
   /** Open this stage in the focus modal (compact card only). */
   onExpand?: () => void;
 }) {
-  // Join the weekly-flow bars with the stock level per week.
-  const data = flowPoints.map((f, i) => ({
-    week: f.week ?? "",
-    flow: f.flowValue,
-    stock: points[i]?.value ?? null,
-  }));
+  // Join the weekly-flow bars with the stock level per week. Memoised: this ran
+  // on every render (four of these cards are on screen at once), so toggling
+  // "show stock line" rebuilt every card's series, not just the ones affected.
+  const data = useMemo(
+    () => flowPoints.map((f, i) => ({
+      week: f.week ?? "",
+      flow: f.flowValue,
+      stock: points[i]?.value ?? null,
+    })),
+    [flowPoints, points],
+  );
   const avgFlow = summary?.fiveWeekAvgFlowValue ?? null;
-  const hasFlow = data.some((d) => d.flow != null);
+  const hasFlow = useMemo(() => data.some((d) => d.flow != null), [data]);
   return (
     <div className={cn("rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4", large && "h-full")}
       data-testid={`funnel-stage-${stage}`}>
@@ -534,9 +556,13 @@ function CohortView({ client, portfolioId, portfolioContext }: {
   const scopeId = portfolioContext ?? "total";
 
   // Vintage cohorts feed the progression's vintage selector (always vintage).
+  // The dimension is passed EXPLICITLY rather than left undefined: the client
+  // cache keys `dimension ?? "vintage"`, but the server saw `dimension=None`
+  // and `dimension=vintage` as two different query strings, so a cold Cohorts
+  // view issued two requests for the same computation.
   useEffect(() => {
     let c = false;
-    Promise.resolve(client.getCohorts(portfolioId, grain, undefined, scopeId))
+    Promise.resolve(client.getCohorts(portfolioId, grain, "vintage", scopeId))
       .then((r) => { if (!c) setCohorts(r); }).catch(() => {});
     return () => { c = true; };
   }, [client, portfolioId, grain, scopeId]);

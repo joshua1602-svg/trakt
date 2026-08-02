@@ -199,15 +199,28 @@ class TestProbabilityGovernance(unittest.TestCase):
         self.assertLess(b["weightedExpectedFundedAmount"], b["pipelineAmount"])
 
     def test_endpoint_takes_no_probability_input(self):
-        # The forecast endpoint signature accepts only SCOPE identifiers — which
-        # portfolio, which run, which governed portfolio context. No completion
-        # probability, weighting or assumption can be injected by the caller;
-        # those come from the governed pipeline config alone.
+        # The forecast endpoint accepts only SCOPE identifiers from the CALLER —
+        # which portfolio, which run, which governed portfolio context. No
+        # completion probability, weighting or assumption can be injected; those
+        # come from the governed pipeline config alone.
+        #
+        # FastAPI-injected plumbing (Request / Response, used for conditional
+        # responses) is excluded BY TYPE rather than by name: the framework
+        # supplies those, a caller cannot. Any new caller-supplied parameter —
+        # which is what this test exists to catch — still fails the assertion.
         import inspect
+
+        from fastapi import Request, Response
+
         from mi_agent_api.app import forecast_snapshot
-        params = set(inspect.signature(forecast_snapshot).parameters)
-        self.assertEqual(params, {"portfolioId", "client_id", "runId", "run_id",
-                                  "portfolioContext"})
+        signature = inspect.signature(forecast_snapshot)
+        # ``app.py`` uses ``from __future__ import annotations``, so annotations
+        # arrive as strings; accept both forms rather than depending on that.
+        framework_injected = {Request, Response, "Request", "Response"}
+        caller_params = {name for name, p in signature.parameters.items()
+                         if p.annotation not in framework_injected}
+        self.assertEqual(caller_params, {"portfolioId", "client_id", "runId",
+                                         "run_id", "portfolioContext"})
 
 
 # --------------------------------------------------------------------------- #

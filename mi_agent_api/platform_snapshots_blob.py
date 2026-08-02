@@ -30,9 +30,12 @@ from __future__ import annotations
 
 import os
 import re
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
+
+from trakt_core import perf as _perf
 
 _PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
 #: A DATED platform canonical under a blob:// platform root. ``latest/`` is
@@ -42,7 +45,40 @@ _DATED_RE = re.compile(
 
 #: uri -> (etag, DataFrame). A dated canonical is immutable per etag, so this
 #: avoids re-downloading on every /mi/snapshots (or per-run /mi/snapshot) call.
-_READ_CACHE: Dict[str, Tuple[Optional[str], pd.DataFrame]] = {}
+#:
+#: BOUNDED (Phase 1A item 5). This was previously an unbounded dict of full
+#: DataFrames: every dated canonical ever read stayed resident for the life of
+#: the worker, so memory grew with each published cut. It is now an LRU sized to
+#: hold one full evolution pass (a year of monthly cuts); overriding the ceiling
+#: only changes the hit rate, never the answer, because a miss re-reads.
+_READ_CACHE_MAX = max(1, int(os.environ.get("MI_AGENT_CANONICAL_CACHE_MAX", "12")))
+_READ_CACHE: "OrderedDict[str, Tuple[Optional[str], pd.DataFrame]]" = OrderedDict()
+
+#: (uri, etag, scope) -> (prepared_df, prep_report). Funded preparation over a
+#: full canonical is the expensive half of every evolution / risk /
+#: concentration request, and the evolution loader re-ran it for EVERY period on
+#: EVERY request (the raw frame above was cached, the prepared one was not).
+#:
+#: The scope is part of the key because preparation is data-dependent: the
+#: percent-vs-fraction LTV heuristic in ``funded_prep._to_ratio`` reads the
+#: median of the rows present, so preparing a scoped frame is not equivalent to
+#: scoping a prepared one. The existing scope-then-prepare order is preserved
+#: exactly; only the result is reused.
+_PREPARED_CACHE_MAX = max(1, int(os.environ.get("MI_AGENT_PREPARED_CACHE_MAX", "24")))
+_PREPARED_CACHE: "OrderedDict[str, Tuple[pd.DataFrame, Any]]" = OrderedDict()
+
+
+def _lru_put(cache: "OrderedDict", key: str, value: Any, limit: int) -> None:
+    cache[key] = value
+    cache.move_to_end(key)
+    while len(cache) > limit:
+        cache.popitem(last=False)
+
+
+def reset_caches() -> None:
+    """Drop both memos (tests, and the existing manual refresh path)."""
+    _READ_CACHE.clear()
+    _PREPARED_CACHE.clear()
 
 
 def is_blob_root(root: Optional[str]) -> bool:
@@ -77,7 +113,10 @@ def _read(uri: str, storage) -> Optional[pd.DataFrame]:
         et = storage.etag(uri)
         cached = _READ_CACHE.get(uri)
         if cached is not None and cached[0] == et:
+            _READ_CACHE.move_to_end(uri)
+            _perf.cache_event("canonical_raw", _perf.CACHE_HIT)
             return cached[1]
+        _perf.cache_event("canonical_raw", _perf.CACHE_MISS)
         from pathlib import Path as _Path
         local = storage._local_path(uri)
         if _Path(str(local)).exists():
@@ -89,8 +128,9 @@ def _read(uri: str, storage) -> Optional[pd.DataFrame]:
             dest = _Path(scratch) / "platform_runs" / "_".join(tail)
             dest.parent.mkdir(parents=True, exist_ok=True)
             path = str(storage.download_file(uri, dest))
-        df = pd.read_csv(path, low_memory=False)
-        _READ_CACHE[uri] = (et, df)
+        with _perf.counted("file.read.platform_canonical"):
+            df = pd.read_csv(path, low_memory=False)
+        _lru_put(_READ_CACHE, uri, (et, df), _READ_CACHE_MAX)
         return df
     except Exception:  # noqa: BLE001 - a bad canonical must not break discovery
         return None
@@ -171,19 +211,61 @@ def build_funded_evolution_frames(root: str, storage, scope: Optional[str],
     for d in list_dated_platform_canonicals(root, storage):
         if cut and d["date"] > cut:
             continue
-        raw = _read(d["uri"], storage)
-        if raw is None or raw.empty:
-            continue
-        scoped = _scope_frame(raw, scope)
-        if scoped is None or scoped.empty:
-            continue
-        try:
-            prepared, _rep = prepare_fn(scoped)
-        except Exception:  # noqa: BLE001 - a bad cut never breaks the series
+        prepared = _prepared_for(d["uri"], storage, scope, prepare_fn)
+        if prepared is None:
             continue
         frames.append({"run_id": d["date"], "reporting_date": d["date"],
                        "df": prepared, "source": d["uri"]})
     return frames
+
+
+def _prepared_for(uri: str, storage, scope: Optional[str], prepare_fn):
+    """The PREPARED funded frame for one dated canonical under ``scope``.
+
+    Memoised on ``(uri, etag, scope)``: the etag is the immutable identity of
+    the published bytes, so a re-published or corrected cut naturally misses and
+    is re-prepared. ``None`` when the cut is unreadable, empty, out of scope or
+    fails preparation — each of which is the SAME outcome as before, and none of
+    which is cached as a valid result.
+
+    The frame is handed out as a shallow copy so a consumer that assigns a
+    column (the concentration forward states do, on their own copies today)
+    cannot leak into the next request's series.
+    """
+    try:
+        et = storage.etag(uri)
+    except Exception:  # noqa: BLE001 - an unidentifiable cut is simply not cached
+        et = None
+    key = f"{uri}|{et}|{scope or 'total'}" if et is not None else None
+
+    if key is not None:
+        hit = _PREPARED_CACHE.get(key)
+        if hit is not None:
+            _PREPARED_CACHE.move_to_end(key)
+            _perf.cache_event("canonical_prepared", _perf.CACHE_HIT)
+            return hit[0].copy(deep=False)
+        _perf.cache_event("canonical_prepared", _perf.CACHE_MISS)
+    else:
+        _perf.cache_event("canonical_prepared", _perf.CACHE_BYPASS)
+
+    raw = _read(uri, storage)
+    if raw is None or raw.empty:
+        return None
+    # Scope BEFORE preparing, exactly as before: preparation reads the median of
+    # the rows present to decide whether LTV is a percentage or a fraction, so
+    # reordering these two steps could change a published figure.
+    scoped = _scope_frame(raw, scope)
+    if scoped is None or scoped.empty:
+        return None
+    try:
+        prepared, _rep = prepare_fn(scoped)
+    except Exception:  # noqa: BLE001 - a bad cut never breaks the series
+        return None
+    if key is not None:
+        _lru_put(_PREPARED_CACHE, key, (prepared, _rep), _PREPARED_CACHE_MAX)
+        _perf.cache_event("canonical_prepared", _perf.CACHE_STORE)
+        return prepared.copy(deep=False)
+    return prepared
 
 
 def canonical_etag(root: str, storage, run_id: str) -> Optional[str]:

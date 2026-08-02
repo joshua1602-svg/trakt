@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import yaml
@@ -33,6 +33,7 @@ from mi_agent.risk_monitor import risk_limits_contract as contract
 
 from . import snapshots as snap
 from . import currency as currency_mod
+from trakt_core import perf as _perf
 
 _BALANCE = "current_outstanding_balance"
 _REGION = "geographic_region_obligor"
@@ -518,12 +519,23 @@ def _observations(tests: List[Dict[str, Any]], summary: Dict[str, Any]) -> List[
 # --------------------------------------------------------------------------- #
 def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
                         *, search_roots: Optional[List[str]] = None,
-                        scope=None) -> Dict[str, Any]:
+                        scope=None,
+                        prepared_funded: Optional[Tuple[Any, Any, Optional[str]]] = None
+                        ) -> Dict[str, Any]:
     """Full risk-limit monitor envelope for a client/run.
 
     ``scope`` is the governed portfolio context: concentration is measured
     against the SAME rows the workspace is showing, so a limit test can never be
-    run over a wider book than the one selected."""
+    run over a wider book than the one selected.
+
+    ``prepared_funded`` is an optional ``(df, prior_df, reporting_date)`` that a
+    caller has ALREADY resolved through the identical governed resolution below
+    — same discovery, same loaders, same scope narrowing — for the same
+    ``(client_id, to_run_id, scope)``. It exists purely so the concentration
+    envelope's legacy fallback does not resolve and re-prepare the whole funded
+    series a second time within one request. It is passed by value down a single
+    call; nothing is cached, shared between requests or reachable from another
+    tenant. When it is omitted the resolution below runs exactly as before."""
     # Resolve funded df for the run (and the prior run for movement), reusing the
     # governed snapshot loaders. Never 500s — returns observed concentrations even
     # when limits are unavailable.
@@ -551,6 +563,18 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
     extracted = load_extracted_limits(client_id, search_roots=search_roots,
                                       run_config_path=run_cfg_path)
     limits_source = extracted.get("limits_source", "Schedule 8 extracted")
+
+    if prepared_funded is not None:
+        # Already resolved by the caller through this exact sequence, for this
+        # exact (client_id, to_run_id, scope). Adopt it verbatim — including the
+        # scope narrowing, which the caller has already applied — and skip
+        # straight to the limit tests.
+        df, prior_df, reporting_date = prepared_funded
+        _perf.count("funded_prep.reused", 1)
+        return _risk_limit_envelope(df, prior_df, reporting_date, extracted,
+                                    limits_source, client_id, to_run_id, runs,
+                                    run_cfg_path)
+
     if runs:
         tape = snap.resolve_tape_path(output_root, client_id, runs[-1]["run_id"])
         if tape is not None:
@@ -595,6 +619,20 @@ def compute_risk_limits(output_root, client_id: str, to_run_id: Optional[str],
         df = apply_scope(df, scope)
         prior_df = apply_scope(prior_df, scope)
 
+    return _risk_limit_envelope(df, prior_df, reporting_date, extracted,
+                                limits_source, client_id, to_run_id, runs,
+                                run_cfg_path)
+
+
+def _risk_limit_envelope(df, prior_df, reporting_date: Optional[str],
+                         extracted: Dict[str, Any], limits_source: str,
+                         client_id: str, to_run_id: Optional[str],
+                         runs: List[Dict[str, Any]], run_cfg_path
+                         ) -> Dict[str, Any]:
+    """Evaluate the limits against already-resolved frames and shape the reply.
+
+    Split out verbatim from ``compute_risk_limits`` so the resolved path and the
+    caller-supplied path cannot drift into two different envelopes."""
     limits = extracted.get("limits", [])
     if df is None:
         # No funded data: still surface the limits with unavailable actuals.

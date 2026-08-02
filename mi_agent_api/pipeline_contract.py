@@ -20,6 +20,7 @@ Pipeline records stay SEPARATE from the funded central lender tape.
 
 from __future__ import annotations
 
+import copy
 import os
 import re
 from pathlib import Path
@@ -28,7 +29,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+from trakt_core import perf as _perf
 
+from . import serving_cache as _serving_cache
 from .mi_dataset_contract import build_dataset_contract
 from .pipeline_prep import (
     field_correlation_to_funded,
@@ -73,12 +76,13 @@ _NON_CLIENT_PARTS = {"output", "outputs", "runs", "onboarding", "central",
 #                                 from the FOLDER month (e.g. ``mi_2025_11``).
 # --------------------------------------------------------------------------- #
 def _read_source(path: Path) -> Optional[pd.DataFrame]:
-    try:
-        if path.suffix.lower() in (".xlsx", ".xls"):
-            return pd.read_excel(path)
-        return pd.read_csv(path, low_memory=False)
-    except Exception:  # noqa: BLE001 - a bad file must not break discovery
-        return None
+    with _perf.counted("file.read.pipeline_source"):
+        try:
+            if path.suffix.lower() in (".xlsx", ".xls"):
+                return pd.read_excel(path)
+            return pd.read_csv(path, low_memory=False)
+        except Exception:  # noqa: BLE001 - a bad file must not break discovery
+            return None
 
 
 def _date_in(text: str) -> Optional[str]:
@@ -142,6 +146,22 @@ def _infer_client(path: Path, root: Path) -> Optional[str]:
     return None
 
 
+def _file_set_identity(files: List[Path]) -> Optional[List[Any]]:
+    """Immutable identity of a discovered file set (path + ``mtime_ns:size``).
+
+    Discovery is a pure function of the files it finds, so this is a complete
+    identity for its result. Any file that cannot be stat'd collapses it to
+    ``None`` and the caller does not cache.
+    """
+    identity: List[Any] = []
+    for path in files:
+        marker = _serving_cache.file_identity(path)
+        if marker is None:
+            return None
+        identity.append((str(path), marker))
+    return identity
+
+
 def discover_pipeline_sources(root: str | os.PathLike,
                               client_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Discover governed weekly pipeline sources under ``root``, grouped by scope.
@@ -157,6 +177,13 @@ def discover_pipeline_sources(root: str | os.PathLike,
          weekly_files}
 
     Ordered oldest -> newest by folder/as-of date.
+
+    Memoised on the immutable identity of the discovered file set. Discovery
+    opens EVERY scope's latest file to record its row count, and each dated
+    weekly folder is its own scope — so on a root holding N weekly extracts this
+    performed N full CSV reads. It is called by the portfolio-context, geo,
+    cohort and pipeline routes, which paid that on every request. A new,
+    replaced or removed extract changes the identity and is rediscovered.
     """
     root = Path(root)
     if not root.exists():
@@ -170,6 +197,21 @@ def discover_pipeline_sources(root: str | os.PathLike,
     if not files:
         files = _collect_files(root, _FALLBACK_PIPELINE_GLOBS)
 
+    key = _serving_cache.key_for(
+        tenant=_serving_cache.resolved_tenant(),
+        scope=f"client={client_id or '-'}",
+        identity=[str(root), *(_file_set_identity(files) or [None])])
+    cached = _DISCOVERY_CACHE.get_or_build(
+        key, lambda: _discover_pipeline_sources_uncached(files, root, client_id))
+    # Deep-copied: callers annotate the returned scope dicts (weekly_files,
+    # run ids), so a shared list could be mutated by a later request.
+    return copy.deepcopy(cached) if key is not None else cached
+
+
+def _discover_pipeline_sources_uncached(files: List[Path], root: Path,
+                                        client_id: Optional[str]
+                                        ) -> List[Dict[str, Any]]:
+    """The discovery body. Unchanged behaviour; see the caller for caching."""
     # Group weekly files by (client, source folder) scope.
     scopes: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for path in files:
@@ -367,6 +409,7 @@ def weekly_extract_inventory(root: str | os.PathLike,
     }
 
 
+@_perf.stage_fn("pipeline_prep")
 def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
                            as_of_date: Optional[str] = None,
                            historical_model: Optional[Dict[str, Any]] = None
@@ -382,12 +425,42 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
         as_of_date = as_of_date or source.get("pipeline_as_of_date")
         source = source.get("source_file", "")
     p = Path(source)
-    raw = _read_source(p)
-    if raw is None:
-        raise FileNotFoundError(f"cannot read pipeline source {p}")
     rd = as_of_date or _extract_date(p)
-    return prepare_pipeline_mi_dataset(raw, as_of_date=rd, source_file=p.name,
-                                       historical_model=historical_model)
+
+    # Memoised on the immutable identity of the source file plus every input
+    # that changes the OUTPUT: the as-of date and the historical model whose
+    # stage rates weight the prepared frame. A re-published extract changes
+    # ``mtime_ns:size``; a different model changes its fingerprint; either way
+    # the key changes and the frame is rebuilt.
+    # ``rd`` and the model fingerprint are LABELLED rather than bare, because a
+    # ``None`` as-of date is a deterministic property of this source (a mirrored
+    # snapshot carries its date in the folder, not the filename) — not an
+    # unidentifiable source. Only the path and its content marker may null the
+    # key, which is what keeps "cannot identify the bytes" uncacheable.
+    key = _serving_cache.key_for(
+        tenant=_serving_cache.resolved_tenant(),
+        scope=f"source={p.name}",
+        identity=[str(p), _serving_cache.file_identity(p),
+                  ("as_of", rd),
+                  ("model", _serving_cache.model_fingerprint(historical_model))])
+
+    def _build() -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        raw = _read_source(p)
+        if raw is None:
+            # NOT cached: a failed read must never be stored as a valid result.
+            raise FileNotFoundError(f"cannot read pipeline source {p}")
+        return prepare_pipeline_mi_dataset(raw, as_of_date=rd, source_file=p.name,
+                                           historical_model=historical_model)
+
+    df, report = _PIPELINE_PREP_CACHE.get_or_build(key, _build)
+    if key is None:
+        return df, report
+    # Hand each caller its own frame object and its own report. The audited
+    # consumers already copy before mutating (concentration forward states,
+    # the forecast view frame), but a shared cache entry must not depend on
+    # every future consumer remembering to: a new column added by one request
+    # would otherwise appear in the next.
+    return df.copy(deep=False), copy.deepcopy(report)
 
 
 def collect_weekly_history(root: str | os.PathLike,
@@ -399,20 +472,72 @@ def collect_weekly_history(root: str | os.PathLike,
     return weekly_extract_inventory(root, client_id)["extracts"]
 
 
+#: Prepared-pipeline and historical-model memos. Sized for the deployment's
+#: shape: one client per deployment, a handful of governed scopes, and a
+#: rolling window of weekly extracts. See mi_agent_api/serving_cache.py.
+_HISTORY_CACHE = _serving_cache.BoundedCache("history_model", max_entries=16)
+_PIPELINE_PREP_CACHE = _serving_cache.BoundedCache("pipeline_prep", max_entries=64)
+#: Governed pipeline SOURCE DISCOVERY (see discover_pipeline_sources).
+_DISCOVERY_CACHE = _serving_cache.BoundedCache("pipeline_discovery", max_entries=16)
+
+
+def _extract_set_identity(extracts: List[Dict[str, Any]]) -> Optional[List[Any]]:
+    """Immutable identity of an ORDERED weekly-extract set.
+
+    Every contributing file contributes its path, its extract date and its
+    content marker (``mtime_ns:size``). Adding, replacing, re-publishing or
+    reordering an extract therefore changes the identity — which is what makes
+    corrected and backdated uploads safe to cache against. A file that cannot be
+    stat'd collapses the identity to ``None`` (the caller then does not cache).
+    """
+    identity: List[Any] = []
+    for entry in extracts or []:
+        source = entry.get("source_file")
+        if not source:
+            return None
+        marker = _serving_cache.file_identity(source)
+        if marker is None:
+            return None
+        identity.append((str(source), entry.get("pipeline_extract_date"), marker))
+    return identity
+
+
 def build_pipeline_history(root: str | os.PathLike,
                            client_id: str) -> Dict[str, Any]:
     """Build the historical completion model from a client's UNIQUE weekly pipeline
-    extracts, annotated with the dedup provenance (scanned vs used vs excluded)."""
+    extracts, annotated with the dedup provenance (scanned vs used vs excluded).
+
+    Memoised on the immutable identity of the ordered extract set (path + date +
+    ``mtime_ns:size`` per file) plus the tenant and the methodology version. The
+    build replays every retained weekly extract case-by-case, so this is the
+    single most expensive repeated calculation in the serving path; a miss still
+    performs exactly the calculation below.
+    """
     from .pipeline_history import build_historical_completion_model
     inv = weekly_extract_inventory(root, client_id)
-    model = build_historical_completion_model(inv["extracts"])
-    # Provenance: how many files were scanned vs how many unique extracts were used.
-    model["sourceFilesScanned"] = inv["sourceFilesScanned"]
-    model["uniqueWeeklyExtractsUsed"] = inv["uniqueWeeklyExtractsUsed"]
-    model["duplicatesExcluded"] = inv["duplicatesExcluded"]
-    model["primarySourcePreference"] = inv["primarySourcePreference"]
-    model["sourceFoldersIncluded"] = inv["sourceFoldersIncluded"]
-    return model
+    key = _serving_cache.key_for(
+        tenant=_serving_cache.resolved_tenant(),
+        # The client is the scope component here: a model is per-client, and a
+        # model built for one client may never answer for another.
+        scope=f"client={client_id}",
+        identity=[str(root), *(_extract_set_identity(inv["extracts"]) or [None])])
+
+    def _build() -> Dict[str, Any]:
+        model = build_historical_completion_model(inv["extracts"])
+        # Provenance: how many files were scanned vs how many unique extracts
+        # were used.
+        model["sourceFilesScanned"] = inv["sourceFilesScanned"]
+        model["uniqueWeeklyExtractsUsed"] = inv["uniqueWeeklyExtractsUsed"]
+        model["duplicatesExcluded"] = inv["duplicatesExcluded"]
+        model["primarySourcePreference"] = inv["primarySourcePreference"]
+        model["sourceFoldersIncluded"] = inv["sourceFoldersIncluded"]
+        return model
+
+    model = _HISTORY_CACHE.get_or_build(key, _build)
+    # Returned as a defensive copy: the model is a plain dict and callers have
+    # always been free to annotate it (see forecast/concentration metadata), so
+    # a shared instance could be contaminated by a later request.
+    return copy.deepcopy(model) if key is not None else model
 
 
 def resolve_pipeline_source(root: str | os.PathLike, client_id: str,

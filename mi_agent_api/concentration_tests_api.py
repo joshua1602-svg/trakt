@@ -40,6 +40,7 @@ from mi_agent.concentration_tests.models import (
 from mi_agent.concentration_tests.store import ConcentrationStore
 
 from . import snapshots as snap
+from trakt_core import perf as _perf
 
 logger = logging.getLogger("mi_agent_api.concentration_tests")
 
@@ -295,6 +296,7 @@ def _adapt_legacy(legacy: Dict[str, Any]) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Entry points
 # --------------------------------------------------------------------------- #
+@_perf.stage_fn("concentration_evaluate")
 def compute_concentration_tests(output_root, client_id: str,
                                 to_run_id: Optional[str], *,
                                 scope=None) -> Dict[str, Any]:
@@ -363,8 +365,14 @@ def compute_concentration_tests(output_root, client_id: str,
     # Legacy fallback — the existing extracted monitor, explicitly unapproved.
     from . import risk_limits as risk_mod
     try:
-        legacy = risk_mod.compute_risk_limits(output_root, client_id,
-                                              to_run_id, scope=scope)
+        # ``_resolve_frames`` above already ran the identical governed
+        # resolution — same discovery, same loaders, same scope narrowing — for
+        # this same (client_id, to_run_id, scope). Hand those frames straight to
+        # the legacy monitor instead of letting it resolve and re-prepare the
+        # whole funded series a second time inside one request.
+        legacy = risk_mod.compute_risk_limits(
+            output_root, client_id, to_run_id, scope=scope,
+            prepared_funded=(df, prior_df, reporting_date))
     except Exception as exc:  # noqa: BLE001 - never 500
         logger.warning("legacy risk-limits fallback failed: %s", exc)
         legacy = {"tests": [], "available": False, "limitsSource": "error",
@@ -479,6 +487,7 @@ def compute_pipeline_drivers(output_root, client_id: str,
     return out
 
 
+@_perf.stage_fn("concentration_history")
 def compute_history(output_root, client_id: str, to_run_id: Optional[str],
                     *, scope=None, test_id: Optional[str] = None,
                     max_periods: int = 24) -> Dict[str, Any]:
