@@ -314,9 +314,6 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
         # Track, then the filled current bar.
         ax.barh(i, top, height=0.52, color=theme.bg_panel_alt, edgecolor="none")
         ax.barh(i, min(util, top), height=0.52, color=colour, edgecolor="none")
-        ax.text(-0.02 * top, i, str(t.get("label", ""))[:38], ha="right",
-                va="center", color=theme.ink_300, fontsize=9,
-                transform=ax.get_yaxis_transform(which="grid"))
         ax.text(min(util, top) + 0.012 * top, i, f"{util:.0f}%", ha="left",
                 va="center", color=theme.ink_100, fontsize=9,
                 fontproperties=_MONO_FP)
@@ -334,7 +331,10 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
     ax.axvline(100, color=theme.ink_400, linewidth=1.1, linestyle="--", alpha=0.9)
     ax.text(100, -0.62, "limit", ha="center", va="bottom", color=theme.ink_400,
             fontsize=8.5)
-    ax.set_yticks([])
+    # Test names as tick labels — a bar an investor cannot name is not evidence.
+    ax.set_yticks(list(range(len(tests))))
+    ax.set_yticklabels([_truncate(str(t.get("label", "")), 30) for t in tests])
+    ax.tick_params(axis="y", colors=theme.ink_300, labelsize=9, length=0, pad=6)
     ax.tick_params(axis="x", colors=theme.ink_500, labelsize=8.5, length=0)
     ax.set_xticks([0, 50, 100] + ([150] if top > 150 else []))
     ax.set_xticklabels([f"{v}%" for v in ([0, 50, 100] + ([150] if top > 150 else []))])

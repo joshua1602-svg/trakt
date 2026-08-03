@@ -1182,22 +1182,53 @@ class DeckBuilder:
         self._place(s, path, il, it, iw, ih)
 
         # -- the numbers behind the bars -------------------------------------
-        cols = ["Test", "Current", "Limit", "Headroom"] + (["Expected"] if forward else [])
-        trows = []
-        for r in top:
-            row = [r["label"][:26],
-                   C.format_measure(r["value"], r["unit"]),
-                   C.format_measure(r["limit"], r["unit"]),
-                   (f"{r['headroom']:.1f}" if r["headroom"] is not None else "—")]
+        # Rendered as NATIVE PowerPoint text, not a chart image: a covenant table
+        # is the page an investor reads closely, copies figures out of and zooms
+        # into, and an image is none of those things.
+        self._panel(s, Inches(7.28), Inches(2.66), Inches(5.52), Inches(3.62),
+                    fill=self.theme.bg_panel, line=self.theme.line)
+        self._text(s, Inches(7.5), Inches(2.82), Inches(5.1), Inches(0.34),
+                   "Current position against limit", size=12.5, bold=True)
+        cols = [("Test", 0.0, PP_ALIGN.LEFT), ("Current", 2.55, PP_ALIGN.RIGHT),
+                ("Limit", 3.55, PP_ALIGN.RIGHT), ("Headroom", 4.6, PP_ALIGN.RIGHT)]
+        if forward:
+            cols = [("Test", 0.0, PP_ALIGN.LEFT), ("Current", 2.15, PP_ALIGN.RIGHT),
+                    ("Limit", 3.05, PP_ALIGN.RIGHT), ("Headroom", 3.95, PP_ALIGN.RIGHT),
+                    ("Expected", 5.05, PP_ALIGN.RIGHT)]
+        head_y = Inches(3.3)
+        for label, dx, align in cols:
+            self._text(s, Inches(7.5 + dx), head_y, Inches(1.0 if dx else 2.4),
+                       Inches(0.26), label, size=8.5, color=self.theme.ink_400,
+                       bold=True, align=align)
+        row_h = 0.56
+        for i, r in enumerate(top):
+            y = Inches(3.62 + i * row_h)
+            status_colour = self.theme.rag.get(
+                {"breach": "red", "warning": "amber"}.get(r["status"], "green"),
+                self.theme.ink_300)
+            cells = [
+                (r["label"][:30], 0.0, PP_ALIGN.LEFT, self.theme.ink_100, 2.4),
+                (C.format_measure(r["value"], r["unit"]),
+                 cols[1][1], PP_ALIGN.RIGHT, status_colour, 1.0),
+                (C.format_measure(r["limit"], r["unit"]),
+                 cols[2][1], PP_ALIGN.RIGHT, self.theme.ink_300, 1.0),
+                (f"{r['headroom']:.1f}" if r["headroom"] is not None else "—",
+                 cols[3][1], PP_ALIGN.RIGHT, self.theme.ink_300, 1.0),
+            ]
             if forward:
-                row.append(C.format_measure(r["expected_value"], r["unit"])
-                           if r["expected_value"] is not None else "—")
-            trows.append(row)
-        il, it, iw, ih = self._card(s, Inches(7.28), Inches(2.66), Inches(5.52),
-                                    Inches(3.62), "Current position against limit")
-        tpath = self.work / "conc_table.png"
-        R.draw_table(tpath, cols, trows, iw, ih, theme=self.theme)
-        self._place(s, tpath, il, it, iw, ih)
+                cells.append((C.format_measure(r["expected_value"], r["unit"])
+                              if r["expected_value"] is not None else "—",
+                              cols[4][1], PP_ALIGN.RIGHT, self.theme.peri, 1.0))
+            for value, dx, align, colour, w in cells:
+                self._text(s, Inches(7.5 + dx), y, Inches(w), Inches(0.3),
+                           str(value), size=10, color=colour, align=align,
+                           bold=(align == PP_ALIGN.RIGHT and colour is status_colour))
+            self._text(s, Inches(7.5), Emu(int(y) + int(Inches(0.28))),
+                       Inches(5.1), Inches(0.22),
+                       f"{r['status'].upper()}"
+                       + (f" · breaches {r['breach_horizon']}" if r.get("breach_horizon")
+                          else ""),
+                       size=7.5, color=status_colour)
 
         # -- deterministic takeaway + source disclosure -----------------------
         takeaway = self._concentration_takeaway(summary, top, forward)
