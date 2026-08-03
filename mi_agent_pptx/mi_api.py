@@ -685,9 +685,17 @@ def build_dashboard_data(
                                          lambda: _forecast_evo(out_root, prow, cid, rid, history))
 
         # -- RISK limits / FORECAST extrapolation (multi-run) ------------
-        data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
+        # Concentration first: when no operator-approved configuration exists it
+        # falls back to the extracted limit monitor INTERNALLY and returns it in
+        # the same envelope. Calling risk_limits again here would run the
+        # identical governed computation a second time for the same scope and
+        # date, so it is only resolved when concentration produced nothing.
         data.concentration = _guard(data, "concentration",
                                     lambda: _concentration(out_root, cid, rid, scope))
+        # Only when the concentration service itself could not run — it consults
+        # the extracted monitor internally, so any other path would repeat it.
+        if not data.concentration:
+            data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
         data.extrapolation = _guard(data, "extrapolation",
                                     lambda: _extrapolation(out_root, prow, cid, rid, history))
 
