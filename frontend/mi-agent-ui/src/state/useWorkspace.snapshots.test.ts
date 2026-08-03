@@ -55,6 +55,7 @@ function makeClient(): AgentClient {
     getConcentrationDrivers: any,
     getForecastExtrapolation: any,
     getCohortProgression: any,
+    getCohortVintages: () => Promise.resolve({ dataset: "cohort_formation", portfolioId: "p", cohortBasis: "origination_date", grain: "M", available: true, vintages: [] }) as never,
     getMe: any,
     getDecks: any,
     deckDownloadUrl: () => null,

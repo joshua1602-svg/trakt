@@ -1,3 +1,25 @@
+# Analytics field aliases: source header -> canonical field.
+#
+# OPTIONAL `source_unit` (percentage-valued fields only)
+# ------------------------------------------------------
+# A canonical field carrying `unit: percentage_points` in fields_registry.yaml
+# may declare the unit its SOURCE arrives in:
+#
+#   current_loan_to_value:
+#     source_unit: fraction        # or: percentage_points
+#     aliases: [...]
+#
+# When declared it is authoritative and the Transform Agent normalises by it.
+# When absent the transform reconciles the supplied value against the value
+# derived from balance and valuation, and adopts the scale that agrees. It
+# never decides from magnitude alone, and it never silently overwrites a
+# supplied value that reconciles.
+#
+# These entries are deliberately left undeclared: the aliases below carry mixed
+# evidence ("LTV %" implies points, bare "LTV" implies nothing), and a header
+# name is not a guarantee about the data beneath it. Declare `source_unit` when
+# a specific tape is known, rather than guessing here for every client.
+
 asset_type:
   aliases:
   - asset type

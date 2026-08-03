@@ -60,38 +60,6 @@ def _resolve_default_regime(config: dict) -> str | None:
     return config.get("default_regime") or config.get("regime")
 
 
-def _backfill_ltv(df: pd.DataFrame,
-                  bal_col: str,
-                  val_col: str,
-                  ltv_col: str) -> pd.DataFrame:
-    """
-    Fill LTV% where missing using: LTV = balance / valuation * 100.
-
-    - No effect if balance/valuation columns are missing.
-    - Creates the LTV column if it doesn't exist.
-    - Only computes where valuation > 0 and both inputs are present.
-    """
-    if bal_col not in df.columns or val_col not in df.columns:
-        return df
-
-    # Ensure target LTV column exists
-    if ltv_col not in df.columns:
-        df[ltv_col] = np.nan
-
-    mask = df[ltv_col].isna() & df[bal_col].notna() & df[val_col].notna()
-    if not mask.any():
-        return df
-
-    bal = pd.to_numeric(df.loc[mask, bal_col], errors="coerce")
-    val = pd.to_numeric(df.loc[mask, val_col], errors="coerce")
-
-    valid = val > 0
-    if not valid.any():
-        return df
-
-    idx = df.loc[mask].index[valid]
-    df.loc[idx, ltv_col] = (bal[valid] / val[valid]) * 100.0
-    return df
 
 def _dat101_test(df: pd.DataFrame) -> pd.Series:
     required = ["account_status", "maturity_date", "reporting_date"]
@@ -369,6 +337,38 @@ RULES = [
             index=df.index,
         ),
         "fail_message": lambda row, col: "current_loan_to_value not consistent with balance and valuation (outside 1% tolerance).",
+    },
+    # LTV003/LTV004 mirror LTV001/LTV002 for the ORIGINAL LTV, which had no rule
+    # of any kind. That gap is why a source-supplied fraction survived all the
+    # way to the Annex output: RREC12 shipped in percentage points beside RREC16
+    # as a 0-1 fraction, in the same record, and nothing objected.
+    {
+        "rule_id": "LTV003",
+        "regimes": ["ESMA_Annex2", "ESMA_Annex3"],
+        "severity": "error",
+        "description": "Original LTV > 0 and ≤ 500%.",
+        "required_columns": ["original_loan_to_value"],
+        "test": lambda df: (df["original_loan_to_value"] > 0) & (df["original_loan_to_value"] <= 500),
+        "fail_message": lambda row, col: f"Original LTV {row.get('original_loan_to_value')} out of bounds (0–500%).",
+    },
+    {
+        "rule_id": "LTV004",
+        "regimes": ["all"],
+        "severity": "warning",
+        "description": "Reported original LTV ≈ (original balance / original valuation) * 100 (within 1% tolerance).",
+        "required_columns": ["original_loan_to_value", "original_principal_balance",
+                             "original_valuation_amount"],
+        "test": lambda df: pd.Series(
+            np.isclose(
+                df["original_principal_balance"] / df["original_valuation_amount"] * 100,
+                df["original_loan_to_value"],
+                atol=1.0,
+                rtol=0.01,
+                equal_nan=True,
+            ),
+            index=df.index,
+        ),
+        "fail_message": lambda row, col: "original_loan_to_value not consistent with balance and valuation (outside 1% tolerance).",
     },
 
     {
@@ -841,9 +841,13 @@ def main():
     # Read typed canonical – let pandas infer dtypes (we rely on canonical_transform for most typing)
     df = pd.read_csv(in_path, low_memory=False)
     
-    df = _backfill_ltv(df, "current_principal_balance", 
-                   "current_valuation_amount", "current_loan_to_value")
-    
+    # LTV is resolved in Gate 2 (canonical_transform._resolve_ltv), which
+    # normalises a declared source unit, reconciles an undeclared one against
+    # balance and valuation, and derives what is missing — including from an
+    # outstanding balance where no principal balance exists, which this backfill
+    # could not do. A validator that repairs its own input cannot then report on
+    # it, so the repair has been removed rather than duplicated here.
+
     # --- Column normalisation for alignment with frozen canonical ---
     # Business rules were originally authored against legacy column names in some places.
     # To avoid brittle skip behaviour, we alias the frozen canonical names to the legacy names where needed.

@@ -115,3 +115,82 @@ export function mockCohortProgression(
     lineage: { note: "Static-pool seasoning across reporting periods (synthetic)." },
   };
 }
+
+/**
+ * Vintage formation and static pools, on the shape the brief describes:
+ * 33 loans originated in October, 40 in November, 10 in December, with
+ * genuine redemptions out of the October pool.
+ *
+ * The point of the fixture is that the two views disagree — portfolio
+ * evolution counts the book (33 → 73 → 83) while formation counts arrivals
+ * (33, 40, 10) — so a mock that returned cumulative totals would hide exactly
+ * the defect this surface exists to fix.
+ */
+const MOCK_VINTAGES = [
+  { vintage: "2025-10", originalLoanCount: 33, originalBalance: 3_300_000,
+    firstSeen: "2025-10-31", waOriginalLtv: 0.417, waEntryLtv: 0.417, waRate: 0.0605 },
+  { vintage: "2025-11", originalLoanCount: 40, originalBalance: 4_800_000,
+    firstSeen: "2025-11-30", waOriginalLtv: 0.370, waEntryLtv: 0.370, waRate: 0.0612 },
+  { vintage: "2025-12", originalLoanCount: 10, originalBalance: 900_000,
+    firstSeen: "2025-12-31", waOriginalLtv: 0.402, waEntryLtv: 0.402, waRate: 0.0598 },
+];
+
+const MOCK_POOLS: Record<string, import("@/domain").StaticPoolPeriod[]> = {
+  "2025-10": [
+    { period: "2025-10", reportingDate: "2025-10-31", monthsSinceEntry: 0,
+      survivingLoanCount: 33, currentBalance: 3_300_000, loanRetention: 1,
+      balanceRetention: 1, exitsInPeriod: 0, cumulativeExits: 0,
+      waLtv: 0.417, waRate: 0.0605 },
+    { period: "2025-11", reportingDate: "2025-11-30", monthsSinceEntry: 1,
+      survivingLoanCount: 31, currentBalance: 3_038_000, loanRetention: 0.9394,
+      balanceRetention: 0.9206, exitsInPeriod: 2, cumulativeExits: 2,
+      waLtv: 0.421, waRate: 0.0605 },
+    { period: "2025-12", reportingDate: "2025-12-31", monthsSinceEntry: 2,
+      survivingLoanCount: 28, currentBalance: 2_688_000, loanRetention: 0.8485,
+      balanceRetention: 0.8145, exitsInPeriod: 3, cumulativeExits: 5,
+      waLtv: 0.425, waRate: 0.0605 },
+  ],
+  "2025-11": [
+    { period: "2025-11", reportingDate: "2025-11-30", monthsSinceEntry: 0,
+      survivingLoanCount: 40, currentBalance: 4_800_000, loanRetention: 1,
+      balanceRetention: 1, exitsInPeriod: 0, cumulativeExits: 0,
+      waLtv: 0.370, waRate: 0.0612 },
+    { period: "2025-12", reportingDate: "2025-12-31", monthsSinceEntry: 1,
+      survivingLoanCount: 40, currentBalance: 4_720_000, loanRetention: 1,
+      balanceRetention: 0.9833, exitsInPeriod: 0, cumulativeExits: 0,
+      waLtv: 0.374, waRate: 0.0612 },
+  ],
+  "2025-12": [
+    { period: "2025-12", reportingDate: "2025-12-31", monthsSinceEntry: 0,
+      survivingLoanCount: 10, currentBalance: 900_000, loanRetention: 1,
+      balanceRetention: 1, exitsInPeriod: 0, cumulativeExits: 0,
+      waLtv: 0.402, waRate: 0.0598 },
+  ],
+};
+
+export function mockCohortVintages(
+  portfolioId: string,
+  query?: import("@/domain").CohortVintageQuery,
+): import("@/domain").CohortFormation | import("@/domain").CohortStaticPool {
+  const grain = query?.grain ?? "M";
+  if (query?.vintage) {
+    const periods = MOCK_POOLS[query.vintage] ?? [];
+    return {
+      dataset: "cohort_static_pool", portfolioId,
+      cohortBasis: "origination_date", vintage: query.vintage, grain,
+      available: periods.length > 0,
+      reason: periods.length ? null : `no loans were originated in ${query.vintage}`,
+      originalLoanCount: periods[0]?.survivingLoanCount ?? null,
+      originalBalance: periods[0]?.currentBalance ?? null,
+      periods, singlePeriod: periods.length <= 1,
+    };
+  }
+  return {
+    dataset: "cohort_formation", portfolioId,
+    cohortBasis: "origination_date", grain,
+    available: true, reason: null,
+    vintages: MOCK_VINTAGES,
+    totalLoanCount: MOCK_VINTAGES.reduce((a, v) => a + v.originalLoanCount, 0),
+    lateCorrections: [],
+  };
+}

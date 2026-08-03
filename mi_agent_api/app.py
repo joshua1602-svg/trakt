@@ -1249,6 +1249,51 @@ def cohort_progression(portfolioId: Optional[str] = None,
                 "metricsAvailable": []}
 
 
+@app.get("/mi/cohorts/vintages")
+def cohort_vintages(portfolioId: Optional[str] = None,
+                    client_id: Optional[str] = None,
+                    portfolioContext: Optional[str] = None,
+                    lens: Optional[str] = None,
+                    vintage: Optional[str] = None,
+                    grain: str = "M") -> Dict[str, Any]:
+    """Vintage FORMATION, and one vintage's static pool when ``vintage`` is given.
+
+    Formation answers "what entered the book in each origination period" — each
+    loan counted once, in its own vintage. That is deliberately NOT the book
+    outstanding at a reporting date, which /mi/evolution/funded already serves:
+    a book of 33 October and 40 November loans reads 33 and 40 here, and 33 then
+    73 there.
+
+    Never 500s; returns ``available=false`` with a reason when the funded tape
+    carries no origination date or no loan identifier — a static pool cannot be
+    built from rows that cannot be followed between periods.
+    """
+    cid = "client_001"
+    if portfolioId and "/" in portfolioId:
+        cid = portfolioId.split("/", 1)[0]
+    elif portfolioId:
+        cid = portfolioId
+    cid = client_id or cid
+    try:
+        resolved = _resolve_portfolio_context(portfolioContext or lens, cid)
+        scope = resolved.scope if resolved else None
+        frames = evolution_mod.funded_frames(
+            _onboarding_output_root(), cid, scope=scope)
+        if vintage:
+            result = cohorts_mod.cohort_static_pool(
+                frames, vintage=vintage, grain=grain, client_id=cid)
+        else:
+            result = cohorts_mod.cohort_formation(
+                frames, grain=grain, client_id=cid)
+        if scope is not None:
+            result["portfolioScope"] = scope.to_dict()
+        return result
+    except Exception as exc:  # noqa: BLE001 - the cohort surface must never 500
+        logger.warning("cohort vintages failed for %s: %s", cid, exc)
+        return {"dataset": "cohort_formation", "portfolioId": cid,
+                "available": False, "reason": str(exc), "vintages": []}
+
+
 _PPTX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation")
 

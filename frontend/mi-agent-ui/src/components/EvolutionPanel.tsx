@@ -26,7 +26,7 @@ import { ConversionContext } from "@/components/insight/ConversionContext";
 import { InsightStageCard } from "@/components/insight/InsightStageCard";
 import { enhancedHoversEnabled } from "@/lib/featureFlags";
 import { DETAIL_COMPLETIONS, DETAIL_PIPELINE } from "@/domain";
-import { cn, formatGBP } from "@/lib/utils";
+import { cn, formatGBP, formatValue } from "@/lib/utils";
 
 type EvoView = "funded" | "pipeline" | "forecast" | "origination" | "cohorts";
 
@@ -566,8 +566,15 @@ function MethodologyDisclosure() {
   );
 }
 
+/**
+ * Percent metrics from the evolution and cohort routes are FRACTIONS by
+ * contract (0.395 == 39.5%), so this states that scale explicitly rather than
+ * open-coding `v * 100`. A bare multiply is silently wrong the moment a route
+ * emits points, and it cannot be caught by the contract tests that check
+ * formatting against a declared scale.
+ */
 function pctFmt(v: number | null | undefined): string {
-  return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
+  return v == null ? "—" : formatValue(v, "pct", "percent_fraction");
 }
 function mobFmt(v: number | null | undefined): string {
   return v == null ? "—" : `${Math.round(v)} mo`;

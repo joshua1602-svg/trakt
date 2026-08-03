@@ -308,6 +308,19 @@ export class HttpAgentClient implements AgentClient {
       `/mi/cohorts/progression?${p.toString()}`, signal);
   }
 
+  getCohortVintages(portfolioId: string,
+                    query?: import("@/domain").CohortVintageQuery,
+                    signal?: AbortSignal
+  ): Promise<import("@/domain").CohortFormation | import("@/domain").CohortStaticPool> {
+    const p = new URLSearchParams({ portfolioId });
+    if (query?.portfolioContext) p.set("portfolioContext", query.portfolioContext);
+    if (query?.vintage) p.set("vintage", query.vintage);
+    if (query?.grain) p.set("grain", query.grain);
+    return this.getJson<import("@/domain").CohortFormation
+      | import("@/domain").CohortStaticPool>(
+      `/mi/cohorts/vintages?${p.toString()}`, signal);
+  }
+
   async ask(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse> {
     let res: Response;
     try {
