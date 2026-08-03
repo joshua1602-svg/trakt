@@ -158,17 +158,10 @@ def _portfolio_items(ctx, portfolio) -> List[Insight]:
     if portfolio is None:
         return []
     out: List[Insight] = []
-    if portfolio.has_mixed_reporting_dates:
-        pairs = "; ".join(f"{k}: {v}" for k, v in
-                          sorted(portfolio.type_reporting_dates.items()))
-        out.append(_item(
-            ctx, REPORTING_DATE_SPREAD,
-            "Constituent books are reported as at different dates.",
-            f"The total combines books reported at different dates ({pairs}); "
-            f"period-on-period totals should be read with that in mind.",
-            severity=SEVERITY_ATTENTION,
-            metrics={"reporting_dates": portfolio.reporting_dates},
-            methodology={"source": "governed portfolio registry"}))
+    # NOTE: mixed reporting dates are deliberately NOT raised here. The cover
+    # carries the warning and the executive summary raises it as an attention
+    # observation; repeating it a third time would crowd the watch list with a
+    # standing disclosure rather than something to act on before next period.
     for sl in portfolio.type_slices:
         change = sl.balance_movement
         if change is None or change >= 0 or not sl.balance:
@@ -197,12 +190,21 @@ def _movement_items(ctx, movement) -> List[Insight]:
     for key, bridge in (movement or {}).items():
         if not getattr(bridge, "available", False):
             continue
+        # ONE shift per dimension. Within a dimension the shares are
+        # complementary — if one category gains 8pp the others lose 8pp between
+        # them — so listing every mover states the same fact several times and
+        # crowds out genuinely different findings.
+        shifts = []
         for contributor in bridge.contributors:
             if contributor.is_other:
                 continue
             pp = bridge.share_change_pp(contributor)
             if pp is None or abs(pp) < MATERIAL_SHARE_PP:
                 continue
+            shifts.append((abs(pp), pp, contributor))
+        if not shifts:
+            continue
+        for _magnitude, pp, contributor in [max(shifts, key=lambda s: s[0])]:
             direction = "increased" if pp > 0 else "reduced"
             out.append(_item(
                 ctx, CONCENTRATION_SHIFT,

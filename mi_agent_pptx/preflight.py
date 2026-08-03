@@ -382,6 +382,78 @@ def _gate_no_empty_slides(deck_path: Optional[str],
                       evidence={"sparse": sparse})
 
 
+def _gate_movement_reconciles(movement) -> GateResult:
+    """Attribution must sum to the headline movement, for every dimension.
+
+    ``funded_bridge`` guarantees this by construction. The gate exists so a
+    future change that broke it fails publication rather than quietly
+    misattributing a period's movement.
+    """
+    bridges = [b for b in (movement or {}).values()
+               if getattr(b, "available", False)]
+    if not bridges:
+        return GateResult("movement_reconciles", True,
+                          "no movement attribution in scope", mandatory=False)
+    broken = [b.label for b in bridges if not b.reconciles()]
+    ok = not broken
+    return GateResult("movement_reconciles", ok,
+                      f"{len(bridges)} attribution dimension(s) reconcile" if ok else
+                      f"attribution does not sum to the headline movement for: "
+                      f"{', '.join(broken)}",
+                      evidence={"dimensions": [b.label for b in bridges],
+                                "broken": broken})
+
+
+def _gate_no_unsupported_causal_language(text: Optional[str]) -> GateResult:
+    """Balance movement evidences WHAT moved, never WHY.
+
+    Words like "redemption", "amortisation" or "prepayment" attribute a cause the
+    funded balance decomposition cannot prove. They are only permissible where a
+    governed decomposition supplies them, which this release does not have — so
+    their presence in the rendered pack is a defect.
+    """
+    import re
+    if text is None:
+        return GateResult("no_unsupported_causal_language", False,
+                          "deck could not be read")
+    banned = ("redemption", "redeemed", "amortisation", "amortised",
+              "prepayment", "prepaid", "expected runoff", "expected run-off")
+    low = text.lower()
+    hits = [w for w in banned if re.search(rf"\b{re.escape(w)}\b", low)]
+    ok = not hits
+    return GateResult("no_unsupported_causal_language", ok,
+                      "no unsupported causal attribution" if ok else
+                      f"the deck attributes a cause the evidence does not prove: "
+                      f"{', '.join(hits)}",
+                      evidence={"terms": hits})
+
+
+def _gate_no_duplicate_observations(insights, watchlist) -> GateResult:
+    """The same fact must not be stated twice.
+
+    Complementary shares make this easy to get wrong: within one dimension, a
+    category gaining 8pp means the others lose 8pp between them, so a naive
+    generator emits the same finding several times and crowds out genuinely
+    different ones.
+    """
+    headlines: List[str] = []
+    for item in ((insights or {}).get("insights") or []):
+        headlines.append(str(getattr(item, "headline", "")).strip().lower())
+    for key in ("watch", "observations"):
+        for item in ((watchlist or {}).get(key) or []):
+            headlines.append(str(getattr(item, "headline", "")).strip().lower())
+    seen, dupes = set(), []
+    for h in headlines:
+        if h and h in seen:
+            dupes.append(h)
+        seen.add(h)
+    ok = not dupes
+    return GateResult("no_duplicate_observations", ok,
+                      f"{len(headlines)} observation(s), none duplicated" if ok else
+                      f"duplicate observation(s): {dupes[0][:60]}",
+                      evidence={"duplicates": dupes[:4], "total": len(headlines)})
+
+
 def _gate_mandatory_slides(records: Sequence[Mapping[str, Any]]) -> GateResult:
     """Cover, methodology and appendix are the disclosure spine of the pack."""
     ids = {str(r.get("id")) for r in records}
@@ -425,5 +497,10 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         _gate_no_empty_slides(deck_path, records),
         _gate_pipeline_reconciles(text, getattr(data, "pipeline", None)),
         _gate_concentration_reconciles(text, getattr(data, "concentration", None)),
+        # -- v2.2: attribution integrity and evidence discipline -------------
+        _gate_movement_reconciles(getattr(data, "movement", None)),
+        _gate_no_unsupported_causal_language(text),
+        _gate_no_duplicate_observations(getattr(data, "insights", None),
+                                        getattr(data, "watchlist", None)),
     ])
     return report
