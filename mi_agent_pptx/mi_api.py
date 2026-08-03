@@ -37,9 +37,12 @@ import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .deck_context import DeckPortfolioContext
 
 _DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 _PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
@@ -68,10 +71,32 @@ class DashboardData:
     source_files: List[str] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     notes: List[str] = field(default_factory=list)
+    #: The governed portfolio context this deck describes (scope, constituent
+    #: books, per-book reporting dates, per-type funded snapshots). ``None`` only
+    #: when no funded dataset resolved at all.
+    portfolio: Optional["DeckPortfolioContext"] = None
+    #: The deterministic executive summary (see :mod:`mi_agent_pptx.insights`).
+    insights: Dict[str, Any] = field(default_factory=dict)
 
     def note(self, msg: str) -> None:
         if msg and msg not in self.notes:
             self.notes.append(msg)
+
+
+def _guard_ctx(data: DashboardData, registry, scope, cid, tenant_id,
+               snapshot, type_snaps, reporting_date):
+    """Assemble the deck's governed portfolio context, never raising."""
+    if registry is None or scope is None:
+        return None
+    try:
+        from .deck_context import build_context
+        return build_context(
+            tenant_id=tenant_id or cid, client_id=cid, registry=registry,
+            scope=scope, snapshot=snapshot, type_snapshots=type_snaps,
+            reporting_date=reporting_date)
+    except Exception as exc:  # noqa: BLE001
+        data.note(f"portfolio_context: {type(exc).__name__}: {exc}")
+        return None
 
 
 def _guard(note_target: DashboardData, label: str,
@@ -196,21 +221,33 @@ def _kfi_lag_weeks(model: Optional[Dict[str, Any]]) -> Optional[int]:
     return max(1, round(float(median_days) / 7.0)) if median_days else None
 
 
-def _scoped_to(df: Optional[pd.DataFrame], cid: str) -> Optional[pd.DataFrame]:
+def _resolve_scope(df: Optional[pd.DataFrame], context_id: Optional[str],
+                   client_id: Optional[str]):
+    """``(registry, scope)`` for a frame and a requested portfolio context.
+
+    Uses the SAME governed resolver React and Copilot use, so an investor pack can
+    never disagree with the workspace about what a book contains.
+    """
+    from mi_agent.portfolio_scope import resolve
+    return resolve(df, context_id, client_id=client_id)
+
+
+def _scoped_to(df: Optional[pd.DataFrame], cid: str,
+               context_id: Optional[str] = None) -> Optional[pd.DataFrame]:
     """Narrow a canonical frame to a governed portfolio context.
 
-    Deck generation resolves scope through the SAME governed resolver React and
-    Copilot use, so an investor pack can never disagree with the workspace about
-    what a book contains. ``cid`` may be a client id (no narrowing), a type group
-    (``direct`` / ``acquired`` — every current member) or a single
-    ``source_portfolio_id``; an unrecognised value resolves to the consolidated
-    platform, which is the pre-existing behaviour for a client id.
+    ``context_id`` is the explicit governed scope (``total`` / ``direct`` /
+    ``acquired`` / a ``source_portfolio_id``). When it is ``None`` the legacy
+    behaviour applies and ``cid`` itself is used as the context — a client id
+    resolves to the consolidated platform, while ``direct``/``acquired`` passed
+    as ``--client-id`` continue to narrow exactly as before.
     """
-    if df is None or getattr(df, "empty", True) or not cid:
+    requested = context_id if context_id is not None else cid
+    if df is None or getattr(df, "empty", True) or not requested:
         return df
     try:
-        from mi_agent.portfolio_scope import apply_scope, resolve
-        _registry, scope = resolve(df, cid)
+        from mi_agent.portfolio_scope import apply_scope
+        _registry, scope = _resolve_scope(df, requested, cid)
         if scope.is_total:
             return df
         scoped = apply_scope(df, scope)
@@ -219,14 +256,57 @@ def _scoped_to(df: Optional[pd.DataFrame], cid: str) -> Optional[pd.DataFrame]:
         return df
 
 
-def _funded_frame(cid: str) -> Optional[pd.DataFrame]:
+def _funded_frame(cid: str, context_id: Optional[str] = None) -> Optional[pd.DataFrame]:
     """The prepared funded frame for the active run (the platform canonical set via
     ``MI_AGENT_PLATFORM_CANONICAL``), scoped to the governed portfolio context."""
     from mi_agent_api import data_source
     df = data_source.get_dataframe()
     if df is None or df.empty:
         return None
-    return _scoped_to(df, cid)
+    return _scoped_to(df, cid, context_id)
+
+
+def _unscoped_funded_frame() -> Optional[pd.DataFrame]:
+    """The active funded frame BEFORE portfolio narrowing (for registry build)."""
+    from mi_agent_api import data_source
+    df = data_source.get_dataframe()
+    return None if df is None or df.empty else df
+
+
+def _type_snapshots(funded_df, registry, scope, semantics, *, cid: str, rid: str,
+                    reporting_date, prior_df, prior_rid, prior_rd,
+                    data: DashboardData) -> Dict[str, Dict[str, Any]]:
+    """A governed funded snapshot per portfolio TYPE inside the scope.
+
+    Computed with the SAME ``compute_funded_snapshot`` the total uses, over the
+    frame narrowed to each type — so a type slice and the total can never be
+    computed differently. Only produced when the scope spans more than one type;
+    a single-book deck costs nothing extra.
+    """
+    from mi_agent.portfolio_scope import apply_scope
+    from mi_agent_api import snapshots as snap
+    from trakt_core.portfolio import resolve_scope
+
+    types = sorted({str(t).lower() for t in (getattr(scope, "portfolio_types", ()) or ())
+                    if t})
+    if len(types) < 2:
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for ptype in types:
+        try:
+            tscope = resolve_scope(registry, ptype)
+            tdf = apply_scope(funded_df, tscope)
+            if tdf is None or tdf.empty:
+                continue
+            tprior = apply_scope(prior_df, tscope) if prior_df is not None else None
+            out[ptype] = snap.compute_funded_snapshot(
+                tdf, semantics, client_id=cid, run_id=rid,
+                reporting_date=reporting_date, prior_df=tprior,
+                prior_run_id=prior_rid, prior_reporting_date=prior_rd,
+                scope=tscope)
+        except Exception as exc:  # noqa: BLE001 — one type must not break the deck
+            data.note(f"type_snapshot[{ptype}]: {type(exc).__name__}: {exc}")
+    return out
 
 
 def _pipeline_client(prow, cid: str) -> str:
@@ -282,7 +362,8 @@ def _dated_funded_cuts(out_root: str, cid: str) -> List[Tuple[str, str]]:
     return sorted(cuts.items())
 
 
-def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str) -> List[Dict[str, Any]]:
+def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str,
+                         context_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Prepared funded frames from LOCAL dated platform canonicals, scoped to the
     client — the local analogue of ``platform_snapshots_blob.build_funded_evolution_frames``."""
     from mi_agent_api.funded_prep import prepare_funded_mi_dataset
@@ -292,7 +373,7 @@ def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str) -> List[Dict[str
             raw = pd.read_csv(path, low_memory=False)
         except Exception:  # noqa: BLE001
             continue
-        raw = _scoped_to(raw, cid)
+        raw = _scoped_to(raw, cid, context_id)
         try:
             df, _rep = prepare_funded_mi_dataset(raw)
         except Exception:  # noqa: BLE001
@@ -301,7 +382,8 @@ def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str) -> List[Dict[str
     return frames
 
 
-def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optional[str]):
+def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optional[str],
+                  context_id: Optional[str] = None):
     """The prepared funded frame for the reporting period BEFORE *reporting_date*
     (the most recent dated cut strictly earlier), for month-on-month KPI deltas."""
     if not cuts:
@@ -309,7 +391,7 @@ def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optiona
     earlier = [(d, p) for d, p in cuts if not reporting_date or d < str(reporting_date)]
     if not earlier:
         return None, None, None
-    frames = _local_funded_frames([earlier[-1]], cid)
+    frames = _local_funded_frames([earlier[-1]], cid, context_id)
     if not frames:
         return None, None, None
     d, _p = earlier[-1]
@@ -480,8 +562,15 @@ def build_dashboard_data(
     output_root: Optional[str] = None,
     pipeline_root: Optional[str] = None,
     prior_run_dir: Optional[str] = None,  # accepted for CLI compatibility (unused)
+    portfolio_context: Optional[str] = None,
+    tenant_id: Optional[str] = None,
 ) -> DashboardData:
-    """Compute the full set of dashboard payloads for *run_dir*, headless."""
+    """Compute the full set of dashboard payloads for *run_dir*, headless.
+
+    ``portfolio_context`` is the governed scope the deck reports on (``total`` /
+    ``direct`` / ``acquired`` / a ``source_portfolio_id``). ``None`` preserves the
+    pre-existing behaviour exactly: the scope is derived from ``client_id``.
+    """
     run_path = Path(run_dir)
     cid, rid, rs = _run_ids(run_path, client_id, run_id)
     data = DashboardData(client_id=cid, run_id=rid)
@@ -514,7 +603,7 @@ def build_dashboard_data(
         pipe_cid = _pipeline_client(prow, cid)
         history = _pipeline_history(prow, pipe_cid)
 
-        funded_df = _funded_frame(cid)
+        funded_df = _funded_frame(cid, portfolio_context)
         reporting_date = as_of or rs.get("reporting_date")
         if funded_df is not None and not funded_df.empty:
             try:
@@ -524,14 +613,31 @@ def build_dashboard_data(
         data.reporting_date = reporting_date
 
         funded_cuts = _dated_funded_cuts(out_root, cid)
-        prior_df, prior_rid, prior_rd = _prior_funded(funded_cuts, cid, reporting_date)
+        prior_df, prior_rid, prior_rd = _prior_funded(funded_cuts, cid, reporting_date,
+                                                      portfolio_context)
+
+        # -- Governed portfolio context (scope + constituent books) -------
+        # Resolved from the UNSCOPED frame so the registry sees every book, then
+        # narrowed to the requested context — the same two-step the API performs.
+        registry = scope = None
+        try:
+            registry, scope = _resolve_scope(
+                _unscoped_funded_frame(),
+                portfolio_context if portfolio_context is not None else cid, cid)
+            # A plain client id is not a *requested* scope: it means Total. Don't
+            # report a fallback the caller never asked for.
+            if portfolio_context is None and getattr(scope, "fell_back_to_total", False):
+                scope = _resolve_scope(_unscoped_funded_frame(), None, cid)[1]
+        except Exception as exc:  # noqa: BLE001 — scope must never break the deck
+            data.note(f"portfolio_scope: {type(exc).__name__}: {exc}")
 
         # -- FUNDED snapshot (KPIs + stratifications) --------------------
         if funded_df is not None and not funded_df.empty:
             data.funded = _guard(data, "funded_snapshot", lambda: snap.compute_funded_snapshot(
                 funded_df, semantics, client_id=cid, run_id=rid,
                 reporting_date=reporting_date, prior_df=prior_df,
-                prior_run_id=prior_rid, prior_reporting_date=prior_rd))
+                prior_run_id=prior_rid, prior_reporting_date=prior_rd,
+                scope=scope))
             # Extra funded stratifications the deck shows (broker / borrower type /
             # ticket size) — computed with the same stratify engine as the snapshot,
             # appended so the deck renders one consistent BarList visual.
@@ -545,9 +651,16 @@ def build_dashboard_data(
             data.cohort_progression = _guard(data, "cohort_progression",
                                              lambda: _cohort_progression(out_root, cid))
             data.geo = _guard(data, "geo", lambda: _geo(funded_df, cid, rid))
+            # Per-type governed snapshots (only when the scope spans >1 type).
+            type_snaps = _type_snapshots(
+                funded_df, registry, scope, semantics, cid=cid, rid=rid,
+                reporting_date=reporting_date, prior_df=prior_df,
+                prior_rid=prior_rid, prior_rd=prior_rd, data=data)
+            data.portfolio = _guard_ctx(data, registry, scope, cid, tenant_id,
+                                        data.funded, type_snaps, reporting_date)
         else:
-            data.note("No funded dataset resolved for this run — funded slides "
-                      "render as branded placeholders.")
+            data.note("No funded dataset resolved for this run — funded sections "
+                      "are omitted from the deck.")
 
         # -- PIPELINE snapshot (latest governed weekly extract) ----------
         pipe_df, pipe_report, source = _pipeline(prow, pipe_cid, rid, semantics, history, data)
@@ -558,8 +671,10 @@ def build_dashboard_data(
             data.pipeline, source))
 
         # -- Multi-run EVOLUTION / FUNNEL / FORECAST ---------------------
-        data.funded_evolution = _guard(data, "funded_evolution",
-                                       lambda: _funded_evo(out_root, cid, rid, funded_cuts))
+        data.funded_evolution = _guard(
+            data, "funded_evolution",
+            lambda: _funded_evo(out_root, cid, rid, funded_cuts, scope,
+                                portfolio_context))
         data.pipeline_evolution = _guard(data, "pipeline_evolution",
                                          lambda: _pipeline_evo(prow, pipe_cid, history))
         data.funnel = _guard(data, "funnel", lambda: _funnel(prow, pipe_cid, history))
@@ -573,6 +688,10 @@ def build_dashboard_data(
 
         pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
 
+    # -- Deterministic executive summary (no LLM) ------------------------
+    # Built last: every generator reads an already-resolved governed payload.
+    data.insights = _guard(data, "insights", lambda: _insights(data))
+
     # Provenance + diagnostics ------------------------------------------
     if source and source.get("source_file"):
         data.source_files.append(Path(source["source_file"]).name)
@@ -580,8 +699,8 @@ def build_dashboard_data(
                                     funded_cuts, pipe_snapshots)
 
     if not data.pipeline:
-        data.note("No pipeline source resolved — pipeline & forecast slides "
-                  "render as branded placeholders.")
+        data.note("No pipeline source resolved — pipeline & forecast sections "
+                  "are omitted from the deck.")
     return data
 
 
@@ -679,6 +798,11 @@ def _forecast(cid, rid, reporting_date, funded_df, pipe_df, pipe_report, pipe_sn
     return env
 
 
+def _insights(data: DashboardData) -> Dict[str, Any]:
+    from . import insights as _ins
+    return _ins.build(data)
+
+
 def _cohorts(funded_df, cid, pid, reporting_date):
     from mi_agent_api import cohorts
     return cohorts.cohort_analysis(
@@ -693,15 +817,19 @@ def _geo(funded_df, cid, rid):
     return out
 
 
-def _funded_evo(out_root, cid, rid, funded_cuts):
+def _funded_evo(out_root, cid, rid, funded_cuts, scope=None, context_id=None):
     """Funded evolution: the dashboard's resolver first (blob dated cuts / local
     central-tape cuts); when that yields <2 periods, supplement from LOCAL dated
-    platform canonicals so downloaded history renders too (requirement #3)."""
+    platform canonicals so downloaded history renders too (requirement #3).
+
+    ``scope`` narrows the series to the governed portfolio context, so a scoped
+    deck's trend describes the same book as its KPIs rather than the whole
+    platform."""
     from mi_agent_api import evolution
-    result = evolution.funded_evolution(out_root, cid, rid)
+    result = evolution.funded_evolution(out_root, cid, rid, scope=scope)
     if len(result.get("periods", [])) >= 2:
         return result
-    frames = _local_funded_frames(funded_cuts, cid)
+    frames = _local_funded_frames(funded_cuts, cid, context_id)
     if len(frames) >= 2:
         return evolution.assemble_funded_evolution(frames, cid, rid, lineage={
             "source": "dated platform canonicals (platform_canonical_typed.csv)",

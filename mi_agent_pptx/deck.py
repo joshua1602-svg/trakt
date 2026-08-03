@@ -58,6 +58,10 @@ class DeckBuilder:
         self.work.mkdir(parents=True, exist_ok=True)
         self.appendix: List[str] = list(data.notes)
         self.records: List[Dict[str, Any]] = []
+        #: Slides this portfolio did not justify, with reasons (rendered in the
+        #: appendix so an omission is never silent).
+        self.omissions: List[Any] = []
+        self.facts: Dict[str, Any] = {}
 
     # ------------------------------------------------------------- pptx scaffold
     def _rgb(self, hx):
@@ -121,10 +125,30 @@ class DeckBuilder:
             self._text(slide, Inches(0.57), Inches(1.0), Inches(12.4), Inches(0.5),
                        strap, size=12, color=self.theme.peri, italic=True)
 
+    def scope_footnote(self) -> str:
+        """The one-line scope + date stamp every slide carries.
+
+        A slide read on its own — screenshotted, pasted into a memo — must still
+        say which book it describes and as at when.
+        """
+        p = self.d.portfolio
+        date = self.ctx.as_of_date or self.d.reporting_date
+        if p is None:
+            return f"Funded as at {date}" if date else ""
+        label = f"{p.scope_label} portfolio"
+        if p.has_mixed_reporting_dates:
+            return f"{label} · mixed reporting dates (see cover)"
+        return f"{label} · funded as at {date}" if date else label
+
     def _footer(self, slide):
         self._page += 1
-        self._text(slide, Inches(0.55), Inches(7.08), Inches(10), Inches(0.3),
+        self._text(slide, Inches(0.55), Inches(7.08), Inches(6.6), Inches(0.3),
                    self.ctx.footer, size=8, color=self.theme.ink_500)
+        stamp = self.scope_footnote()
+        if stamp:
+            self._text(slide, Inches(7.25), Inches(7.08), Inches(4.95), Inches(0.3),
+                       stamp, size=8, color=self.theme.ink_400,
+                       align=PP_ALIGN.RIGHT)
         self._text(slide, Inches(12.3), Inches(7.08), Inches(0.8), Inches(0.3),
                    str(self._page), size=8, color=self.theme.ink_500,
                    align=PP_ALIGN.RIGHT)
@@ -214,6 +238,12 @@ class DeckBuilder:
                              "placeholder": placeholder})
 
     def slide_cover(self, spec):
+        """Cover — states, unambiguously, what this report is a report ABOUT.
+
+        Scope, constituent books and every reporting date are rendered from the
+        governed portfolio context, never from an operator-typed name, so a deck
+        covering one book can never be mistaken for a total-portfolio deck.
+        """
         s = self._slide()
         # Full-height left accent rail (replaces the old overlapping corner panel).
         rail = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0),
@@ -222,34 +252,91 @@ class DeckBuilder:
         rail.fill.fore_color.rgb = self._rgb(self.theme.peri)
         rail.line.fill.background()
         rail.shadow.inherit = False
-        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(3.02),
+        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(2.92),
                                  Inches(2.2), Inches(0.07))
         bar.fill.solid()
         bar.fill.fore_color.rgb = self._rgb(self.theme.peri)
         bar.line.fill.background()
         bar.shadow.inherit = False
-        self._text(s, Inches(0.9), Inches(0.7), Inches(6), Inches(0.4),
+        self._text(s, Inches(0.9), Inches(0.62), Inches(6), Inches(0.4),
                    "TRAKT · MI AGENT", size=12, color=self.theme.peri, bold=True)
-        self._text(s, Inches(0.86), Inches(1.7), Inches(11.5), Inches(1.4),
-                   self.ctx.client_name, size=42, bold=True)
-        self._text(s, Inches(0.92), Inches(3.25), Inches(11), Inches(0.6),
-                   self.ctx.deck_name, size=19, color=self.theme.peri)
-        fb = (self.d.forecast.get("forecastBridge") or {})
+        self._text(s, Inches(0.86), Inches(1.42), Inches(11.5), Inches(1.1),
+                   self._entity_name(), size=38, bold=True)
+        self._text(s, Inches(0.92), Inches(3.12), Inches(11), Inches(0.5),
+                   self.ctx.deck_name, size=18, color=self.theme.peri)
         strap = self._cover_strapline()
-        self._text(s, Inches(0.92), Inches(3.95), Inches(10.5), Inches(0.7),
-                   strap, size=13, color=self.theme.ink_300, italic=True, spacing=1.15)
-        self._text(s, Inches(0.92), Inches(5.7), Inches(6), Inches(0.4),
-                   f"Data cut-off   {self.ctx.as_of_date or 'n/a'}", size=12.5)
-        self._text(s, Inches(0.92), Inches(6.12), Inches(8), Inches(0.4),
-                   f"Generated automatically by {self.ctx.generated_by}", size=11,
+        self._text(s, Inches(0.92), Inches(3.7), Inches(10.5), Inches(0.6),
+                   strap, size=12.5, color=self.theme.ink_300, italic=True,
+                   spacing=1.12)
+        self._cover_scope_block(s)
+        self._text(s, Inches(0.92), Inches(6.72), Inches(8), Inches(0.35),
+                   f"Generated automatically by {self.ctx.generated_by}", size=10,
                    color=self.theme.ink_400)
-        self._record("cover", self.ctx.client_name, strap)
+        self._record("cover", self._entity_name(), strap)
+
+    def _entity_name(self):
+        """The reporting entity — the operator-supplied client name."""
+        return self.ctx.client_name
+
+    def _cover_scope_block(self, s):
+        """Reporting scope + constituent books + every reporting date."""
+        p = self.d.portfolio
+        left, top = Inches(0.92), Inches(4.42)
+        self._text(s, left, top, Inches(5.6), Inches(0.3), "REPORTING SCOPE",
+                   size=9, color=self.theme.peri, bold=True)
+        if p is None:
+            self._text(s, left, top + Inches(0.3), Inches(6), Inches(0.4),
+                       "Scope unavailable — no governed portfolio context resolved.",
+                       size=11.5, color=self.theme.ink_300)
+            return
+        self._text(s, left, top + Inches(0.28), Inches(5.6), Inches(0.4),
+                   f"{p.scope_label} portfolio", size=15, bold=True)
+        # Constituent books, each with its type.
+        y = top + Inches(0.68)
+        for book in p.portfolios[:5]:
+            self._text(s, left, y, Inches(5.6), Inches(0.3),
+                       f"·  {book.label}  —  {book.type_label}", size=10.5,
+                       color=self.theme.ink_300)
+            y = Emu(int(y) + int(Inches(0.245)))
+        if len(p.portfolios) > 5:
+            self._text(s, left, y, Inches(5.6), Inches(0.3),
+                       f"·  and {len(p.portfolios) - 5} further book(s)", size=10.5,
+                       color=self.theme.ink_400)
+
+        # Reporting dates — per type when they differ, else one line.
+        rleft = Inches(7.1)
+        self._text(s, rleft, top, Inches(5.3), Inches(0.3), "REPORTING DATES",
+                   size=9, color=self.theme.peri, bold=True)
+        ry = top + Inches(0.28)
+        dates = p.type_reporting_dates
+        if dates:
+            for ptype, date in sorted(dates.items()):
+                from .deck_context import type_label
+                self._text(s, rleft, ry, Inches(5.3), Inches(0.32),
+                           f"{type_label(ptype)}:  {date}", size=11.5,
+                           color=self.theme.ink_100)
+                ry = Emu(int(ry) + int(Inches(0.3)))
+        else:
+            self._text(s, rleft, ry, Inches(5.3), Inches(0.32),
+                       f"Funded portfolio:  {self.ctx.as_of_date or 'n/a'}",
+                       size=11.5)
+            ry = Emu(int(ry) + int(Inches(0.3)))
+        if p.has_mixed_reporting_dates:
+            self._text(s, rleft, Emu(int(ry) + int(Inches(0.06))), Inches(5.3),
+                       Inches(0.5),
+                       "⚠  Constituent books are reported as at different dates; "
+                       "the total combines them.",
+                       size=9.5, color=self.theme.amber, italic=True)
 
     def _cover_strapline(self):
+        p = self.d.portfolio
         kpis = {k.get("id"): k for k in self.d.funded.get("kpis", [])}
         bal = kpis.get("balance", {}).get("value")
         loans = kpis.get("loans", {}).get("value")
         ltv = kpis.get("wa_current_ltv", {}).get("value")
+        if bal and p is not None and p.is_mixed:
+            return (f"Funded book of {bal} across {loans} loans, reported as a total "
+                    f"and split by portfolio type.")
         if bal:
             return (f"Funded book of {bal} across {loans} loans at {ltv} weighted "
                     f"current LTV.")
@@ -269,6 +356,227 @@ class DeckBuilder:
         self._footer(s)
         self._record("executive_summary", spec.get("title", "Executive Summary"),
                      "Funded KPIs (dashboard-aligned).")
+
+    # ------------------------------------------------- investor narrative
+    def slide_exec_insights(self, spec):
+        """Executive Summary — *what changed, and why*.
+
+        Deterministic observations from :mod:`mi_agent_pptx.insights`. Every
+        sentence is a template over a governed figure; nothing is generated.
+        """
+        s = self._slide()
+        brief = self.d.insights or {}
+        items = brief.get("insights") or []
+        self._header(s, spec.get("title", "Executive Summary"),
+                     "Governed observations for the period")
+        if not items:
+            self._placeholder_body(s, "No governed observations for this run.")
+            self._footer(s)
+            return self._record(spec.get("id", "executive_summary"),
+                                spec.get("title"), "", placeholder=True)
+
+        # Severity accent per observation — a caveat must not read as an aside.
+        accent_for = {"concern": self.theme.rose, "attention": self.theme.amber}
+        top = 1.58
+        # Two columns when there are enough observations to warrant it.
+        two_col = len(items) > 4
+        col_w = Inches(6.0) if two_col else Inches(12.25)
+        per_col = (len(items) + 1) // 2 if two_col else len(items)
+        row_h = 1.62 if two_col else 0.92
+        for i, ins in enumerate(items[:8]):
+            col, row = (i // per_col, i % per_col) if two_col else (0, i)
+            l = Inches(0.55) if col == 0 else Inches(6.78)
+            t = Inches(top + row * (row_h + 0.12))
+            h = Inches(row_h)
+            accent = accent_for.get(getattr(ins, "severity", "info"), self.theme.peri)
+            self._panel(s, l, t, col_w, h, fill=self.theme.bg_panel_alt,
+                        line=self.theme.line_soft)
+            chip = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, l, t, Inches(0.045), h)
+            chip.fill.solid()
+            chip.fill.fore_color.rgb = self._rgb(accent)
+            chip.line.fill.background()
+            chip.shadow.inherit = False
+            self._text(s, l + Inches(0.24), t + Inches(0.14),
+                       col_w - Inches(0.46), Inches(0.42),
+                       str(getattr(ins, "headline", "")), size=12.5, bold=True)
+            self._text(s, l + Inches(0.24), t + Inches(0.56),
+                       col_w - Inches(0.46), h - Inches(0.68),
+                       str(getattr(ins, "summary", "")), size=10,
+                       color=self.theme.ink_300, spacing=1.1)
+        self._footer(s)
+        self._record(spec.get("id", "executive_summary"), spec.get("title"),
+                     f"{len(items)} governed observations.")
+
+    def slide_portfolio_composition(self, spec):
+        """Portfolio Composition — *what do I own today?*
+
+        The anchor slide: total, then each portfolio type side by side on the
+        same governed measures, so a blended average can never hide a divergence.
+        """
+        s = self._slide()
+        p = self.d.portfolio
+        self._header(s, spec.get("title", "Portfolio Composition"),
+                     "Funded book by portfolio type")
+        if p is None:
+            self._placeholder_body(s, "No governed portfolio context resolved.")
+            self._footer(s)
+            return self._record(spec.get("id", "portfolio_composition"),
+                                spec.get("title"), "", placeholder=True)
+        from .metric_resolver import compact_currency, compact_number
+
+        total_bal = p.total_balance or 0.0
+        # Headline band: the total.
+        self._panel(s, Inches(0.55), Inches(1.58), Inches(12.25), Inches(1.16),
+                    fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+        self._text(s, Inches(0.8), Inches(1.74), Inches(4.6), Inches(0.3),
+                   "TOTAL FUNDED PORTFOLIO", size=9, color=self.theme.ink_400,
+                   bold=True)
+        self._text(s, Inches(0.8), Inches(2.04), Inches(4.6), Inches(0.55),
+                   compact_currency(total_bal), size=26, bold=True)
+        self._text(s, Inches(5.6), Inches(1.74), Inches(3.2), Inches(0.3),
+                   "LOANS", size=9, color=self.theme.ink_400, bold=True)
+        self._text(s, Inches(5.6), Inches(2.04), Inches(3.2), Inches(0.5),
+                   compact_number(p.loan_count or 0), size=22, bold=True)
+        self._text(s, Inches(8.9), Inches(1.74), Inches(3.7), Inches(0.3),
+                   "CONSTITUENT BOOKS", size=9, color=self.theme.ink_400, bold=True)
+        self._text(s, Inches(8.9), Inches(2.04), Inches(3.7), Inches(0.5),
+                   f"{p.portfolio_count} · {len(p.type_slices) or 1} type(s)",
+                   size=22, bold=True)
+
+        # Per-type columns on identical governed measures.
+        slices = list(p.type_slices)
+        if not slices:
+            self._text(s, Inches(0.55), Inches(3.1), Inches(12.25), Inches(0.5),
+                       "Single-portfolio book — no type split applies.", size=12,
+                       color=self.theme.ink_400, italic=True)
+            self._footer(s)
+            return self._record(spec.get("id", "portfolio_composition"),
+                                spec.get("title"), "Single portfolio.")
+
+        rows = [
+            ("Funded balance", lambda sl: compact_currency(sl.balance)),
+            ("Share of book", lambda sl: (f"{(sl.balance or 0) / total_bal * 100:.1f}%"
+                                          if total_bal else "—")),
+            ("Loans", lambda sl: compact_number(sl.loan_count or 0)),
+            ("Average balance", lambda sl: compact_currency(sl.avg_balance)),
+            ("WA current LTV", lambda sl: self._pct_display(sl, "wa_current_ltv")),
+            ("WA interest rate", lambda sl: self._pct_display(sl, "wa_rate")),
+            ("Period movement", lambda sl: self._signed_currency(sl.balance_movement)),
+            ("Reporting date", lambda sl: sl.reporting_date or "—"),
+        ]
+        n = len(slices)
+        gap = Inches(0.2)
+        label_w = Inches(2.9)
+        avail = int(Inches(12.25)) - int(label_w) - (n - 1) * int(gap)
+        col_w = Emu(int(avail / n))
+        top0 = Inches(3.02)
+        row_h = Inches(0.44)
+
+        # Column headers.
+        for j, sl in enumerate(slices):
+            l = Emu(int(Inches(0.55)) + int(label_w) + j * (int(col_w) + int(gap)))
+            self._panel(s, l, top0, col_w, Inches(0.5), fill=self.theme.bg_panel,
+                        line=self.theme.line)
+            self._text(s, l + Inches(0.16), top0 + Inches(0.12),
+                       col_w - Inches(0.3), Inches(0.3), sl.label.upper(),
+                       size=9.5, bold=True, color=self.theme.peri)
+        for i, (label, fn) in enumerate(rows):
+            t = Emu(int(top0) + int(Inches(0.58)) + i * int(row_h))
+            self._text(s, Inches(0.6), t + Inches(0.08), label_w, Inches(0.3),
+                       label, size=10.5, color=self.theme.ink_400)
+            for j, sl in enumerate(slices):
+                l = Emu(int(Inches(0.55)) + int(label_w) + j * (int(col_w) + int(gap)))
+                try:
+                    value = fn(sl)
+                except Exception:  # noqa: BLE001 — one cell must not break the slide
+                    value = "—"
+                self._text(s, l + Inches(0.16), t + Inches(0.08),
+                           col_w - Inches(0.3), Inches(0.3), str(value),
+                           size=11, bold=True)
+        self._footer(s)
+        self._record(spec.get("id", "portfolio_composition"), spec.get("title"),
+                     f"{n} portfolio type(s).")
+
+    def _pct_display(self, sl, kpi_id):
+        """A weighted-average percentage as the governed snapshot formatted it."""
+        return sl.display(kpi_id) or "—"
+
+    @staticmethod
+    def _signed_currency(value):
+        """A movement with an explicit sign — ``+£851K`` / ``-£296K``."""
+        from .metric_resolver import compact_currency
+        if value is None:
+            return "—"
+        text = compact_currency(value)
+        return f"+{text}" if float(value) > 0 else text
+
+    def slide_portfolio_comparison(self, spec):
+        """Direct vs Acquired — *why did the total move?*
+
+        Movement attribution plus the mix differences that a blended total hides.
+        """
+        s = self._slide()
+        p = self.d.portfolio
+        self._header(s, spec.get("title", "Direct vs Acquired"),
+                     "Period movement attribution and portfolio differences")
+        if p is None or len(p.type_slices) < 2:
+            self._placeholder_body(s, "Only one portfolio type is in scope.")
+            self._footer(s)
+            return self._record(spec.get("id", "portfolio_comparison"),
+                                spec.get("title"), "", placeholder=True)
+        from .metric_resolver import compact_currency
+
+        slices = list(p.type_slices)
+        # Left: movement attribution waterfall (total = Σ type movements).
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.58), Inches(6.0),
+                                    Inches(4.98), "What moved the total")
+        movers = [(sl, sl.balance_movement) for sl in slices
+                  if sl.balance_movement is not None]
+        path = self.work / "cmp_attrib.png"
+        if movers:
+            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            steps = [("Opening", float(opening), "base")]
+            for sl, v in movers:
+                steps.append((sl.label.replace(" portfolio", "").replace(
+                    " originations", ""), float(v), "add"))
+            steps.append(("Closing", float(p.total_balance or 0), "total"))
+            render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        else:
+            render_placeholder_png(path, "", "No prior reporting period to "
+                                   "attribute movement against", theme=self.theme,
+                                   width_in=iw, height_in=ih)
+        self._place(s, path, il, it, iw, ih)
+
+        # Right: side-by-side differences on identical governed measures.
+        il, it, iw, ih = self._card(s, Inches(6.78), Inches(1.58), Inches(6.02),
+                                    Inches(4.98), "How the books differ")
+        cols = ["Measure"] + [sl.label for sl in slices]
+        measures = [
+            ("Funded balance", lambda sl: compact_currency(sl.balance)),
+            ("Loans", lambda sl: f"{int(sl.loan_count or 0):,}"),
+            ("Average balance", lambda sl: compact_currency(sl.avg_balance)),
+            ("WA current LTV", lambda sl: self._pct_display(sl, "wa_current_ltv")),
+            ("WA interest rate", lambda sl: self._pct_display(sl, "wa_rate")),
+            ("WA borrower age", lambda sl: self._pct_display(sl, "wa_age")),
+            ("Period movement", lambda sl: self._signed_currency(sl.balance_movement)),
+            ("Loan movement", lambda sl: (f"{int(sl.loan_movement):+,}"
+                                          if sl.loan_movement is not None else "—")),
+        ]
+        trows = []
+        for label, fn in measures:
+            row = [label]
+            for sl in slices:
+                try:
+                    row.append(str(fn(sl)))
+                except Exception:  # noqa: BLE001
+                    row.append("—")
+            trows.append(row)
+        tpath = self.work / "cmp_table.png"
+        R.draw_table(tpath, cols, trows, iw, ih, theme=self.theme)
+        self._place(s, tpath, il, it, iw, ih)
+        self._footer(s)
+        self._record(spec.get("id", "portfolio_comparison"), spec.get("title"),
+                     "Movement attribution by portfolio type.")
 
     def slide_strat(self, spec):
         s = self._slide()
@@ -778,10 +1086,18 @@ class DeckBuilder:
     def slide_methodology(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Methodology & Notes"), "")
+        p = self.d.portfolio
         lines = [
             f"Client:  {self.ctx.client_name}",
-            f"Reporting date:  {self.d.reporting_date or 'n/a'}",
+            f"Reporting scope:  {p.scope_label if p else 'n/a'}"
+            + (f"  ({', '.join(p.portfolio_ids)})" if p and p.portfolio_ids else ""),
+            f"Portfolio types:  {', '.join(p.portfolio_types) if p and p.portfolio_types else 'n/a'}",
+            f"Reporting date(s):  " + (
+                "; ".join(f"{k}: {v}" for k, v in sorted(p.type_reporting_dates.items()))
+                if p and p.type_reporting_dates else (self.d.reporting_date or "n/a")),
             f"Run:  {self.d.client_id}/{self.d.run_id}",
+            "Executive summary:  deterministic governed observations "
+            f"({(self.d.insights or {}).get('insight_version', 'n/a')}); no LLM is used.",
             "Data source:  MI Agent API computations (identical to the React dashboard).",
             "Funded KPIs / stratifications:  /mi/snapshot (compute_funded_snapshot).",
             "Pipeline & forecast:  /mi/forecast/snapshot (pipeline snapshot + forecast bridge).",
@@ -823,6 +1139,15 @@ class DeckBuilder:
             else:
                 extra = f" ({info['periods']} periods)" if info.get("periods") else ""
                 lines.append(f"   {label}:  rendered{extra}")
+        # The omission ledger: what this deck does NOT contain, and why. Without
+        # it a reader cannot tell an absent section from a book with nothing to
+        # report.
+        if self.omissions:
+            lines.append("SECTIONS NOT INCLUDED")
+            for o in self.omissions[:8]:
+                lines.append(f"   {o.title}:  {o.reason}")
+            if len(self.omissions) > 8:
+                lines.append(f"   and {len(self.omissions) - 8} further section(s).")
         extra_notes = [n for n in self.appendix
                        if "placeholder" not in n.lower() and "render" not in n.lower()]
         if extra_notes:
@@ -855,6 +1180,9 @@ class DeckBuilder:
     # ------------------------------------------------------------------- build
     _DISPATCH = {
         "cover": "slide_cover", "kpi_summary": "slide_kpi_summary",
+        "exec_insights": "slide_exec_insights",
+        "portfolio_composition": "slide_portfolio_composition",
+        "portfolio_comparison": "slide_portfolio_comparison",
         "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",
@@ -866,7 +1194,22 @@ class DeckBuilder:
     }
 
     def build(self, slides: List[Dict[str, Any]], output: str | Path) -> Dict[str, Any]:
-        for spec in slides:
+        """Render the slides this portfolio justifies, and record the rest.
+
+        Composition runs BEFORE any rendering, so a slide that would have had
+        nothing to show never reaches the deck — an investor pack contains no
+        "no data available" pages. Everything dropped is carried into the
+        appendix with its reason, because a silent omission is indistinguishable
+        from a book that had nothing to report.
+        """
+        from .composition import build_facts, select_slides
+
+        facts = build_facts(self.d)
+        selected, omissions = select_slides(slides, self.d, facts)
+        self.omissions = list(omissions)
+        self.facts = dict(facts)
+
+        for spec in selected:
             handler = getattr(self, self._DISPATCH.get(spec.get("type"), ""), None)
             if handler is None:
                 continue
@@ -875,4 +1218,21 @@ class DeckBuilder:
         out.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(str(out))
         return {"output": str(out), "slides": self.records,
-                "coverage_notes": self.appendix}
+                "coverage_notes": self.appendix,
+                "omitted_slides": [o.to_dict() for o in self.omissions],
+                "facts": self.facts,
+                "portfolio_context": (self.d.portfolio.to_dict()
+                                      if self.d.portfolio else None),
+                "insights": self._insight_records()}
+
+    def _insight_records(self) -> Dict[str, Any]:
+        """The executive summary in a serialisable form, for the run manifest."""
+        brief = self.d.insights or {}
+        return {
+            "insight_version": brief.get("insight_version"),
+            "status": brief.get("status"),
+            "count": brief.get("count", 0),
+            "headlines": [str(getattr(i, "headline", ""))
+                          for i in (brief.get("insights") or [])],
+            "omitted": [o.to_dict() for o in (brief.get("omitted") or [])],
+        }
