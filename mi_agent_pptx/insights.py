@@ -44,6 +44,7 @@ PIPELINE_OUTLOOK = "PIPELINE_OUTLOOK"
 FORECAST_OUTLOOK = "FORECAST_OUTLOOK"
 REPORTING_SCOPE = "REPORTING_SCOPE"
 MOVEMENT_DRIVERS = "MOVEMENT_DRIVERS"
+PORTFOLIO_POSITION = "PORTFOLIO_POSITION"
 
 #: Ordering weight for the executive summary. Attribution outranks the headline
 #: movement because "why" is the investor question; scope and risk caveats
@@ -52,6 +53,7 @@ DECK_TYPE_PRIORITY: Dict[str, int] = {
     REPORTING_SCOPE: 110,
     RISK_LIMITS: 100,
     FUNDED_MOVEMENT: 90,
+    PORTFOLIO_POSITION: 88,
     MOVEMENT_ATTRIBUTION: 85,
     MOVEMENT_DRIVERS: 82,
     PORTFOLIO_MIX: 80,
@@ -73,7 +75,7 @@ MIN_INSIGHTS = 5
 #: The governed insight vocabulary this module emits, for the artefact metadata.
 #: Bumped whenever the observation vocabulary or wording changes, so a
 #: reader can tell which engine produced a given pack.
-INSIGHT_VERSION = "deck-2"
+INSIGHT_VERSION = "deck-3"
 
 
 # --------------------------------------------------------------------------- #
@@ -178,6 +180,40 @@ def movement_drivers(ctx: Mapping[str, Any], movement) -> Result:
     return [], [Omission(MOVEMENT_DRIVERS,
                          "no dimension moved materially over the period.",
                          OMITTED_IMMATERIAL)]
+
+
+def portfolio_position(ctx: Mapping[str, Any], portfolio) -> Result:
+    """The book's position, stated when nothing else cleared its threshold.
+
+    A stable portfolio is a finding, not an absence of one. Without this a book
+    that genuinely did not move produced an EMPTY executive summary, which reads
+    as a failed run rather than as a quiet period — and blocked publication on a
+    perfectly valid pack.
+    """
+    if portfolio is None or portfolio.total_balance is None:
+        return [], [Omission(PORTFOLIO_POSITION, "no governed funded balance.",
+                             OMITTED_UNAVAILABLE)]
+    from .deck_context import raw_of
+    change = raw_of(portfolio.snapshot, "mom_balance")
+    loans = int(portfolio.loan_count or 0)
+    if change is None:
+        detail = ("This is the first reporting period available for the book, so "
+                  "no period-on-period comparison is shown.")
+        headline = (f"Funded portfolio stands at {money(portfolio.total_balance)} "
+                    f"across {loans:,} loans.")
+    else:
+        pc = _pct_change(portfolio.total_balance, change)
+        detail = (f"The book moved {signed_money(change)}"
+                  + (f" ({signed_pct(pc)})" if pc is not None else "")
+                  + ", below the reporting threshold for a material movement.")
+        headline = (f"Funded portfolio was broadly unchanged at "
+                    f"{money(portfolio.total_balance)} across {loans:,} loans.")
+    return [_insight(
+        ctx, PORTFOLIO_POSITION, headline, detail,
+        metrics={"funded_balance": portfolio.total_balance,
+                 "loan_count": portfolio.loan_count, "balance_change": change},
+        methodology={"source": "compute_funded_snapshot"},
+    )], []
 
 
 def funded_movement(ctx: Mapping[str, Any], portfolio) -> Result:
@@ -553,6 +589,18 @@ def build(data: Any, *, limit: int = MAX_INSIGHTS) -> Dict[str, Any]:
             failures += 1
             omitted.append(Omission(label, f"generation failed: "
                                            f"{type(exc).__name__}: {exc}", "error"))
+
+    if not produced:
+        # Everything was immaterial or unavailable. State the position rather
+        # than returning an empty summary.
+        try:
+            fallback, fallback_omissions = portfolio_position(ctx, portfolio)
+            produced.extend(fallback)
+            omitted.extend(fallback_omissions)
+        except Exception as exc:  # noqa: BLE001
+            omitted.append(Omission(PORTFOLIO_POSITION, f"generation failed: "
+                                                        f"{type(exc).__name__}: {exc}",
+                                    "error"))
 
     kept, capped = select(produced, limit=limit)
     omitted.extend(capped)
