@@ -419,6 +419,10 @@ def generate_investor_pptx(
     deck_config: Optional[str] = None,
     mandatory: bool = False,
     source_run_id: Optional[str] = None,
+    portfolio_context: Optional[str] = None,
+    client_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    output_root: Optional[str] = None,
     log: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
     """Generate the investor PPTX for a completed run and update the manifest.
@@ -426,6 +430,18 @@ def generate_investor_pptx(
     Returns the artifact record written to the manifest. Never raises unless
     *mandatory* is set and generation fails (in which case the caller is
     expected to fail the run).
+
+    ``portfolio_context`` is the governed scope the pack reports on. The pipeline
+    leaves it unset (total portfolio); the on-demand capability passes the scope
+    the user is looking at, so the two channels reach the generator through this
+    one entry point rather than each assembling their own argv.
+
+    ``client_id`` / ``tenant_id`` / ``output_root`` are likewise optional and
+    unset by the pipeline, which runs inside its own run directory and lets the
+    generator infer them from ``run_state.json`` and the ambient environment. The
+    on-demand capability generates from an ARBITRARY historical run directory, so
+    it states them rather than depending on what the API process happens to have
+    configured.
     """
     log = log or logger
     run_dir = Path(run_dir)
@@ -442,6 +458,14 @@ def generate_investor_pptx(
     ]
     if as_of_date:
         argv += ["--as-of-date", str(as_of_date)]
+    if portfolio_context:
+        argv += ["--portfolio-context", str(portfolio_context)]
+    if client_id:
+        argv += ["--client-id", str(client_id)]
+    if tenant_id:
+        argv += ["--tenant-id", str(tenant_id)]
+    if output_root:
+        argv += ["--output-root", str(output_root)]
 
     log.info("Starting Investor PPTX generation...")
     try:

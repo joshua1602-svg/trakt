@@ -51,6 +51,7 @@ from . import evolution as evolution_mod
 from . import chat_routing as chat_routing_mod
 from . import pipeline_timing as timing_mod
 from . import decks as decks_mod
+from . import deck_generation as deck_generation_mod
 from . import cohorts as cohorts_mod
 from . import geo as geo_mod
 from . import portfolio_context as portfolio_ctx_mod
@@ -1261,8 +1262,14 @@ def list_decks(portfolioId: Optional[str] = None,
     UI-safe: returns the ``latest`` deck pointer and the dated reporting-period
     decks available (never raw blob paths). Empty listing when none exist — the
     UI then shows a disabled 'No deck available' state. Never 500s.
+
+    With no ``portfolioId`` this falls back to the tenant this deployment serves,
+    not to the historical ``client_001`` default. ``/mi/decks/download`` has
+    always selected by the authenticated tenant, so the old default meant an
+    unparameterised discovery could report "no deck" for a tenant whose deck the
+    download route would happily serve.
     """
-    cid, _trid = _evo_ids(portfolioId, client_id, None, None)
+    cid, _trid = _evo_ids(portfolioId, client_id or default_tenant_id(), None, None)
     try:
         return decks_mod.list_decks(cid)
     except Exception as exc:  # noqa: BLE001 - discovery must never 500
@@ -1298,6 +1305,63 @@ def download_deck(request: Request, portfolioId: Optional[str] = None,
     artefact = result.result
     return FileResponse(str(artefact.local_path), media_type=artefact.content_type,
                         filename=artefact.download_name)
+
+
+class DeckGenerateRequest(BaseModel):
+    """Ask for an investor pack. The tenant is deliberately absent — it comes
+    from the authenticated context, never from the body."""
+
+    portfolioId: Optional[str] = Field(
+        None, description="Portfolio to report on, within the authenticated tenant.")
+    portfolioContext: Optional[str] = Field(
+        None, description="Governed scope: total | direct | acquired | a source "
+                          "portfolio id. Omitted means the total portfolio.")
+    period: Optional[str] = Field(
+        None, description="Reporting period (YYYY-MM or YYYY-MM-DD). Omitted "
+                          "means the latest completed run.")
+    idempotencyKey: Optional[str] = Field(
+        None, description="Repeat a request safely: the same key returns the "
+                          "original job instead of generating again.")
+
+
+def _generation_response(result) -> Any:
+    if not result.ok:
+        err = result.error
+        return JSONResponse(
+            status_code=result.http_status,
+            content={"ok": False, "error": err.message if err else "Unavailable.",
+                     "errorCode": err.code if err else None,
+                     "retryable": err.retryable if err else False,
+                     "requestId": result.request_id})
+    job = result.result
+    return JSONResponse(
+        status_code=202 if not job.terminal else 200,
+        content={"ok": True, "requestId": result.request_id, **job.to_payload()})
+
+
+@app.post("/mi/decks/generate")
+def generate_deck(req: DeckGenerateRequest, request: Request):
+    """Request an investor pack for the authenticated tenant.
+
+    Accepts and returns a job — generation takes seconds, which is too long to
+    hold the request open. The deck is built by the SAME orchestration stage the
+    nightly pipeline uses, so an on-demand pack and a pipeline pack are the same
+    artefact produced the same way and subject to the same publication gates.
+    """
+    context = _execution_context(request, channel=CHANNEL_REACT)
+    return _generation_response(deck_generation_mod.request_generation(
+        context, portfolio_id=req.portfolioId,
+        portfolio_context=req.portfolioContext, period=req.period,
+        idempotency_key=req.idempotencyKey))
+
+
+@app.get("/mi/decks/generate/{job_id}")
+def generate_deck_status(job_id: str, request: Request):
+    """The state of a requested generation: queued, generating, completed,
+    blocked (gates refused publication) or failed."""
+    context = _execution_context(request, channel=CHANNEL_REACT)
+    return _generation_response(
+        deck_generation_mod.get_generation(context, job_id))
 
 
 @app.get("/mi/evolution/forecast")

@@ -53,11 +53,16 @@ KNOWN_ACTOR_TYPES: FrozenSet[str] = frozenset({ACTOR_USER, ACTOR_SERVICE, ACTOR_
 SCOPE_PORTFOLIO_READ = "portfolio:read"
 SCOPE_MI_QUERY = "mi:query"
 SCOPE_ARTEFACT_READ = "artefact:read"
+#: Producing an artefact, as distinct from reading one. Separate because
+#: generation consumes real compute and republishes what external investors
+#: receive, so a deployment may grant reading without granting production.
+SCOPE_ARTEFACT_GENERATE = "artefact:generate"
 
 #: The scope set granted to an authenticated MI user or an internal caller. New
 #: scopes should be added here only when a capability genuinely gates on them.
 DEFAULT_MI_SCOPES: FrozenSet[str] = frozenset({
     SCOPE_PORTFOLIO_READ, SCOPE_MI_QUERY, SCOPE_ARTEFACT_READ,
+    SCOPE_ARTEFACT_GENERATE,
 })
 
 

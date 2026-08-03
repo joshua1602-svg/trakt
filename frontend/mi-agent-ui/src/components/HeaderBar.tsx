@@ -137,7 +137,9 @@ export function HeaderBar({
         )}
 
         {/* Investor deck download (top-right actions). */}
-        <DeckDownloadMenu client={client} portfolioId={portfolioId} reportingPeriod={reportingPeriod} />
+        <DeckDownloadMenu client={client} portfolioId={portfolioId}
+                          reportingPeriod={reportingPeriod}
+                          portfolioContext={selectedContextId} />
 
         {/* Manual refresh — clears the client cache + reloads the active data. */}
         {onRefresh && (

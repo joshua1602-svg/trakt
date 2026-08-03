@@ -232,6 +232,11 @@ export class MockAgentClient implements AgentClient {
     return null; // mock cannot serve real .pptx bytes
   }
 
+  // Generating a pack means running the real governed generator over a real
+  // book. The mock has neither, and a fake "generated" state would be a lie the
+  // UI then acts on — so the action reports itself unavailable instead.
+  readonly generateDeck = null;
+
   getCohorts(portfolioId: string, _grain?: import("@/domain").CohortGrain,
              dimension?: import("@/domain").CohortDimension,
              ): Promise<import("@/domain").CohortAnalysis> {
