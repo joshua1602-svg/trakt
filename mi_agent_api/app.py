@@ -54,6 +54,7 @@ from . import decks as decks_mod
 from . import cohorts as cohorts_mod
 from . import geo as geo_mod
 from . import portfolio_context as portfolio_ctx_mod
+from . import insight_contract
 # The shared governed MI application service both channels (React + Copilot)
 # call. It imports this module's data resolvers lazily, so there is no cycle.
 from . import mi_service
@@ -977,6 +978,92 @@ def movement_detail(detailType: str,
             detailType, cid, as_of=asOf,
             scope=(resolved.scope.context_id if resolved else None),
             reason="Movement detail could not be produced for this point.")
+
+
+@app.get("/mi/insights/weekly-brief")
+def weekly_brief(portfolioId: Optional[str] = None,
+                 client_id: Optional[str] = None,
+                 asOf: Optional[str] = None,
+                 portfolioContext: Optional[str] = None,
+                 request: Request = None, response: Response = None
+                 ) -> Dict[str, Any]:
+    """OPTIONAL Weekly Portfolio Brief — deterministic governed insights.
+
+    Phase 3A, additive and independently removable. Off unless
+    ``TRAKT_MI_WEEKLY_BRIEF`` is set, in which case it 404s and no insight is
+    generated at all.
+
+    Calculates on request from the SAME cached prepared frames and the SAME
+    governed outputs the dashboard already uses — it never reads a source file,
+    never rebuilds the historical model for its own sake, and never recomputes a
+    forecast or a concentration test. There is no persistence layer here.
+    Never 500s: a failing insight type degrades the brief to ``partial``.
+    """
+    from . import insight_engine as engine
+    if not engine.weekly_brief_enabled():
+        raise HTTPException(status_code=404,
+                            detail="weekly brief is not enabled")
+
+    cid, funded_trid = _evo_ids(portfolioId, client_id, None, None)
+    resolved, refusal = _pipeline_scope_gate(
+        portfolioContext, cid, "weekly_brief", portfolioId=cid,
+        status="unavailable", insights=[], omitted=[])
+    if refusal is not None:
+        return refusal
+    root = _pipeline_discovery_root()
+    if not root:
+        return insight_contract.build_brief(
+            [], [], tenant_id=cid, portfolio_id=cid,
+            portfolio_context=(resolved.scope.context_id if resolved else "total"),
+            as_of_date=asOf, comparison_date=None, status="unavailable",
+            reason="No governed pipeline root is configured.")
+
+    etag = http_cache.begin(
+        request, route="mi.insights.weekly-brief",
+        scope=f"{portfolioContext or 'total'}|{asOf or 'latest'}",
+        identity=http_cache.dataset_identity(cid, funded_trid,
+                                             include_pipeline=True))
+    try:
+        scope_id = resolved.scope.context_id if resolved else None
+        # The concentration and funnel inputs are the EXISTING governed outputs,
+        # resolved through the same services the workspace uses — the brief
+        # reads them, it never recomputes them.
+        conc = None
+        try:
+            from . import concentration_tests_api as conc_mod
+            conc = conc_mod.compute_concentration_tests(
+                _onboarding_output_root(), cid, funded_trid,
+                scope=resolved.scope if resolved else None)
+        except Exception as exc:  # noqa: BLE001 - one input, not the brief
+            logger.warning("weekly brief: concentration unavailable: %s", exc)
+        funnel = None
+        try:
+            model = _pipeline_history(cid)
+            funnel = evolution_mod.pipeline_funnel_evolution(
+                root, cid, None, lag_weeks=_kfi_lag_weeks_from_model(model),
+                historical_model=model)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("weekly brief: funnel unavailable: %s", exc)
+            model = None
+
+        result = engine.build(
+            root, cid, tenant_id=cid, as_of=asOf,
+            # Shares the frames the charts already prepared rather than
+            # preparing every extract again under a different cache key.
+            historical_model=_pipeline_history(cid),
+            scope=scope_id, concentration_snapshot=conc, funnel=funnel)
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+        return http_cache.finish(response, etag, result)
+    except http_cache.NotModified:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the brief must never 500
+        logger.warning("weekly brief failed: %s", exc)
+        return insight_contract.build_brief(
+            [], [], tenant_id=cid, portfolio_id=cid,
+            portfolio_context=(resolved.scope.context_id if resolved else "total"),
+            as_of_date=asOf, comparison_date=None, status="unavailable",
+            reason="The weekly brief could not be produced.")
 
 
 @app.get("/mi/evolution/funnel")

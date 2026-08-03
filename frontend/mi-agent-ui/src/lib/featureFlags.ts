@@ -18,6 +18,7 @@
 /** The Vite env fields this module reads (injectable so tests need no bundler). */
 export interface FeatureEnv {
   VITE_MI_ENHANCED_HOVERS?: string;
+  VITE_MI_WEEKLY_BRIEF?: string;
 }
 
 const TRUTHY = new Set(["1", "true", "on", "yes", "enabled"]);
@@ -32,4 +33,18 @@ export function enhancedHoversEnabled(
   env: FeatureEnv = import.meta.env as unknown as FeatureEnv,
 ): boolean {
   return TRUTHY.has(String(env?.VITE_MI_ENHANCED_HOVERS ?? "").trim().toLowerCase());
+}
+
+/**
+ * Phase 3A — the Weekly Portfolio Brief panel.
+ *
+ * Independent of the hover flag and of the API's own `TRAKT_MI_WEEKLY_BRIEF`,
+ * for the same reason: a UI enabled against an API that is not gets a 404,
+ * which the hook reports as "unavailable" and the panel simply does not render.
+ * A mismatch degrades to the current dashboard rather than to an error.
+ */
+export function weeklyBriefEnabled(
+  env: FeatureEnv = import.meta.env as unknown as FeatureEnv,
+): boolean {
+  return TRUTHY.has(String(env?.VITE_MI_WEEKLY_BRIEF ?? "").trim().toLowerCase());
 }

@@ -1,0 +1,102 @@
+# =========================================================================
+# Weekly Portfolio Brief — materiality thresholds (Phase 3A).
+# =========================================================================
+#
+# The insight engine is deterministic: these thresholds are the ONLY thing that
+# decides whether a change is worth telling someone about. They live here, not
+# in the calculation layer, so a portfolio can be tuned without a code change
+# and so the reason an insight did or did not appear is auditable.
+#
+# Every threshold is RELATIVE (a percentage, a percentage-point move, or a share
+# of the book). None is an absolute currency amount: a £5m move is the whole
+# story on a £50m book and noise on a £5bn one, so an absolute floor would make
+# the brief useless at one end of the range and deafening at the other.
+#
+# Values are read through mi_agent_api/insight_config.py, which falls back to
+# the same defaults if this file is missing or a key is absent — so a partial
+# override is safe and the engine never fails closed on configuration.
+
+version: 1
+
+insights:
+
+  # ---- Pipeline movement --------------------------------------------------
+  # Two gates, EITHER of which qualifies. The percentage gate catches a large
+  # relative move on a small book; the share gate catches a move that is large
+  # against the book as a whole even when the percentage looks modest.
+  pipeline_movement:
+    min_change_pct: 2.0
+    min_change_share_of_pipeline_pct: 2.0
+
+  # ---- Ticket size --------------------------------------------------------
+  # Mean and median are reported together and gated independently: a mean that
+  # moves while the median does not is a tail effect, which is worth surfacing
+  # precisely because the two disagree.
+  ticket_size:
+    min_average_change_pct: 5.0
+    min_median_change_pct: 5.0
+    # Below this many cases the mean and median are both unstable week to week.
+    min_case_count: 20
+
+  # ---- Weighted-average LTV ----------------------------------------------
+  # Balance-weighted, never a straight average. Suppressed entirely when
+  # coverage is thin, because a WA LTV over 60% of the book is not the book's.
+  weighted_ltv:
+    min_change_pp: 1.0
+    min_coverage_pct: 90.0
+
+  # ---- Mix shift ----------------------------------------------------------
+  # Only the single most material band move per family is reported; a list of
+  # every band that twitched is noise, not an insight.
+  ticket_mix:
+    min_share_change_pp: 5.0
+  ltv_mix:
+    min_share_change_pp: 5.0
+
+  # ---- Completions --------------------------------------------------------
+  # Weekly completion flow is far more volatile than pipeline stock, so the
+  # gate is correspondingly higher.
+  completions:
+    min_change_pct: 10.0
+
+  # ---- Conversion ---------------------------------------------------------
+  # No prior-period comparison rate is published, so conversion cannot be
+  # gated on movement. It is reported when the governed data itself says
+  # something: a rate under a configured floor, or an insufficient window.
+  # `minimum_acceptable_rate: null` disables the floor test.
+  conversion:
+    minimum_acceptable_rate: null
+    require_sufficient: true
+
+  # ---- Concentration ------------------------------------------------------
+  concentration:
+    amber_utilisation_pct: 90.0
+    red_utilisation_pct: 100.0
+    forecast_horizon_weeks: 12
+
+  # ---- Data quality -------------------------------------------------------
+  # These gate the CREDIBILITY of everything above. A high dimension
+  # reassignment rate means the contributor attribution in the pipeline and
+  # completion insights cannot be trusted, which is why it ranks near the top.
+  data_quality:
+    max_dimension_reassignment_pct: 5.0
+    max_unknown_share_pct: 5.0
+    max_unusable_id_share_pct: 1.0
+    max_duplicate_id_share_pct: 1.0
+    # When true, a clean week produces one explicit "no material issues"
+    # object instead of silence, so the absence of a warning is a statement.
+    emit_when_clean: false
+
+# ---- Brief-level limits ---------------------------------------------------
+brief:
+  max_insights: 8
+  max_per_type:
+    CONCENTRATION_PROXIMITY: 2
+    DATA_QUALITY: 1
+    TICKET_SIZE: 1
+    WEIGHTED_LTV: 1
+    TICKET_MIX_SHIFT: 1
+    LTV_MIX_SHIFT: 1
+    PIPELINE_MOVEMENT: 1
+    COMPLETIONS_MOVEMENT: 1
+    CONVERSION_CONTEXT: 1

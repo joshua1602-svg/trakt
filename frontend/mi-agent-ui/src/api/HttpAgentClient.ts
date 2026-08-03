@@ -20,6 +20,7 @@ import type {
   MIQuerySpec,
   MovementDetail,
   MovementDetailType,
+  WeeklyBrief,
   PipelineEvolution,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
@@ -196,6 +197,13 @@ export class HttpAgentClient implements AgentClient {
     return this.getJson<MovementDetail>(
       `/mi/insight/movement-detail?${this.scoped(portfolioId, portfolioContext,
         { detailType, asOf })}`, signal);
+  }
+
+  getWeeklyBrief(portfolioId: string, portfolioContext?: string, asOf?: string,
+                signal?: AbortSignal): Promise<WeeklyBrief> {
+    return this.getJson<WeeklyBrief>(
+      `/mi/insights/weekly-brief?${this.scoped(portfolioId, portfolioContext,
+        { asOf })}`, signal);
   }
 
   getForecastEvolution(portfolioId: string, portfolioContext?: string,

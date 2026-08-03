@@ -24,6 +24,7 @@ import type {
   SnapshotIndex,
   MovementDetail,
   MovementDetailType,
+  WeeklyBrief,
 } from "@/domain";
 import { buildAgentResponse } from "@/data/mockResponses";
 import { MOCK_SNAPSHOT_INDEX, mockSnapshot } from "@/data/mockSnapshots";
@@ -155,6 +156,19 @@ export class MockAgentClient implements AgentClient {
       counts: null,
       contributors: {},
       components: null,
+    });
+  }
+
+  /** The demo dataset has no governed weekly comparison, so the brief reports
+   * itself unavailable rather than inventing insights that would be
+   * indistinguishable from real ones. */
+  getWeeklyBrief(portfolioId: string): Promise<WeeklyBrief> {
+    return Promise.resolve({
+      brief_version: "1", status: "unavailable",
+      reason: "The weekly brief is not available in the demo dataset.",
+      tenant_id: portfolioId, portfolio_id: portfolioId,
+      portfolio_context: "total", as_of_date: null, comparison_date: null,
+      insight_count: 0, insights: [], omitted: [],
     });
   }
 
