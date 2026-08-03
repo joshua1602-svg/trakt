@@ -71,6 +71,10 @@ class DashboardData:
     extrapolation: Dict[str, Any] = field(default_factory=dict)
     multidim: Dict[str, Any] = field(default_factory=dict)
     cohort_progression: Dict[str, Any] = field(default_factory=dict)
+    #: Per-vintage static-pool series, keyed by vintage — one governed
+    #: ``funded_cohort_progression`` call each, exactly as the React
+    #: Cohorts tab issues when a user selects a vintage.
+    cohort_series: Dict[str, Any] = field(default_factory=dict)
     source_files: List[str] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     notes: List[str] = field(default_factory=list)
@@ -555,11 +559,17 @@ def _multidim(df: pd.DataFrame) -> Dict[str, Any]:
     return out
 
 
-def _cohort_progression(out_root: str, cid: str) -> Dict[str, Any]:
-    """Static-pool cohort progression across reporting periods (line curves per
-    vintage) — the dashboard's /mi/cohorts/progression."""
+def _cohort_progression(out_root: str, cid: str, *,
+                        vintage: Optional[str] = None,
+                        lens_filters: Optional[Dict[str, str]] = None,
+                        lens_label: str = "Total") -> Dict[str, Any]:
+    """Static-pool cohort progression across reporting periods — the dashboard's
+    ``/mi/cohorts/progression``, called with the same arguments the React Cohorts
+    tab sends when a user picks a vintage and a scope."""
     from mi_agent_api import evolution
-    return evolution.funded_cohort_progression(out_root, cid, grain="Y")
+    return evolution.funded_cohort_progression(
+        out_root, cid, grain="Y", vintage=vintage,
+        lens_filters=lens_filters, lens_label=lens_label)
 
 
 def _pipeline_extract_count(root: str, cid: str) -> int:
@@ -671,8 +681,15 @@ def build_dashboard_data(
             data.multidim = _guard(data, "multidim", lambda: _multidim(funded_df))
             data.cohorts = _guard(data, "cohorts",
                                   lambda: _cohorts(funded_df, cid, pid, reporting_date))
+            # Static-pool seasoning, ONE governed call per cohort the deck will
+            # draw — the same call the React Cohorts tab makes when a user picks
+            # a vintage. The Total series is kept for the appendix; the per-
+            # vintage series are what the seasoning slide plots.
             data.cohort_progression = _guard(data, "cohort_progression",
                                              lambda: _cohort_progression(out_root, cid))
+            data.cohort_series = _guard(data, "cohort_series",
+                                        lambda: _cohort_series(out_root, cid, scope,
+                                                               data))
             data.geo = _guard(data, "geo", lambda: _geo(funded_df, cid, rid))
             # Per-type governed snapshots (only when the scope spans >1 type).
             type_snaps = _type_snapshots(
@@ -880,14 +897,7 @@ def _movement(out_root, cid, rid, scope, data: DashboardData,
     """
     from . import movement as _mv
 
-    lens_filters = None
-    lens_label = "Total"
-    if scope is not None and not getattr(scope, "is_total", True):
-        from trakt_core.portfolio import FIELD_PORTFOLIO_TYPE
-        types = [t for t in (getattr(scope, "portfolio_types", ()) or ()) if t]
-        if len(types) == 1:
-            lens_filters = {FIELD_PORTFOLIO_TYPE: types[0]}
-            lens_label = str(getattr(scope, "label", types[0]))
+    lens_filters, lens_label = _scope_lens(scope)
     return _mv.build_bridges(out_root, cid, rid,
                              start_period=prior_reporting_date,
                              lens_filters=lens_filters,
@@ -909,6 +919,51 @@ def _cohorts(funded_df, cid, pid, reporting_date):
     return cohorts.cohort_analysis(
         funded_df, client_id=cid, portfolio_id=pid,
         reporting_date=reporting_date, grain="Y", dimension="vintage")
+
+
+def _cohort_series(out_root, cid, scope, data: DashboardData) -> Dict[str, Any]:
+    """Per-vintage static-pool series for the cohorts the deck will show.
+
+    The vintages come from the governed cohort table already resolved into
+    ``data.cohorts``, so the slide can never plot a cohort the composition table
+    does not contain. Each series is one call to the SAME progression service the
+    dashboard uses; nothing is grouped or aggregated here.
+    """
+    from . import cohorts as _co
+
+    formation = _co.adapt_formation(data.cohorts)
+    if not _co.formation_is_meaningful(formation):
+        return {"available": False, "reason": formation.reason
+                or "no governed cohort composition for this book", "series": {}}
+
+    chosen, overflow = _co.select_cohorts(formation)
+    if not chosen:
+        return {"available": False,
+                "reason": "no vintage holds a material share of the book",
+                "series": {}}
+
+    lens_filters, lens_label = _scope_lens(scope)
+    series: Dict[str, Any] = {}
+    for vintage in chosen:
+        series[vintage] = _guard(
+            data, f"cohort_series[{vintage}]",
+            lambda v=vintage: _cohort_progression(
+                out_root, cid, vintage=v, lens_filters=lens_filters,
+                lens_label=lens_label))
+    return {"available": True, "series": series, "overflow": overflow,
+            "lens": lens_label}
+
+
+def _scope_lens(scope):
+    """(lens_filters, lens_label) for the governed scope — the same narrowing the
+    movement bridge applies, so every multi-period surface reports one book."""
+    if scope is None or getattr(scope, "is_total", True):
+        return None, "Total"
+    from trakt_core.portfolio import FIELD_PORTFOLIO_TYPE
+    types = [t for t in (getattr(scope, "portfolio_types", ()) or ()) if t]
+    if len(types) == 1:
+        return {FIELD_PORTFOLIO_TYPE: types[0]}, str(getattr(scope, "label", types[0]))
+    return None, str(getattr(scope, "label", "Total"))
 
 
 def _geo(funded_df, cid, rid):

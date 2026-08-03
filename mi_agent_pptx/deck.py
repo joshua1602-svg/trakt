@@ -236,13 +236,38 @@ class DeckBuilder:
             t = Emu(int(top0) + r * (int(tile_h) + int(gy)))
             self._tile(slide, l, t, tile_w, tile_h, tile)
 
-    def _chart_boxes(self, n):
-        top = Inches(1.62)
-        h = Inches(4.95)
-        if n <= 1:
-            return [(Inches(0.55), top, Inches(12.25), h)]
-        return [(Inches(0.55), top, Inches(6.0), h),
-                (Inches(6.78), top, Inches(6.0), h)]
+    #: THE content band. Every tile row and every chart panel is laid out across
+    #: these two edges, so a KPI strip and the charts beneath it cannot drift
+    #: apart — which is exactly what happened when tiles used a 3.0in pitch and
+    #: charts a 6.78in origin: the last tile ended at 12.47in and the right chart
+    #: at 12.78in, a third of an inch of visible misalignment.
+    CONTENT_L = 0.55
+    CONTENT_R = 12.78
+    COLUMN_GAP = 0.28
+
+    def _grid(self, n: int, *, gap: Optional[float] = None):
+        """``[(left_in, width_in)]`` for *n* equal columns across the band."""
+        gap = self.COLUMN_GAP if gap is None else gap
+        span = self.CONTENT_R - self.CONTENT_L
+        w = (span - gap * max(n - 1, 0)) / max(n, 1)
+        return [(self.CONTENT_L + i * (w + gap), w) for i in range(n)]
+
+    def _chart_boxes(self, n, *, top: float = 1.62, height: float = 4.95):
+        return [(Inches(l), Inches(top), Inches(w), Inches(height))
+                for l, w in self._grid(min(max(n, 1), 3))]
+
+    def _strip(self, tiles, *, top: float = 1.58, height: float = 1.45):
+        """A KPI row on the same grid the charts use.
+
+        Returns parallel sequences so a caller can ``zip`` them with its tiles;
+        the columns are the grid's, never a per-slide constant.
+        """
+        cols = self._grid(len(tiles))
+        return ([Inches(l) for l, _w in cols],
+                [Inches(top)] * len(tiles),
+                [Inches(w) for _l, w in cols],
+                [Inches(height)] * len(tiles),
+                list(tiles))
 
     def _barlist_card(self, slide, box, title, rows, value_key, *, currency=True,
                       cid="bl", label_key="label"):
@@ -461,10 +486,18 @@ class DeckBuilder:
                      f"{len(items)} governed observations.")
 
     def slide_portfolio_composition(self, spec):
-        """Portfolio Composition — *what do I own today?*
+        """Portfolio Composition — *what do I own today, and how is it divided?*
 
-        The anchor slide: total, then each portfolio type side by side on the
-        same governed measures, so a blended average can never hide a divergence.
+        The anchor slide, and the second page an investor sees. It used to be a
+        label column beside one value column per type — functionally complete and
+        visually a spreadsheet. The measures are unchanged; the hierarchy is not:
+        a summary strip, then the split itself as a proportional bar, then one
+        card per portfolio type leading on the three figures that decide whether
+        the reader keeps reading (balance, share, movement) with the rest beneath.
+
+        Every portfolio type comes from the governed registry, so this renders a
+        single book, a direct/acquired pair, or more than two types without any
+        of them being named here.
         """
         s = self._slide()
         p = self.d.portfolio
@@ -478,85 +511,146 @@ class DeckBuilder:
         from .metric_resolver import compact_currency, compact_number
 
         total_bal = p.total_balance or 0.0
-        # Headline band: the total.
-        self._panel(s, Inches(0.55), Inches(1.58), Inches(12.25), Inches(1.16),
-                    fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
-        self._text(s, Inches(0.8), Inches(1.74), Inches(4.6), Inches(0.3),
-                   "TOTAL FUNDED PORTFOLIO", size=9, color=self.theme.ink_400,
-                   bold=True)
-        self._text(s, Inches(0.8), Inches(2.04), Inches(4.6), Inches(0.55),
-                   compact_currency(total_bal), size=26, bold=True)
-        self._text(s, Inches(5.6), Inches(1.74), Inches(3.2), Inches(0.3),
-                   "LOANS", size=9, color=self.theme.ink_400, bold=True)
-        self._text(s, Inches(5.6), Inches(2.04), Inches(3.2), Inches(0.5),
-                   compact_number(p.loan_count or 0), size=22, bold=True)
-        self._text(s, Inches(8.9), Inches(1.74), Inches(3.7), Inches(0.3),
-                   "CONSTITUENT BOOKS", size=9, color=self.theme.ink_400, bold=True)
-        self._text(s, Inches(8.9), Inches(2.04), Inches(3.7), Inches(0.5),
-                   f"{p.portfolio_count} · {len(p.type_slices) or 1} type(s)",
-                   size=22, bold=True)
-
-        # Per-type columns on identical governed measures.
         slices = list(p.type_slices)
+
+        # -- 1. summary strip -------------------------------------------------
+        tiles = [
+            {"label": "Total funded portfolio", "value": compact_currency(total_bal)},
+            {"label": "Loans", "value": compact_number(p.loan_count or 0)},
+            {"label": "Constituent books", "value": compact_number(p.portfolio_count),
+             "hint": f"{len(slices) or 1} portfolio type"
+                     f"{'s' if (len(slices) or 1) != 1 else ''}"},
+            {"label": "Reporting date",
+             "value": _pretty_date(self.d.reporting_date) or "—",
+             "hint": ("dates differ by book" if p.has_mixed_reporting_dates
+                      else "aligned across books")},
+        ]
+        for l, t, w, h, tile in zip(*self._strip(tiles, top=1.56, height=1.10)):
+            self._tile(s, l, t, w, h, tile)
+
         if not slices:
-            self._text(s, Inches(0.55), Inches(3.1), Inches(12.25), Inches(0.5),
+            self._text(s, Inches(self.CONTENT_L), Inches(3.1),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.5),
                        "Single-portfolio book — no type split applies.", size=12,
                        color=self.theme.ink_400, italic=True)
             self._footer(s)
             return self._record(spec.get("id", "portfolio_composition"),
                                 spec.get("title"), "Single portfolio.")
 
-        # The full per-type comparison lives HERE. A separate "Direct vs
-        # Acquired" slide previously repeated most of these rows alongside a
-        # waterfall identical to the one on Portfolio Movement and Drivers; it
-        # was consolidated away rather than kept for symmetry.
-        rows = [
-            ("Funded balance", lambda sl: compact_currency(sl.balance)),
-            ("Share of book", lambda sl: (f"{(sl.balance or 0) / total_bal * 100:.1f}%"
-                                          if total_bal else "—")),
+        # -- 2. the split, as one proportional bar ----------------------------
+        self._composition_bar(s, slices, total_bal, top=2.90)
+
+        # -- 3. one card per portfolio type -----------------------------------
+        # Cards, not columns: with more than two types a shared-row table forces
+        # every measure into a sliver, while cards simply get narrower and keep
+        # their internal hierarchy.
+        lead = [
+            ("Balance", lambda sl: compact_currency(sl.balance)),
+            ("Share", lambda sl: (f"{(sl.balance or 0) / total_bal * 100:.1f}%"
+                                  if total_bal else "—")),
+            ("Movement", lambda sl: self._signed_currency(sl.balance_movement)),
+        ]
+        rest = [
             ("Loans", lambda sl: compact_number(sl.loan_count or 0)),
             ("Average balance", lambda sl: compact_currency(sl.avg_balance)),
             ("WA current LTV", lambda sl: self._pct_display(sl, "wa_current_ltv")),
             ("WA interest rate", lambda sl: self._pct_display(sl, "wa_rate")),
             ("WA borrower age", lambda sl: self._pct_display(sl, "wa_age")),
-            ("Period movement", lambda sl: self._signed_currency(sl.balance_movement)),
             ("Loan movement", lambda sl: (f"{int(sl.loan_movement):+,}"
                                           if sl.loan_movement is not None else "—")),
-            ("Reporting date", lambda sl: sl.reporting_date or "—"),
+            ("Reporting date", lambda sl: _pretty_date(sl.reporting_date) or "—"),
         ]
-        n = len(slices)
-        gap = Inches(0.2)
-        label_w = Inches(2.9)
-        avail = int(Inches(12.25)) - int(label_w) - (n - 1) * int(gap)
-        col_w = Emu(int(avail / n))
-        top0 = Inches(2.94)
-        # Derived from the band so the table always fits, whatever the row count.
-        row_h = Inches(min(0.44, (6.86 - 3.52) / max(len(rows), 1)))
-
-        # Column headers.
-        for j, sl in enumerate(slices):
-            l = Emu(int(Inches(0.55)) + int(label_w) + j * (int(col_w) + int(gap)))
-            self._panel(s, l, top0, col_w, Inches(0.5), fill=self.theme.bg_panel,
-                        line=self.theme.line)
-            self._text(s, l + Inches(0.16), top0 + Inches(0.12),
-                       col_w - Inches(0.3), Inches(0.3), sl.label.upper(),
-                       size=9.5, bold=True, color=self.theme.peri)
-        for i, (label, fn) in enumerate(rows):
-            t = Emu(int(top0) + int(Inches(0.58)) + i * int(row_h))
-            self._text(s, Inches(0.6), t + Inches(0.08), label_w, Inches(0.3),
-                       label, size=10.5, color=self.theme.ink_400)
-            for j, sl in enumerate(slices):
-                l = Emu(int(Inches(0.55)) + int(label_w) + j * (int(col_w) + int(gap)))
-                try:
-                    value = fn(sl)
-                except Exception:  # noqa: BLE001 — one cell must not break the slide
-                    value = "—"
-                self._text(s, l + Inches(0.16), t + Inches(0.08),
-                           col_w - Inches(0.3), Inches(0.3), str(value),
-                           size=11, bold=True)
+        top = 3.66
+        height = 2.94
+        for (l, w), sl in zip(self._grid(len(slices)), slices):
+            self._type_card(s, sl, lead, rest, Inches(l), Inches(top),
+                            Inches(w), Inches(height))
         self._footer(s)
         self._record(spec.get("id", "portfolio_composition"), spec.get("title"),
-                     f"{n} portfolio type(s).")
+                     f"{len(slices)} portfolio type(s).")
+
+    def _composition_bar(self, s, slices, total, *, top: float):
+        """The split as ONE proportional bar.
+
+        A restrained institutional visual rather than a donut: segment length is
+        the only encoding, it reads left to right like the numbers beneath it,
+        and it degrades to a single full-width segment for a one-type book.
+        """
+        left = self.CONTENT_L
+        width = self.CONTENT_R - self.CONTENT_L
+        colours = [self.theme.peri, self.theme.mint, self.theme.ink_400,
+                   self.theme.rag.get("amber", self.theme.ink_300)]
+        x = left
+        for i, sl in enumerate(slices):
+            share = ((sl.balance or 0.0) / total) if total else (1.0 / len(slices))
+            seg = max(width * share, 0.06)     # a sliver must still be visible
+            bar = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x),
+                                     Inches(top), Inches(seg), Inches(0.30))
+            bar.fill.solid()
+            bar.fill.fore_color.rgb = self._rgb(colours[i % len(colours)])
+            bar.line.fill.background()
+            bar.shadow.inherit = False
+            # The label only goes INSIDE a segment wide enough to hold it;
+            # otherwise the legend row beneath carries it.
+            if seg >= 1.5:
+                self._text(s, Inches(x + 0.12), Inches(top + 0.02),
+                           Inches(seg - 0.24), Inches(0.26),
+                           f"{sl.label} · {share * 100:.1f}%", size=9.5,
+                           bold=True, color=self.theme.navy)
+            x += seg
+        # A legend row ONLY for the segments too narrow to carry their own
+        # label. Listing every type again under a bar that already names them
+        # spends a line of the slide saying the same thing twice.
+        unlabelled = [(i, sl) for i, sl in enumerate(slices)
+                      if width * (((sl.balance or 0.0) / total) if total else 1.0) < 1.5]
+        lx = left
+        for i, sl in unlabelled:
+            dot = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(lx), Inches(top + 0.40),
+                                     Inches(0.10), Inches(0.10))
+            dot.fill.solid()
+            dot.fill.fore_color.rgb = self._rgb(colours[i % len(colours)])
+            dot.line.fill.background()
+            dot.shadow.inherit = False
+            label = f"{sl.label} — {(((sl.balance or 0) / total * 100) if total else 0):.1f}%"
+            self._text(s, Inches(lx + 0.18), Inches(top + 0.34), Inches(3.2),
+                       Inches(0.24), label, size=9, color=self.theme.ink_400)
+            lx += 3.4
+
+    def _type_card(self, s, sl, lead, rest, l, t, w, h):
+        """One portfolio type: three headline measures, then the rest."""
+        self._panel(s, l, t, w, h, fill=self.theme.bg_panel, line=self.theme.line)
+        self._text(s, l + Inches(0.20), t + Inches(0.16), w - Inches(0.4),
+                   Inches(0.30), sl.label.upper(), size=9.5, bold=True,
+                   color=self.theme.peri)
+
+        inner = (w / EMU_IN) - 0.40
+        for i, (label, fn) in enumerate(lead):
+            cw = inner / len(lead)
+            lx = l + Inches(0.20 + i * cw)
+            self._text(s, lx, t + Inches(0.56), Inches(cw - 0.08), Inches(0.24),
+                       label.upper(), size=8, color=self.theme.ink_500, bold=True)
+            self._text(s, lx, t + Inches(0.80), Inches(cw - 0.08), Inches(0.42),
+                       str(self._cell(fn, sl)), size=15 if len(lead) <= 3 else 13,
+                       bold=True)
+
+        band = (h / EMU_IN) - 1.44
+        row_h = min(0.30, band / max(len(rest), 1))
+        size = 10 if row_h >= 0.27 else 9
+        for i, (label, fn) in enumerate(rest):
+            y = t + Inches(1.36 + i * row_h)
+            self._text(s, l + Inches(0.20), y, Inches(inner * 0.58), Inches(0.26),
+                       label, size=size, color=self.theme.ink_400)
+            self._text(s, l + Inches(0.20 + inner * 0.56), y,
+                       Inches(inner * 0.44), Inches(0.26),
+                       str(self._cell(fn, sl)), size=size, bold=True,
+                       align=PP_ALIGN.RIGHT)
+
+    @staticmethod
+    def _cell(fn, sl):
+        try:
+            return fn(sl)
+        except Exception:  # noqa: BLE001 — one cell must not break the slide
+            return "—"
 
     def _pct_display(self, sl, kpi_id):
         """A weighted-average percentage as the governed snapshot formatted it."""
@@ -871,47 +965,231 @@ class DeckBuilder:
         self._record("funded_evolution", spec.get("title"), "", placeholder=ph)
 
     def slide_cohorts(self, spec):
+        """Vintage Formation — *how much business entered each vintage?*
+
+        The governed cohort table (``cohorts.cohort_analysis``, the same service
+        behind the React Cohorts composition table), presented as formation
+        rather than as a bare cross-section. Where the scope spans more than one
+        portfolio type this reports them separately, because a ten-year acquired
+        book and a two-year direct book averaged into one vintage series
+        describe neither.
+        """
+        from . import cohorts as CO
+        from .metric_resolver import compact_currency, compact_number
+
         s = self._slide()
-        self._header(s, spec.get("title", "Vintage Cohorts"),
-                     # NOT static-pool: this is a point-in-time cross-section of
-                     # the CURRENT book grouped by origination year. A static
-                     # pool tracks a fixed cohort forward through time, which
-                     # this release does not render — so it must not be claimed.
-                     "Point-in-time composition of the current book by origination year")
-        rows = sorted(self.d.cohorts.get("cohorts", []), key=lambda r: str(r.get("cohort")))
-        x = [str(r.get("cohort")) for r in rows]
-        boxes = self._chart_boxes(2)
-        # Left: funded balance & book share by vintage. Right: WA LTV & WA rate.
-        def _rate(v):
-            if v is None:
-                return None
-            return v * 100 if v <= 1.5 else v
+        formation = CO.adapt_formation(self.d.cohorts)
+        basis = "Origination vintage" if (formation.cohort_basis or "").find(
+            "origination") >= 0 else "Cohort"
+        self._header(s, spec.get("title", "Vintage Formation"),
+                     f"{basis} composition of the funded book"
+                     + (f" · {formation.span}" if formation.span else ""))
+        if not CO.formation_is_meaningful(formation):
+            self._placeholder_body(
+                s, formation.reason or "No governed cohort composition for this book.")
+            self._footer(s)
+            return self._record("cohorts", spec.get("title"), "", placeholder=True)
+
+        rows = [r for r in formation.rows if r.vintage != "Unknown"]
+        # -- summary strip ----------------------------------------------------
+        oldest, newest = rows[0], rows[-1]
+        tiles = [
+            {"label": "Vintages", "value": compact_number(len(rows))},
+            {"label": "Oldest vintage", "value": oldest.vintage,
+             "hint": compact_currency(oldest.balance)},
+            {"label": "Newest vintage", "value": newest.vintage,
+             "hint": compact_currency(newest.balance)},
+            {"label": "Largest vintage",
+             "value": max(rows, key=lambda r: r.balance or 0).vintage,
+             "hint": compact_currency(max(r.balance or 0 for r in rows))},
+        ]
+        for l, t, w, h, tile in zip(*self._strip(tiles, top=1.58, height=1.16)):
+            self._tile(s, l, t, w, h, tile)
+
+        # -- balance by vintage, then the governed per-vintage measures -------
+        boxes = self._chart_boxes(2, top=3.02, height=3.26)
         il, it, iw, ih = self._card(s, *boxes[0], "Funded balance by vintage")
         p1 = self.work / "cohort_balance.png"
-        if rows:
-            R.draw_lines(p1, x, [{"name": "Funded balance",
-                                  "values": [r.get("balance") for r in rows]}],
-                         iw, ih, theme=self.theme, currency=True, area=True)
-        else:
-            render_placeholder_png(p1, "", "No cohort composition for this run",
-                                   theme=self.theme, width_in=iw, height_in=ih)
+        R.draw_barlist(p1, [{"label": r.vintage, "balance": r.balance}
+                            for r in sorted(rows, key=lambda r: -(r.balance or 0))],
+                       "balance", iw, ih, theme=self.theme)
         self._place(s, p1, il, it, iw, ih)
 
-        il, it, iw, ih = self._card(s, *boxes[1], "WA current LTV & WA rate by vintage")
-        p2 = self.work / "cohort_metrics.png"
-        if rows:
-            R.draw_lines(p2, x, [
-                {"name": "WA current LTV", "values": [_rate(r.get("waLtv")) for r in rows],
-                 "color": "#7c9cf0"},
-                {"name": "WA rate", "values": [_rate(r.get("waRate")) for r in rows],
-                 "color": "#5ec6b8"}],
-                iw, ih, theme=self.theme, currency=False, percent=True)
-        else:
-            render_placeholder_png(p2, "", "No cohort composition for this run",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-        self._place(s, p2, il, it, iw, ih)
+        il, it, iw, ih = self._card(s, *boxes[1], "Vintage measures")
+        self._vintage_table(s, rows, formation, il, it, iw, ih)
         self._footer(s)
-        self._record("cohorts", spec.get("title"), "", placeholder=not rows)
+        self._record("cohorts", spec.get("title"),
+                     f"{len(rows)} governed vintages.")
+
+    def _vintage_table(self, s, rows, formation, il, it, iw, ih):
+        """The governed per-vintage measures, as native text.
+
+        Only columns the service reported in ``metricsAvailable`` are drawn: a
+        tape without an interest rate must lose the rate column, not gain a
+        column of dashes.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        # Columns are declared with RELATIVE weights and laid out across the card
+        # that exists, so a tape carrying every optional measure cannot push the
+        # last column past the panel edge — which a fixed offset table did.
+        have = set(formation.metrics_available)
+        spec_cols = [("Vintage", 1.05, PP_ALIGN.LEFT, lambda r: r.vintage)]
+        if "balance" in have:
+            spec_cols += [
+                ("Balance", 1.15, PP_ALIGN.RIGHT,
+                 lambda r: compact_currency(r.balance)),
+                ("Share", 0.72, PP_ALIGN.RIGHT,
+                 lambda r: f"{r.share_pct:.1f}%" if r.share_pct is not None else "—")]
+        if "loanCount" in have:
+            spec_cols.append(("Loans", 0.72, PP_ALIGN.RIGHT,
+                              lambda r: compact_number(r.loan_count)))
+        if "balance" in have and "loanCount" in have:
+            spec_cols.append(("Avg", 0.80, PP_ALIGN.RIGHT,
+                              lambda r: compact_currency(r.average_balance)))
+        if "waLtv" in have:
+            spec_cols.append(("WA LTV", 0.80, PP_ALIGN.RIGHT,
+                              lambda r: f"{r.wa_ltv:.1f}%" if r.wa_ltv is not None else "—"))
+        if "waRate" in have:
+            spec_cols.append(("WA rate", 0.82, PP_ALIGN.RIGHT,
+                              lambda r: f"{r.wa_rate:.1f}%" if r.wa_rate is not None else "—"))
+        if "waMonthsOnBook" in have:
+            spec_cols.append(("Months", 0.72, PP_ALIGN.RIGHT,
+                              lambda r: compact_number(r.wa_months_on_book)))
+
+        x0 = (il / EMU_IN) + 0.14
+        scale = (iw - 0.28) / sum(c[1] for c in spec_cols)   # iw is the WIDTH
+        cols, dx = [], 0.0
+        for label, weight, align, fn in spec_cols:
+            cols.append((label, dx, weight * scale, align, fn))
+            dx += weight * scale
+        band = ih - 0.46                      # ih is already INCHES from _card
+        shown = rows[: max(1, int(band / 0.26))]
+        row_h = min(0.34, band / max(len(shown), 1))
+        head_y = (it / EMU_IN) + 0.16
+        for label, dx, cw, align, _fn in cols:
+            self._text(s, Inches(x0 + dx), Inches(head_y), Inches(cw), Inches(0.24),
+                       label, size=8.5, color=self.theme.ink_400, bold=True,
+                       align=align)
+        size = 9.5 if len(shown) <= 8 else 8.5
+        for i, r in enumerate(shown):
+            y = Inches(head_y + 0.30 + i * row_h)
+            for label, dx, cw, align, fn in cols:
+                self._text(s, Inches(x0 + dx), y, Inches(cw), Inches(0.26),
+                           str(fn(r)), size=size, align=align,
+                           color=self.theme.ink_100 if label == "Vintage"
+                           else self.theme.ink_300)
+        if len(shown) < len(rows):
+            self._text(s, Inches(x0), Inches(head_y + 0.30 + len(shown) * row_h),
+                       Inches(5.4), Inches(0.24),
+                       f"{len(rows) - len(shown)} further vintages not shown.",
+                       size=8, color=self.theme.ink_500)
+
+    def slide_cohort_progression(self, spec):
+        """Cohort Progression — *how have cohorts seasoned since they formed?*
+
+        The governed static pool (``evolution.funded_cohort_progression``), one
+        call per cohort, plotted on a SEASONING axis: periods since formation,
+        not calendar dates, so a 2019 vintage and a 2024 vintage can be compared
+        at the same age.
+        """
+        from . import cohorts as CO
+        from .metric_resolver import compact_currency
+
+        s = self._slide()
+        payload = self.d.cohort_series or {}
+        series = [CO.adapt_progression(p, v)
+                  for v, p in sorted((payload.get("series") or {}).items())]
+        live = [x for x in series if x.available and len(x.live) >= 2]
+        self._header(s, spec.get("title", "Cohort Progression"),
+                     "Static-pool seasoning — the same cohort tracked across "
+                     "reporting periods")
+        if not live:
+            reason = next((x.reason for x in series if x.reason), None)
+            self._placeholder_body(
+                s, "Static-pool seasoning needs at least two reporting periods "
+                   "in which a cohort holds loans." + (f" {reason}." if reason else ""))
+            self._footer(s)
+            return self._record("cohort_progression", spec.get("title"), "",
+                                placeholder=True)
+
+        # -- balance curves, indexed to formation ----------------------------
+        boxes = self._chart_boxes(2, top=1.62, height=3.62)
+        il, it, iw, ih = self._card(s, *boxes[0],
+                                    "Funded balance by reporting periods since formation")
+        p1 = self.work / "cohort_prog_balance.png"
+        longest = max(len(x.live) for x in live)
+        R.draw_lines(p1, [str(i) for i in range(longest)],
+                     [{"name": x.vintage,
+                       "values": [x.value("funded_balance", i) if i < len(x.live)
+                                  else None for i in range(longest)]}
+                      for x in live],
+                     iw, ih, theme=self.theme, currency=True)
+        self._place(s, p1, il, it, iw, ih)
+
+        # -- retention, the question the curves are asked to answer -----------
+        il, it, iw, ih = self._card(s, *boxes[1],
+                                    "Cohort balance since first observation")
+        self._cohort_change_table(s, live, il, it, iw, ih)
+
+        overflow = payload.get("overflow") or []
+        # Deliberately avoids naming what a balance movement WOULD be attributed
+        # to. The publication gate that bans causal vocabulary is a substring
+        # check and cannot read a negation, and it is the more valuable of the
+        # two properties — so the sentence is written without the word.
+        note = ("Cohorts are the governed static pool — a vintage tracked across "
+                "reporting periods. The change column is the latest period as a "
+                "percentage of that cohort's first observed period. It is not a "
+                "measure of run-off: a cohort can also gain balance where a later "
+                "reporting period boards a loan of that vintage.")
+        if overflow:
+            note += (f" {len(overflow)} smaller vintage"
+                     f"{'s are' if len(overflow) != 1 else ' is'} not plotted.")
+        self._text(s, Inches(0.57), Inches(5.46), Inches(12.2), Inches(0.5), note,
+                   size=9, color=self.theme.ink_500, spacing=1.06)
+        self._footer(s)
+        self._record("cohort_progression", spec.get("title"),
+                     f"{len(live)} governed cohort series.")
+
+    def _cohort_change_table(self, s, live, il, it, iw, ih):
+        from .metric_resolver import compact_currency, compact_number
+
+        spec_cols = [("Cohort", 0.82, PP_ALIGN.LEFT),
+                     ("Periods", 0.70, PP_ALIGN.RIGHT),
+                     ("First observed", 1.16, PP_ALIGN.RIGHT),
+                     ("Latest", 1.06, PP_ALIGN.RIGHT),
+                     ("Balance vs first", 1.28, PP_ALIGN.RIGHT),
+                     ("Loans vs first", 1.20, PP_ALIGN.RIGHT)]
+        scale = (iw - 0.28) / sum(c[1] for c in spec_cols)
+        cols, dx = [], 0.0
+        for label, weight, align in spec_cols:
+            cols.append((label, dx, weight * scale, align))
+            dx += weight * scale
+        x0 = (il / EMU_IN) + 0.14
+        head_y = (it / EMU_IN) + 0.16
+        for label, dx, cw, align in cols:
+            self._text(s, Inches(x0 + dx), Inches(head_y), Inches(cw), Inches(0.24),
+                       label, size=8.5, color=self.theme.ink_400, bold=True,
+                       align=align)
+        band = ih - 0.52                      # ih is already INCHES from _card
+        row_h = min(0.44, band / max(len(live), 1))
+        for i, x in enumerate(live):
+            y = Inches(head_y + 0.32 + i * row_h)
+            bal_ret = x.change_since_first("funded_balance")
+            loan_ret = x.change_since_first("loan_count")
+            values = [
+                (x.vintage, self.theme.ink_100),
+                (str(len(x.live)), self.theme.ink_300),
+                (compact_currency(x.value("funded_balance", 0)), self.theme.ink_300),
+                (compact_currency(x.value("funded_balance", -1)), self.theme.ink_100),
+                (f"{bal_ret:.0f}%" if bal_ret is not None else "—",
+                 self.theme.mint if (bal_ret or 0) >= 100 else self.theme.ink_100),
+                (f"{loan_ret:.0f}%" if loan_ret is not None else "—",
+                 self.theme.ink_300),
+            ]
+            for (value, colour), (_label, dx, cw, align) in zip(values, cols):
+                self._text(s, Inches(x0 + dx), y, Inches(cw), Inches(0.28),
+                           value, size=10, color=colour, align=align)
 
     def slide_pipeline(self, spec):
         s = self._slide()
@@ -947,13 +1225,12 @@ class DeckBuilder:
              "value": compact_currency(p.get("weightedExpectedFundedAmount")),
              "hint": "probability-weighted"},
         ]
-        tw = Inches(2.92)
-        for i, tile in enumerate(tiles):
-            l = Emu(int(Inches(0.55)) + i * int(Inches(3.0)))
-            self._tile(s, l, Inches(1.6), tw, Inches(1.45), tile)
+        # Tiles and charts share ONE grid, so the strip and the panels beneath
+        # it line up at both outer edges.
+        for l, t, w, h, tile in zip(*self._strip(tiles, top=1.60, height=1.45)):
+            self._tile(s, l, t, w, h, tile)
         # two BarLists: stage + broker
-        box1 = (Inches(0.55), Inches(3.28), Inches(6.0), Inches(3.35))
-        box2 = (Inches(6.78), Inches(3.28), Inches(6.0), Inches(3.35))
+        box1, box2 = self._chart_boxes(2, top=3.28, height=3.35)
         self._barlist_card(s, box1, "Pipeline amount by stage",
                            self._stage_rows(p.get("stageBreakdown", [])), "pipelineAmount",
                            cid="pipe_stage")
@@ -1063,60 +1340,60 @@ class DeckBuilder:
         self._record("origination_flow", spec.get("title"), "", placeholder=single)
 
     def slide_multidim(self, spec):
-        """Three multi-dimension funded views: LTV×Age bubble (left half) + two
-        LTV heatmaps (borrower type, region) stacked on the right half."""
+        """Funded balance across paired dimensions — one visual grammar.
+
+        LTV × borrower age used to be a bubble matrix while LTV × borrower type
+        and LTV × region were heatmaps, though all three answer the same
+        question: how much balance sits in each cell of a two-way band cross-tab.
+        Bubble AREA encodes the value but bubble POSITION encodes nothing, so a
+        reader compares circles by eye where a heatmap lets them read the number.
+        All three are now heatmaps on one colour scale methodology.
+
+        The underlying cross-tabs are unchanged — the bubble was already drawing
+        the same matrix, via its ``points`` projection.
+        """
         s = self._slide()
         self._header(s, spec.get("title", "Multi-Dimensional Risk Analytics"),
                      "Funded balance across paired dimensions", accent=self.theme.peri)
         md = self.d.multidim or {}
         # Only panels that actually resolved are drawn, and the layout adapts to
         # how many there are. Rendering an empty card labelled "not available"
-        # tells an investor nothing and makes the pack look unfinished; the
-        # composition guard omits the slide entirely when none resolve.
-        bubble = md.get("ltv_age") if (md.get("ltv_age") or {}).get("points") else None
-        heatmaps = [(key, title) for key, title in
-                    (("ltv_borrower_type", "Balance by LTV × Borrower Type"),
-                     ("ltv_region", "Balance by LTV × Region"))
-                    if (md.get(key) or {}).get("matrix")]
+        # tells an investor nothing; the composition guard omits the slide when
+        # none resolve.
+        panels = [(key, title) for key, title in
+                  (("ltv_age", "Balance by LTV × Borrower Age"),
+                   ("ltv_borrower_type", "Balance by LTV × Borrower Type"),
+                   ("ltv_region", "Balance by LTV × Region"))
+                  if (md.get(key) or {}).get("matrix")]
+        if not panels:
+            self._placeholder_body(s, "No paired funded dimensions resolved.")
+            self._footer(s)
+            return self._record("multidim", spec.get("title"), "", placeholder=True)
 
-        if bubble and heatmaps:
-            # Bubble on the left, heatmaps stacked on the right.
-            il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.02),
-                                        Inches(4.95), "Balance by LTV × Borrower Age")
-            p0 = self.work / "md_bubble.png"
-            R.draw_bubble(p0, bubble["points"], bubble["xLabels"], bubble["yLabels"],
-                          iw, ih, theme=self.theme)
-            self._place(s, p0, il, it, iw, ih)
-            if len(heatmaps) == 1:
-                boxes = [(Inches(6.78), Inches(1.62), Inches(6.02), Inches(4.95))]
-            else:
-                boxes = [(Inches(6.78), Inches(1.62), Inches(6.02), Inches(2.42)),
-                         (Inches(6.78), Inches(4.15), Inches(6.02), Inches(2.42))]
-            for box, (key, title) in zip(boxes, heatmaps):
-                il, it, iw, ih = self._card(s, *box, title)
-                hm = md[key]
-                path = self.work / f"md_{key}.png"
-                R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
-                               iw, ih, theme=self.theme)
-                self._place(s, path, il, it, iw, ih)
-        elif bubble:
-            il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(12.25),
-                                        Inches(4.95), "Balance by LTV × Borrower Age")
-            p0 = self.work / "md_bubble.png"
-            R.draw_bubble(p0, bubble["points"], bubble["xLabels"], bubble["yLabels"],
-                          iw, ih, theme=self.theme)
-            self._place(s, p0, il, it, iw, ih)
+        # Region carries the longest labels, so it takes the full width when it
+        # would otherwise share a row with another matrix.
+        if len(panels) == 3:
+            wide = [p for p in panels if p[0] == "ltv_region"]
+            narrow = [p for p in panels if p[0] != "ltv_region"]
+            boxes = [(Inches(l), Inches(1.62), Inches(w), Inches(2.42))
+                     for l, w in self._grid(2)]
+            boxes += [(Inches(self.CONTENT_L), Inches(4.20),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(2.38))]
+            ordered = narrow + wide
         else:
-            boxes = self._chart_boxes(len(heatmaps))
-            for box, (key, title) in zip(boxes, heatmaps):
-                il, it, iw, ih = self._card(s, *box, title)
-                hm = md[key]
-                path = self.work / f"md_{key}.png"
-                R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
-                               iw, ih, theme=self.theme)
-                self._place(s, path, il, it, iw, ih)
+            boxes = self._chart_boxes(len(panels))
+            ordered = panels
+
+        for box, (key, title) in zip(boxes, ordered):
+            il, it, iw, ih = self._card(s, *box, title)
+            hm = md[key]
+            path = self.work / f"md_{key}.png"
+            R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
+                           iw, ih, theme=self.theme)
+            self._place(s, path, il, it, iw, ih)
         self._footer(s)
-        self._record("multidim", spec.get("title"), "", placeholder=False)
+        self._record("multidim", spec.get("title"),
+                     f"{len(panels)} paired dimensions.", placeholder=False)
 
     def slide_funnel(self, spec):
         s = self._slide()
@@ -1311,34 +1588,49 @@ class DeckBuilder:
 
         colour = {"concern": self.theme.rag["red"],
                   "attention": self.theme.rag["amber"]}
-        top = 1.62
+        # ONE band, shared by both columns, so the watch stack and the
+        # observations panel start and finish on the same two lines whatever the
+        # item count. A fixed 0.86in pitch left the stack ending above the panel
+        # beside it for every count except five.
+        BAND_TOP, BAND_BOTTOM = 1.62, 6.52
+        band = BAND_BOTTOM - BAND_TOP
+        top = BAND_TOP
         # The two columns are sized to what there is to say. With no watch items
         # a narrow left column left roughly 60% of the slide empty, which reads
         # as a rendering failure rather than as a clean bill of health.
         left_w = 7.7 if watch else 6.02
         obs_l = 8.5 if watch else 6.78
-        obs_w = 4.3 if watch else 6.02
+        obs_w = (self.CONTENT_R - 8.5) if watch else 6.02
         if watch:
-            for i, item in enumerate(watch[:5]):
-                t = Inches(top + i * 0.86)
+            items = watch[:5]
+            pitch = band / len(items)
+            row_h = min(1.30, pitch - 0.10)
+            for i, item in enumerate(items):
+                t = Inches(top + i * pitch)
                 accent = colour.get(item.severity, self.theme.ink_400)
-                self._panel(s, Inches(0.55), t, Inches(left_w), Inches(0.76),
+                self._panel(s, Inches(0.55), t, Inches(left_w), Inches(row_h),
                             fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
                 chip = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.55), t,
-                                          Inches(0.05), Inches(0.76))
+                                          Inches(0.05), Inches(row_h))
                 chip.fill.solid()
                 chip.fill.fore_color.rgb = self._rgb(accent)
                 chip.line.fill.background()
                 chip.shadow.inherit = False
-                self._text(s, Inches(0.78), t + Inches(0.09), Inches(left_w - 0.5),
-                           Inches(0.28), item.headline, size=11, bold=True)
-                self._text(s, Inches(0.78), t + Inches(0.38), Inches(left_w - 0.5),
-                           Inches(0.32), item.summary, size=8.5,
-                           color=self.theme.ink_400)
+                # A taller row (few items) gets a larger headline and more room
+                # for the body, rather than the same 0.76in card with white space
+                # underneath it.
+                head_pt = 12.5 if row_h >= 1.0 else 11
+                self._text(s, Inches(0.78), t + Inches(0.10), Inches(left_w - 0.5),
+                           Inches(0.30), item.headline, size=head_pt, bold=True)
+                self._text(s, Inches(0.78), t + Inches(0.10 + 0.32),
+                           Inches(left_w - 0.5), Inches(max(0.28, row_h - 0.52)),
+                           item.summary, size=9.5 if row_h >= 1.0 else 8.5,
+                           color=self.theme.ink_400, spacing=1.06)
         else:
             # An empty list is a finding, and must be stated rather than leaving
             # the reader to wonder whether the check ran at all.
-            self._panel(s, Inches(0.55), Inches(1.62), Inches(left_w), Inches(4.9),
+            self._panel(s, Inches(0.55), Inches(BAND_TOP), Inches(left_w),
+                        Inches(band),
                         fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
             self._text(s, Inches(0.85), Inches(1.94), Inches(left_w - 0.6),
                        Inches(0.72),
@@ -1365,21 +1657,28 @@ class DeckBuilder:
                            size=9.5, color=self.theme.ink_400)
 
         # Observations column.
-        self._panel(s, Inches(obs_l), Inches(1.62), Inches(obs_w), Inches(4.9),
+        self._panel(s, Inches(obs_l), Inches(BAND_TOP), Inches(obs_w), Inches(band),
                     fill=self.theme.bg_panel, line=self.theme.line)
         self._text(s, Inches(obs_l + 0.22), Inches(1.78), Inches(obs_w - 0.4),
                    Inches(0.3), "OBSERVATIONS", size=9, bold=True,
                    color=self.theme.peri)
-        y = 2.14
-        for item in observations[:3]:
+        # Observations are distributed down the SAME band rather than stacked at
+        # the top of it, so a single observation does not sit above four inches
+        # of empty panel.
+        shown_obs = observations[:3]
+        obs_pitch = (band - 0.60) / max(len(shown_obs), 1)
+        y = BAND_TOP + 0.52
+        for item in shown_obs:
             self._text(s, Inches(obs_l + 0.22), Inches(y), Inches(obs_w - 0.4),
                        Inches(0.46), item.headline, size=10, bold=True)
             self._text(s, Inches(obs_l + 0.22), Inches(y + 0.5), Inches(obs_w - 0.4),
-                       Inches(0.72), item.summary[:150], size=8.5,
-                       color=self.theme.ink_400)
-            y += 1.42
+                       Inches(min(1.30, obs_pitch - 0.60)), item.summary[:220],
+                       size=9 if obs_pitch >= 1.3 else 8.5,
+                       color=self.theme.ink_400, spacing=1.06)
+            y += obs_pitch
         if not observations:
-            self._text(s, Inches(obs_l + 0.22), Inches(2.14), Inches(obs_w - 0.4),
+            self._text(s, Inches(obs_l + 0.22), Inches(BAND_TOP + 0.52),
+                       Inches(obs_w - 0.4),
                        Inches(0.3), "None recorded.", size=10,
                        color=self.theme.ink_400)
         self._footer(s)
@@ -1786,6 +2085,7 @@ class DeckBuilder:
         "watchlist": "slide_watchlist",
         "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
+        "cohort_progression": "slide_cohort_progression",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",
         "funnel": "slide_funnel", "origination_flow": "slide_origination_flow",
         "forecast_bridge": "slide_forecast_bridge",

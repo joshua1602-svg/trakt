@@ -300,16 +300,29 @@ def _gate_no_placeholder_language(text: Optional[str]) -> GateResult:
                       evidence={"phrases": hits})
 
 
-def _gate_no_false_static_pool(text: Optional[str]) -> GateResult:
+def _gate_no_false_static_pool(text: Optional[str], build_report=None) -> GateResult:
+    """Static-pool language is permitted ONLY when the static pool was rendered.
+
+    The gate began life as an outright ban, because the deck showed a
+    point-in-time cross-section and calling it a static pool would have been a
+    false claim. Now that the governed progression service is rendered, the
+    claim can be true — so the gate checks the claim against the deck's own
+    composition rather than forbidding the words. A pack that says "static pool"
+    with no seasoning slide still fails, which is the property that mattered.
+    """
     if text is None:
         return GateResult("no_false_static_pool_claim", False, "deck could not be read")
     low = text.lower()
     hits = [p for p in _STATIC_POOL_PHRASES if p in low]
-    ok = not hits
+    rendered = any(str(r.get("id")) == "cohort_progression" and not r.get("placeholder")
+                   for r in ((build_report or {}).get("slides") or ()))
+    ok = not hits or rendered
     return GateResult("no_false_static_pool_claim", ok,
-                      "no static-pool claim is made" if ok else
+                      ("static-pool analysis is rendered, so the claim is supported"
+                       if hits and rendered else "no static-pool claim is made")
+                      if ok else
                       "the deck claims static-pool analysis, which it does not render",
-                      evidence={"phrases": hits})
+                      evidence={"phrases": hits, "progression_rendered": rendered})
 
 
 def _gate_pipeline_reconciles(text: Optional[str], pipeline) -> GateResult:
@@ -493,7 +506,7 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         # -- v2.1: client-safety and reconciliation --------------------------
         _gate_no_internal_paths(text),
         _gate_no_placeholder_language(text),
-        _gate_no_false_static_pool(text),
+        _gate_no_false_static_pool(text, build_report),
         _gate_no_empty_slides(deck_path, records),
         _gate_pipeline_reconciles(text, getattr(data, "pipeline", None)),
         _gate_concentration_reconciles(text, getattr(data, "concentration", None)),

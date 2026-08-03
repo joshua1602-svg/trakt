@@ -317,3 +317,81 @@ def test_the_deck_layer_owns_no_economic_calculation():
         assert required in sourced, (
             f"{required} is not referenced anywhere in the deck layer — a deck "
             f"surface may have started computing its own figures")
+
+
+# --------------------------------------------------------------------------- #
+# Cohorts and vintages.
+#
+# The deck used to group the current book by origination year itself. It now
+# consumes the two governed services the React Cohorts tab consumes, so the two
+# channels can be compared cohort by cohort — which is the only way to catch the
+# deck drifting onto its own definition again.
+# --------------------------------------------------------------------------- #
+
+def test_the_vintage_table_is_the_governed_cohort_table(deck, react):
+    from mi_agent_pptx import cohorts as CO
+
+    api = react("/mi/cohorts", grain="Y", dimension="vintage")
+    theirs = {str(c["cohort"]): c for c in api.get("cohorts") or ()}
+    mine = {r.vintage: r for r in CO.adapt_formation(deck.cohorts).rows}
+    assert mine, "the deck resolved no vintages"
+    assert set(mine) == set(theirs)
+    for vintage, row in mine.items():
+        src = theirs[vintage]
+        assert _close(row.balance, src.get("balance")), vintage
+        assert row.loan_count == src.get("loanCount"), vintage
+        assert _close(row.share_pct, src.get("sharePct")), vintage
+
+
+def test_the_deck_reports_the_governed_cohort_basis(deck, react):
+    """Vintage assignment is the service's, so the basis it declares must reach
+    the deck rather than being restated in the deck's own words."""
+    from mi_agent_pptx import cohorts as CO
+
+    api = react("/mi/cohorts", grain="Y", dimension="vintage")
+    assert CO.adapt_formation(deck.cohorts).cohort_basis == api.get("cohortBasis")
+
+
+def test_the_progression_series_are_the_governed_static_pool(book, react):
+    """Each cohort curve must equal the /mi/cohorts/progression payload for the
+    SAME vintage — the deck issues the identical call the dashboard issues."""
+    from pathlib import Path as _P
+
+    from mi_agent_pptx import cohorts as CO
+    from mi_agent_pptx.mi_api import build_dashboard_data
+
+    data = build_dashboard_data(book, client_id=CLIENT, as_of=AS_OF,
+                                output_root=str(_P(book).parent))
+    payload = data.cohort_series or {}
+    if not payload.get("available"):
+        pytest.skip("this book has no material vintage to season")
+
+    for vintage, mine_raw in (payload.get("series") or {}).items():
+        api = react("/mi/cohorts/progression", vintage=vintage, grain="Y")
+        mine = CO.adapt_progression(mine_raw, vintage)
+        theirs = CO.adapt_progression(api, vintage)
+        assert mine.available == theirs.available, vintage
+        assert [p.period for p in mine.points] == [p.period for p in theirs.points], vintage
+        for a, b in zip(mine.points, theirs.points):
+            assert a.loan_count == b.loan_count, f"{vintage}/{a.period}"
+            assert _close(a.metrics.get("funded_balance"),
+                          b.metrics.get("funded_balance")), f"{vintage}/{a.period}"
+            assert _close(a.metrics.get("wa_ltv"), b.metrics.get("wa_ltv"),
+                          tol=0.05), f"{vintage}/{a.period}"
+
+
+def test_the_deck_never_calls_a_cohort_ratio_retention():
+    """The governed service re-selects a cohort by vintage each period rather
+    than freezing it at formation, so the ratio can exceed 100%. Calling that
+    "retention" would state an analytic the service does not support."""
+    from pathlib import Path as _P
+
+    import mi_agent_pptx
+
+    root = _P(mi_agent_pptx.__file__).parent
+    for name in ("cohorts.py", "deck.py"):
+        text = (root / name).read_text(encoding="utf-8")
+        body = "\n".join(l for l in text.splitlines()
+                         if not l.strip().startswith("#"))
+        assert "retention" not in body.lower() or "retention asserts" in body.lower(), \
+            f"{name} still presents a cohort ratio as retention"

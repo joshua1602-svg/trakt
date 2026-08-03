@@ -120,13 +120,26 @@ slides:
     when: "has_funded_history"
 
   # 12 ------------------------------------------------------ Vintage Cohorts
-  # NOTE: a point-in-time cross-section by origination vintage. True static-pool
-  # seasoning (months-on-book, balance retention) is deliberately NOT claimed
-  # here — it is a separate release.
+  # Vintage formation, from the governed cohort table the React Cohorts tab
+  # reads (cohorts.cohort_analysis). Point-in-time by construction: it describes
+  # what each vintage looks like TODAY.
   - id: cohorts
     type: cohorts
-    title: "Origination Vintages"
-    question: "How does the book break down by origination year?"
+    title: "Vintage Formation"
+    question: "How much of the book sits in each origination vintage?"
+    when: has_cohorts
+
+  # Static-pool seasoning, from the governed progression service
+  # (evolution.funded_cohort_progression) — one call per cohort, exactly as the
+  # dashboard issues when a user selects a vintage. Omitted unless a cohort
+  # holds loans in two or more reporting periods: a single period is a formation
+  # snapshot, and joining one point into a line would be the misleading trend
+  # the sufficiency rules exist to prevent.
+  - id: cohort_progression
+    type: cohort_progression
+    title: "Cohort Progression"
+    question: "How have the cohorts seasoned since they formed?"
+    when: has_cohort_progression
 
   # 13 ---------------------------------------------------- Pipeline Overview
   # Pipeline is direct-origination only; an acquired book does not originate.

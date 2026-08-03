@@ -104,6 +104,24 @@ def _periods(payload: Any, minimum: int = 2) -> bool:
     return len(payload.get("periods") or ()) >= minimum
 
 
+def _cohort_progression_ready(data: Any) -> bool:
+    """True when the governed static pool has something to season.
+
+    Asks the cohort adapter rather than re-deriving sufficiency here, so the
+    slide's guard and the slide's own emptiness check can never disagree.
+    """
+    payload = getattr(data, "cohort_series", {}) or {}
+    if not payload.get("available"):
+        return False
+    try:
+        from . import cohorts as _co
+        return _co.progression_is_meaningful(
+            [_co.adapt_progression(p, v)
+             for v, p in (payload.get("series") or {}).items()])
+    except Exception:  # noqa: BLE001 — a guard must never break composition
+        return False
+
+
 def build_facts(data: Any) -> Dict[str, Any]:
     """The governed facts a ``when:`` expression may refer to.
 
@@ -141,6 +159,10 @@ def build_facts(data: Any) -> Dict[str, Any]:
         "has_funded_history": _periods(getattr(data, "funded_evolution", {})),
         "has_geo": bool((getattr(data, "geo", {}) or {}).get("areas")),
         "has_cohorts": bool((getattr(data, "cohorts", {}) or {}).get("cohorts")),
+        # Seasoning exists only when a cohort holds loans in TWO OR MORE
+        # reporting periods. One period is a formation snapshot; drawing a line
+        # through it would claim a trend the data does not contain.
+        "has_cohort_progression": _cohort_progression_ready(data),
         "has_multidim": bool(getattr(data, "multidim", {}) or {}),
         # -- pipeline --------------------------------------------------------
         "has_pipeline": bool(getattr(data, "pipeline", {}) or {}),
@@ -208,6 +230,10 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
     "funded_evolution": _evolution_guard("funded_evolution", "funded evolution"),
     "cohorts": lambda s, d: (None if (getattr(d, "cohorts", {}) or {}).get("cohorts")
                              else "no origination vintage data on the funded tape"),
+    "cohort_progression": lambda s, d: (
+        None if _cohort_progression_ready(d)
+        else "static-pool seasoning needs a cohort with loans in at least two "
+             "reporting periods"),
     "pipeline_summary": lambda s, d: (None if (getattr(d, "pipeline", {}) or {})
                                       else "no governed pipeline source for this book"),
     "pipeline_evolution": _evolution_guard("pipeline_evolution", "pipeline evolution"),

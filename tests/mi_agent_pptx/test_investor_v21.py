@@ -348,12 +348,27 @@ def test_dates_are_rendered_in_prose_not_iso_only(run_root, tmp_path):
 # W5 — vintage wording.
 # --------------------------------------------------------------------------- #
 
-def test_no_static_pool_claim_survives(run_root, tmp_path):
+def test_static_pool_language_appears_only_when_the_static_pool_is_rendered(
+        run_root, tmp_path):
+    """The v2.1 rule was an outright ban, because the deck showed a
+    point-in-time cross-section and calling it a static pool would have been a
+    false claim. The deck now renders the governed progression service, so the
+    claim can be true — and the property worth holding is the conditional one.
+    """
+    from mi_agent_pptx.cli import preflight_path
+
     out = tmp_path / "vintage.pptx"
     _build(run_root, out)
     text = _text(out).lower()
-    assert "static-pool" not in text and "static pool" not in text
-    assert "origination vintages" in text
+    verdict = json.loads(preflight_path(out).read_text(encoding="utf-8"))
+    rendered = any(str(r.get("id")) == "cohort_progression" and not r.get("placeholder")
+                   for r in (verdict.get("slides") or ()))
+    claims = "static-pool" in text or "static pool" in text
+    assert not claims or rendered, \
+        "the deck claims static-pool analysis without rendering the static pool"
+    # The vintage slide is always present when the tape carries an origination
+    # date, whatever it is called.
+    assert "vintage" in text
 
 
 def test_static_pool_gate_would_block_the_old_wording():

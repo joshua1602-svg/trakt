@@ -67,6 +67,15 @@ MATERIAL_SHARE_PP = 2.0
 MATERIAL_LTV_PP = 0.5
 
 
+def _dimension_label(label: str) -> str:
+    """A dimension name in prose. ``.lower()`` alone turned "LTV band" into
+    "ltv band" — an acronym is not a word."""
+    lowered = str(label or "").lower()
+    for acronym in ("ltv", "nneg", "kfi"):
+        lowered = lowered.replace(acronym, acronym.upper())
+    return lowered
+
+
 def _money(value: Optional[float]) -> str:
     """Currency in the pack's own convention — never a raw number."""
     if value is None:
@@ -224,9 +233,14 @@ def _movement_items(ctx, movement) -> List[Insight]:
                 ctx, CONCENTRATION_SHIFT,
                 f"{contributor.category} share of the book {direction} "
                 f"{abs(pp):.1f} percentage points.",
-                f"Within {bridge.label.lower()}, {contributor.category} moved "
-                f"{contributor.delta:+,.0f} over the period, changing its share "
-                f"of funded balance by {pp:+.1f} percentage points.",
+                # The amount goes through the shared governed formatting, not
+                # `:+,.0f`. "+38,425,896" is a developer diagnostic: every other
+                # figure in the pack reads £38.4m, and a raw integer beside them
+                # makes the reader stop and count digits.
+                f"Within {_dimension_label(bridge.label)}, {contributor.category} "
+                f"{'increased by' if contributor.delta >= 0 else 'reduced by'} "
+                f"{_money(abs(contributor.delta))} over the period, changing its "
+                f"share of funded balance by {pp:+.1f} percentage points.",
                 severity=SEVERITY_ATTENTION,
                 discriminator=f"{key}:{contributor.category}",
                 metrics={"delta": contributor.delta, "share_change_pp": pp,

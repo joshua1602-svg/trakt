@@ -76,7 +76,11 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
     pad_top, pad_bot = 0.10, 0.05
     band = (1.0 - pad_top - pad_bot) / max(n, 1)
     bar_h = min(band * 0.62, 0.135)
-    label_x, tx0, tx1 = 0.005, 0.335, 0.85
+    # The label column carries real region and broker names. At 0.335 the widest
+    # standard UK region ("Yorkshire and The Humber", 24 characters) truncated on
+    # every deck; a truncated dimension label is a legibility defect, not a
+    # styling choice.
+    label_x, tx0, tx1 = 0.005, 0.385, 0.86
     tw = tx1 - tx0
     max_chars = max(10, int((tx0 - label_x) * w * 72 / (10.5 * 0.56)))
     for i, (lab, val) in enumerate(zip(labels, values)):
@@ -302,9 +306,12 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8.5,
                        color=theme.ink_500)
     if len(series) > 1:
+        # ONE row. At ncol=3 a fourth series wrapped onto a second row that the
+        # axes' headroom did not allow for, and the wrapped entry printed over
+        # the row above it.
         leg = ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.02),
-                        fontsize=8.5, frameon=False,
-                        ncol=min(len(series), 3), handlelength=1.4)
+                        fontsize=8.5 if len(series) <= 4 else 7.5, frameon=False,
+                        ncol=len(series), handlelength=1.4, columnspacing=1.4)
         for t in leg.get_texts():
             t.set_color(theme.ink_300)
     return _save(fig, path, theme, dpi)
