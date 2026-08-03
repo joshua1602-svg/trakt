@@ -71,8 +71,10 @@ _METRIC_DISPLAY: Dict[str, Tuple[str, str, Optional[str]]] = {
     "weighted_expected_funded_amount": ("gbp", "gbp", None),
     "loan_count": ("count", "number", None),
     "pipeline_case_count": ("count", "number", None),
+    # Both fractions: the evolution routes now emit one convention, so the
+    # display scale is the same for every percent metric they carry.
     "wa_ltv": ("pct_fraction", "pct", "percent_fraction"),
-    "wa_interest_rate": ("pct_points", "pct", "percent_points"),
+    "wa_interest_rate": ("pct_fraction", "pct", "percent_fraction"),
     "avg_borrower_age": ("decimal", "decimal", None),
 }
 
@@ -680,10 +682,12 @@ def _funded_metric_value(df, metric_key: str) -> Optional[float]:
         return evolution_mod._bal_sum(df)
     if metric_key == "loan_count":
         return int(len(df))
+    # Fractions, matching assemble_funded_evolution exactly — this helper's
+    # contract is that a filtered series reconciles to the unfiltered one.
     if metric_key == "wa_ltv":
-        return evolution_mod._weighted_avg(df, "current_loan_to_value")
+        return evolution_mod._pct_fraction(df, "current_loan_to_value")
     if metric_key == "wa_interest_rate":
-        return evolution_mod._weighted_avg(df, "current_interest_rate")
+        return evolution_mod._pct_fraction(df, "current_interest_rate")
     if metric_key == "avg_borrower_age":
         return evolution_mod._simple_avg(df, "youngest_borrower_age")
     return None

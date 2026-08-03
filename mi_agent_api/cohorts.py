@@ -78,16 +78,24 @@ def _weighted_avg(values: pd.Series, weights: pd.Series) -> Optional[float]:
     return round(float((v[mask] * w[mask]).sum() / denom), 4)
 
 
-def _weighted_avg_pct(values: pd.Series, weights: pd.Series) -> Optional[float]:
+def _weighted_avg_pct(values: pd.Series, weights: pd.Series,
+                      scale_from: Optional[pd.Series] = None) -> Optional[float]:
     """Balance-weighted average of a PERCENT column, normalised to a FRACTION
     (0.0955 == 9.55%). The funded tape stores LTV as a fraction but the interest
     rate in points (9.55), so a single ×100 formatter turned 9.55% into 955%.
     Detect the column's storage scale and emit a fraction so the UI's percent
-    formatter renders every rate/LTV correctly regardless of tape convention."""
+    formatter renders every rate/LTV correctly regardless of tape convention.
+
+    ``scale_from`` must be the WHOLE column whenever ``values`` is one cohort's
+    slice of it. The storage scale belongs to the column, and deciding it per
+    cohort scaled neighbouring rows of the same table differently — a small
+    low-LTV band stored in points sits under the 1.5 median threshold, so it
+    was read as a fraction and rendered 1.23 as 123%."""
     wavg = _weighted_avg(values, weights)
     if wavg is None:
         return None
-    if percent_storage_scale(values) == PERCENT_POINTS:
+    basis = scale_from if scale_from is not None else values
+    if percent_storage_scale(basis) == PERCENT_POINTS:
         return round(wavg / 100.0, 6)
     return wavg
 
@@ -239,10 +247,11 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
             row["balance"] = round(bal, 2)
             row["sharePct"] = (round(bal / total_balance * 100, 2)
                                if total_balance else None)
+        # Scale from the whole column, never this cohort's slice of it.
         if _LTV in sub.columns and sub_balance is not None:
-            row["waLtv"] = _weighted_avg_pct(sub[_LTV], sub[_BALANCE])
+            row["waLtv"] = _weighted_avg_pct(sub[_LTV], sub[_BALANCE], work[_LTV])
         if _RATE in sub.columns and sub_balance is not None:
-            row["waRate"] = _weighted_avg_pct(sub[_RATE], sub[_BALANCE])
+            row["waRate"] = _weighted_avg_pct(sub[_RATE], sub[_BALANCE], work[_RATE])
         if _MOB in sub.columns and sub_balance is not None:
             row["waMonthsOnBook"] = _weighted_avg(sub[_MOB], sub[_BALANCE])
         cohorts.append(row)
