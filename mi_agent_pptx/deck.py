@@ -30,6 +30,21 @@ SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
 EMU_IN = 914400
 
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December")
+
+
+def _pretty_date(value: Any) -> str:
+    """``2026-06-30`` -> ``30 June 2026``, for a client-facing page."""
+    text = str(value or "").strip()
+    parts = text.split("-")
+    if len(parts) == 3 and len(parts[0]) == 4:
+        try:
+            return f"{int(parts[2])} {_MONTHS[int(parts[1]) - 1]} {parts[0]}"
+        except (ValueError, IndexError):
+            return text
+    return text
+
 
 @dataclass
 class DeckContext:
@@ -685,7 +700,11 @@ class DeckBuilder:
     def slide_cohorts(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Vintage Cohorts"),
-                     "Static-pool profile compared across origination vintages")
+                     # NOT static-pool: this is a point-in-time cross-section of
+                     # the CURRENT book grouped by origination year. A static
+                     # pool tracks a fixed cohort forward through time, which
+                     # this release does not render — so it must not be claimed.
+                     "Point-in-time composition of the current book by origination year")
         rows = sorted(self.d.cohorts.get("cohorts", []), key=lambda r: str(r.get("cohort")))
         x = [str(r.get("cohort")) for r in rows]
         boxes = self._chart_boxes(2)
@@ -877,36 +896,54 @@ class DeckBuilder:
         self._header(s, spec.get("title", "Multi-Dimensional Risk Analytics"),
                      "Funded balance across paired dimensions", accent=self.theme.peri)
         md = self.d.multidim or {}
-        # Left half — bubble.
-        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.4),
-                                    Inches(4.95), "Balance by LTV × Borrower Age")
-        bub = md.get("ltv_age")
-        p0 = self.work / "md_bubble.png"
-        if bub and bub.get("points"):
-            R.draw_bubble(p0, bub["points"], bub["xLabels"], bub["yLabels"], iw, ih,
-                          theme=self.theme)
-        else:
-            render_placeholder_png(p0, "", "LTV × age not available on this tape",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-        self._place(s, p0, il, it, iw, ih)
-        # Right half — two stacked heatmaps.
-        rboxes = [(Inches(7.15), Inches(1.62), Inches(5.65), Inches(2.42)),
-                  (Inches(7.15), Inches(4.15), Inches(5.65), Inches(2.42))]
-        specs = [("ltv_borrower_type", "Balance by LTV × Borrower Type"),
-                 ("ltv_region", "Balance by LTV × Region")]
-        for box, (key, title) in zip(rboxes, specs):
-            il, it, iw, ih = self._card(s, *box, title)
-            hm = md.get(key)
-            path = self.work / f"md_{key}.png"
-            if hm and hm.get("matrix"):
-                R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"], iw, ih,
-                               theme=self.theme)
+        # Only panels that actually resolved are drawn, and the layout adapts to
+        # how many there are. Rendering an empty card labelled "not available"
+        # tells an investor nothing and makes the pack look unfinished; the
+        # composition guard omits the slide entirely when none resolve.
+        bubble = md.get("ltv_age") if (md.get("ltv_age") or {}).get("points") else None
+        heatmaps = [(key, title) for key, title in
+                    (("ltv_borrower_type", "Balance by LTV × Borrower Type"),
+                     ("ltv_region", "Balance by LTV × Region"))
+                    if (md.get(key) or {}).get("matrix")]
+
+        if bubble and heatmaps:
+            # Bubble on the left, heatmaps stacked on the right.
+            il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.4),
+                                        Inches(4.95), "Balance by LTV × Borrower Age")
+            p0 = self.work / "md_bubble.png"
+            R.draw_bubble(p0, bubble["points"], bubble["xLabels"], bubble["yLabels"],
+                          iw, ih, theme=self.theme)
+            self._place(s, p0, il, it, iw, ih)
+            if len(heatmaps) == 1:
+                boxes = [(Inches(7.15), Inches(1.62), Inches(5.65), Inches(4.95))]
             else:
-                render_placeholder_png(path, "", "Not available on this tape",
-                                       theme=self.theme, width_in=iw, height_in=ih)
-            self._place(s, path, il, it, iw, ih)
+                boxes = [(Inches(7.15), Inches(1.62), Inches(5.65), Inches(2.42)),
+                         (Inches(7.15), Inches(4.15), Inches(5.65), Inches(2.42))]
+            for box, (key, title) in zip(boxes, heatmaps):
+                il, it, iw, ih = self._card(s, *box, title)
+                hm = md[key]
+                path = self.work / f"md_{key}.png"
+                R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
+                               iw, ih, theme=self.theme)
+                self._place(s, path, il, it, iw, ih)
+        elif bubble:
+            il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(12.25),
+                                        Inches(4.95), "Balance by LTV × Borrower Age")
+            p0 = self.work / "md_bubble.png"
+            R.draw_bubble(p0, bubble["points"], bubble["xLabels"], bubble["yLabels"],
+                          iw, ih, theme=self.theme)
+            self._place(s, p0, il, it, iw, ih)
+        else:
+            boxes = self._chart_boxes(len(heatmaps))
+            for box, (key, title) in zip(boxes, heatmaps):
+                il, it, iw, ih = self._card(s, *box, title)
+                hm = md[key]
+                path = self.work / f"md_{key}.png"
+                R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
+                               iw, ih, theme=self.theme)
+                self._place(s, path, il, it, iw, ih)
         self._footer(s)
-        self._record("multidim", spec.get("title"), "", placeholder=not md)
+        self._record("multidim", spec.get("title"), "", placeholder=False)
 
     def slide_funnel(self, spec):
         s = self._slide()
@@ -1083,79 +1120,230 @@ class DeckBuilder:
         self._footer(s)
         self._record("risk", spec.get("title"), "", placeholder=False)
 
-    def slide_methodology(self, spec):
+    def slide_concentration(self, spec):
+        """Concentration Tests and Headroom — *am I within my limits?*
+
+        Three states, kept visually and verbally distinct: CURRENT funded (the
+        only actual), EXPECTED forecast, and the ALL-PIPELINE-CONVERTS stress.
+        Presenting the stress as an expectation would misstate the risk, so it
+        is labelled a stress everywhere it appears.
+        """
+        from . import concentration as C
+
         s = self._slide()
-        self._header(s, spec.get("title", "Methodology & Notes"), "")
-        p = self.d.portfolio
-        lines = [
-            f"Client:  {self.ctx.client_name}",
-            f"Reporting scope:  {p.scope_label if p else 'n/a'}"
-            + (f"  ({', '.join(p.portfolio_ids)})" if p and p.portfolio_ids else ""),
-            f"Portfolio types:  {', '.join(p.portfolio_types) if p and p.portfolio_types else 'n/a'}",
-            f"Reporting date(s):  " + (
-                "; ".join(f"{k}: {v}" for k, v in sorted(p.type_reporting_dates.items()))
-                if p and p.type_reporting_dates else (self.d.reporting_date or "n/a")),
-            f"Run:  {self.d.client_id}/{self.d.run_id}",
-            "Executive summary:  deterministic governed observations "
-            f"({(self.d.insights or {}).get('insight_version', 'n/a')}); no LLM is used.",
-            "Data source:  MI Agent API computations (identical to the React dashboard).",
-            "Funded KPIs / stratifications:  /mi/snapshot (compute_funded_snapshot).",
-            "Pipeline & forecast:  /mi/forecast/snapshot (pipeline snapshot + forecast bridge).",
-            "Evolution / cohorts / geography / risk:  /mi/evolution/*, /mi/cohorts, /mi/geo, /mi/risk-limits.",
-            "Forecast method:  funded + Σ(weighted pipeline); scale-up via run-rate extrapolation.",
+        env = self.d.concentration or {}
+        rows = C.adapt_tests(env)
+        self._header(s, spec.get("title", "Concentration Tests and Headroom"),
+                     "Utilisation of contractual limits — current, expected and stress",
+                     accent=self.theme.peri)
+        if not rows:
+            self._placeholder_body(s, "No governed concentration tests configured.")
+            self._footer(s)
+            return self._record(spec.get("id", "concentration"), spec.get("title"),
+                                "", placeholder=True)
+
+        summary = C.summarise(env, rows)
+        top = C.select_tests(rows)
+        forward = C.forward_states_available(env)
+
+        # -- summary strip --------------------------------------------------
+        tiles = [
+            ("TESTS", str(summary["tests"]), self.theme.ink_400),
+            ("IN BREACH", str(summary["breaches"]),
+             self.theme.rag["red"] if summary["breaches"] else self.theme.rag["green"]),
+            ("WARNING", str(summary["warnings"]),
+             self.theme.rag["amber"] if summary["warnings"] else self.theme.ink_400),
+            ("FORECAST BREACH", str(summary["expected_breaches"]) if forward else "—",
+             self.theme.rag["amber"] if summary["expected_breaches"] else self.theme.ink_400),
+            ("STRESS BREACH", str(summary["stress_breaches"]) if forward else "—",
+             self.theme.ink_400),
         ]
-        if self.d.source_files:
-            lines.append("Pipeline source:  " + ", ".join(self.d.source_files[:4]))
-        self._bullets(s, lines, size=12.5)
+        tw = Inches(2.35)
+        for i, (label, value, colour) in enumerate(tiles):
+            l = Emu(int(Inches(0.55)) + i * int(Inches(2.45)))
+            self._panel(s, l, Inches(1.56), tw, Inches(0.92),
+                        fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+            self._text(s, l + Inches(0.18), Inches(1.66), tw - Inches(0.3),
+                       Inches(0.28), label, size=8, color=self.theme.ink_400,
+                       bold=True)
+            self._text(s, l + Inches(0.18), Inches(1.92), tw - Inches(0.3),
+                       Inches(0.42), value, size=19, bold=True, color=colour)
+
+        # -- utilisation bars ------------------------------------------------
+        bars = [{"label": r["label"], "utilisation": r["utilisation"] or 0,
+                 "status": r["status"],
+                 "expectedUtilisation": r["expected_utilisation"] if forward else None,
+                 "stressUtilisation": r["stress_utilisation"] if forward else None}
+                for r in top]
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(2.66), Inches(6.5),
+                                    Inches(3.62), "Utilisation of limit")
+        path = self.work / "conc_util.png"
+        R.draw_utilisation_tests(path, bars, iw, ih, theme=self.theme)
+        self._place(s, path, il, it, iw, ih)
+
+        # -- the numbers behind the bars -------------------------------------
+        cols = ["Test", "Current", "Limit", "Headroom"] + (["Expected"] if forward else [])
+        trows = []
+        for r in top:
+            row = [r["label"][:26],
+                   C.format_measure(r["value"], r["unit"]),
+                   C.format_measure(r["limit"], r["unit"]),
+                   (f"{r['headroom']:.1f}" if r["headroom"] is not None else "—")]
+            if forward:
+                row.append(C.format_measure(r["expected_value"], r["unit"])
+                           if r["expected_value"] is not None else "—")
+            trows.append(row)
+        il, it, iw, ih = self._card(s, Inches(7.28), Inches(2.66), Inches(5.52),
+                                    Inches(3.62), "Current position against limit")
+        tpath = self.work / "conc_table.png"
+        R.draw_table(tpath, cols, trows, iw, ih, theme=self.theme)
+        self._place(s, tpath, il, it, iw, ih)
+
+        # -- deterministic takeaway + source disclosure -----------------------
+        takeaway = self._concentration_takeaway(summary, top, forward)
+        self._text(s, Inches(0.57), Inches(6.42), Inches(9.4), Inches(0.4),
+                   takeaway, size=10, color=self.theme.ink_300, italic=True)
+        disclosure = C.source_disclosure(env)
+        if disclosure:
+            self._text(s, Inches(0.57), Inches(6.72), Inches(9.4), Inches(0.3),
+                       disclosure, size=8.5, color=self.theme.ink_500)
         self._footer(s)
-        self._record("methodology", spec.get("title"), "")
+        self._record(spec.get("id", "concentration"), spec.get("title"),
+                     f"{summary['tests']} governed tests.")
+
+    def _concentration_takeaway(self, summary, rows, forward) -> str:
+        """One deterministic sentence over the governed evidence — no inference."""
+        from . import concentration as C
+        if summary["breaches"]:
+            worst = next((r for r in rows if r["status"] == C.STATUS_BREACH), None)
+            lead = (f"{summary['breaches']} limit"
+                    f"{'s are' if summary['breaches'] != 1 else ' is'} in breach at the "
+                    f"reporting date")
+            if worst:
+                lead += f", led by {worst['label']}"
+            lead += "."
+        elif summary["warnings"]:
+            lead = (f"All limits are within contractual thresholds; "
+                    f"{summary['warnings']} "
+                    f"{'are' if summary['warnings'] != 1 else 'is'} in warning range.")
+        else:
+            lead = "All governed concentration limits are within their contractual thresholds."
+        tail = ""
+        if forward and summary["expected_breaches"]:
+            horizon = next((r.get("breach_horizon") for r in rows
+                            if r.get("expected_breach") and r.get("breach_horizon")), None)
+            tail = (f" The expected forecast breaches {summary['expected_breaches']} "
+                    f"limit{'s' if summary['expected_breaches'] != 1 else ''}"
+                    + (f", crossing around {horizon}" if horizon else "") + ".")
+        elif forward and summary["stress_breaches"]:
+            tail = (f" The all-pipeline-converts stress would breach "
+                    f"{summary['stress_breaches']} "
+                    f"limit{'s' if summary['stress_breaches'] != 1 else ''}; this is a "
+                    f"stress, not the expected outcome.")
+        return lead + tail
+
+    def slide_methodology(self, spec):
+        """Kept as an alias of the investor-safe Data and Methodology page.
+
+        The former version of this slide listed endpoint paths, internal compute
+        function names and resolved source filenames. Those are implementation
+        details, not methodology, and had no place in a client-facing pack — the
+        single page below states the basis of preparation in business language.
+        """
+        return self.slide_appendix(spec)
 
     def slide_appendix(self, spec):
+        """Data and Methodology — investor-safe.
+
+        The previous version of this page printed the generator's own
+        diagnostics: discovery roots (absolute filesystem paths), resolved
+        source filenames and internal compute-function names. None of that
+        belongs in a client-facing document. This page states the same facts in
+        business language — what the report covers, as at when, what was
+        excluded and why — and never where the bytes live.
+        """
         s = self._slide()
-        self._header(s, spec.get("title", "Appendix — Data Coverage"), "")
+        self._header(s, spec.get("title", "Data and Methodology"),
+                     "Scope, source dates, coverage and basis of preparation")
+        p = self.d.portfolio
         d = self.d.diagnostics or {}
-        ts = d.get("timeSeries", {})
-        pretty = {"funded_evolution": "Funded evolution",
-                  "pipeline_evolution": "Pipeline evolution",
-                  "funnel": "Origination funnel",
-                  "forecast_projection": "Forecast projection", "risk": "Risk limits"}
 
-        def _fmt(v, dash="not resolved"):
-            return str(v) if v not in (None, "") else dash
+        left = []
+        left.append("REPORTING SCOPE")
+        if p is not None:
+            left.append(f"   {p.scope_label} portfolio")
+            for book in p.portfolios[:4]:
+                left.append(f"   ·  {book.label} — {book.type_label}")
+            if len(p.portfolios) > 4:
+                left.append(f"   ·  and {len(p.portfolios) - 4} further book(s)")
+        else:
+            left.append("   Scope unavailable for this run.")
 
-        lines = ["RESOLVED SOURCES",
-                 f"   Funded current source:  {_fmt(d.get('fundedCurrentSource'))}",
-                 f"   Pipeline current source:  {_fmt(d.get('pipelineCurrentSource'))}",
-                 "HISTORICAL DISCOVERY",
-                 f"   Funded history root:  {_fmt(d.get('fundedHistoryRoot'))}",
-                 f"      dated funded cuts found:  {d.get('fundedCutsFound', 0)}",
-                 f"   Pipeline history root:  {_fmt(d.get('pipelineHistoryRoot'))}",
-                 f"      dated pipeline snapshots found:  {d.get('pipelineSnapshotsFound', 0)}",
-                 "TIME-SERIES SLIDE COVERAGE"]
-        for key, label in pretty.items():
-            info = ts.get(key, {})
-            if info.get("placeholder"):
-                lines.append(f"   {label}:  placeholder — {info.get('reason') or 'insufficient history'}")
-            else:
-                extra = f" ({info['periods']} periods)" if info.get("periods") else ""
-                lines.append(f"   {label}:  rendered{extra}")
-        # The omission ledger: what this deck does NOT contain, and why. Without
-        # it a reader cannot tell an absent section from a book with nothing to
-        # report.
+        left.append("")
+        left.append("SOURCE REPORTING DATES")
+        if p is not None and p.type_reporting_dates:
+            from .deck_context import type_label
+            for ptype, date in sorted(p.type_reporting_dates.items()):
+                left.append(f"   {type_label(ptype)} funded data as at {_pretty_date(date)}.")
+        elif self.d.reporting_date:
+            left.append(f"   Funded portfolio data as at {_pretty_date(self.d.reporting_date)}.")
+        pipe_date = (self.d.pipeline or {}).get("pipelineAsOfDate")
+        if pipe_date:
+            left.append(f"   Pipeline data as at {_pretty_date(pipe_date)}.")
+        if p is not None and p.has_mixed_reporting_dates:
+            left.append("   Constituent books are reported as at different dates;")
+            left.append("   the total combines them.")
+
+        right = ["BASIS OF PREPARATION",
+                 "   Figures are produced by the governed MI calculations and are",
+                 "   identical to the management dashboard for the same portfolio",
+                 "   and reporting date.",
+                 "   Commentary is generated deterministically from those figures.",
+                 "   No language model is used in its production."]
+        conc = self.d.concentration or {}
+        if conc.get("tests"):
+            from . import concentration as C
+            disclosure = C.source_disclosure(conc)
+            if disclosure:
+                right.append(f"   Concentration limits: {disclosure.lower()}.")
+        right.append("")
+        right.append("COVERAGE")
+        cuts = d.get("fundedCutsFound") or 0
+        if cuts:
+            right.append(f"   {cuts} funded reporting period(s) available.")
+        snaps = d.get("pipelineSnapshotsFound") or 0
+        right.append(f"   {snaps} weekly pipeline extract(s) available."
+                     if snaps else "   No weekly pipeline extracts available.")
+
         if self.omissions:
-            lines.append("SECTIONS NOT INCLUDED")
-            for o in self.omissions[:8]:
-                lines.append(f"   {o.title}:  {o.reason}")
-            if len(self.omissions) > 8:
-                lines.append(f"   and {len(self.omissions) - 8} further section(s).")
-        extra_notes = [n for n in self.appendix
-                       if "placeholder" not in n.lower() and "render" not in n.lower()]
-        if extra_notes:
-            lines.append("NOTES")
-            lines += [f"   •  {n}" for n in extra_notes[:6]]
-        self._bullets(s, lines, size=10.5)
+            right.append("")
+            right.append("SECTIONS NOT INCLUDED")
+            for o in self.omissions[:6]:
+                right.append(f"   {o.title}: {o.reason}.")
+            if len(self.omissions) > 6:
+                right.append(f"   and {len(self.omissions) - 6} further section(s).")
+
+        self._column_text(s, left, Inches(0.6), Inches(6.0))
+        self._column_text(s, right, Inches(6.95), Inches(5.85))
         self._footer(s)
-        self._record("appendix", spec.get("title"), "")
+        self._record(spec.get("id", "appendix"), spec.get("title"), "")
+
+    def _column_text(self, slide, lines, left, width):
+        """A column of the methodology page; section headings pick up the accent."""
+        box = slide.shapes.add_textbox(left, Inches(1.6), width, Inches(5.3))
+        tf = box.text_frame
+        tf.word_wrap = True
+        for i, line in enumerate(lines):
+            para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            run = para.add_run()
+            run.text = line
+            heading = bool(line) and line == line.upper() and not line.startswith(" ")
+            run.font.size = Pt(9 if heading else 10)
+            run.font.bold = heading
+            run.font.name = self.theme.font_sans
+            run.font.color.rgb = self._rgb(
+                self.theme.peri if heading else self.theme.ink_300)
+            para.space_after = Pt(5 if heading else 2)
 
     # ------------------------------------------------------------------ helpers
     def _placeholder_body(self, slide, msg):
@@ -1190,6 +1378,7 @@ class DeckBuilder:
         "forecast_bridge": "slide_forecast_bridge",
         "forecast_projection": "slide_forecast_projection",
         "forecast_evolution": "slide_forecast_evolution", "risk": "slide_risk",
+        "concentration": "slide_concentration",
         "methodology": "slide_methodology", "appendix": "slide_appendix",
     }
 

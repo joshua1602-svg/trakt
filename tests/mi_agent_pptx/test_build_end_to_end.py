@@ -23,7 +23,9 @@ from mi_agent_pptx.deck import DeckBuilder, DeckContext
 from mi_agent_pptx.mi_api import build_dashboard_data
 
 #: Slides the pack must always carry — they are its disclosure spine.
-MANDATORY_SLIDE_IDS = {"cover", "methodology", "appendix"}
+#: The pack's disclosure spine. The former separate appendix is now folded
+#: into the single investor-safe Data and Methodology page.
+MANDATORY_SLIDE_IDS = {"cover", "methodology"}
 
 
 def _slides(deck_config_path):

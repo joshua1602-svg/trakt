@@ -150,6 +150,10 @@ def build_facts(data: Any) -> Dict[str, Any]:
         "has_forecast_projection": projection,
         "has_forecast_history": _periods(getattr(data, "forecast_evolution", {})),
         "has_risk": bool(risk.get("tests")),
+        # -- concentration ----------------------------------------------------
+        "has_concentration": bool((getattr(data, "concentration", {}) or {}).get("tests")),
+        "has_concentration_forward": bool(
+            ((getattr(data, "concentration", {}) or {}).get("states") or {}).get("available")),
     }
     return facts
 
@@ -188,8 +192,14 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
     "kpi_summary": lambda s, d: (None if (getattr(d, "funded", {}) or {}).get("kpis")
                                  else "no funded book resolved for this run"),
     "strat_barlists": _strat_guard,
-    "multidim": lambda s, d: (None if (getattr(d, "multidim", {}) or {})
-                              else "paired-dimension analysis is not available on this tape"),
+    # At least one paired-dimension panel must actually have data — an "available"
+    # multidim payload whose panels are all empty would render an empty slide.
+    "multidim": lambda s, d: (
+        None if any(((getattr(d, "multidim", {}) or {}).get(k) or {}).get(f)
+                    for k, f in (("ltv_age", "points"),
+                                 ("ltv_borrower_type", "matrix"),
+                                 ("ltv_region", "matrix")))
+        else "paired-dimension analysis is not available for this book"),
     "geo": lambda s, d: (None if (getattr(d, "geo", {}) or {}).get("areas")
                          else "no geographic exposure resolved for this book"),
     "funded_evolution": _evolution_guard("funded_evolution", "funded evolution"),
@@ -218,6 +228,9 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
     "forecast_evolution": _evolution_guard("forecast_evolution", "forecast evolution"),
     "risk": lambda s, d: (None if (getattr(d, "risk", {}) or {}).get("tests")
                           else "no governed risk-limit artefact for this run"),
+    "concentration": lambda s, d: (
+        None if (getattr(d, "concentration", {}) or {}).get("tests")
+        else "no governed concentration tests are configured for this portfolio"),
     "portfolio_composition": lambda s, d: (
         None if getattr(d, "portfolio", None) is not None
         else "no governed portfolio context resolved"),
@@ -297,6 +310,8 @@ _CONDITION_WORDING: Dict[str, str] = {
     "has_risk": "no governed risk-limit artefact for this run",
     "has_funded_history": "fewer than two reporting periods are available",
     "has_movement": "no prior reporting period to compare against",
+    "has_concentration": "no governed concentration tests are configured for this portfolio",
+    "has_pipeline_history": "fewer than two weekly pipeline extracts are available",
 }
 
 

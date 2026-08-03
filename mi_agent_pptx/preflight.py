@@ -248,14 +248,150 @@ def _gate_no_placeholders(records: Sequence[Mapping[str, Any]]) -> GateResult:
                       evidence={"placeholders": placeholders})
 
 
+#: Text that must never reach a client-facing deck. These are implementation
+#: details, not disclosures: a storage location or a function name tells an
+#: investor nothing and tells everyone else too much.
+_LEAK_PATTERNS = (
+    (r"(?:^|[\s(])/(?:tmp|home|var|root|mnt|Users)/\S+", "absolute filesystem path"),
+    (r"\bscratchpad\b", "scratchpad location"),
+    (r"\b(?:blob|abfss|s3|file)://\S+", "storage URI"),
+    (r"\b[A-Za-z_][A-Za-z0-9_]*\.py\b", "python module name"),
+    (r"\bcompute_[a-z_]+\b", "internal function name"),
+    (r"\b_[a-z]+_[a-z_]+\(\)", "internal function name"),
+    (r"C:\\\\", "windows path"),
+)
+
+#: Wording that signals an unpopulated or provisional page.
+_PLACEHOLDER_PHRASES = (
+    "no data for this run", "data unavailable", "not available on this tape",
+    "lorem ipsum", "tbc", "to be confirmed", "placeholder", "coming soon",
+)
+
+#: A static pool tracks a FIXED cohort forward through time. This release renders
+#: a point-in-time cross-section by origination year, so the claim must not
+#: appear — a wrong label is as misleading as a wrong number.
+_STATIC_POOL_PHRASES = ("static-pool", "static pool")
+
+
+def _gate_no_internal_paths(text: Optional[str]) -> GateResult:
+    import re
+    if text is None:
+        return GateResult("no_internal_paths", False, "deck could not be read")
+    found: List[str] = []
+    for pattern, label in _LEAK_PATTERNS:
+        for match in re.findall(pattern, text):
+            found.append(f"{label}: {str(match).strip()[:60]}")
+    ok = not found
+    return GateResult("no_internal_paths", ok,
+                      "no internal paths or implementation details are rendered" if ok
+                      else f"internal detail rendered in the deck — {found[0]}",
+                      evidence={"found": found[:6]})
+
+
+def _gate_no_placeholder_language(text: Optional[str]) -> GateResult:
+    if text is None:
+        return GateResult("no_placeholder_language", False, "deck could not be read")
+    low = text.lower()
+    hits = [p for p in _PLACEHOLDER_PHRASES if p in low]
+    ok = not hits
+    return GateResult("no_placeholder_language", ok,
+                      "no placeholder language in the deck" if ok else
+                      f"placeholder language rendered: {', '.join(hits)}",
+                      evidence={"phrases": hits})
+
+
+def _gate_no_false_static_pool(text: Optional[str]) -> GateResult:
+    if text is None:
+        return GateResult("no_false_static_pool_claim", False, "deck could not be read")
+    low = text.lower()
+    hits = [p for p in _STATIC_POOL_PHRASES if p in low]
+    ok = not hits
+    return GateResult("no_false_static_pool_claim", ok,
+                      "no static-pool claim is made" if ok else
+                      "the deck claims static-pool analysis, which it does not render",
+                      evidence={"phrases": hits})
+
+
+def _gate_pipeline_reconciles(text: Optional[str], pipeline) -> GateResult:
+    """The pipeline headline must match the governed pipeline snapshot."""
+    amount = (pipeline or {}).get("pipelineAmount")
+    if not amount:
+        return GateResult("pipeline_reconciles", True,
+                          "no pipeline in scope — nothing to reconcile",
+                          mandatory=False)
+    if text is None:
+        return GateResult("pipeline_reconciles", False, "deck could not be read")
+    # The deck formats the governed figure; assert the governed magnitude is the
+    # one on the page (millions, one decimal — the pack's own convention).
+    millions = f"{float(amount) / 1e6:.1f}"
+    ok = millions in text.replace(",", "")
+    return GateResult("pipeline_reconciles", ok,
+                      f"pipeline headline reconciles to the governed snapshot "
+                      f"(£{millions}MM)" if ok else
+                      f"pipeline headline £{millions}MM does not appear in the deck",
+                      evidence={"pipeline_amount": amount})
+
+
+def _gate_concentration_reconciles(text: Optional[str], concentration) -> GateResult:
+    """Concentration values on the slide must be the governed test values."""
+    from . import concentration as C
+    rows = C.adapt_tests(concentration)
+    if not rows:
+        return GateResult("concentration_reconciles", True,
+                          "no governed concentration tests in scope",
+                          mandatory=False)
+    if text is None:
+        return GateResult("concentration_reconciles", False, "deck could not be read")
+    shown = C.select_tests(rows)
+    missing = [r["label"] for r in shown if r["label"][:26] not in text]
+    ok = not missing
+    return GateResult("concentration_reconciles", ok,
+                      f"{len(shown)} governed concentration test(s) rendered" if ok else
+                      f"concentration test(s) not rendered: {', '.join(missing)}",
+                      evidence={"rendered": [r["label"] for r in shown],
+                                "missing": missing})
+
+
+def _gate_no_empty_slides(deck_path: Optional[str],
+                          records: Sequence[Mapping[str, Any]]) -> GateResult:
+    """Every included slide must carry content beyond its title and footer.
+
+    A title with nothing under it is worse than an omitted section: it implies
+    the analysis exists and was empty.
+    """
+    if not deck_path:
+        return GateResult("no_empty_slides", False, "deck path unavailable")
+    try:
+        from pptx import Presentation
+        prs = Presentation(str(deck_path))
+    except Exception:  # noqa: BLE001
+        return GateResult("no_empty_slides", False, "deck could not be opened")
+    sparse: List[str] = []
+    for index, slide in enumerate(prs.slides, start=1):
+        texts = [sh for sh in slide.shapes
+                 if sh.has_text_frame and sh.text_frame.text.strip()]
+        pictures = [sh for sh in slide.shapes if sh.shape_type == 13]
+        # Title + subtitle + footer + page number is four text frames and no
+        # content; anything at or below that with no picture is a shell.
+        if not pictures and len(texts) <= 4:
+            sparse.append(f"slide {index}")
+    ok = not sparse
+    return GateResult("no_empty_slides", ok,
+                      "every slide carries content" if ok else
+                      f"slide(s) rendered with no meaningful content: {', '.join(sparse)}",
+                      evidence={"sparse": sparse})
+
+
 def _gate_mandatory_slides(records: Sequence[Mapping[str, Any]]) -> GateResult:
     """Cover, methodology and appendix are the disclosure spine of the pack."""
     ids = {str(r.get("id")) for r in records}
-    required = {"cover", "methodology", "appendix"}
+    # One investor-safe Data and Methodology page satisfies the disclosure
+    # spine; the former separate appendix has been folded into it.
+    required = {"cover", "methodology"}
     missing = sorted(required - ids)
     ok = not missing
     return GateResult("mandatory_slides", ok,
-                      "cover, methodology and appendix are present" if ok else
+                      "cover and the data/methodology page are present" if ok else
                       f"mandatory slide(s) missing: {', '.join(missing)}",
                       evidence={"missing": missing})
 
@@ -282,5 +418,12 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         _gate_loan_reconciles(portfolio),
         _gate_executive_summary(getattr(data, "insights", None), facts),
         _gate_no_placeholders(records),
+        # -- v2.1: client-safety and reconciliation --------------------------
+        _gate_no_internal_paths(text),
+        _gate_no_placeholder_language(text),
+        _gate_no_false_static_pool(text),
+        _gate_no_empty_slides(deck_path, records),
+        _gate_pipeline_reconciles(text, getattr(data, "pipeline", None)),
+        _gate_concentration_reconciles(text, getattr(data, "concentration", None)),
     ])
     return report

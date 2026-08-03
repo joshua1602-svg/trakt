@@ -268,6 +268,81 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
     return _save(fig, path, theme, dpi)
 
 
+#: Status -> RAG key, for both the approved concentration vocabulary
+#: ("pass"/"warning"/"breach") and the legacy monitor ("green"/"amber"/"red").
+_STATUS_RAG = {
+    "pass": "green", "green": "green", "ok": "green",
+    "warning": "amber", "amber": "amber", "warn": "amber",
+    "breach": "red", "red": "red", "fail": "red",
+}
+
+
+def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: float,
+                           *, theme: PptxTheme = THEME, dpi: int = 220) -> Path:
+    """Concentration tests as horizontal utilisation bars against their limit.
+
+    One row per test. The bar is utilisation of the contractual limit, so the
+    100% gridline IS the limit and proximity is readable at a glance — the thing
+    an investor actually asks of a covenant table.
+
+    Each row can carry up to three marks, and they are deliberately visually
+    distinct because conflating them would be the whole failure mode:
+
+      * the filled bar  — CURRENT funded, the only actual;
+      * a hollow caret  — EXPECTED forecast;
+      * a hatched tick  — the ALL-PIPELINE-CONVERTS stress (never an expectation).
+    """
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.30, 0.10, 0.62, 0.84])
+    ax.set_facecolor(theme.bg_panel)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    n = max(len(tests), 1)
+    # Scale so a breach is visible beyond the limit line without dwarfing the rest.
+    vals = [t.get("utilisation") or 0 for t in tests]
+    vals += [(t.get("expectedUtilisation") or 0) for t in tests]
+    vals += [(t.get("stressUtilisation") or 0) for t in tests]
+    top = max(120.0, min(200.0, (max(vals) if vals else 100) * 1.12))
+    ax.set_xlim(0, top)
+    ax.set_ylim(-0.5, n - 0.5)
+    ax.invert_yaxis()
+
+    for i, t in enumerate(tests):
+        util = float(t.get("utilisation") or 0)
+        rag = _STATUS_RAG.get(str(t.get("status", "")).lower(), "green")
+        colour = theme.rag.get(rag, theme.neutral)
+        # Track, then the filled current bar.
+        ax.barh(i, top, height=0.52, color=theme.bg_panel_alt, edgecolor="none")
+        ax.barh(i, min(util, top), height=0.52, color=colour, edgecolor="none")
+        ax.text(-0.02 * top, i, str(t.get("label", ""))[:38], ha="right",
+                va="center", color=theme.ink_300, fontsize=9,
+                transform=ax.get_yaxis_transform(which="grid"))
+        ax.text(min(util, top) + 0.012 * top, i, f"{util:.0f}%", ha="left",
+                va="center", color=theme.ink_100, fontsize=9,
+                fontproperties=_MONO_FP)
+        exp = t.get("expectedUtilisation")
+        if exp is not None:
+            ax.plot([min(float(exp), top)], [i], marker="v", markersize=6,
+                    markerfacecolor="none",
+                    markeredgecolor=theme.peri, markeredgewidth=1.4)
+        stress = t.get("stressUtilisation")
+        if stress is not None:
+            ax.plot([min(float(stress), top)], [i - 0.30], marker="|",
+                    markersize=9, color=theme.ink_400, markeredgewidth=1.6)
+
+    # The limit.
+    ax.axvline(100, color=theme.ink_400, linewidth=1.1, linestyle="--", alpha=0.9)
+    ax.text(100, -0.62, "limit", ha="center", va="bottom", color=theme.ink_400,
+            fontsize=8.5)
+    ax.set_yticks([])
+    ax.tick_params(axis="x", colors=theme.ink_500, labelsize=8.5, length=0)
+    ax.set_xticks([0, 50, 100] + ([150] if top > 150 else []))
+    ax.set_xticklabels([f"{v}%" for v in ([0, 50, 100] + ([150] if top > 150 else []))])
+    ax.grid(axis="x", color=theme.line_soft, linewidth=0.6, alpha=0.55)
+    ax.set_axisbelow(True)
+    return _save(fig, path, theme, dpi)
+
+
 def draw_table(path, columns: Sequence[str], rows: Sequence[Sequence[Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                status_col: Optional[int] = None, dpi: int = 220) -> Path:

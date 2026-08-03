@@ -65,6 +65,9 @@ class DashboardData:
     cohorts: Dict[str, Any] = field(default_factory=dict)
     geo: Dict[str, Any] = field(default_factory=dict)
     risk: Dict[str, Any] = field(default_factory=dict)
+    #: Governed concentration-test envelope (/mi/concentration-tests): current,
+    #: expected-forecast and full-pipeline-stress states per approved test.
+    concentration: Dict[str, Any] = field(default_factory=dict)
     extrapolation: Dict[str, Any] = field(default_factory=dict)
     multidim: Dict[str, Any] = field(default_factory=dict)
     cohort_progression: Dict[str, Any] = field(default_factory=dict)
@@ -683,6 +686,8 @@ def build_dashboard_data(
 
         # -- RISK limits / FORECAST extrapolation (multi-run) ------------
         data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
+        data.concentration = _guard(data, "concentration",
+                                    lambda: _concentration(out_root, cid, rid, scope))
         data.extrapolation = _guard(data, "extrapolation",
                                     lambda: _extrapolation(out_root, prow, cid, rid, history))
 
@@ -757,14 +762,41 @@ def _diagnostics(data, out_root, prow, funded_uri, source, funded_cuts, pipe_sna
 # Per-endpoint compute wrappers (call the SAME functions app.py's handlers call).
 # --------------------------------------------------------------------------- #
 
+def _resolve_pipeline_source(prow, cid, rid, data: DashboardData):
+    """The governed pipeline source, resolved EXACTLY as the dashboard resolves it.
+
+    The deck used to call ``pipeline_contract.resolve_pipeline_source(root, …)``
+    directly, which only ever performs discovery under a root. The API resolves
+    through ``datasets._resolve_pipeline_source``, which first honours the
+    durable weekly snapshot pointer (``MI_AGENT_PIPELINE_URI``) and an explicit
+    ``MI_AGENT_PIPELINE_SOURCE`` before falling back to that same discovery.
+
+    In a deployment where the pipeline is published as a durable snapshot rather
+    than a discoverable dated tree, the old path found nothing and the whole
+    pipeline section silently vanished from the investor pack while the
+    dashboard showed it. Using the shared resolver removes that divergence by
+    construction; the root-based call remains as the fallback so an explicitly
+    supplied ``--pipeline-root`` still wins where discovery is the deployment.
+    """
+    from mi_agent_api import pipeline_contract as pc
+    try:
+        from mi_agent_api import datasets as _ds
+        source = _ds._resolve_pipeline_source(cid, rid)
+        if source:
+            return source
+    except Exception as exc:  # noqa: BLE001 — fall through to root discovery
+        data.note(f"pipeline_source(shared): {type(exc).__name__}: {exc}")
+    try:
+        return pc.resolve_pipeline_source(prow, cid, rid)
+    except Exception as exc:  # noqa: BLE001
+        data.note(f"pipeline_source: {exc}")
+        return None
+
+
 def _pipeline(prow, cid, rid, semantics, history, data: DashboardData):
     """Resolve + snapshot the latest governed weekly pipeline extract."""
     from mi_agent_api import pipeline_contract as pc
-    try:
-        source = pc.resolve_pipeline_source(prow, cid, rid)
-    except Exception as exc:  # noqa: BLE001
-        data.note(f"pipeline_source: {exc}")
-        source = None
+    source = _resolve_pipeline_source(prow, cid, rid, data)
     if not source:
         return None, None, None
     try:
@@ -858,6 +890,21 @@ def _forecast_evo(out_root, prow, cid, rid, history):
 def _risk(out_root, cid, rid):
     from mi_agent_api import risk_limits
     return risk_limits.compute_risk_limits(out_root, cid, rid)
+
+
+def _concentration(out_root, cid, rid, scope):
+    """The governed concentration-test envelope — the SAME service the Risk Limits
+    workspace, MI Query and Copilot use (``/mi/concentration-tests``).
+
+    This is the operator-approved capability. It supersedes the deck's previous
+    use of ``risk_limits`` alone, which is the *legacy extracted* monitor the
+    concentration service itself presents as explicitly NOT operator-approved.
+    It additionally carries the forward-looking states the investor section
+    needs — Expected (forecast model) and Full Pipeline (maximum-exposure
+    stress) — which the legacy monitor has no concept of.
+    """
+    from mi_agent_api import concentration_tests_api as ct
+    return ct.compute_concentration_tests(out_root, cid, rid, scope=scope)
 
 
 def _extrapolation(out_root, prow, cid, rid, history):

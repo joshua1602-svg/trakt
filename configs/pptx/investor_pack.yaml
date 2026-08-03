@@ -164,22 +164,30 @@ slides:
     question: "What does the run-rate imply?"
     when: "has_forecast_projection"
 
-  # 19 ---------------------------------------------------------- Risk Limits
+  # 19 ------------------------------------ Concentration Tests and Headroom
+  # The governed, operator-approved concentration capability
+  # (/mi/concentration-tests). Carries CURRENT funded, EXPECTED forecast and the
+  # ALL-PIPELINE-CONVERTS stress as three distinct states — the stress is never
+  # presented as the expected outcome.
+  - id: concentration
+    type: concentration
+    title: "Concentration Tests and Headroom"
+    question: "Am I operating within approved limits, and where could pressure emerge?"
+    when: "has_concentration"
+
+  # 20 ---------------------------------------------------------- Risk Limits
+  # The legacy extracted monitor. Shown only when no approved concentration
+  # configuration exists, so the two never appear together saying similar things.
   - id: risk
     type: risk
     title: "Risk Limits"
     question: "Am I operating within approved limits?"
-    when: "has_risk"
+    when: "has_risk and not has_concentration"
 
-  # 20 ----------------------------------------------- Methodology / Notes
+  # 21 ------------------------------------------- Data and Methodology
+  # Investor-safe: scope, source dates, coverage, basis of preparation and the
+  # omission ledger. Never storage locations, endpoints or module names.
   - id: methodology
     type: methodology
-    title: "Methodology & Notes"
-    question: "How were these figures produced?"
-
-  # 21 ----------------------------------------------- Appendix / Coverage
-  # Carries the omission ledger: what this deck does not contain, and why.
-  - id: appendix
-    type: appendix
-    title: "Appendix — Data Coverage"
-    question: "What is the data coverage and what was omitted?"
+    title: "Data and Methodology"
+    question: "What does this report cover, as at when, and how was it produced?"
