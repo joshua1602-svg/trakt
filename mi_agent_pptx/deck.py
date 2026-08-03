@@ -1459,18 +1459,29 @@ class DeckBuilder:
                     ("Current", 2.35, 0.85, PP_ALIGN.RIGHT),
                     ("Limit", 3.30, 0.80, PP_ALIGN.RIGHT),
                     ("Headroom", 4.20, 0.90, PP_ALIGN.RIGHT)]
-        head_y = Inches(3.3)
-        for label, dx, cw, align in cols:
-            self._text(s, Inches(7.5 + dx), head_y, Inches(cw), Inches(0.26),
-                       label, size=8.5, color=self.theme.ink_400, bold=True,
-                       align=align)
         # Pitch derives from how many tests there ARE, so one test does not sit
-        # in a sliver at the top of an empty card and five do not collide.
-        band = 6.20 - 3.62
+        # in a sliver at the top of an empty card and five do not collide. When
+        # tests overflow the slide, the last line of the band is reserved for
+        # saying so — the note belongs to this table, and putting it below the
+        # panel would run it into the takeaway.
+        rest = C.overflow(rows)
+        band = (6.20 - 3.62) - (0.30 if rest else 0.0)
         row_h = min(0.80, band / max(len(top), 1))
         value_pt = 10 if len(top) > 2 else 11
+        # With few tests the rows would otherwise sit in the top fifth of the
+        # card above a large blank, which reads as a rendering fault rather than
+        # as a short list. They are given a detail line and centred in the band.
+        detail = row_h >= 0.72
+        row_span = row_h + (0.22 if detail else 0.0)
+        top_y = 3.62 + max(0.0, (band - len(top) * row_span) / 2)
+        # The column header travels WITH the rows. Pinned at a constant it would
+        # be orphaned at the top of the card whenever a short list is centred.
+        for label, dx, cw, align in cols:
+            self._text(s, Inches(7.5 + dx), Inches(top_y - 0.32), Inches(cw),
+                       Inches(0.26), label, size=8.5, color=self.theme.ink_400,
+                       bold=True, align=align)
         for i, r in enumerate(top):
-            y = Inches(3.62 + i * row_h)
+            y = Inches(top_y + i * row_span)
             status_colour = self.theme.rag.get(
                 {"breach": "red", "warning": "amber"}.get(r["status"], "green"),
                 self.theme.ink_300)
@@ -1504,15 +1515,45 @@ class DeckBuilder:
             self._text(s, Inches(7.5), Emu(int(y) + int(Inches(0.28))),
                        Inches(5.0), Inches(0.22), status_line,
                        size=7.5, color=status_colour)
+            if detail:
+                # Only where the evaluator produced them. A deployment that
+                # evaluates neither forward state gets the current position
+                # restated in words, not two invented ones.
+                bits = []
+                if forward and r["expected_value"] is not None:
+                    bits.append(
+                        f"Expected {C.format_measure(r['expected_value'], r['unit'])}"
+                        + (f" ({r['expected_utilisation']:.0f}% of limit)"
+                           if r["expected_utilisation"] is not None else ""))
+                if forward and r["stress_value"] is not None:
+                    bits.append(
+                        "under the all-pipeline-converts stress "
+                        f"{C.format_measure(r['stress_value'], r['unit'])}")
+                if not bits and r["headroom"] is not None:
+                    bits.append(
+                        f"{C.format_measure(abs(r['headroom']), r['unit'])} "
+                        + ("of headroom remaining" if r["headroom"] >= 0
+                           else "beyond the limit"))
+                if bits:
+                    self._text(s, Inches(7.5), Emu(int(y) + int(Inches(0.50))),
+                               Inches(5.1), Inches(0.22), " · ".join(bits),
+                               size=7.5, color=self.theme.ink_500)
 
-        rest = C.overflow(rows)
         if rest:
-            worst = rest[0]
-            self._text(s, Inches(7.5), Inches(6.28), Inches(5.1), Inches(0.24),
-                       f"{len(rest)} further test"
-                       f"{'s' if len(rest) != 1 else ''} within limit and ranked "
-                       f"below these; nearest is {worst['label'][:28]}.",
-                       size=8, color=self.theme.ink_500)
+            # Never assert the hidden tests are within limit. They are ranked
+            # BELOW the shown ones, which on a book with five breaches does not
+            # mean they pass — and "N further tests within limit" would then be
+            # a false statement on the one slide that must not make one.
+            adverse = sum(1 for r in rest
+                          if r.get("status") in (C.STATUS_BREACH, C.STATUS_WARNING))
+            note = (f"{len(rest)} further test{'s' if len(rest) != 1 else ''} "
+                    f"ranked below these")
+            note += (f", of which {adverse} in breach or warning." if adverse
+                     else f"; nearest is {self._fit_label(rest[0]['label'], 2.2, 8)}.")
+            self._text(s, Inches(7.5), Inches(3.62 + len(top) * row_h + 0.04),
+                       Inches(5.1), Inches(0.24), note,
+                       size=8, color=(self.theme.rag.get("amber") if adverse
+                                      else self.theme.ink_500))
 
         # -- deterministic takeaway + source disclosure -----------------------
         takeaway = self._concentration_takeaway(summary, top, forward)
@@ -1557,7 +1598,21 @@ class DeckBuilder:
                 lead += f", led by {worst['label']}"
             parts.append(lead + ".")
         else:
-            parts.append("All current tests remain within limit.")
+            lead = "All current tests remain within limit."
+            # "Nothing is in breach" is a weak conclusion on its own. Where the
+            # evaluator identified the tightest test, name it and its position:
+            # an investor's next question is always how much room is left.
+            # Only when nothing at all is adverse. With a test in warning range
+            # the warning clause below is the answer, and naming the closest as
+            # well would say the same thing twice.
+            closest = summary.get("closest") if not summary["warnings"] else None
+            if closest and closest.get("utilisation") is not None:
+                lead += (f" The closest is {closest['label']} at "
+                         f"{C.format_measure(closest['value'], closest['unit'])} "
+                         f"against a "
+                         f"{C.format_measure(closest['limit'], closest['unit'])} "
+                         f"limit, {closest['utilisation']:.0f}% utilised.")
+            parts.append(lead)
         if summary["warnings"]:
             parts.append(f"{summary['warnings']} test"
                          f"{'s are' if summary['warnings'] != 1 else ' is'} in "

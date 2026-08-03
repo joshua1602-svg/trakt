@@ -195,3 +195,28 @@ def test_narrative_contains_no_client_specific_wording():
     # The conclusion describes the STATE, not the particular test's name.
     assert "South West" not in text
     assert "warning range" in text
+
+
+def test_the_closest_test_is_chosen_by_utilisation_not_headroom():
+    """Headroom is in the test's own unit. A £2m cushion on a £2bn limit and 5
+    points on a 95-point limit cannot be ranked against each other, and the
+    smaller NUMBER is not the tighter position."""
+    rows = C.adapt_tests(_env([
+        _test("small", "Small unit test", value=1.0, limit=2.0, status="pass",
+              util=50.0, headroom=1.0),
+        _test("tight", "Nearly at its limit", value=90.0, limit=95.0,
+              status="pass", util=94.7, headroom=5.0)]))
+    summary = C.summarise(_env([]), rows)
+    assert summary["closest"]["label"] == "Nearly at its limit"
+    # The headroom-ordered pick would have named the wrong one.
+    assert summary["tightest"]["label"] == "Small unit test"
+
+
+def test_the_all_clear_narrative_quantifies_the_closest_position():
+    """"Nothing is in breach" alone leaves the reader's next question unanswered."""
+    rows = C.adapt_tests(_env([
+        _test("a", "Region A", value=10.0, limit=50.0, status="pass", util=20.0),
+        _test("b", "Region B", value=45.0, limit=50.0, status="pass", util=90.0)]))
+    text = _takeaway(rows, forward=False)
+    assert "All current tests remain within limit." in text
+    assert "The closest is Region B at 45.0% against a 50.0% limit, 90% utilised." in text

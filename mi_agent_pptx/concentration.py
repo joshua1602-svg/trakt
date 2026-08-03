@@ -215,6 +215,14 @@ def summarise(envelope: Optional[Mapping[str, Any]],
                                     and not r.get("expected_breach")),
         "tightest": min((r for r in rows if r.get("headroom") is not None),
                         key=lambda r: r["headroom"], default=None),
+        # The test CLOSEST TO BREACHING, which is not the same as the one with
+        # the least headroom: headroom is in the test's own unit, so £2m of room
+        # on a £2bn limit and 5pp on a 95pp limit cannot be ranked against each
+        # other. Utilisation is the evaluator's own unitless "how close am I",
+        # and it already accounts for the limit's direction — a floor test at
+        # 8 against a minimum of 10 is over-utilised, not under.
+        "closest": max((r for r in rows if r.get("utilisation") is not None),
+                       key=lambda r: r["utilisation"], default=None),
     }
 
 
