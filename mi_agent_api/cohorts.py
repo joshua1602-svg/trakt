@@ -116,7 +116,10 @@ def _vintage_series(df: pd.DataFrame, grain: str = "Y") -> Optional[pd.Series]:
                 return (od.dt.year.astype("Int64").astype("string") + "-Q"
                         + od.dt.quarter.astype("Int64").astype("string"))
             if g == "M":
-                return od.dt.strftime("%Y-%m").astype("string").where(od.notna())
+                # to_period is vectorised; dt.strftime formats element by
+                # element and was over half the cost of building a cohort.
+                return (od.dt.to_period("M").astype("string")
+                        .where(od.notna()))
             return od.dt.year.astype("Int64")
     if g == "Y" and _VINTAGE in df.columns and df[_VINTAGE].notna().any():
         return df[_VINTAGE]
@@ -341,8 +344,10 @@ def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M"
     silently re-basing a loan would move it between cohorts and make a static
     pool grow, which is the one thing a static pool may never do.
     """
-    entry: Dict[str, str] = {}
-    corrections: List[Dict[str, Any]] = []
+    # Vectorised: a row-wise loop over every loan in every period dominated the
+    # cost of the whole surface. One concat + drop_duplicates does the same
+    # work, and keeps the "first assignment wins" rule explicit.
+    seen: List[pd.DataFrame] = []
     for fr in frames:
         df = fr.get("df")
         if df is None or not len(df):
@@ -351,20 +356,26 @@ def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M"
         labels = _vintage_series(df, grain)
         if id_col is None or labels is None:
             continue
-        ids = _ids(df, id_col)
-        for loan, label in zip(ids, labels.astype("string")):
-            if loan is None or pd.isna(loan) or str(loan).strip() == "":
-                continue
-            if pd.isna(label):
-                continue
-            label = str(label)
-            if loan not in entry:
-                entry[loan] = label
-            elif entry[loan] != label:
-                corrections.append({
-                    "loanId": loan, "assigned": entry[loan],
-                    "restatedTo": label, "seenIn": fr.get("reporting_date"),
-                })
+        part = pd.DataFrame({
+            "loan": _ids(df, id_col).to_numpy(),
+            "label": labels.astype("string").to_numpy(),
+        })
+        part["seenIn"] = fr.get("reporting_date")
+        seen.append(part[part["loan"].notna() & (part["loan"] != "")
+                        & part["label"].notna()])
+    if not seen:
+        return {}, []
+
+    observed = pd.concat(seen, ignore_index=True)
+    first = observed.drop_duplicates(subset="loan", keep="first")
+    entry: Dict[str, str] = dict(zip(first["loan"].astype(str),
+                                     first["label"].astype(str)))
+    assigned = observed["loan"].map(entry)
+    restated = observed[observed["label"].astype(str) != assigned.astype(str)]
+    corrections = [{
+        "loanId": str(r.loan), "assigned": entry[str(r.loan)],
+        "restatedTo": str(r.label), "seenIn": r.seenIn,
+    } for r in restated.itertuples(index=False)]
     return entry, corrections
 
 
@@ -407,18 +418,14 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
         if id_col is None:
             continue
         ids = _ids(df, id_col)
-        fresh = ~ids.isin(seen) & ids.notna()
+        fresh = (~ids.isin(seen) & ids.notna()).to_numpy()
         if not fresh.any():
             continue
-        newly = df[fresh.values]
-        new_ids = ids[fresh]
-        seen.update(new_ids.dropna().tolist())
+        newly = df[fresh].copy()
+        seen.update(ids[fresh].dropna().tolist())
         # Group this period's new arrivals by the vintage they were assigned.
-        vintages = new_ids.map(entry)
-        for label, idx in vintages.groupby(vintages).groups.items():
-            sub = newly.loc[[i for i in idx if i in newly.index]]
-            if not len(sub):
-                continue
+        newly["_assigned_vintage"] = ids[fresh].map(entry).to_numpy()
+        for label, sub in newly.groupby("_assigned_vintage", dropna=True):
             row = rows.setdefault(str(label), {
                 "vintage": str(label), "originalLoanCount": 0,
                 "originalBalance": 0.0, "firstSeen": fr.get("reporting_date"),
