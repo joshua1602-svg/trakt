@@ -225,7 +225,14 @@ def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
     the £ value annotated. Uses the periwinkle→mint brand ramp."""
     from matplotlib.colors import LinearSegmentedColormap
     fig = _fig(w, h, theme, dpi)
-    ax = fig.add_axes([0.20, 0.16, 0.78, 0.78])
+    # The row labels are real category names — "Yorkshire and The Humber" is 24
+    # characters — and a truncated dimension label is a legibility defect on a
+    # slide whose whole purpose is comparing categories. The left margin is
+    # derived from the widest label rather than fixed at 0.20, which clipped it.
+    widest = max((len(str(l)) for l in y_labels), default=6)
+    label_pt = 8.5 if widest <= 20 else 7.5
+    left = min(0.34, max(0.20, widest * label_pt * 0.55 / 72.0 / max(w, 1.0) + 0.03))
+    ax = fig.add_axes([left, 0.16, 0.975 - left, 0.78])
     ax.set_facecolor(theme.bg_panel)
     mat = np.array([[float(c or 0) for c in row] for row in matrix], dtype=float) \
         if matrix else np.zeros((len(y_labels), len(x_labels)))
