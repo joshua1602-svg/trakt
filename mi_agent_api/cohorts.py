@@ -288,3 +288,290 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
                     "path and are not shown.",
         },
     }
+
+
+# --------------------------------------------------------------------------- #
+# Vintage formation and static-pool seasoning
+#
+# The distinction this section exists to enforce:
+#
+#   portfolio evolution  the whole book at each reporting date — 33 then 73.
+#                        Already served by funded_evolution; NOT duplicated here.
+#   vintage formation    loans ENTERING in each origination period — 33 then 40.
+#   static pool          one vintage followed forward: how those 33 loans behave
+#                        as they season, and which of them leave.
+#
+# funded_cohort_progression already tracks a SELECTED vintage across periods,
+# but with no vintage selected it returns the whole book per period, which is
+# portfolio evolution wearing a cohort label. Formation is what was missing:
+# there was no surface on which November is 40 rather than 73.
+#
+# Cohort membership comes from `origination_date` — the funded book's policy
+# completion / drawdown date (config/system/aliases_onboarding_lending.yaml
+# maps "policy completion date" to it). It is a property of the loan, not of
+# the reporting period, so a loan belongs to exactly one vintage for life.
+# --------------------------------------------------------------------------- #
+_LOAN_ID_CANDIDATES = ("loan_id", "loan_identifier", "loan_policy_number",
+                       "account_number")
+
+
+def loan_id_column(df: pd.DataFrame) -> Optional[str]:
+    """The column identifying a loan across reporting periods, or None.
+
+    Without one, a static pool cannot be built: survival and exits are defined
+    by following the SAME loans forward, not by counting rows.
+    """
+    for col in _LOAN_ID_CANDIDATES:
+        if col in getattr(df, "columns", []) and df[col].notna().any():
+            return col
+    return None
+
+
+def _ids(df: pd.DataFrame, id_col: str) -> pd.Series:
+    return df[id_col].astype("string").str.strip()
+
+
+def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M"
+                     ) -> Tuple[Dict[str, str], List[Dict[str, Any]]]:
+    """Map every loan id to its vintage, plus any late corrections observed.
+
+    A loan's vintage is taken from the FIRST reporting period in which it
+    appears, and kept. If a later snapshot restates its origination date into a
+    different vintage the first assignment stands and the change is reported —
+    silently re-basing a loan would move it between cohorts and make a static
+    pool grow, which is the one thing a static pool may never do.
+    """
+    entry: Dict[str, str] = {}
+    corrections: List[Dict[str, Any]] = []
+    for fr in frames:
+        df = fr.get("df")
+        if df is None or not len(df):
+            continue
+        id_col = loan_id_column(df)
+        labels = _vintage_series(df, grain)
+        if id_col is None or labels is None:
+            continue
+        ids = _ids(df, id_col)
+        for loan, label in zip(ids, labels.astype("string")):
+            if loan is None or pd.isna(loan) or str(loan).strip() == "":
+                continue
+            if pd.isna(label):
+                continue
+            label = str(label)
+            if loan not in entry:
+                entry[loan] = label
+            elif entry[loan] != label:
+                corrections.append({
+                    "loanId": loan, "assigned": entry[loan],
+                    "restatedTo": label, "seenIn": fr.get("reporting_date"),
+                })
+    return entry, corrections
+
+
+def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
+                     client_id: str = "", portfolio_id: str = ""
+                     ) -> Dict[str, Any]:
+    """Vintage FORMATION: what entered the book in each origination period.
+
+    Each loan is counted once, in its own vintage, with the metrics observed in
+    the first reporting period that carried it — so "original balance" is the
+    balance at entry rather than a later amortised one. November is 40 here,
+    never 73.
+    """
+    base = {
+        "dataset": "cohort_formation",
+        "portfolioId": portfolio_id or client_id,
+        "cohortBasis": _ORIG_DATE,
+        "grain": (grain or "M").upper(),
+    }
+    usable = [fr for fr in frames if fr.get("df") is not None and len(fr["df"])]
+    if not usable:
+        return {**base, "available": False, "reason": "no funded reporting periods",
+                "vintages": []}
+    first = usable[0]["df"]
+    if loan_id_column(first) is None:
+        return {**base, "available": False, "vintages": [],
+                "reason": "the funded tape carries no loan identifier, so loans "
+                          "cannot be followed between reporting periods"}
+    if _vintage_series(first, grain) is None:
+        return {**base, "available": False, "vintages": [],
+                "reason": f"no {_ORIG_DATE} on the funded tape, so loans cannot "
+                          "be assigned to an origination vintage"}
+
+    entry, corrections = cohort_entry_map(frames, grain)
+    seen: set = set()
+    rows: Dict[str, Dict[str, Any]] = {}
+    for fr in usable:
+        df = fr["df"]
+        id_col = loan_id_column(df)
+        if id_col is None:
+            continue
+        ids = _ids(df, id_col)
+        fresh = ~ids.isin(seen) & ids.notna()
+        if not fresh.any():
+            continue
+        newly = df[fresh.values]
+        new_ids = ids[fresh]
+        seen.update(new_ids.dropna().tolist())
+        # Group this period's new arrivals by the vintage they were assigned.
+        vintages = new_ids.map(entry)
+        for label, idx in vintages.groupby(vintages).groups.items():
+            sub = newly.loc[[i for i in idx if i in newly.index]]
+            if not len(sub):
+                continue
+            row = rows.setdefault(str(label), {
+                "vintage": str(label), "originalLoanCount": 0,
+                "originalBalance": 0.0, "firstSeen": fr.get("reporting_date"),
+            })
+            row["originalLoanCount"] += int(len(sub))
+            if _BALANCE in sub.columns:
+                row["originalBalance"] += float(coerce_numeric(sub[_BALANCE]).sum())
+            row.setdefault("_ltv", []).append(sub)
+
+    out: List[Dict[str, Any]] = []
+    for label, row in rows.items():
+        parts = row.pop("_ltv", [])
+        entry_rows = pd.concat(parts) if parts else None
+        if entry_rows is not None and _BALANCE in entry_rows.columns:
+            w = entry_rows[_BALANCE]
+            if _ORIG_LTV in entry_rows.columns:
+                row["waOriginalLtv"] = _weighted_avg_pct(
+                    entry_rows[_ORIG_LTV], w, entry_rows[_ORIG_LTV])
+            if _LTV in entry_rows.columns:
+                row["waEntryLtv"] = _weighted_avg_pct(
+                    entry_rows[_LTV], w, entry_rows[_LTV])
+            if _RATE in entry_rows.columns:
+                row["waRate"] = _weighted_avg_pct(
+                    entry_rows[_RATE], w, entry_rows[_RATE])
+        row["originalBalance"] = round(row["originalBalance"], 2)
+        out.append(row)
+    out.sort(key=lambda r: r["vintage"])
+    return {
+        **base,
+        "available": bool(out),
+        "reason": None if out else "no loans could be assigned to a vintage",
+        "vintages": out,
+        "totalLoanCount": sum(r["originalLoanCount"] for r in out),
+        "lateCorrections": corrections,
+        "lineage": {
+            "source": "governed funded reporting periods, by origination vintage",
+            "metric": "loans and balance ENTERING the book in each vintage",
+            "note": "Formation counts each loan once, in the period it was "
+                    "originated — not the book outstanding at a reporting date. "
+                    "Portfolio evolution is a separate view.",
+        },
+    }
+
+
+def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
+                       grain: str = "M", client_id: str = "",
+                       portfolio_id: str = "") -> Dict[str, Any]:
+    """One vintage followed forward through reporting periods.
+
+    The pool is fixed at formation: only loans assigned to ``vintage`` are ever
+    counted, so the count can fall through redemption but can never rise. Any
+    later arrival carrying this vintage is a late correction and is reported
+    rather than admitted.
+    """
+    base = {
+        "dataset": "cohort_static_pool",
+        "portfolioId": portfolio_id or client_id,
+        "cohortBasis": _ORIG_DATE,
+        "vintage": vintage,
+        "grain": (grain or "M").upper(),
+    }
+    usable = [fr for fr in frames if fr.get("df") is not None and len(fr["df"])]
+    if not usable:
+        return {**base, "available": False, "periods": [],
+                "reason": "no funded reporting periods"}
+    if loan_id_column(usable[0]["df"]) is None:
+        return {**base, "available": False, "periods": [],
+                "reason": "the funded tape carries no loan identifier, so a "
+                          "static pool cannot be followed"}
+
+    entry, _ = cohort_entry_map(frames, grain)
+    members = {loan for loan, label in entry.items() if label == str(vintage)}
+    if not members:
+        return {**base, "available": False, "periods": [],
+                "reason": f"no loans were originated in {vintage}"}
+
+    periods: List[Dict[str, Any]] = []
+    original_count: Optional[int] = None
+    original_balance: Optional[float] = None
+    prior_ids: Optional[set] = None
+    for fr in usable:
+        df = fr["df"]
+        id_col = loan_id_column(df)
+        if id_col is None:
+            continue
+        ids = _ids(df, id_col)
+        present = ids.isin(members)
+        if not present.any() and original_count is None:
+            continue  # the vintage has not formed yet
+        sub = df[present.values]
+        here = set(ids[present].dropna().tolist())
+        balance = (float(coerce_numeric(sub[_BALANCE]).sum())
+                   if _BALANCE in sub.columns and len(sub) else 0.0)
+        if original_count is None:
+            original_count, original_balance = len(here), balance
+        exits = sorted(prior_ids - here) if prior_ids is not None else []
+        row: Dict[str, Any] = {
+            "period": (fr.get("reporting_date") or fr.get("run_id") or "")[:7],
+            "reportingDate": fr.get("reporting_date"),
+            "monthsSinceEntry": _months_between(vintage, fr.get("reporting_date")),
+            "survivingLoanCount": len(here),
+            "currentBalance": round(balance, 2),
+            "loanRetention": (round(len(here) / original_count, 4)
+                              if original_count else None),
+            "balanceRetention": (round(balance / original_balance, 4)
+                                 if original_balance else None),
+            "exitsInPeriod": len(exits),
+            "cumulativeExits": original_count - len(here) if original_count else 0,
+        }
+        if len(sub) and _BALANCE in sub.columns:
+            w = sub[_BALANCE]
+            if _LTV in sub.columns:
+                row["waLtv"] = _weighted_avg_pct(sub[_LTV], w, df[_LTV])
+            if _RATE in sub.columns:
+                row["waRate"] = _weighted_avg_pct(sub[_RATE], w, df[_RATE])
+        periods.append(row)
+        prior_ids = here
+
+    return {
+        **base,
+        "available": bool(periods),
+        "reason": None if periods else f"no reporting period contains {vintage}",
+        "originalLoanCount": original_count,
+        "originalBalance": (round(original_balance, 2)
+                            if original_balance is not None else None),
+        "periods": periods,
+        "singlePeriod": len(periods) <= 1,
+        "lineage": {
+            "source": "governed funded reporting periods (fixed static pool)",
+            "metric": "surviving loans, balance, retention and exits for one vintage",
+            "note": "The pool is fixed at formation. A falling count is "
+                    "redemption or exit; the count can never rise.",
+        },
+    }
+
+
+def _months_between(vintage: str, reporting_date: Optional[str]) -> Optional[int]:
+    """Whole months from the vintage period to a reporting date. None unless the
+    vintage is month- or quarter-grained (a year label has no single start)."""
+    if not reporting_date:
+        return None
+    try:
+        rd = pd.Timestamp(reporting_date)
+    except (ValueError, TypeError):
+        return None
+    label = str(vintage)
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}", label):
+            start = pd.Timestamp(label + "-01")
+        elif re.fullmatch(r"\d{4}-Q[1-4]", label):
+            start = pd.Timestamp(f"{label[:4]}-{(int(label[-1]) - 1) * 3 + 1:02d}-01")
+        else:
+            return None
+    except (ValueError, TypeError):
+        return None
+    return (rd.year - start.year) * 12 + (rd.month - start.month)
