@@ -244,6 +244,22 @@ class TestConversionGenerator(unittest.TestCase):
             "denominatorWeek": "2026-06-26", "weeksInWindow": 5, "minWeeks": 4,
             "sufficient": True}
 
+    def test_disabling_conversion_omits_it_explicitly(self):
+        """Off must be stated, not silent — and it is what lets the route skip
+        resolving the funnel, which is most of the brief's cold cost."""
+        import os, tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as fh:
+            fh.write("insights:\n  conversion:\n    enabled: false\n")
+            os.environ[cfg.PATH_ENV] = fh.name
+        cfg.reset_cache()
+        try:
+            ins, omit = gen.conversion(CTX, {**self.BASE, "sufficient": False})
+            self.assertEqual(ins, [])
+            self.assertIn("disabled by configuration", omit[0].reason)
+        finally:
+            os.environ.pop(cfg.PATH_ENV, None)
+            cfg.reset_cache()
+
     def test_a_healthy_sufficient_conversion_is_suppressed(self):
         ins, omit = gen.conversion(CTX, self.BASE)
         self.assertEqual(ins, [])

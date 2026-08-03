@@ -64,7 +64,12 @@ insights:
   # gated on movement. It is reported when the governed data itself says
   # something: a rate under a configured floor, or an insufficient window.
   # `minimum_acceptable_rate: null` disables the floor test.
+  # `enabled: false` also skips resolving the origination funnel, which is 63%
+  # of the brief's cold cost (measured: 3.5s of 5.6s on a 26-week root) and
+  # exists solely to supply this one insight. Left on by default — the saving
+  # is a deployment's decision, not a silent default.
   conversion:
+    enabled: true
     minimum_acceptable_rate: null
     require_sufficient: true
 

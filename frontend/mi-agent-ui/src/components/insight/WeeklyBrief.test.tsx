@@ -94,10 +94,11 @@ describe("containment", () => {
 
 // --------------------------------------------------------------------------
 describe("presentation", () => {
-  it("shows a loading state", () => {
+  it("shows a loading state once the deferred fetch starts", async () => {
     render(<WeeklyBriefPanel {...PROPS} enabled
       client={client(vi.fn().mockReturnValue(new Promise(() => {})))} />);
-    expect(screen.getByTestId("weekly-brief-loading")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByTestId("weekly-brief-loading")).toBeTruthy());
   });
 
   it("renders the insights the API returned, in the order it returned them", async () => {
@@ -187,6 +188,54 @@ describe("presentation", () => {
     const header = screen.getByTestId("weekly-brief").textContent ?? "";
     expect(header).toContain("Pipeline 2026-08-07 vs 2026-07-31");
     expect(header).toContain("funded actuals 2026-07-31");
+  });
+});
+
+// --------------------------------------------------------------------------
+describe("staying off the first-paint critical path", () => {
+  // The regression this guards against: the brief fired in parallel with the
+  // dashboard's own primary requests, so a cold worker prepared the same data
+  // twice at once while serving them. First paint went from 2.6s to 4.0s and
+  // network idle from 4.1s to 9.9s.
+
+  it("issues NO request until the primary data has resolved", async () => {
+    const spy = vi.fn().mockResolvedValue(brief());
+    const { rerender } = render(
+      <WeeklyBriefPanel {...PROPS} enabled ready={false} client={client(spy)} />);
+    await new Promise((r) => setTimeout(r, 250));
+    expect(spy).not.toHaveBeenCalled();
+
+    rerender(<WeeklyBriefPanel {...PROPS} enabled ready client={client(spy)} />);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+  });
+
+  it("renders nothing at all while it is waiting", async () => {
+    const { container } = render(
+      <WeeklyBriefPanel {...PROPS} enabled ready={false}
+        client={client(vi.fn().mockResolvedValue(brief()))} />);
+    await new Promise((r) => setTimeout(r, 250));
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("does not fetch when a portfolio switch makes it un-ready again", async () => {
+    const spy = vi.fn().mockResolvedValue(brief());
+    const c = client(spy);
+    const { rerender } = render(
+      <WeeklyBriefPanel portfolioId="A" enabled ready client={c} />);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    // New portfolio selected: its snapshot is loading again, so the brief must
+    // wait rather than asking about a book the dashboard has not loaded.
+    rerender(<WeeklyBriefPanel portfolioId="B" enabled ready={false} client={c} />);
+    await new Promise((r) => setTimeout(r, 250));
+    expect(spy).toHaveBeenCalledTimes(1);
+    rerender(<WeeklyBriefPanel portfolioId="B" enabled ready client={c} />);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+  });
+
+  it("defaults to ready so a caller that does not care is unaffected", async () => {
+    const spy = vi.fn().mockResolvedValue(brief());
+    render(<WeeklyBriefPanel {...PROPS} enabled client={client(spy)} />);
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
   });
 });
 
