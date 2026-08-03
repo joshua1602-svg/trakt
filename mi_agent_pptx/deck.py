@@ -1464,7 +1464,11 @@ class DeckBuilder:
             self._text(s, Inches(7.5 + dx), head_y, Inches(cw), Inches(0.26),
                        label, size=8.5, color=self.theme.ink_400, bold=True,
                        align=align)
-        row_h = 0.56
+        # Pitch derives from how many tests there ARE, so one test does not sit
+        # in a sliver at the top of an empty card and five do not collide.
+        band = 6.20 - 3.62
+        row_h = min(0.80, band / max(len(top), 1))
+        value_pt = 10 if len(top) > 2 else 11
         for i, r in enumerate(top):
             y = Inches(3.62 + i * row_h)
             status_colour = self.theme.rag.get(
@@ -1484,8 +1488,8 @@ class DeckBuilder:
             for i, ((value, colour), (_label, dx, cw, align)) in enumerate(
                     zip(values, cols)):
                 self._text(s, Inches(7.5 + dx), y, Inches(cw), Inches(0.3),
-                           str(value), size=9.5 if i == 0 else 10, color=colour,
-                           align=align,
+                           str(value), size=9.5 if i == 0 else value_pt,
+                           color=colour, align=align,
                            bold=(align == PP_ALIGN.RIGHT and colour is status_colour))
             # A test that passes today but is forecast to cross says BOTH, and
             # says which is which — "PASS · breaches 2026-07" reads as a
@@ -1501,14 +1505,27 @@ class DeckBuilder:
                        Inches(5.0), Inches(0.22), status_line,
                        size=7.5, color=status_colour)
 
+        rest = C.overflow(rows)
+        if rest:
+            worst = rest[0]
+            self._text(s, Inches(7.5), Inches(6.28), Inches(5.1), Inches(0.24),
+                       f"{len(rest)} further test"
+                       f"{'s' if len(rest) != 1 else ''} within limit and ranked "
+                       f"below these; nearest is {worst['label'][:28]}.",
+                       size=8, color=self.theme.ink_500)
+
         # -- deterministic takeaway + source disclosure -----------------------
         takeaway = self._concentration_takeaway(summary, top, forward)
-        self._text(s, Inches(0.57), Inches(6.42), Inches(9.4), Inches(0.4),
-                   takeaway, size=10, color=self.theme.ink_300, italic=True)
+        # The conclusion can run to several clauses when many states are in
+        # play, so it gets the full content width and steps down rather than
+        # clipping — this is the sentence the reader keeps.
+        self._text(s, Inches(0.57), Inches(6.38), Inches(12.2), Inches(0.44),
+                   takeaway, size=10 if len(takeaway) < 190 else 9,
+                   color=self.theme.ink_300, italic=True, spacing=1.06)
         disclosure = C.source_disclosure(env)
         if disclosure:
-            self._text(s, Inches(0.57), Inches(6.72), Inches(9.4), Inches(0.3),
-                       disclosure, size=8.5, color=self.theme.ink_500)
+            self._text(s, Inches(0.57), Inches(6.86), Inches(9.4), Inches(0.26),
+                       disclosure, size=8, color=self.theme.ink_500)
         self._footer(s)
         self._record(spec.get("id", "concentration"), spec.get("title"),
                      f"{summary['tests']} governed tests.")
@@ -1522,35 +1539,53 @@ class DeckBuilder:
         return text if len(text) <= capacity else text[: capacity - 1].rstrip() + "…"
 
     def _concentration_takeaway(self, summary, rows, forward) -> str:
-        """One deterministic sentence over the governed evidence — no inference."""
+        """One deterministic sentence over the governed evidence.
+
+        Composed from what the configuration actually produced: it never assumes
+        a direction, a scenario is available, or that any particular state
+        exists. Where a state was not evaluated it is simply not mentioned,
+        rather than being reported as "none".
+        """
         from . import concentration as C
+        parts: List[str] = []
         if summary["breaches"]:
             worst = next((r for r in rows if r["status"] == C.STATUS_BREACH), None)
-            lead = (f"{summary['breaches']} limit"
-                    f"{'s are' if summary['breaches'] != 1 else ' is'} in breach at the "
-                    f"reporting date")
+            lead = (f"{summary['breaches']} test"
+                    f"{'s are' if summary['breaches'] != 1 else ' is'} in breach "
+                    f"at the reporting date")
             if worst:
                 lead += f", led by {worst['label']}"
-            lead += "."
-        elif summary["warnings"]:
-            lead = (f"All limits are within contractual thresholds; "
-                    f"{summary['warnings']} "
-                    f"{'are' if summary['warnings'] != 1 else 'is'} in warning range.")
+            parts.append(lead + ".")
         else:
-            lead = "All governed concentration limits are within their contractual thresholds."
-        tail = ""
+            parts.append("All current tests remain within limit.")
+        if summary["warnings"]:
+            parts.append(f"{summary['warnings']} test"
+                         f"{'s are' if summary['warnings'] != 1 else ' is'} in "
+                         f"warning range.")
         if forward and summary["expected_breaches"]:
             horizon = next((r.get("breach_horizon") for r in rows
-                            if r.get("expected_breach") and r.get("breach_horizon")), None)
-            tail = (f" The expected forecast breaches {summary['expected_breaches']} "
-                    f"limit{'s' if summary['expected_breaches'] != 1 else ''}"
-                    + (f", crossing around {horizon}" if horizon else "") + ".")
-        elif forward and summary["stress_breaches"]:
-            tail = (f" The all-pipeline-converts stress would breach "
-                    f"{summary['stress_breaches']} "
-                    f"limit{'s' if summary['stress_breaches'] != 1 else ''}; this is a "
-                    f"stress, not the expected outcome.")
-        return lead + tail
+                            if r.get("expected_breach") and r.get("breach_horizon")),
+                           None)
+            parts.append(
+                f"{summary['expected_breaches']} "
+                f"{'is' if summary['expected_breaches'] == 1 else 'are'} expected "
+                f"to breach on the governed forecast"
+                + (f", crossing around {horizon}" if horizon else "") + ".")
+        if forward and summary["stress_breaches"]:
+            only_stress = summary.get("stress_only_breaches",
+                                      summary["stress_breaches"])
+            if only_stress > 0:
+                further = "further " if summary["expected_breaches"] else ""
+                parts.append(
+                    f"{only_stress} {further}test"
+                    f"{'s' if only_stress != 1 else ''} breach"
+                    f"{'' if only_stress != 1 else 'es'} only under the "
+                    f"all-pipeline-converts stress, which is a stress rather "
+                    f"than the expected outcome.")
+        if not forward:
+            parts.append("Forward-looking states were not evaluated for this "
+                         "book, so only the current position is shown.")
+        return " ".join(parts)
 
     def slide_methodology(self, spec):
         """Kept as an alias of the investor-safe Data and Methodology page.

@@ -100,6 +100,13 @@ def adapt_tests(envelope: Optional[Mapping[str, Any]]) -> List[Dict[str, Any]]:
             "label": str(t.get("displayName") or t.get("metricId") or ""),
             "category": t.get("category") or "",
             "unit": t.get("unit"),
+            # The governed limit DIRECTION. "max" is a ceiling, "min" a floor;
+            # the evaluator already computes status and utilisation for both, so
+            # nothing here may assume that a higher value is the worse one.
+            "operator": str(t.get("operator") or "max").lower(),
+            # The operator-configured display priority, where the configuration
+            # expresses one. Ranking falls back to it before the id tie-break.
+            "severity": t.get("severity"),
             # -- current (the only actual) -------------------------------
             "value": _num(t.get("currentValue")),
             "limit": _num(t.get("threshold")),
@@ -127,27 +134,39 @@ def adapt_tests(envelope: Optional[Mapping[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def rank_key(row: Mapping[str, Any]):
-    """Deterministic severity order, exactly as specified:
+    """Deterministic severity order, exactly as specified.
 
-    current breach → forecast breach → amber proximity → expected breach
-    horizon → utilisation. Ties break on the label so two runs never disagree.
+    current breach → current warning → expected forecast breach → shortest
+    breach horizon → stress breach → highest utilisation → configured display
+    priority → stable test id.
+
+    Every level is derived from the governed payload; none of it is client
+    specific, and the final tie-break on ``test_id`` means two runs over the
+    same configuration can never disagree on order.
     """
-    current_breach = row.get("status") == STATUS_BREACH
-    forecast_breach = bool(row.get("expected_breach"))
-    amber = row.get("status") == STATUS_WARNING or \
-        row.get("expected_status") == STATUS_WARNING
-    # An earlier horizon outranks a later one; absent horizon sorts last.
-    horizon = row.get("breach_horizon")
-    horizon_key = str(horizon) if horizon else "~"
     util = row.get("utilisation")
+    horizon = row.get("breach_horizon")
     return (
-        0 if current_breach else 1,
-        0 if forecast_breach else 1,
-        0 if amber else 1,
-        horizon_key,
+        0 if row.get("status") == STATUS_BREACH else 1,
+        0 if row.get("status") == STATUS_WARNING else 1,
+        0 if row.get("expected_breach") else 1,
+        # An earlier horizon outranks a later one; absent sorts last.
+        str(horizon) if horizon else "~",
+        0 if row.get("stress_breach") else 1,
         -(util if util is not None else -1.0),
-        str(row.get("label", "")),
+        _priority_rank(row.get("severity")),
+        str(row.get("test_id") or row.get("label") or ""),
     )
+
+
+#: Configured display priority, most severe first. An unrecognised or absent
+#: value sorts after everything the configuration ranked explicitly.
+_PRIORITY_ORDER = ("critical", "high", "material", "medium", "low", "informational")
+
+
+def _priority_rank(severity: Any) -> int:
+    value = str(severity or "").strip().lower()
+    return _PRIORITY_ORDER.index(value) if value in _PRIORITY_ORDER else len(_PRIORITY_ORDER)
 
 
 def select_tests(rows: Sequence[Mapping[str, Any]],
@@ -156,6 +175,17 @@ def select_tests(rows: Sequence[Mapping[str, Any]],
     unreadable slide; showing an arbitrary subset would be worse."""
     ordered = sorted((dict(r) for r in rows), key=rank_key)
     return ordered[:limit]
+
+
+def overflow(rows: Sequence[Mapping[str, Any]],
+             limit: int = MAX_TESTS_ON_SLIDE) -> List[Dict[str, Any]]:
+    """Ranked tests beyond the primary slide's capacity.
+
+    Squeezing forty tests onto one page produces an unreadable slide; dropping
+    them silently produces a misleading one. They are returned so the deck can
+    carry them on a second page or disclose them in metadata.
+    """
+    return sorted((dict(r) for r in rows), key=rank_key)[limit:]
 
 
 def summarise(envelope: Optional[Mapping[str, Any]],
@@ -177,6 +207,12 @@ def summarise(envelope: Optional[Mapping[str, Any]],
                                  or sum(1 for r in rows if r.get("expected_breach"))),
         "stress_breaches": int(summary.get("fullPipelineBreaches")
                                or sum(1 for r in rows if r.get("stress_breach"))),
+        # Tests that breach ONLY under stress. Counted per test rather than by
+        # subtracting one total from the other: whether the stress set contains
+        # the forecast set depends on the configuration, and on a floor-limit or
+        # a run-off test it need not.
+        "stress_only_breaches": sum(1 for r in rows if r.get("stress_breach")
+                                    and not r.get("expected_breach")),
         "tightest": min((r for r in rows if r.get("headroom") is not None),
                         key=lambda r: r["headroom"], default=None),
     }

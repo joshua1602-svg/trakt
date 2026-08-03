@@ -272,7 +272,9 @@ def test_takeaway_states_forecast_breach_without_inventing_actions(
     out = tmp_path / "takeaway.pptx"
     _build(run_dir, out)
     text = _text(out)
-    assert "expected forecast breaches" in text.lower()
+    # The forecast is reported as the governed model's projection — not as an
+    # observation, and not as something anyone is being told to act on.
+    assert "expected to breach on the governed forecast" in text.lower()
     for imperative in ("should ", "must ", "recommend", "we suggest"):
         assert imperative not in text.lower()
 
