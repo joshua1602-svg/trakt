@@ -20,6 +20,7 @@ Target State Updates (v1.9):
 
 import argparse
 import json
+import os
 import re
 import calendar
 import warnings
@@ -27,6 +28,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -710,8 +712,145 @@ def normalize_geography(df: pd.DataFrame, pt: str, config: dict) -> dict:
 
 
 # --- UPDATED: Accepts Config Object ---
+#: A supplied percentage agrees with its derived reference within this relative
+#: tolerance. Wide enough for rounding and for a valuation restated between
+#: extracts; far narrower than the 100x it must never confuse.
+_PCT_RECONCILE_RTOL = 0.02
+
+#: Deriving LTV from an outstanding balance where no principal balance exists
+#: populates RREC12/RREC16 for books that previously reported No Data — an
+#: acquired tape carries no principal balance, so this is the whole acquired
+#: book. That is a NEW REGULATORY DISCLOSURE, not a bug fix, so the capability
+#: ships dark: built and tested, off until the disclosure is approved. With the
+#: flag off the fallback is not consulted and those books behave exactly as
+#: they do today.
+_ACQUIRED_LTV_DISCLOSURE_FLAG = "GATE2_LTV_ACQUIRED_DISCLOSURE"
+
+
+def acquired_ltv_disclosure_enabled(config: Optional[dict] = None) -> bool:
+    """True when LTV may be derived from an outstanding balance. Default False."""
+    declared = (config or {}).get(_ACQUIRED_LTV_DISCLOSURE_FLAG.lower())
+    if declared is None:
+        declared = os.environ.get(_ACQUIRED_LTV_DISCLOSURE_FLAG, "")
+    return str(declared).strip().lower() in ("1", "true", "yes", "on", "enabled")
+
+
+def percentage_source_unit(field: str, config: dict) -> Optional[str]:
+    """The declared source unit for a percentage field, or None.
+
+    Read from the alias declaration (``source_unit: percentage_points |
+    fraction``). When declared it is authoritative; when absent the caller
+    reconciles rather than guessing.
+    """
+    for key in ("aliases", "alias_map", "field_aliases"):
+        block = (config or {}).get(key)
+        if isinstance(block, dict):
+            entry = block.get(field)
+            if isinstance(entry, dict) and entry.get("source_unit"):
+                return str(entry["source_unit"]).strip().lower()
+    return None
+
+
+def _first_present(df: pd.DataFrame, columns: tuple) -> Optional[str]:
+    """First column that exists and carries at least one value."""
+    for col in columns:
+        if col in df.columns and pd.to_numeric(df[col], errors="coerce").notna().any():
+            return col
+    return None
+
+
+def _resolve_ltv(df: pd.DataFrame, ltv_col: str, bal_cols: tuple, val_col: str,
+                 config: dict) -> Optional[Dict[str, Any]]:
+    """Bring one LTV column onto the canonical percentage-point scale.
+
+    In precedence order, and never by magnitude alone:
+
+    1. a DECLARED source unit normalises the supplied value;
+    2. otherwise the supplied value is RECONCILED against ``(balance /
+       valuation) * 100`` and the scale that agrees is adopted;
+    3. rows with no usable supplied value are DERIVED from balance and
+       valuation;
+    4. anything still unresolved is left exactly as supplied and reported, so
+       validation sees it rather than the transform hiding it.
+
+    A supplied value that reconciles is never overwritten — the derivation is a
+    reference for agreeing the scale, not a replacement for the client's number.
+    """
+    # The first entry is the field's own balance; any later entry is a fallback
+    # that creates a new disclosure, so it is consulted only when approved.
+    usable = bal_cols if acquired_ltv_disclosure_enabled(config) else bal_cols[:1]
+    bal_col = _first_present(df, usable)
+    val_present = val_col in df.columns and pd.to_numeric(
+        df[val_col], errors="coerce").notna().any()
+    has_supplied = ltv_col in df.columns and pd.to_numeric(
+        df.get(ltv_col), errors="coerce").notna().any()
+    if bal_col is None and not has_supplied:
+        return None
+    if ltv_col not in df.columns:
+        df[ltv_col] = pd.NA
+
+    supplied = pd.to_numeric(df[ltv_col], errors="coerce")
+    reference = None
+    if bal_col is not None and val_present:
+        b = pd.to_numeric(df[bal_col], errors="coerce")
+        v = pd.to_numeric(df[val_col], errors="coerce")
+        reference = (b / v.where(v > 0)) * 100.0
+
+    report: Dict[str, Any] = {
+        "rule_id": f"RESOLVE_{ltv_col.upper()}",
+        "numerator": bal_col, "denominator": val_col if val_present else None,
+        "normalised_rows": 0, "derived_rows": 0, "unresolved_rows": 0,
+        "source_unit": None, "basis": None,
+    }
+
+    # 1. Declared source unit wins outright.
+    declared = percentage_source_unit(ltv_col, config)
+    if declared in ("fraction", "percent_fraction"):
+        mask = supplied.notna()
+        df.loc[mask, ltv_col] = supplied[mask] * 100.0
+        report.update(source_unit=declared, basis="declared",
+                      normalised_rows=int(mask.sum()))
+    elif declared in ("percentage_points", "percent_points", "points"):
+        report.update(source_unit=declared, basis="declared",
+                      normalised_rows=int(supplied.notna().sum()))
+    elif supplied.notna().any() and reference is not None:
+        # 2. Reconcile: which reading of the supplied value matches the book?
+        comparable = supplied.notna() & reference.notna()
+        as_points = np.isclose(supplied[comparable], reference[comparable],
+                               rtol=_PCT_RECONCILE_RTOL, atol=0.5)
+        as_fraction = np.isclose(supplied[comparable] * 100.0, reference[comparable],
+                                 rtol=_PCT_RECONCILE_RTOL, atol=0.5)
+        points_hits, fraction_hits = int(as_points.sum()), int(as_fraction.sum())
+        if fraction_hits > points_hits:
+            mask = supplied.notna()
+            df.loc[mask, ltv_col] = supplied[mask] * 100.0
+            report.update(source_unit="fraction", basis="reconciled",
+                          normalised_rows=int(mask.sum()))
+        elif points_hits:
+            report.update(source_unit="percentage_points", basis="reconciled",
+                          normalised_rows=points_hits)
+        else:
+            # Neither scale agrees: the value is not a rescaling of this book.
+            report.update(basis="unreconciled",
+                          unresolved_rows=int(comparable.sum()))
+    elif supplied.notna().any():
+        # 3. No reference and no declaration — leave it, and say so.
+        report.update(basis="undeclared_no_reference",
+                      unresolved_rows=int(supplied.notna().sum()))
+
+    # 4. Fill the gaps from balance and valuation.
+    if reference is not None:
+        gaps = pd.to_numeric(df[ltv_col], errors="coerce").isna() & reference.notna()
+        if gaps.any():
+            df.loc[gaps, ltv_col] = reference[gaps]
+            report["derived_rows"] = int(gaps.sum())
+            report["basis"] = report["basis"] or "derived"
+    return report if (report["normalised_rows"] or report["derived_rows"]
+                      or report["unresolved_rows"]) else None
+
+
 def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
-                 dayfirst: bool, infer_year: bool, derive_month: bool, 
+                 dayfirst: bool, infer_year: bool, derive_month: bool,
                  default_year: Optional[int], config: dict) -> Dict[str, Any]:
     
     deriv_report: Dict[str, Any] = {"derived": {}, "skipped": {}}
@@ -738,33 +877,30 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
         if mask_prin.any():
             df.loc[mask_prin, "current_principal_balance"] = o[mask_prin] - i[mask_prin]
 
-    # 2. LTV Calculations
-    for ltv_col, bal_col, val_col in [
-        ("current_loan_to_value", "current_principal_balance", "current_valuation_amount"),
-        ("original_loan_to_value", "original_principal_balance", "original_valuation_amount")
+    # 2. LTV — normalise the source, reconcile it, derive only what is absent.
+    #
+    # Current and original declare their OWN inputs. They used to share a loop
+    # whose only asymmetry was the overwrite rule, which is how current LTV came
+    # to be force-derived into percentage points while original LTV kept whatever
+    # scale the source supplied — two conventions on one canonical field name,
+    # visible in the Annex fixtures as RREC12 in points beside RREC16 as a
+    # fraction.
+    #
+    # Numerator precedence is explicit per field. For current LTV a principal
+    # balance is preferred and an outstanding balance is the fallback: an
+    # acquired tape carries only the latter, so requiring principal silently
+    # skipped LTV for the whole acquired book — and with it both LTV validators.
+    for ltv_col, bal_cols, val_col in [
+        ("current_loan_to_value",
+         ("current_principal_balance", "current_outstanding_balance"),
+         "current_valuation_amount"),
+        ("original_loan_to_value",
+         ("original_principal_balance",),
+         "original_valuation_amount"),
     ]:
-        if {bal_col, val_col}.issubset(df.columns):
-            # Ensure column exists
-            if ltv_col not in df.columns: 
-                df[ltv_col] = pd.NA
-
-            b = pd.to_numeric(df[bal_col], errors="coerce")
-            v = pd.to_numeric(df[val_col], errors="coerce")
-            
-            if ltv_col == "current_loan_to_value":
-                mask = b.notna() & v.notna() & (v != 0) 
-            else:
-                mask = df[ltv_col].isna() & b.notna() & v.notna() & (v != 0)
-
-            if mask.any():
-                df.loc[mask, ltv_col] = (b[mask] / v[mask]) * 100.0
-                
-                # Optional: Add to derivation report so you know it happened
-                deriv_report.setdefault("derived", {})[ltv_col] = {
-                    "rule_id": f"DERIVE_{ltv_col.upper()}_FORCED", 
-                    "filled_rows": int(mask.sum()),
-                    "logic": "Forced calc: (bal/val)*100 to fix scaling"
-                }
+        outcome = _resolve_ltv(df, ltv_col, bal_cols, val_col, config)
+        if outcome:
+            deriv_report.setdefault("derived", {})[ltv_col] = outcome
 
     # 3. Geography normalisation (regulatory NUTS fields vs classification year)
     #    Correct semantics (ESMA Annex 2):

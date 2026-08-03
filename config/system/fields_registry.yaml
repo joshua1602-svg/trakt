@@ -947,6 +947,9 @@ fields:
     allowed_values: null
     category: regulatory
     format: decimal
+    # Percentage points (90% == 90.00). Confirmed by ESMA_Annex2 RREC12 -> PercentageRate3Choice;
+    # the Annex wire representation is the same, so projection is pass-through.
+    unit: percentage_points
     portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
@@ -1350,6 +1353,9 @@ fields:
     allowed_values: null
     category: regulatory
     format: decimal
+    # Percentage points (90% == 90.00). Confirmed by ESMA_Annex2 RREL40 -> PercentageRate3Choice;
+    # the Annex wire representation is the same, so projection is pass-through.
+    unit: percentage_points
     portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
@@ -3379,6 +3385,9 @@ fields:
     allowed_values: null
     category: regulatory
     format: decimal
+    # Percentage points (90% == 90.00). Confirmed by ESMA_Annex2 RREC16 -> PercentageRate3Choice;
+    # the Annex wire representation is the same, so projection is pass-through.
+    unit: percentage_points
     portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
@@ -4336,6 +4345,9 @@ fields:
     # current_loan_to_value and the interest-rate fields. The `percentage` format
     # strips a "%" suffix without rescaling the magnitude.
     format: percentage
+    # Percentage points (90% == 90.00). Confirmed by registry format: percentage;
+    # the Annex wire representation is the same, so projection is pass-through.
+    unit: percentage_points
     portfolio_type: equity_release
     layer: product
     core_canonical: false
