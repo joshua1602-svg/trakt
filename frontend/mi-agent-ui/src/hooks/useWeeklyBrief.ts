@@ -8,6 +8,12 @@
  * A rejection is "no brief", never an error the user has to see: the API flag
  * may be off while the UI flag is on, and that must degrade to the current
  * dashboard rather than to a red panel.
+ *
+ * The brief NEVER competes with the dashboard's own first load. It summarises
+ * data the dashboard is already fetching, so firing it in parallel means paying
+ * for the same cold work twice, at once, on a worker that is simultaneously
+ * trying to serve the primary requests — which is exactly what made the landing
+ * page slow. It waits for `ready`, then for the main thread to go idle.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -23,12 +29,37 @@ export interface WeeklyBriefState {
 
 const IDLE: WeeklyBriefState = { brief: null, loading: false, unavailable: false };
 
-export function useWeeklyBrief({ client, portfolioId, portfolioContext, asOf, enabled }: {
+/** Wait for the main thread to go quiet, so the fetch cannot land in the middle
+ * of the chart render that follows the primary data. Falls back to a timeout
+ * where requestIdleCallback is unavailable (Safari, jsdom). */
+function whenIdle(fn: () => void, timeoutMs = 2000): () => void {
+  const w = globalThis as unknown as {
+    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+    cancelIdleCallback?: (h: number) => void;
+  };
+  if (typeof w.requestIdleCallback === "function") {
+    const handle = w.requestIdleCallback(fn, { timeout: timeoutMs });
+    return () => w.cancelIdleCallback?.(handle);
+  }
+  const t = setTimeout(fn, 0);
+  return () => clearTimeout(t);
+}
+
+export function useWeeklyBrief({ client, portfolioId, portfolioContext, asOf, enabled,
+                                 ready = true }: {
   client: AgentClient;
   portfolioId: string;
   portfolioContext?: string;
   asOf?: string;
   enabled: boolean;
+  /**
+   * Whether the dashboard's own primary data has resolved.
+   *
+   * Defaults to true so a caller that does not care — and every existing test —
+   * behaves as before. `AppShell` passes the real signal, which is what keeps
+   * the brief off the first-paint critical path.
+   */
+  ready?: boolean;
 }): WeeklyBriefState {
   const [state, setState] = useState<WeeklyBriefState>(IDLE);
   // Guards against a slower earlier request resolving after a newer one and
@@ -42,30 +73,36 @@ export function useWeeklyBrief({ client, portfolioId, portfolioContext, asOf, en
   clientRef.current = client;
 
   useEffect(() => {
-    if (!enabled || !portfolioId) {
+    if (!enabled || !ready || !portfolioId) {
+      // Not "loading": the panel renders nothing until there is something to
+      // say, so a brief that has not started must not occupy the page either.
       setState(IDLE);
       return;
     }
     const token = ++latest.current;
-    setState((prev) => ({ ...prev, loading: true }));
-    Promise.resolve(
-      clientRef.current.getWeeklyBrief?.(portfolioId, portfolioContext, asOf),
-    )
-      .then((brief) => {
-        if (token !== latest.current) return;
-        setState({
-          brief: brief ?? null,
-          loading: false,
-          unavailable: !brief || brief.status === "unavailable",
+    const cancel = whenIdle(() => {
+      if (token !== latest.current) return;
+      setState((prev) => ({ ...prev, loading: true }));
+      Promise.resolve(
+        clientRef.current.getWeeklyBrief?.(portfolioId, portfolioContext, asOf),
+      )
+        .then((brief) => {
+          if (token !== latest.current) return;
+          setState({
+            brief: brief ?? null,
+            loading: false,
+            unavailable: !brief || brief.status === "unavailable",
+          });
+        })
+        .catch(() => {
+          // A 404 (feature off on the API), a network blip or an abort all mean
+          // the same thing here: no brief. Never a visible error.
+          if (token !== latest.current) return;
+          setState({ brief: null, loading: false, unavailable: true });
         });
-      })
-      .catch(() => {
-        // A 404 (feature off on the API), a network blip or an abort all mean
-        // the same thing here: no brief. Never a visible error.
-        if (token !== latest.current) return;
-        setState({ brief: null, loading: false, unavailable: true });
-      });
-  }, [portfolioId, portfolioContext, asOf, enabled]);
+    });
+    return cancel;
+  }, [portfolioId, portfolioContext, asOf, enabled, ready]);
 
   return state;
 }

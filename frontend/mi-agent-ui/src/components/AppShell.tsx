@@ -315,6 +315,13 @@ export function AppShell() {
             client={client}
             portfolioId={workspacePortfolioId}
             portfolioContext={ws.selectedContextId}
+            // The brief summarises the funded and forecast snapshots, so it
+            // must not be fetched until those have resolved. Fetching in
+            // parallel made a cold worker prepare the same data twice at once
+            // while it was also serving the primary requests, which pushed
+            // first paint out by ~1.4s and network idle by ~5.8s.
+            ready={Boolean((ws.snapshot || ws.snapshotError)
+              && (ws.forecast || ws.forecastError))}
           />
 
           {/* Region 3/4 — CORE DASHBOARD: neutral panel, distinct from the grey

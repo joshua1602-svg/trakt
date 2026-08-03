@@ -370,6 +370,10 @@ def completions_movement(ctx: Dict[str, Any],
 # --------------------------------------------------------------------------- #
 def conversion(ctx: Dict[str, Any], conv: Optional[Dict[str, Any]],
                cohort_pct: Optional[float] = None) -> Result:
+    if not cfg.thresholds("conversion").get("enabled", True):
+        return [], [Omission(CONVERSION_CONTEXT,
+                             "Conversion reporting is disabled by configuration "
+                             "for this deployment.", OMITTED_UNAVAILABLE)]
     if not conv:
         return [], [Omission(CONVERSION_CONTEXT,
                              "No governed conversion evidence is available.",

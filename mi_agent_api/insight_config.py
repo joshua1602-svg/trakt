@@ -49,6 +49,11 @@ DEFAULTS: Dict[str, Any] = {
     "ltv_mix": {"min_share_change_pp": 5.0},
     "completions": {"min_change_pct": 10.0},
     "conversion": {
+        # Turning this off skips resolving the origination funnel entirely,
+        # which is 63% of the brief's cold cost (3.5s of 5.6s on a 26-week
+        # root) and exists solely to supply this one insight. Left ON by
+        # default: the saving is a deployment's choice, not a silent default.
+        "enabled": True,
         "minimum_acceptable_rate": None,
         "require_sufficient": True,
     },

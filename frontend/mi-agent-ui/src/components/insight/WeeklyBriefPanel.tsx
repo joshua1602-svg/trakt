@@ -112,7 +112,7 @@ function Omissions({ brief }: { brief: WeeklyBrief }) {
 }
 
 export function WeeklyBriefPanel({
-  client, portfolioId, portfolioContext, asOf, onNavigate, enabled,
+  client, portfolioId, portfolioContext, asOf, onNavigate, enabled, ready = true,
 }: {
   client: AgentClient;
   portfolioId: string;
@@ -122,11 +122,17 @@ export function WeeklyBriefPanel({
   onNavigate?: (deepLink: string) => void;
   /** Injectable so a test does not need the bundler's env. */
   enabled?: boolean;
+  /**
+   * Whether the dashboard's primary data has resolved. The brief summarises
+   * that same data, so fetching before the dashboard has it means paying for
+   * the same cold work twice, concurrently. Defaults to true.
+   */
+  ready?: boolean;
 }) {
   const on = useMemo(
     () => (enabled === undefined ? weeklyBriefEnabled() : enabled), [enabled]);
   const { brief, loading, unavailable } = useWeeklyBrief({
-    client, portfolioId, portfolioContext, asOf, enabled: on,
+    client, portfolioId, portfolioContext, asOf, enabled: on, ready,
   });
 
   // Nothing to say and nothing to explain -> render nothing, so a disabled or

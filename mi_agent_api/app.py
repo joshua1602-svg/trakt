@@ -1037,14 +1037,19 @@ def weekly_brief(portfolioId: Optional[str] = None,
         except Exception as exc:  # noqa: BLE001 - one input, not the brief
             logger.warning("weekly brief: concentration unavailable: %s", exc)
         funnel = None
-        try:
-            model = _pipeline_history(cid)
-            funnel = evolution_mod.pipeline_funnel_evolution(
-                root, cid, None, lag_weeks=_kfi_lag_weeks_from_model(model),
-                historical_model=model)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("weekly brief: funnel unavailable: %s", exc)
-            model = None
+        # The funnel exists here ONLY to supply the conversion evidence, and it
+        # prepares every retained weekly extract to do it — 63% of this route's
+        # cold cost. Skip it entirely when conversion reporting is switched off,
+        # rather than computing an input nothing will read.
+        from . import insight_config as insight_cfg
+        if insight_cfg.thresholds("conversion").get("enabled", True):
+            try:
+                model = _pipeline_history(cid)
+                funnel = evolution_mod.pipeline_funnel_evolution(
+                    root, cid, None, lag_weeks=_kfi_lag_weeks_from_model(model),
+                    historical_model=model)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("weekly brief: funnel unavailable: %s", exc)
 
         result = engine.build(
             root, cid, tenant_id=cid, as_of=asOf,
