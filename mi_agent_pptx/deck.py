@@ -1266,6 +1266,73 @@ class DeckBuilder:
         self._footer(s)
         self._record("risk", spec.get("title"), "", placeholder=False)
 
+    def slide_watchlist(self, spec):
+        """Portfolio Health and Watch Items — *what needs attention next?*
+
+        At most five watch items and three observations, ranked by governed
+        severity. No management actions are proposed: recommending what to do
+        about a breach is a decision, and nothing in the evidence authorises the
+        deck to make it.
+        """
+        s = self._slide()
+        wl = self.d.watchlist or {}
+        watch = wl.get("watch") or []
+        observations = wl.get("observations") or []
+        self._header(s, spec.get("title", "Portfolio Health and Watch Items"),
+                     "Governed items requiring attention before the next period",
+                     accent=self.theme.amber if watch else self.theme.peri)
+
+        colour = {"concern": self.theme.rag["red"],
+                  "attention": self.theme.rag["amber"]}
+        top = 1.62
+        if watch:
+            for i, item in enumerate(watch[:5]):
+                t = Inches(top + i * 0.86)
+                accent = colour.get(item.severity, self.theme.ink_400)
+                self._panel(s, Inches(0.55), t, Inches(7.7), Inches(0.76),
+                            fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+                chip = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.55), t,
+                                          Inches(0.05), Inches(0.76))
+                chip.fill.solid()
+                chip.fill.fore_color.rgb = self._rgb(accent)
+                chip.line.fill.background()
+                chip.shadow.inherit = False
+                self._text(s, Inches(0.78), t + Inches(0.09), Inches(7.2),
+                           Inches(0.28), item.headline, size=11, bold=True)
+                self._text(s, Inches(0.78), t + Inches(0.38), Inches(7.2),
+                           Inches(0.32), item.summary, size=8.5,
+                           color=self.theme.ink_400)
+        else:
+            # An empty list is a finding, and must be stated rather than leaving
+            # the reader to wonder whether the check ran at all.
+            self._panel(s, Inches(0.55), Inches(1.62), Inches(7.7), Inches(1.1),
+                        fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+            self._text(s, Inches(0.85), Inches(1.86), Inches(7.1), Inches(0.34),
+                       "No material watch items identified for this period.",
+                       size=13, bold=True, color=self.theme.rag["green"])
+            self._text(s, Inches(0.85), Inches(2.22), Inches(7.1), Inches(0.3),
+                       "Every governed check ran; none cleared its materiality "
+                       "threshold.", size=9.5, color=self.theme.ink_400)
+
+        # Observations column.
+        self._panel(s, Inches(8.5), Inches(1.62), Inches(4.3), Inches(4.9),
+                    fill=self.theme.bg_panel, line=self.theme.line)
+        self._text(s, Inches(8.72), Inches(1.78), Inches(3.9), Inches(0.3),
+                   "OBSERVATIONS", size=9, bold=True, color=self.theme.peri)
+        y = 2.14
+        for item in observations[:3]:
+            self._text(s, Inches(8.72), Inches(y), Inches(3.9), Inches(0.46),
+                       item.headline, size=10, bold=True)
+            self._text(s, Inches(8.72), Inches(y + 0.5), Inches(3.9), Inches(0.72),
+                       item.summary[:150], size=8.5, color=self.theme.ink_400)
+            y += 1.42
+        if not observations:
+            self._text(s, Inches(8.72), Inches(2.14), Inches(3.9), Inches(0.3),
+                       "None recorded.", size=10, color=self.theme.ink_400)
+        self._footer(s)
+        self._record(spec.get("id", "watchlist"), spec.get("title"),
+                     f"{len(watch)} watch item(s).")
+
     def slide_concentration(self, spec):
         """Concentration Tests and Headroom — *am I within my limits?*
 
@@ -1549,6 +1616,7 @@ class DeckBuilder:
         "portfolio_composition": "slide_portfolio_composition",
         "portfolio_comparison": "slide_portfolio_comparison",
         "movement_drivers": "slide_movement_drivers",
+        "watchlist": "slide_watchlist",
         "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",

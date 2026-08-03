@@ -237,6 +237,10 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
                  or (getattr(d, "portfolio", None) is not None
                      and any(sl.has_movement for sl in d.portfolio.type_slices)))
         else "no prior reporting period to attribute movement against"),
+    # The watch list always renders: "no material items" is itself a finding,
+    # and a reader must be able to tell it from a check that never ran.
+    "watchlist": lambda s, d: (None if getattr(d, "watchlist", None) is not None
+                               else "the watch-list evaluation did not run"),
     "concentration": lambda s, d: (
         None if (getattr(d, "concentration", {}) or {}).get("tests")
         else "no governed concentration tests are configured for this portfolio"),

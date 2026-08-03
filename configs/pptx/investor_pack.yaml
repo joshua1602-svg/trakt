@@ -173,6 +173,14 @@ slides:
     question: "What does the run-rate imply?"
     when: "has_forecast_projection"
 
+  # 18b --------------------------------- Portfolio Health and Watch Items
+  # At most five governed watch items and three observations. Always rendered:
+  # "no material watch items" is a finding, not an empty slide.
+  - id: watchlist
+    type: watchlist
+    title: "Portfolio Health and Watch Items"
+    question: "What requires attention before the next reporting period?"
+
   # 19 ------------------------------------ Concentration Tests and Headroom
   # The governed, operator-approved concentration capability
   # (/mi/concentration-tests). Carries CURRENT funded, EXPECTED forecast and the

@@ -43,6 +43,7 @@ RISK_LIMITS = "RISK_LIMITS"
 PIPELINE_OUTLOOK = "PIPELINE_OUTLOOK"
 FORECAST_OUTLOOK = "FORECAST_OUTLOOK"
 REPORTING_SCOPE = "REPORTING_SCOPE"
+MOVEMENT_DRIVERS = "MOVEMENT_DRIVERS"
 
 #: Ordering weight for the executive summary. Attribution outranks the headline
 #: movement because "why" is the investor question; scope and risk caveats
@@ -52,6 +53,7 @@ DECK_TYPE_PRIORITY: Dict[str, int] = {
     RISK_LIMITS: 100,
     FUNDED_MOVEMENT: 90,
     MOVEMENT_ATTRIBUTION: 85,
+    MOVEMENT_DRIVERS: 82,
     PORTFOLIO_MIX: 80,
     PORTFOLIO_RUNOFF: 70,
     CONCENTRATION: 60,
@@ -69,7 +71,9 @@ MAX_INSIGHTS = 8
 MIN_INSIGHTS = 5
 
 #: The governed insight vocabulary this module emits, for the artefact metadata.
-INSIGHT_VERSION = "deck-1"
+#: Bumped whenever the observation vocabulary or wording changes, so a
+#: reader can tell which engine produced a given pack.
+INSIGHT_VERSION = "deck-2"
 
 
 # --------------------------------------------------------------------------- #
@@ -127,6 +131,54 @@ def _insight(ctx: Mapping[str, Any], insight_type: str, headline: str, summary: 
 # --------------------------------------------------------------------------- #
 # Generators — one per observation, each isolated.
 # --------------------------------------------------------------------------- #
+
+def movement_drivers(ctx: Mapping[str, Any], movement) -> Result:
+    """Where the movement came from, across the governed dimensions.
+
+    This is the observation an investor asks for after "how much" — and it is
+    grounded in the attribution bridge, so the named contributor is evidenced
+    rather than inferred.
+    """
+    from . import movement as _mv
+
+    bridges = {k: b for k, b in (movement or {}).items()
+               if getattr(b, "available", False)}
+    if not bridges:
+        return [], [Omission(MOVEMENT_DRIVERS,
+                             "no governed attribution is available for this "
+                             "period.", OMITTED_UNAVAILABLE)]
+    # Prefer the dimensions an investor asks about first.
+    for key in ("region", "broker", "ticket", "ltv"):
+        bridge = bridges.get(key)
+        if bridge is None:
+            continue
+        ups, downs = bridge.movers(limit=1)
+        if not ups and not downs:
+            continue
+        parts = []
+        if ups:
+            parts.append(f"{ups[0].category} contributed the largest increase "
+                         f"({_mv._signed(ups[0].delta)})")
+        if downs:
+            parts.append(f"{downs[0].category} the largest reduction "
+                         f"({_mv._signed(downs[0].delta)})")
+        return [_insight(
+            ctx, MOVEMENT_DRIVERS,
+            f"Movement was concentrated by {bridge.label.lower()}.",
+            "; ".join(parts) + f", measured across {bridge.label.lower()} "
+            f"between {bridge.start_period} and {bridge.end_period}.",
+            contributors={c.category: c.delta for c in bridge.contributors
+                          if not c.is_other},
+            metrics={"dimension": bridge.dimension_col,
+                     "net_change": bridge.total_delta},
+            methodology={"source": "governed funded attribution bridge",
+                         "basis": "per-category deltas sum exactly to the "
+                                  "headline movement"},
+        )], []
+    return [], [Omission(MOVEMENT_DRIVERS,
+                         "no dimension moved materially over the period.",
+                         OMITTED_IMMATERIAL)]
+
 
 def funded_movement(ctx: Mapping[str, Any], portfolio) -> Result:
     """How the funded book moved over the period."""
@@ -250,10 +302,15 @@ def portfolio_runoff(ctx: Mapping[str, Any], portfolio) -> Result:
                   if n_exited else "")
         out.append(_insight(
             ctx, PORTFOLIO_RUNOFF,
-            f"{s.label} continued to run off, reducing {money(abs(change))}"
+            f"{s.label} reduced during the period by {money(abs(change))}"
             f"{'' if pc is None else ' (' + signed_pct(pc) + ')'}.",
-            f"The {s.label.lower()} closed at {money(s.balance)}{exited}, "
-            f"consistent with redemption and amortisation on a seasoned book.",
+            # Deliberately states the OBSERVED movement only. Attributing it to
+            # redemption or amortisation would name a cause the balance
+            # decomposition does not evidence, and calling it "expected" would
+            # imply a forecast that has not been produced.
+            f"The {s.label.lower()} closed at {money(s.balance)}{exited}. "
+            f"The reduction is observed in the period balance movement; no "
+            f"forecast of continued run-off is implied.",
             discriminator=s.portfolio_type,
             metrics={"balance": s.balance, "balance_change": change,
                      "balance_change_pct": pc, "loan_change": loans},
@@ -472,6 +529,8 @@ def build(data: Any, *, limit: int = MAX_INSIGHTS) -> Dict[str, Any]:
         (REPORTING_SCOPE, lambda: reporting_scope(ctx, portfolio)),
         (FUNDED_MOVEMENT, lambda: funded_movement(ctx, portfolio)),
         (MOVEMENT_ATTRIBUTION, lambda: movement_attribution(ctx, portfolio)),
+        (MOVEMENT_DRIVERS,
+         lambda: movement_drivers(ctx, getattr(data, "movement", None))),
         (PORTFOLIO_MIX, lambda: portfolio_mix(ctx, portfolio)),
         (PORTFOLIO_RUNOFF, lambda: portfolio_runoff(ctx, portfolio)),
         (WEIGHTED_LTV_TREND,

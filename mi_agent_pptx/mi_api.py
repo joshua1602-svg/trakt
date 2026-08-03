@@ -83,6 +83,8 @@ class DashboardData:
     #: Governed movement attribution per dimension (evolution.funded_bridge),
     #: computed ONCE per scope and shared by every slide that narrates movement.
     movement: Dict[str, Any] = field(default_factory=dict)
+    #: Deterministic watch items (see :mod:`mi_agent_pptx.watchlist`).
+    watchlist: Dict[str, Any] = field(default_factory=dict)
 
     def note(self, msg: str) -> None:
         if msg and msg not in self.notes:
@@ -711,6 +713,7 @@ def build_dashboard_data(
     # -- Deterministic executive summary (no LLM) ------------------------
     # Built last: every generator reads an already-resolved governed payload.
     data.insights = _guard(data, "insights", lambda: _insights(data))
+    data.watchlist = _guard(data, "watchlist", lambda: _watchlist(data))
 
     # Provenance + diagnostics ------------------------------------------
     if source and source.get("source_file"):
@@ -864,6 +867,11 @@ def _movement(out_root, cid, rid, scope, data: DashboardData) -> Dict[str, Any]:
             lens_label = str(getattr(scope, "label", types[0]))
     return _mv.build_bridges(out_root, cid, rid, lens_filters=lens_filters,
                              lens_label=lens_label, note=data.note)
+
+
+def _watchlist(data: DashboardData) -> Dict[str, Any]:
+    from . import watchlist as _wl
+    return _wl.build(data)
 
 
 def _insights(data: DashboardData) -> Dict[str, Any]:
