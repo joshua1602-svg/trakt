@@ -487,6 +487,10 @@ class DeckBuilder:
             return self._record(spec.get("id", "portfolio_composition"),
                                 spec.get("title"), "Single portfolio.")
 
+        # The full per-type comparison lives HERE. A separate "Direct vs
+        # Acquired" slide previously repeated most of these rows alongside a
+        # waterfall identical to the one on Portfolio Movement and Drivers; it
+        # was consolidated away rather than kept for symmetry.
         rows = [
             ("Funded balance", lambda sl: compact_currency(sl.balance)),
             ("Share of book", lambda sl: (f"{(sl.balance or 0) / total_bal * 100:.1f}%"
@@ -495,7 +499,10 @@ class DeckBuilder:
             ("Average balance", lambda sl: compact_currency(sl.avg_balance)),
             ("WA current LTV", lambda sl: self._pct_display(sl, "wa_current_ltv")),
             ("WA interest rate", lambda sl: self._pct_display(sl, "wa_rate")),
+            ("WA borrower age", lambda sl: self._pct_display(sl, "wa_age")),
             ("Period movement", lambda sl: self._signed_currency(sl.balance_movement)),
+            ("Loan movement", lambda sl: (f"{int(sl.loan_movement):+,}"
+                                          if sl.loan_movement is not None else "—")),
             ("Reporting date", lambda sl: sl.reporting_date or "—"),
         ]
         n = len(slices)
@@ -503,8 +510,9 @@ class DeckBuilder:
         label_w = Inches(2.9)
         avail = int(Inches(12.25)) - int(label_w) - (n - 1) * int(gap)
         col_w = Emu(int(avail / n))
-        top0 = Inches(3.02)
-        row_h = Inches(0.44)
+        top0 = Inches(2.94)
+        # Derived from the band so the table always fits, whatever the row count.
+        row_h = Inches(min(0.44, (6.86 - 3.52) / max(len(rows), 1)))
 
         # Column headers.
         for j, sl in enumerate(slices):
@@ -1285,11 +1293,17 @@ class DeckBuilder:
         colour = {"concern": self.theme.rag["red"],
                   "attention": self.theme.rag["amber"]}
         top = 1.62
+        # The two columns are sized to what there is to say. With no watch items
+        # a narrow left column left roughly 60% of the slide empty, which reads
+        # as a rendering failure rather than as a clean bill of health.
+        left_w = 7.7 if watch else 6.02
+        obs_l = 8.5 if watch else 6.78
+        obs_w = 4.3 if watch else 6.02
         if watch:
             for i, item in enumerate(watch[:5]):
                 t = Inches(top + i * 0.86)
                 accent = colour.get(item.severity, self.theme.ink_400)
-                self._panel(s, Inches(0.55), t, Inches(7.7), Inches(0.76),
+                self._panel(s, Inches(0.55), t, Inches(left_w), Inches(0.76),
                             fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
                 chip = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.55), t,
                                           Inches(0.05), Inches(0.76))
@@ -1297,38 +1311,58 @@ class DeckBuilder:
                 chip.fill.fore_color.rgb = self._rgb(accent)
                 chip.line.fill.background()
                 chip.shadow.inherit = False
-                self._text(s, Inches(0.78), t + Inches(0.09), Inches(7.2),
+                self._text(s, Inches(0.78), t + Inches(0.09), Inches(left_w - 0.5),
                            Inches(0.28), item.headline, size=11, bold=True)
-                self._text(s, Inches(0.78), t + Inches(0.38), Inches(7.2),
+                self._text(s, Inches(0.78), t + Inches(0.38), Inches(left_w - 0.5),
                            Inches(0.32), item.summary, size=8.5,
                            color=self.theme.ink_400)
         else:
             # An empty list is a finding, and must be stated rather than leaving
             # the reader to wonder whether the check ran at all.
-            self._panel(s, Inches(0.55), Inches(1.62), Inches(7.7), Inches(1.1),
+            self._panel(s, Inches(0.55), Inches(1.62), Inches(left_w), Inches(4.9),
                         fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
-            self._text(s, Inches(0.85), Inches(1.86), Inches(7.1), Inches(0.34),
+            self._text(s, Inches(0.85), Inches(1.94), Inches(left_w - 0.6),
+                       Inches(0.72),
                        "No material watch items identified for this period.",
-                       size=13, bold=True, color=self.theme.rag["green"])
-            self._text(s, Inches(0.85), Inches(2.22), Inches(7.1), Inches(0.3),
-                       "Every governed check ran; none cleared its materiality "
-                       "threshold.", size=9.5, color=self.theme.ink_400)
+                       size=15, bold=True, color=self.theme.rag["green"])
+            self._text(s, Inches(0.85), Inches(2.56), Inches(left_w - 0.6),
+                       Inches(0.6),
+                       "Every governed check ran and none cleared its "
+                       "materiality threshold.", size=10,
+                       color=self.theme.ink_300)
+            self._text(s, Inches(0.85), Inches(3.16), Inches(left_w - 0.6),
+                       Inches(0.28), "CHECKS PERFORMED", size=8.5,
+                       color=self.theme.peri, bold=True)
+            # Naming the checks is what separates "all clear" from "nothing ran".
+            for i, line in enumerate((
+                    "Concentration limits — current, expected and stress",
+                    "Reporting-date consistency across constituent books",
+                    "Portfolio-type balance movement",
+                    "Composition shift by region, channel, LTV and ticket band",
+                    "Weighted-average LTV movement",
+                    "Reporting-dimension coverage")):
+                self._text(s, Inches(0.95), Inches(3.48 + i * 0.34),
+                           Inches(left_w - 0.7), Inches(0.3), f"·  {line}",
+                           size=9.5, color=self.theme.ink_400)
 
         # Observations column.
-        self._panel(s, Inches(8.5), Inches(1.62), Inches(4.3), Inches(4.9),
+        self._panel(s, Inches(obs_l), Inches(1.62), Inches(obs_w), Inches(4.9),
                     fill=self.theme.bg_panel, line=self.theme.line)
-        self._text(s, Inches(8.72), Inches(1.78), Inches(3.9), Inches(0.3),
-                   "OBSERVATIONS", size=9, bold=True, color=self.theme.peri)
+        self._text(s, Inches(obs_l + 0.22), Inches(1.78), Inches(obs_w - 0.4),
+                   Inches(0.3), "OBSERVATIONS", size=9, bold=True,
+                   color=self.theme.peri)
         y = 2.14
         for item in observations[:3]:
-            self._text(s, Inches(8.72), Inches(y), Inches(3.9), Inches(0.46),
-                       item.headline, size=10, bold=True)
-            self._text(s, Inches(8.72), Inches(y + 0.5), Inches(3.9), Inches(0.72),
-                       item.summary[:150], size=8.5, color=self.theme.ink_400)
+            self._text(s, Inches(obs_l + 0.22), Inches(y), Inches(obs_w - 0.4),
+                       Inches(0.46), item.headline, size=10, bold=True)
+            self._text(s, Inches(obs_l + 0.22), Inches(y + 0.5), Inches(obs_w - 0.4),
+                       Inches(0.72), item.summary[:150], size=8.5,
+                       color=self.theme.ink_400)
             y += 1.42
         if not observations:
-            self._text(s, Inches(8.72), Inches(2.14), Inches(3.9), Inches(0.3),
-                       "None recorded.", size=10, color=self.theme.ink_400)
+            self._text(s, Inches(obs_l + 0.22), Inches(2.14), Inches(obs_w - 0.4),
+                       Inches(0.3), "None recorded.", size=10,
+                       color=self.theme.ink_400)
         self._footer(s)
         self._record(spec.get("id", "watchlist"), spec.get("title"),
                      f"{len(watch)} watch item(s).")

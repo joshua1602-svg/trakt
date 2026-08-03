@@ -57,13 +57,11 @@ slides:
     title: "Portfolio Composition"
     question: "What do I own today?"
 
-  # 4 ----------------------------------------------------- Direct vs Acquired
-  # Only meaningful when more than one portfolio type is in scope.
-  - id: portfolio_comparison
-    type: portfolio_comparison
-    title: "Direct vs Acquired"
-    question: "Why did the total move?"
-    when: "is_mixed"
+  # NOTE: a separate "Direct vs Acquired" slide was removed in the close-out
+  # pass. Its comparison table duplicated Portfolio Composition, and its
+  # waterfall was identical to the one on Portfolio Movement and Drivers. The
+  # unique measures (WA borrower age, loan movement) moved to Portfolio
+  # Composition. The handler remains available for a future configuration.
 
   # 5 ------------------------------------------ Portfolio Movement and Drivers
   # Governed attribution: which portfolio types and which dimensions moved the

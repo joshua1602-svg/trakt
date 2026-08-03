@@ -67,6 +67,20 @@ MATERIAL_SHARE_PP = 2.0
 MATERIAL_LTV_PP = 0.5
 
 
+def _money(value: Optional[float]) -> str:
+    """Currency in the pack's own convention — never a raw number."""
+    if value is None:
+        return "—"
+    a = abs(value)
+    if a >= 1e9:
+        return f"£{value / 1e9:.2f}bn"
+    if a >= 1e6:
+        return f"£{value / 1e6:.1f}m"
+    if a >= 1e3:
+        return f"£{value / 1e3:.0f}k"
+    return f"£{value:,.0f}"
+
+
 def _item(ctx: Mapping[str, Any], item_type: str, headline: str, summary: str, *,
           severity: str = SEVERITY_ATTENTION, metrics: Optional[Dict[str, Any]] = None,
           discriminator: str = "", scope: Optional[str] = None,
@@ -172,7 +186,7 @@ def _portfolio_items(ctx, portfolio) -> List[Insight]:
         out.append(_item(
             ctx, ACQUIRED_RUNOFF,
             f"The {sl.label.lower()} reduced over the period.",
-            f"Balance fell to {sl.balance:,.0f}"
+            f"Balance closed at {_money(sl.balance)}"
             + (f" ({pct:+.1f}%)" if pct is not None else "")
             + ". The reduction is observed in the balance movement; no "
               "forecast of continued run-off is implied.",

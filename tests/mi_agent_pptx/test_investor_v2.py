@@ -220,18 +220,39 @@ def test_an_unscoped_run_is_not_reported_as_a_fallback(mixed_run):
 # Phase 2 / 5 — composition.
 # --------------------------------------------------------------------------- #
 
-def test_single_type_omits_the_comparison_slide(acquired_only_run):
-    data = _data(acquired_only_run)
-    kept, omitted = select_slides(_slides(), data)
-    ids = {s["id"] for s in kept}
-    assert "portfolio_comparison" not in ids
-    reasons = {o.slide_id: o.reason for o in omitted}
-    assert "only one portfolio type" in reasons["portfolio_comparison"]
+def test_single_type_shows_no_per_type_split(acquired_only_run):
+    """With one type there is nothing to compare, and the composition slide
+    says so rather than rendering a one-column table."""
+    ctx = _data(acquired_only_run).portfolio
+    assert ctx.portfolio_types == ("acquired",)
+    assert not ctx.is_mixed
+    # Per-type snapshots are only computed when there is more than one type —
+    # a single-book scope must not pay for a split it cannot show.
+    assert ctx.type_slices == ()
 
 
-def test_mixed_portfolio_includes_the_comparison_slide(mixed_run):
-    kept, _ = select_slides(_slides(), _data(mixed_run))
-    assert "portfolio_comparison" in {s["id"] for s in kept}
+def test_mixed_portfolio_carries_the_per_type_comparison(mixed_run, tmp_path):
+    """The per-type comparison lives on Portfolio Composition.
+
+    A separate "Direct vs Acquired" slide was consolidated away in the close-out
+    pass: its table duplicated this one and its waterfall was identical to the
+    one on Portfolio Movement and Drivers.
+    """
+    data = _data(mixed_run)
+    assert data.portfolio.is_mixed
+    kept = {s["id"] for s in select_slides(_slides(), data)[0]}
+    assert "portfolio_composition" in kept
+    assert "portfolio_comparison" not in kept, "the duplicated slide is gone"
+
+    out = tmp_path / "composition.pptx"
+    assert _build(mixed_run, out) == 0
+    text = "\n".join(sh.text_frame.text for s in Presentation(str(out)).slides
+                     for sh in s.shapes if sh.has_text_frame)
+    # Every measure the removed slide carried is still reported.
+    for measure in ("Funded balance", "Loans", "Average balance",
+                    "WA current LTV", "WA interest rate", "WA borrower age",
+                    "Period movement", "Loan movement"):
+        assert measure in text, f"{measure} lost in consolidation"
 
 
 def test_no_pipeline_omits_every_pipeline_section(mixed_run):
