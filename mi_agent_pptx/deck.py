@@ -196,9 +196,21 @@ class DeckBuilder:
         self._text(slide, l + pad, t + Inches(0.14), iw, Inches(0.3),
                    str(tile.get("label", "")).upper(), size=8.5,
                    color=self.theme.ink_400, bold=True)
-        val = tile.get("value") if avail else "—"
-        self._text(slide, l + pad, t + Inches(0.44), iw, Inches(0.55), str(val),
-                   size=20, bold=True,
+        val = str(tile.get("value") if avail else "—")
+        # A KPI value may be a long label (an area name), not just a number. Step
+        # the size down so it fits the tile instead of being clipped — a value the
+        # reader cannot see is worse than a smaller one.
+        width_in = int(iw) / EMU_IN
+        size = 20
+        for limit, candidate in ((width_in * 2.6, 20), (width_in * 3.4, 15),
+                                 (width_in * 4.6, 12)):
+            if len(val) <= limit:
+                size = candidate
+                break
+        else:
+            size = 10
+        self._text(slide, l + pad, t + Inches(0.44), iw, Inches(0.58), val,
+                   size=size, bold=True,
                    color=self.theme.ink_100 if avail else self.theme.ink_500)
         y = t + Inches(1.02)
         delta, intent = tile.get("delta"), tile.get("deltaIntent")
@@ -392,16 +404,23 @@ class DeckBuilder:
 
         # Severity accent per observation — a caveat must not read as an aside.
         accent_for = {"concern": self.theme.rose, "attention": self.theme.amber}
+        items = items[:8]
         top = 1.58
-        # Two columns when there are enough observations to warrant it.
+        # The card grid must FIT. Previously the row height was fixed, so a
+        # seventh observation was laid out below the bottom of the slide and the
+        # reader simply never saw it. Height is now derived from the available
+        # band and the number of rows, so the grid always fits by construction.
         two_col = len(items) > 4
         col_w = Inches(6.0) if two_col else Inches(12.25)
-        per_col = (len(items) + 1) // 2 if two_col else len(items)
-        row_h = 1.62 if two_col else 0.92
-        for i, ins in enumerate(items[:8]):
+        per_col = -(-len(items) // 2) if two_col else len(items)
+        gap = 0.12
+        band = 6.92 - top                      # bottom of the content area
+        row_h = max(0.62, min(1.62 if two_col else 0.92,
+                              (band - gap * (per_col - 1)) / max(per_col, 1)))
+        for i, ins in enumerate(items):
             col, row = (i // per_col, i % per_col) if two_col else (0, i)
             l = Inches(0.55) if col == 0 else Inches(6.78)
-            t = Inches(top + row * (row_h + 0.12))
+            t = Inches(top + row * (row_h + gap))
             h = Inches(row_h)
             accent = accent_for.get(getattr(ins, "severity", "info"), self.theme.peri)
             self._panel(s, l, t, col_w, h, fill=self.theme.bg_panel_alt,
@@ -908,17 +927,17 @@ class DeckBuilder:
 
         if bubble and heatmaps:
             # Bubble on the left, heatmaps stacked on the right.
-            il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.4),
+            il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.02),
                                         Inches(4.95), "Balance by LTV × Borrower Age")
             p0 = self.work / "md_bubble.png"
             R.draw_bubble(p0, bubble["points"], bubble["xLabels"], bubble["yLabels"],
                           iw, ih, theme=self.theme)
             self._place(s, p0, il, it, iw, ih)
             if len(heatmaps) == 1:
-                boxes = [(Inches(7.15), Inches(1.62), Inches(5.65), Inches(4.95))]
+                boxes = [(Inches(6.78), Inches(1.62), Inches(6.02), Inches(4.95))]
             else:
-                boxes = [(Inches(7.15), Inches(1.62), Inches(5.65), Inches(2.42)),
-                         (Inches(7.15), Inches(4.15), Inches(5.65), Inches(2.42))]
+                boxes = [(Inches(6.78), Inches(1.62), Inches(6.02), Inches(2.42)),
+                         (Inches(6.78), Inches(4.15), Inches(6.02), Inches(2.42))]
             for box, (key, title) in zip(boxes, heatmaps):
                 il, it, iw, ih = self._card(s, *box, title)
                 hm = md[key]
@@ -983,10 +1002,10 @@ class DeckBuilder:
             return self._record("forecast_bridge", spec.get("title"), "", placeholder=True)
         # Clarify the forecast is the CURRENT book's expected completions only.
         rd = self.d.reporting_date or "the reporting date"
-        self._text(s, Inches(0.57), Inches(1.16), Inches(12.4), Inches(0.4),
+        self._text(s, Inches(0.57), Inches(1.54), Inches(12.4), Inches(0.30),
                    f"Expected completions from the current book only (pipeline as of "
                    f"{rd}), weighted by historical stage conversion — not future new business.",
-                   size=11, color=self.theme.ink_400, italic=True)
+                   size=10, color=self.theme.ink_400, italic=True)
         # Full-width waterfall: split the weighted-pipeline block across expected
         # completion months (byCompletionMonth), Funded → +months → Forecast.
         funded = float(fb.get("fundedBalance") or 0)
@@ -1005,7 +1024,7 @@ class DeckBuilder:
             steps.append(("+ Weighted Pipeline",
                           float(fb.get("weightedExpectedFundedAmount") or 0), "add"))
         steps.append(("Forecast Funded", float(fb.get("forecastFundedBalance") or 0), "total"))
-        box = (Inches(0.55), Inches(1.95), Inches(12.25), Inches(4.6))
+        box = (Inches(0.55), Inches(1.92), Inches(12.25), Inches(4.64))
         il, it, iw, ih = self._card(s, *box,
                                     "Funded + weighted pipeline (by expected completion month) → Forecast")
         path = self.work / "bridge.png"
