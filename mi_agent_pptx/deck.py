@@ -415,7 +415,10 @@ class DeckBuilder:
         per_col = -(-len(items) // 2) if two_col else len(items)
         gap = 0.12
         band = 6.92 - top                      # bottom of the content area
-        row_h = max(0.62, min(1.62 if two_col else 0.92,
+        # Cards grow into the available band rather than sitting at a fixed
+        # height: with two observations a 0.92in card clipped a long summary
+        # while leaving most of the slide empty.
+        row_h = max(0.62, min(1.62 if two_col else 1.55,
                               (band - gap * (per_col - 1)) / max(per_col, 1)))
         for i, ins in enumerate(items):
             col, row = (i // per_col, i % per_col) if two_col else (0, i)
@@ -433,10 +436,15 @@ class DeckBuilder:
             self._text(s, l + Inches(0.24), t + Inches(0.14),
                        col_w - Inches(0.46), Inches(0.42),
                        str(getattr(ins, "headline", "")), size=12.5, bold=True)
-            self._text(s, l + Inches(0.24), t + Inches(0.56),
-                       col_w - Inches(0.46), h - Inches(0.68),
-                       str(getattr(ins, "summary", "")), size=10,
-                       color=self.theme.ink_300, spacing=1.1)
+            # Body size steps down when a summary is long, so a detailed
+            # observation is never clipped by a fixed card height.
+            summary = str(getattr(ins, "summary", ""))
+            capacity = (col_w / EMU_IN) * ((h - Inches(0.62)) / EMU_IN) * 210
+            body = 10 if len(summary) <= capacity else (
+                9 if len(summary) <= capacity * 1.25 else 8)
+            self._text(s, l + Inches(0.24), t + Inches(0.54),
+                       col_w - Inches(0.46), h - Inches(0.62), summary,
+                       size=body, color=self.theme.ink_300, spacing=1.06)
         self._footer(s)
         self._record(spec.get("id", "executive_summary"), spec.get("title"),
                      f"{len(items)} governed observations.")
@@ -1436,45 +1444,61 @@ class DeckBuilder:
                     fill=self.theme.bg_panel, line=self.theme.line)
         self._text(s, Inches(7.5), Inches(2.82), Inches(5.1), Inches(0.34),
                    "Current position against limit", size=12.5, bold=True)
-        cols = [("Test", 0.0, PP_ALIGN.LEFT), ("Current", 2.55, PP_ALIGN.RIGHT),
-                ("Limit", 3.55, PP_ALIGN.RIGHT), ("Headroom", 4.6, PP_ALIGN.RIGHT)]
+        # Column offsets carry an explicit WIDTH so the rightmost column always
+        # ends inside the panel. Deriving the width from whether dx was zero
+        # pushed the fifth column 0.2in off the slide once the Expected column
+        # appeared, which only happens when forward states exist.
         if forward:
-            cols = [("Test", 0.0, PP_ALIGN.LEFT), ("Current", 2.15, PP_ALIGN.RIGHT),
-                    ("Limit", 3.05, PP_ALIGN.RIGHT), ("Headroom", 3.95, PP_ALIGN.RIGHT),
-                    ("Expected", 5.05, PP_ALIGN.RIGHT)]
+            cols = [("Test", 0.0, 2.00, PP_ALIGN.LEFT),
+                    ("Current", 2.06, 0.70, PP_ALIGN.RIGHT),
+                    ("Limit", 2.82, 0.66, PP_ALIGN.RIGHT),
+                    ("Headroom", 3.54, 0.76, PP_ALIGN.RIGHT),
+                    ("Expected", 4.38, 0.72, PP_ALIGN.RIGHT)]
+        else:
+            cols = [("Test", 0.0, 2.20, PP_ALIGN.LEFT),
+                    ("Current", 2.35, 0.85, PP_ALIGN.RIGHT),
+                    ("Limit", 3.30, 0.80, PP_ALIGN.RIGHT),
+                    ("Headroom", 4.20, 0.90, PP_ALIGN.RIGHT)]
         head_y = Inches(3.3)
-        for label, dx, align in cols:
-            self._text(s, Inches(7.5 + dx), head_y, Inches(1.0 if dx else 2.4),
-                       Inches(0.26), label, size=8.5, color=self.theme.ink_400,
-                       bold=True, align=align)
+        for label, dx, cw, align in cols:
+            self._text(s, Inches(7.5 + dx), head_y, Inches(cw), Inches(0.26),
+                       label, size=8.5, color=self.theme.ink_400, bold=True,
+                       align=align)
         row_h = 0.56
         for i, r in enumerate(top):
             y = Inches(3.62 + i * row_h)
             status_colour = self.theme.rag.get(
                 {"breach": "red", "warning": "amber"}.get(r["status"], "green"),
                 self.theme.ink_300)
-            cells = [
-                (r["label"][:30], 0.0, PP_ALIGN.LEFT, self.theme.ink_100, 2.4),
-                (C.format_measure(r["value"], r["unit"]),
-                 cols[1][1], PP_ALIGN.RIGHT, status_colour, 1.0),
-                (C.format_measure(r["limit"], r["unit"]),
-                 cols[2][1], PP_ALIGN.RIGHT, self.theme.ink_300, 1.0),
+            values = [
+                (self._fit_label(r["label"], cols[0][2]), self.theme.ink_100),
+                (C.format_measure(r["value"], r["unit"]), status_colour),
+                (C.format_measure(r["limit"], r["unit"]), self.theme.ink_300),
                 (f"{r['headroom']:.1f}" if r["headroom"] is not None else "—",
-                 cols[3][1], PP_ALIGN.RIGHT, self.theme.ink_300, 1.0),
+                 self.theme.ink_300),
             ]
             if forward:
-                cells.append((C.format_measure(r["expected_value"], r["unit"])
-                              if r["expected_value"] is not None else "—",
-                              cols[4][1], PP_ALIGN.RIGHT, self.theme.peri, 1.0))
-            for value, dx, align, colour, w in cells:
-                self._text(s, Inches(7.5 + dx), y, Inches(w), Inches(0.3),
-                           str(value), size=10, color=colour, align=align,
+                values.append((C.format_measure(r["expected_value"], r["unit"])
+                               if r["expected_value"] is not None else "—",
+                               self.theme.peri))
+            for i, ((value, colour), (_label, dx, cw, align)) in enumerate(
+                    zip(values, cols)):
+                self._text(s, Inches(7.5 + dx), y, Inches(cw), Inches(0.3),
+                           str(value), size=9.5 if i == 0 else 10, color=colour,
+                           align=align,
                            bold=(align == PP_ALIGN.RIGHT and colour is status_colour))
+            # A test that passes today but is forecast to cross says BOTH, and
+            # says which is which — "PASS · breaches 2026-07" reads as a
+            # contradiction rather than as a forward-looking warning.
+            status_line = r["status"].upper()
+            if r.get("expected_breach") and r.get("breach_horizon"):
+                status_line += f" now · forecast breach {r['breach_horizon']}"
+            elif r.get("expected_breach"):
+                status_line += " now · forecast breach"
+            elif r.get("stress_breach"):
+                status_line += " now · breaches under stress only"
             self._text(s, Inches(7.5), Emu(int(y) + int(Inches(0.28))),
-                       Inches(5.1), Inches(0.22),
-                       f"{r['status'].upper()}"
-                       + (f" · breaches {r['breach_horizon']}" if r.get("breach_horizon")
-                          else ""),
+                       Inches(5.0), Inches(0.22), status_line,
                        size=7.5, color=status_colour)
 
         # -- deterministic takeaway + source disclosure -----------------------
@@ -1488,6 +1512,14 @@ class DeckBuilder:
         self._footer(s)
         self._record(spec.get("id", "concentration"), spec.get("title"),
                      f"{summary['tests']} governed tests.")
+
+    @staticmethod
+    def _fit_label(text: str, width_in: float, size_pt: float = 9.5) -> str:
+        """Trim a label to one line at *width_in*, so it cannot wrap into the
+        status line beneath it."""
+        capacity = max(6, int(width_in * 72 / (size_pt * 0.55)))
+        text = str(text)
+        return text if len(text) <= capacity else text[: capacity - 1].rstrip() + "…"
 
     def _concentration_takeaway(self, summary, rows, forward) -> str:
         """One deterministic sentence over the governed evidence — no inference."""
