@@ -80,6 +80,9 @@ class DashboardData:
     portfolio: Optional["DeckPortfolioContext"] = None
     #: The deterministic executive summary (see :mod:`mi_agent_pptx.insights`).
     insights: Dict[str, Any] = field(default_factory=dict)
+    #: Governed movement attribution per dimension (evolution.funded_bridge),
+    #: computed ONCE per scope and shared by every slide that narrates movement.
+    movement: Dict[str, Any] = field(default_factory=dict)
 
     def note(self, msg: str) -> None:
         if msg and msg not in self.notes:
@@ -699,6 +702,10 @@ def build_dashboard_data(
         data.extrapolation = _guard(data, "extrapolation",
                                     lambda: _extrapolation(out_root, prow, cid, rid, history))
 
+        # -- Movement attribution (governed bridge, once per dimension) ------
+        data.movement = _guard(data, "movement",
+                               lambda: _movement(out_root, cid, rid, scope, data))
+
         pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
 
     # -- Deterministic executive summary (no LLM) ------------------------
@@ -836,6 +843,27 @@ def _forecast(cid, rid, reporting_date, funded_df, pipe_df, pipe_report, pipe_sn
     except Exception:  # noqa: BLE001
         env.setdefault("forecastBreakdowns", {})
     return env
+
+
+def _movement(out_root, cid, rid, scope, data: DashboardData) -> Dict[str, Any]:
+    """Governed movement attribution for the deck's scope.
+
+    ``funded_bridge`` scopes through ``lens_filters``, which filters on the
+    provenance columns. A Total scope passes no filter; a type scope filters to
+    that type — the same narrowing the rest of the deck uses.
+    """
+    from . import movement as _mv
+
+    lens_filters = None
+    lens_label = "Total"
+    if scope is not None and not getattr(scope, "is_total", True):
+        from trakt_core.portfolio import FIELD_PORTFOLIO_TYPE
+        types = [t for t in (getattr(scope, "portfolio_types", ()) or ()) if t]
+        if len(types) == 1:
+            lens_filters = {FIELD_PORTFOLIO_TYPE: types[0]}
+            lens_label = str(getattr(scope, "label", types[0]))
+    return _mv.build_bridges(out_root, cid, rid, lens_filters=lens_filters,
+                             lens_label=lens_label, note=data.note)
 
 
 def _insights(data: DashboardData) -> Dict[str, Any]:

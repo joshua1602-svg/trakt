@@ -277,6 +277,61 @@ _STATUS_RAG = {
 }
 
 
+def draw_diverging(path, rows: Sequence[Dict[str, Any]], w: float, h: float, *,
+                   theme: PptxTheme = THEME, currency: bool = True,
+                   dpi: int = 220) -> Path:
+    """Movement by category as diverging bars around zero.
+
+    Increases right, reductions left, ordered by magnitude. This is the shape
+    that answers "what moved" at a glance — a stacked composition chart shows
+    the level and hides the change, which is the opposite of what a period
+    report needs.
+    """
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.34, 0.08, 0.62, 0.88])
+    ax.set_facecolor(theme.bg_panel)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    rows = list(rows)
+    n = max(len(rows), 1)
+    values = [float(r.get("delta") or 0.0) for r in rows]
+    span = max((abs(v) for v in values), default=1.0) * 1.35 or 1.0
+    ax.set_xlim(-span, span)
+    ax.set_ylim(-0.6, n - 0.4)
+    ax.invert_yaxis()
+    for i, (row, value) in enumerate(zip(rows, values)):
+        colour = theme.mint if value >= 0 else theme.rose
+        if row.get("is_other"):
+            colour = theme.ink_500
+        ax.barh(i, value, height=0.56, color=colour, edgecolor="none")
+        label = (_fmt_money(value, signed=True) if currency
+                 else f"{value:+,.1f}")
+        offset = span * 0.02
+        ax.text(value + (offset if value >= 0 else -offset), i, label,
+                ha="left" if value >= 0 else "right", va="center",
+                color=theme.ink_100, fontsize=9, fontproperties=_MONO_FP)
+    ax.axvline(0, color=theme.ink_400, linewidth=1.0, alpha=0.85)
+    ax.set_yticks(list(range(len(rows))))
+    ax.set_yticklabels([_truncate(str(r.get("category", "")), 26) for r in rows])
+    ax.tick_params(axis="y", colors=theme.ink_300, labelsize=9, length=0, pad=6)
+    ax.set_xticks([])
+    ax.grid(axis="x", color=theme.line_soft, linewidth=0.6, alpha=0.4)
+    ax.set_axisbelow(True)
+    return _save(fig, path, theme, dpi)
+
+
+def _fmt_money(value: float, *, signed: bool = False) -> str:
+    sign = "+" if (signed and value >= 0) else ("−" if value < 0 else "")
+    a = abs(value)
+    if a >= 1e9:
+        return f"{sign}£{a / 1e9:.2f}bn"
+    if a >= 1e6:
+        return f"{sign}£{a / 1e6:.1f}m"
+    if a >= 1e3:
+        return f"{sign}£{a / 1e3:.0f}k"
+    return f"{sign}£{a:,.0f}"
+
+
 def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: float,
                            *, theme: PptxTheme = THEME, dpi: int = 220) -> Path:
     """Concentration tests as horizontal utilisation bars against their limit.

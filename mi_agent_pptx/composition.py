@@ -135,6 +135,9 @@ def build_facts(data: Any) -> Dict[str, Any]:
         "has_funded": bool(funded.get("kpis")),
         "has_stratifications": bool(funded.get("stratifications")),
         "has_movement": bool(ctx and any(s.has_movement for s in ctx.type_slices)),
+        # Governed attribution across at least one dimension.
+        "has_attribution": any(getattr(b, "available", False)
+                               for b in (getattr(data, "movement", {}) or {}).values()),
         "has_funded_history": _periods(getattr(data, "funded_evolution", {})),
         "has_geo": bool((getattr(data, "geo", {}) or {}).get("areas")),
         "has_cohorts": bool((getattr(data, "cohorts", {}) or {}).get("cohorts")),
@@ -228,6 +231,12 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
     "forecast_evolution": _evolution_guard("forecast_evolution", "forecast evolution"),
     "risk": lambda s, d: (None if (getattr(d, "risk", {}) or {}).get("tests")
                           else "no governed risk-limit artefact for this run"),
+    "movement_drivers": lambda s, d: (
+        None if (any(getattr(b, "available", False)
+                     for b in (getattr(d, "movement", {}) or {}).values())
+                 or (getattr(d, "portfolio", None) is not None
+                     and any(sl.has_movement for sl in d.portfolio.type_slices)))
+        else "no prior reporting period to attribute movement against"),
     "concentration": lambda s, d: (
         None if (getattr(d, "concentration", {}) or {}).get("tests")
         else "no governed concentration tests are configured for this portfolio"),
@@ -311,6 +320,7 @@ _CONDITION_WORDING: Dict[str, str] = {
     "has_funded_history": "fewer than two reporting periods are available",
     "has_movement": "no prior reporting period to compare against",
     "has_concentration": "no governed concentration tests are configured for this portfolio",
+    "has_attribution": "no prior reporting period to attribute movement against",
     "has_pipeline_history": "fewer than two weekly pipeline extracts are available",
 }
 

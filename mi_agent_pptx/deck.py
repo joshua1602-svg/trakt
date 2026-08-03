@@ -612,31 +612,158 @@ class DeckBuilder:
         self._record(spec.get("id", "portfolio_comparison"), spec.get("title"),
                      "Movement attribution by portfolio type.")
 
-    def slide_strat(self, spec):
+    def slide_movement_drivers(self, spec):
+        """Portfolio Movement and Drivers — *why did funded AuM change?*
+
+        Two governed views side by side: the movement by portfolio type (who
+        moved it) and the movement by a chosen dimension (where it moved). Both
+        reconcile exactly to the headline, because both come from governed
+        decompositions whose parts sum to the whole by construction.
+        """
+        from . import movement as MV
+        from .metric_resolver import compact_currency
+
         s = self._slide()
-        self._header(s, spec.get("title", "Funded Stratifications"),
-                     "Balance by dimension", accent=self.theme.peri)
+        p = self.d.portfolio
+        bridges = self.d.movement or {}
+        primary = next((bridges[k] for k in ("region", "broker", "ltv", "ticket")
+                        if k in bridges and bridges[k].available), None)
+        self._header(s, spec.get("title", "Portfolio Movement and Drivers"),
+                     self._movement_window(primary), accent=self.theme.peri)
+
+        # Left: movement by portfolio type (the attribution that matters most).
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.02),
+                                    Inches(3.62), "Movement by portfolio type")
+        movers = [(sl, sl.balance_movement) for sl in (p.type_slices if p else ())
+                  if sl.balance_movement is not None]
+        path = self.work / "mv_type.png"
+        if movers:
+            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            steps = [("Opening", float(opening), "base")]
+            for sl, v in movers:
+                steps.append((sl.label.replace(" portfolio", "")
+                              .replace(" originations", ""), float(v), "add"))
+            steps.append(("Closing", float(p.total_balance or 0), "total"))
+            render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        elif primary is not None:
+            steps = [("Opening", float(primary.opening or 0), "base"),
+                     ("Net change", float(primary.total_delta or 0), "add"),
+                     ("Closing", float(primary.closing or 0), "total")]
+            render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        self._place(s, path, il, it, iw, ih)
+
+        # Right: movement by the leading governed dimension.
+        if primary is not None:
+            il, it, iw, ih = self._card(s, Inches(6.78), Inches(1.62), Inches(6.02),
+                                        Inches(3.62), f"Movement by {primary.label.lower()}")
+            rows = [{"category": c.category, "delta": c.delta, "is_other": c.is_other}
+                    for c in sorted(primary.contributors,
+                                    key=lambda c: -abs(c.delta))[:7]]
+            dpath = self.work / "mv_dim.png"
+            R.draw_diverging(dpath, rows, iw, ih, theme=self.theme)
+            self._place(s, dpath, il, it, iw, ih)
+
+        # Deterministic takeaways across the governed dimensions.
+        lines: List[str] = []
+        if p is not None and len(p.type_slices) > 1 and movers:
+            ups = [(sl, v) for sl, v in movers if v > 0]
+            downs = [(sl, v) for sl, v in movers if v < 0]
+            if ups and downs:
+                lines.append(
+                    f"{ups[0][0].label} added {compact_currency(abs(ups[0][1]))}, "
+                    f"partly offset by a {compact_currency(abs(downs[0][1]))} "
+                    f"reduction in the {downs[0][0].label.lower()}.")
+        for key in ("region", "broker", "ticket", "ltv"):
+            b = bridges.get(key)
+            if b is not None and b.available:
+                head = MV.headline(b)
+                if head:
+                    lines.append(head)
+            if len(lines) >= 3:
+                break
+        self._takeaway_strip(s, lines[:3], top=5.42)
+        self._footer(s)
+        self._record(spec.get("id", "movement_drivers"), spec.get("title"),
+                     "Governed movement attribution.")
+
+    def _movement_window(self, bridge) -> str:
+        """The period a movement was measured over — never left implicit."""
+        if bridge is None or not getattr(bridge, "available", False):
+            return "Period movement attribution"
+        if bridge.start_date and bridge.end_date:
+            return (f"Movement from {_pretty_date(bridge.start_date)} to "
+                    f"{_pretty_date(bridge.end_date)}")
+        if bridge.start_period and bridge.end_period:
+            return f"Movement from {bridge.start_period} to {bridge.end_period}"
+        return "Period movement attribution"
+
+    def _takeaway_strip(self, slide, lines, *, top: float, width: float = 12.25):
+        """The slide's conclusions — the sentence an investor actually keeps."""
+        lines = [l for l in lines if l]
+        if not lines:
+            return
+        self._panel(slide, Inches(0.55), Inches(top), Inches(width),
+                    Inches(0.34 + 0.26 * len(lines)),
+                    fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+        for i, line in enumerate(lines):
+            self._text(slide, Inches(0.78), Inches(top + 0.14 + i * 0.26),
+                       Inches(width - 0.46), Inches(0.26), f"·  {line}",
+                       size=10, color=self.theme.ink_300)
+
+    def slide_strat(self, spec):
+        """Stratifications — composition, PLUS what changed.
+
+        The composition view is legitimate investor content and is kept. What it
+        could not answer is whether the shape of the book is moving, so where a
+        comparable prior period exists the slide pairs each dimension with its
+        governed marginal change and states the movement in words.
+        """
+        from . import movement as MV
+
+        s = self._slide()
         strats = self.d.funded.get("stratifications", [])
-        # up to two per slide (config may split); here show the first two.
         keys = spec.get("keys")
         if keys:
             strats = [st for st in strats if st.get("key") in keys]
         strats = strats[:2]
-        boxes = self._chart_boxes(len(strats) or 1)
+
+        bridges = self.d.movement or {}
+        moved = [bridges[st.get("key")] for st in strats
+                 if bridges.get(st.get("key")) is not None
+                 and bridges[st.get("key")].available]
+        window = self._movement_window(moved[0]) if moved else "Balance by dimension"
+        self._header(s, spec.get("title", "Funded Stratifications"),
+                     ("Composition and period movement" if moved
+                      else "Balance by dimension"), accent=self.theme.peri)
+
+        has_takeaways = bool(moved)
+        chart_h = 3.62 if has_takeaways else 4.95
         ph = True
+        if len(strats) == 1:
+            boxes = [(Inches(0.55), Inches(1.62), Inches(12.25), Inches(chart_h))]
+        else:
+            boxes = [(Inches(0.55), Inches(1.62), Inches(6.02), Inches(chart_h)),
+                     (Inches(6.78), Inches(1.62), Inches(6.02), Inches(chart_h))]
+
         for st, box in zip(strats, boxes):
+            key = st.get("key")
             rows = st.get("bars", [])
-            ok = self._barlist_card(s, box, st.get("label", st.get("key", "")), rows,
-                                    "balance", cid=f"strat_{st.get('key')}")
+            ok = self._barlist_card(s, box, st.get("label", key or ""), rows,
+                                    "balance", cid=f"strat_{key}")
             ph = ph and not ok
+
+        # A single marginal-change panel beneath, for the dimension that moved
+        # most — one clear change view rather than a grid of small ones.
+        lines: List[str] = []
+        if moved:
+            for b in moved:
+                lines.extend(MV.takeaways(b, limit=1))
+            self._takeaway_strip(s, lines[:3], top=5.42)
         if not strats:
-            il, it, iw, ih = self._card(s, *boxes[0], "Stratifications")
-            path = self.work / "strat_none.png"
-            render_placeholder_png(path, "", "No funded stratifications for this run",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-            self._place(s, path, il, it, iw, ih)
+            self._placeholder_body(s, "No funded stratifications for this run.")
         self._footer(s)
-        self._record(spec.get("id", "strat"), spec.get("title"), "", placeholder=ph)
+        self._record(spec.get("id", "strat"), spec.get("title"),
+                     window if moved else "", placeholder=ph)
 
     def slide_geo(self, spec):
         s = self._slide()
@@ -1421,6 +1548,7 @@ class DeckBuilder:
         "exec_insights": "slide_exec_insights",
         "portfolio_composition": "slide_portfolio_composition",
         "portfolio_comparison": "slide_portfolio_comparison",
+        "movement_drivers": "slide_movement_drivers",
         "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",

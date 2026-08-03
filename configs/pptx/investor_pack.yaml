@@ -65,7 +65,16 @@ slides:
     question: "Why did the total move?"
     when: "is_mixed"
 
-  # 5 --------------------------------------------------------- Funded KPIs
+  # 5 ------------------------------------------ Portfolio Movement and Drivers
+  # Governed attribution: which portfolio types and which dimensions moved the
+  # total. Every component reconciles exactly to the headline movement.
+  - id: movement_drivers
+    type: movement_drivers
+    title: "Portfolio Movement and Drivers"
+    question: "Why did funded AuM change during the period?"
+    when: "has_attribution or has_movement"
+
+  # 6 --------------------------------------------------------- Funded KPIs
   - id: funded_kpis
     type: kpi_summary
     title: "Funded Portfolio — Key Measures"
