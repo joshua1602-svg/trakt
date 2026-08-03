@@ -80,6 +80,7 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     getForecastExtrapolation: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getCohortProgression: async () => ({}) as any,
+    getCohortVintages: () => Promise.resolve({ dataset: "cohort_formation", portfolioId: "p", cohortBasis: "origination_date", grain: "M", available: true, vintages: [] }) as never,
     getMe: async () => ({ authenticated: false }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getDecks: async () => ({ available: false, latest: null, decks: [], client_id: "" }) as any,

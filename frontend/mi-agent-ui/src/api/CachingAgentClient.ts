@@ -199,6 +199,11 @@ export function withCache(
       resource(
         `cohortProg|${portfolioId}|${query?.lens ?? "total"}|${query?.vintage ?? ""}|${query?.grain ?? "Y"}`,
         () => client.getCohortProgression(portfolioId, query, signal)),
+    getCohortVintages: (portfolioId, query, signal) =>
+      resource(
+        `cohortVint|${portfolioId}|${query?.portfolioContext ?? "total"}`
+        + `|${query?.vintage ?? ""}|${query?.grain ?? "M"}`,
+        () => client.getCohortVintages(portfolioId, query, signal)),
     getGeoExposure: (portfolioId, portfolioContext, signal) =>
       resource(`geoExposure|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getGeoExposure(portfolioId, portfolioContext, signal)),

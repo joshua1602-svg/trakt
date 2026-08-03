@@ -35,7 +35,7 @@ import {
   mockForecastEvolution,
 } from "@/data/mockEvolution";
 import { mockFunnelEvolution } from "@/data/mockFunnel";
-import { mockCohorts, mockCohortProgression } from "@/data/mockCohorts";
+import { mockCohorts, mockCohortProgression, mockCohortVintages } from "@/data/mockCohorts";
 import { mockGeoExposure } from "@/data/mockGeoExposure";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import {
@@ -242,6 +242,12 @@ export class MockAgentClient implements AgentClient {
                        query?: import("@/domain").CohortProgressionQuery,
                        ): Promise<import("@/domain").CohortProgression> {
     return Promise.resolve(mockCohortProgression(portfolioId, query));
+  }
+
+  getCohortVintages(portfolioId: string,
+                    query?: import("@/domain").CohortVintageQuery,
+  ): Promise<import("@/domain").CohortFormation | import("@/domain").CohortStaticPool> {
+    return Promise.resolve(mockCohortVintages(portfolioId, query));
   }
 
   getGeoExposure(portfolioId: string): Promise<import("@/domain").GeoExposure> {

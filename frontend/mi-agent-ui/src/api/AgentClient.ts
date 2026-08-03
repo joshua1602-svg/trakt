@@ -12,8 +12,11 @@ import type {
   CohortAnalysis,
   CohortDimension,
   CohortGrain,
+  CohortFormation,
   CohortProgression,
   CohortProgressionQuery,
+  CohortStaticPool,
+  CohortVintageQuery,
   DeckIndex,
   ForecastEvolution,
   ForecastExtrapolation,
@@ -175,6 +178,13 @@ export interface AgentClient {
    *  at ``grain``. */
   getCohortProgression(portfolioId: string, query?: CohortProgressionQuery,
                        signal?: AbortSignal): Promise<CohortProgression>;
+
+  /** Vintage FORMATION — what entered the book in each origination period —
+   *  or, when ``vintage`` is supplied, that vintage's fixed static pool
+   *  followed forward. Not the book outstanding at a reporting date; that is
+   *  `getFundedEvolution`. */
+  getCohortVintages(portfolioId: string, query?: CohortVintageQuery,
+                    signal?: AbortSignal): Promise<CohortFormation | CohortStaticPool>;
 
   /** Funded exposure per UK ITL3 area — the Geography tab's choropleth feed. */
   getGeoExposure(portfolioId: string, portfolioContext?: string,
