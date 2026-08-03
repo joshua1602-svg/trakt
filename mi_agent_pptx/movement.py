@@ -169,6 +169,7 @@ def _f(value: Any) -> Optional[float]:
 
 
 def build_bridges(output_root, client_id: str, run_id: Optional[str], *,
+                  start_period: Optional[str] = None,
                   lens_filters: Optional[Dict[str, str]] = None,
                   lens_label: str = "Total",
                   keys: Optional[Sequence[str]] = None,
@@ -179,6 +180,13 @@ def build_bridges(output_root, client_id: str, run_id: Optional[str], *,
     Only the requested ``keys`` are computed; each is one call to the governed
     bridge. The caller holds the result for the whole deck, so no slide triggers
     a recomputation.
+
+    ``start_period`` is the opening period the attribution is measured FROM, and
+    the caller must supply the same period its headline movement uses. Left
+    unset, the governed bridge opens at the EARLIEST period it can find — which
+    on a two-period book is the prior period and looks correct, and on a
+    fourteen-period book attributes fourteen months of movement beside a
+    one-month headline.
     """
     from mi_agent_api import evolution
 
@@ -190,6 +198,7 @@ def build_bridges(output_root, client_id: str, run_id: Optional[str], *,
         try:
             payload = evolution.funded_bridge(
                 output_root, client_id, list(candidates), to_run_id=run_id,
+                start_period=start_period,
                 lens_filters=lens_filters, lens_label=lens_label, top_n=top_n)
         except Exception as exc:  # noqa: BLE001 — one dimension must not break the deck
             if note:
@@ -204,6 +213,20 @@ def build_bridges(output_root, client_id: str, run_id: Optional[str], *,
 # --------------------------------------------------------------------------- #
 
 def _money(v: Optional[float]) -> str:
+    """Prose notation, matching the governed insight generators.
+
+    The deck deliberately runs two notations, one per medium:
+
+      * TILES and CHART LABELS use ``compact_currency`` (£833.5MM) — the
+        dashboard's own ``formatGBP``, so an exported tile and the screen it
+        mirrors are character-for-character identical;
+      * SENTENCES use £833.5m, matching ``mi_agent_api.insight_generators``,
+        which also writes React's weekly brief.
+
+    These sentences are prose and feed the executive summary, so they follow the
+    prose rule. Formatting them as chart labels made one summary card disagree
+    with the five beside it.
+    """
     if v is None:
         return "—"
     a = abs(v)

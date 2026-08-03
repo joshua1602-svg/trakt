@@ -98,6 +98,35 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
     return _save(fig, path, theme, dpi)
 
 
+
+def _tick_indices(x_labels: Sequence[str], axis_width_in: float,
+                  fontsize: float = 8.5) -> List[int]:
+    """Which x positions can carry a label WITHOUT colliding.
+
+    The old rule was ``n // 7``, which ignores how wide the labels are: ten
+    weekly extracts labelled ``2026-04-24`` produced ten ISO dates in six inches
+    and rendered as one illegible band. This derives the count from the widest
+    label and the axis it has to fit in, and always keeps the first and last so
+    the reader can see the window the series covers.
+    """
+    n = len(x_labels)
+    if n <= 1:
+        return list(range(n))
+    widest = max((len(str(l)) for l in x_labels), default=1)
+    label_in = widest * fontsize * 0.55 / 72.0
+    fits = max(2, int(axis_width_in / (label_in * 1.35))) if label_in else n
+    if fits >= n:
+        return list(range(n))
+    step = max(1, -(-n // fits))
+    idx = list(range(0, n, step))
+    # Keeping the last position is what lets a reader see where the series ends,
+    # but it lands wherever it lands — often one place after a stepped tick, and
+    # the two then print on top of each other. The stepped neighbour goes.
+    while idx and n - 1 - idx[-1] < step:
+        idx.pop()
+    return idx + [n - 1]
+
+
 def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[float]],
                         line: Sequence[Optional[float]], w: float, h: float, *,
                         theme: PptxTheme = THEME, bar_currency: bool = True,
@@ -107,7 +136,9 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     axis), with an optional dashed 5-week-average marker — the dashboard's
     KFI/Completions weekly-flow panel."""
     fig = _fig(w, h, theme, dpi)
-    ax = fig.add_axes([0.09, 0.16, 0.82, 0.78])
+    # Left margin fits a full compact-currency tick ('£800.0MM'); at 0.09 the
+    # leading £ was clipped off the axes.
+    ax = fig.add_axes([0.135, 0.16, 0.80, 0.78])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -138,8 +169,7 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     ax2.tick_params(colors=theme.ink_500, labelsize=8.5, length=0)
     ax2.yaxis.set_major_formatter(FuncFormatter(
         lambda v, p: compact_currency(v) if bar_currency else compact_number(v)))
-    step = max(1, n // 7)
-    idx = sorted(set(list(range(0, n, step)) + [n - 1]))
+    idx = _tick_indices(x_labels, w * 0.80, fontsize=8)
     ax.set_xticks([x[i] for i in idx])
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8, color=theme.ink_500)
     return _save(fig, path, theme, dpi)
@@ -224,7 +254,10 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                dpi: int = 220) -> Path:
     """Dashboard line/area chart. *series* = [{name, values, color?}]."""
     fig = _fig(w, h, theme, dpi)
-    ax = fig.add_axes([0.10, 0.16, 0.88, 0.74 if len(series) > 1 else 0.80])
+    # Left margin fits a full compact-currency tick ('£120.0MM'); the axes top
+    # leaves a clear band for the legend, which is drawn ABOVE the plot rather
+    # than inside it — placed inside, it landed on the series it described.
+    ax = fig.add_axes([0.145, 0.16, 0.825, 0.70 if len(series) > 1 else 0.78])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -253,15 +286,24 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
     if currency:
         ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: compact_currency(v)))
     elif percent:
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: f"{v * 100:.0f}%"
-                                                   if v <= 1.5 else f"{v:.0f}%"))
-    step = max(1, n // 7)
-    idx = sorted(set(list(range(0, n, step)) + [n - 1]))
+        # Decimals follow the RANGE, not a constant. A weighted LTV that moves
+        # between 45.8% and 47.2% produced five ticks all reading "46%" — an
+        # axis that labels four distinct gridlines identically is worse than no
+        # axis, because it reads as a rendering fault rather than a flat series.
+        shown = [float(v) for sr in series for v in (sr.get("values") or ())
+                 if v is not None]
+        as_points = [v * 100 if abs(v) <= 1.5 else v for v in shown]
+        spread = (max(as_points) - min(as_points)) if as_points else 0.0
+        dp = 0 if spread >= 6 else (1 if spread >= 0.6 else 2)
+        ax.yaxis.set_major_formatter(FuncFormatter(
+            lambda v, p: f"{v * 100:.{dp}f}%" if abs(v) <= 1.5 else f"{v:.{dp}f}%"))
+    idx = _tick_indices(x_labels, w * 0.825, fontsize=8.5)
     ax.set_xticks([x[i] for i in idx])
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8.5,
                        color=theme.ink_500)
     if len(series) > 1:
-        leg = ax.legend(loc="upper left", fontsize=8.5, frameon=False,
+        leg = ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.02),
+                        fontsize=8.5, frameon=False,
                         ncol=min(len(series), 3), handlelength=1.4)
         for t in leg.get_texts():
             t.set_color(theme.ink_300)
@@ -295,7 +337,11 @@ def draw_diverging(path, rows: Sequence[Dict[str, Any]], w: float, h: float, *,
     rows = list(rows)
     n = max(len(rows), 1)
     values = [float(r.get("delta") or 0.0) for r in rows]
-    span = max((abs(v) for v in values), default=1.0) * 1.35 or 1.0
+    # 1.35 left no room for the value label on the LONGEST bar: drawn outside
+    # the bar end, it ran into the category name beside it. Widen when any
+    # value is negative, which is the side the category names sit on.
+    headroom = 1.75 if any(v < 0 for v in values) else 1.45
+    span = max((abs(v) for v in values), default=1.0) * headroom or 1.0
     ax.set_xlim(-span, span)
     ax.set_ylim(-0.6, n - 0.4)
     ax.invert_yaxis()
@@ -321,15 +367,16 @@ def draw_diverging(path, rows: Sequence[Dict[str, Any]], w: float, h: float, *,
 
 
 def _fmt_money(value: float, *, signed: bool = False) -> str:
-    sign = "+" if (signed and value >= 0) else ("−" if value < 0 else "")
-    a = abs(value)
-    if a >= 1e9:
-        return f"{sign}£{a / 1e9:.2f}bn"
-    if a >= 1e6:
-        return f"{sign}£{a / 1e6:.1f}m"
-    if a >= 1e3:
-        return f"{sign}£{a / 1e3:.0f}k"
-    return f"{sign}£{a:,.0f}"
+    """Chart labels in the SAME notation as the KPI tiles and the dashboard.
+
+    These used to render ``+£111.6m`` while the axis beside them — formatted by
+    ``compact_currency`` — rendered ``£800.0MM``, so one chart carried two
+    conventions. ``compact_currency`` is the dashboard's own notation
+    (``formatGBP`` in the React client), so delegating to it makes the deck
+    internally consistent AND consistent with the screen it mirrors.
+    """
+    from .metric_resolver import compact_currency, signed_currency
+    return signed_currency(value) if signed else compact_currency(value)
 
 
 def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: float,

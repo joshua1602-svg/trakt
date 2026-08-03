@@ -433,17 +433,28 @@ class DeckBuilder:
             chip.fill.fore_color.rgb = self._rgb(accent)
             chip.line.fill.background()
             chip.shadow.inherit = False
+            # The headline's box is sized to the lines it actually needs, and the
+            # body starts below it. At a fixed 0.42in a two-line headline ran
+            # straight into the summary beneath — which happens as soon as a
+            # movement names two contributors, so it is not an edge case.
+            headline = str(getattr(ins, "headline", ""))
+            text_w = (col_w - Inches(0.46)) / EMU_IN
+            per_line = max(16, int(text_w * 72 / (12.5 * 0.52)))
+            head_lines = min(3, max(1, -(-len(headline) // per_line)))
+            head_h = 0.26 + 0.24 * head_lines
             self._text(s, l + Inches(0.24), t + Inches(0.14),
-                       col_w - Inches(0.46), Inches(0.42),
-                       str(getattr(ins, "headline", "")), size=12.5, bold=True)
+                       col_w - Inches(0.46), Inches(head_h),
+                       headline, size=12.5, bold=True)
             # Body size steps down when a summary is long, so a detailed
             # observation is never clipped by a fixed card height.
             summary = str(getattr(ins, "summary", ""))
-            capacity = (col_w / EMU_IN) * ((h - Inches(0.62)) / EMU_IN) * 210
+            body_top = 0.14 + head_h + 0.04
+            body_h = max(0.24, (h / EMU_IN) - body_top - 0.14)
+            capacity = text_w * body_h * 210
             body = 10 if len(summary) <= capacity else (
                 9 if len(summary) <= capacity * 1.25 else 8)
-            self._text(s, l + Inches(0.24), t + Inches(0.54),
-                       col_w - Inches(0.46), h - Inches(0.62), summary,
+            self._text(s, l + Inches(0.24), t + Inches(body_top),
+                       col_w - Inches(0.46), Inches(body_h), summary,
                        size=body, color=self.theme.ink_300, spacing=1.06)
         self._footer(s)
         self._record(spec.get("id", "executive_summary"), spec.get("title"),

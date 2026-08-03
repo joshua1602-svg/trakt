@@ -266,11 +266,26 @@ def _scoped_to(df: Optional[pd.DataFrame], cid: str,
 
 def _funded_frame(cid: str, context_id: Optional[str] = None) -> Optional[pd.DataFrame]:
     """The prepared funded frame for the active run (the platform canonical set via
-    ``MI_AGENT_PLATFORM_CANONICAL``), scoped to the governed portfolio context."""
+    ``MI_AGENT_PLATFORM_CANONICAL``), scoped to the governed portfolio context.
+
+    The frame goes through the SAME ``prepare_funded_mi_dataset`` the dashboard
+    applies (and that ``_local_funded_frames`` already applies to the prior
+    periods). Without it the CURRENT period lacked derivations the prior periods
+    had — ``months_on_book``, ``vintage_year``, ``time_on_book_bucket`` — so the
+    deck silently dropped the weighted-months-on-book measure the dashboard
+    shows, and the two channels disagreed on how many KPIs the book even has.
+    The prep only fills columns that are absent, so a frame that arrives already
+    prepared is unchanged.
+    """
     from mi_agent_api import data_source
+    from mi_agent_api.funded_prep import prepare_funded_mi_dataset
     df = data_source.get_dataframe()
     if df is None or df.empty:
         return None
+    try:
+        df, _report = prepare_funded_mi_dataset(df)
+    except Exception:  # noqa: BLE001 — an un-preppable tape still renders a deck
+        pass
     return _scoped_to(df, cid, context_id)
 
 
@@ -706,7 +721,8 @@ def build_dashboard_data(
 
         # -- Movement attribution (governed bridge, once per dimension) ------
         data.movement = _guard(data, "movement",
-                               lambda: _movement(out_root, cid, rid, scope, data))
+                               lambda: _movement(out_root, cid, rid, scope, data,
+                                                 prior_reporting_date=prior_rd))
 
         pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
 
@@ -848,12 +864,19 @@ def _forecast(cid, rid, reporting_date, funded_df, pipe_df, pipe_report, pipe_sn
     return env
 
 
-def _movement(out_root, cid, rid, scope, data: DashboardData) -> Dict[str, Any]:
+def _movement(out_root, cid, rid, scope, data: DashboardData,
+              prior_reporting_date: Optional[str] = None) -> Dict[str, Any]:
     """Governed movement attribution for the deck's scope.
 
     ``funded_bridge`` scopes through ``lens_filters``, which filters on the
     provenance columns. A Total scope passes no filter; a type scope filters to
     that type — the same narrowing the rest of the deck uses.
+
+    The bridge opens at ``prior_reporting_date``: the SAME period the funded
+    snapshot compares against. Without it the governed bridge opens at the
+    earliest period available, and a deck with a long history would attribute
+    the whole series beside a one-period headline — the two halves of the
+    movement slide measuring different windows.
     """
     from . import movement as _mv
 
@@ -865,7 +888,9 @@ def _movement(out_root, cid, rid, scope, data: DashboardData) -> Dict[str, Any]:
         if len(types) == 1:
             lens_filters = {FIELD_PORTFOLIO_TYPE: types[0]}
             lens_label = str(getattr(scope, "label", types[0]))
-    return _mv.build_bridges(out_root, cid, rid, lens_filters=lens_filters,
+    return _mv.build_bridges(out_root, cid, rid,
+                             start_period=prior_reporting_date,
+                             lens_filters=lens_filters,
                              lens_label=lens_label, note=data.note)
 
 

@@ -274,11 +274,21 @@ def movement_attribution(ctx: Mapping[str, Any], portfolio) -> Result:
     if risers:
         parts.append(" and ".join(f"{s.label.lower()} ({signed_money(v)})"
                                   for s, v in risers))
+    # The body must add something the headline does not already say. It used to
+    # repeat the leading riser verbatim — "Growth driven by direct originations
+    # (+£31.6m)" above "Growth was driven by direct originations (+£31.6m)" —
+    # which spends a card on nothing. It now gives each type's SHARE of the
+    # movement, which is the reader's next question and is already governed.
+    total_move = sum(v for _s, v in moves)
     detail: List[str] = []
     if risers:
-        lead = risers[0][0]
-        detail.append(f"Growth was driven by {lead.label.lower()} "
-                      f"({signed_money(risers[0][1])})")
+        lead, lead_v = risers[0]
+        share = (f" ({lead_v / total_move * 100:.0f}% of the movement)"
+                 if total_move else "")
+        detail.append(f"{lead.label} accounted for {money(abs(lead_v))} of the "
+                      f"{money(abs(total_move))} movement{share}")
+        for s, v in risers[1:]:
+            detail.append(f"{s.label.lower()} added {money(abs(v))}")
     if fallers:
         detail.append(", ".join(f"the {s.label.lower()} reduced {money(abs(v))}"
                                 for s, v in fallers))
