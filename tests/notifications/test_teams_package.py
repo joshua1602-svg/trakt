@@ -76,35 +76,35 @@ def test_the_manifest_schema_supports_both_capabilities(manifest):
 # --------------------------------------------------------------------------- #
 # Packaging guards
 # --------------------------------------------------------------------------- #
-def test_packaging_refuses_an_unresolved_bot_app_id(manifest):
+def test_a_release_build_refuses_an_unresolved_bot_app_id(manifest):
     with pytest.raises(SystemExit) as excinfo:
-        package_agent._validate_manifest(manifest, allow_placeholders=False)
+        package_agent._validate_manifest(manifest, require_resolved=True)
     assert "TEAMS_BOT_APP_ID" in str(excinfo.value)
 
 
 def test_packaging_refuses_a_manifest_that_lost_the_declarative_agent(manifest):
     manifest.pop("copilotAgents")
     with pytest.raises(SystemExit) as excinfo:
-        package_agent._validate_manifest(manifest, allow_placeholders=True)
+        package_agent._validate_manifest(manifest, require_resolved=False)
     assert "declarative agent" in str(excinfo.value)
 
 
 def test_packaging_refuses_a_manifest_with_no_bot(manifest):
     manifest.pop("bots")
     with pytest.raises(SystemExit) as excinfo:
-        package_agent._validate_manifest(manifest, allow_placeholders=True)
+        package_agent._validate_manifest(manifest, require_resolved=False)
     assert "no bot" in str(excinfo.value)
 
 
 def test_packaging_refuses_a_group_or_channel_scope(manifest):
     manifest["bots"][0]["scopes"] = ["personal", "team"]
     with pytest.raises(SystemExit) as excinfo:
-        package_agent._validate_manifest(manifest, allow_placeholders=True)
+        package_agent._validate_manifest(manifest, require_resolved=False)
     assert "does not implement" in str(excinfo.value)
 
 
 def test_the_package_builds_and_carries_every_artefact(tmp_path):
-    zip_path = package_agent.build(tmp_path, allow_placeholders=True)
+    zip_path = package_agent.build(tmp_path, require_resolved=False)
     import zipfile
     with zipfile.ZipFile(zip_path) as archive:
         names = set(archive.namelist())

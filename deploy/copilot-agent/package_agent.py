@@ -60,14 +60,16 @@ def _png(width: int, height: int, rgba: tuple[int, int, int, int]) -> bytes:
             + chunk(b"IEND", b""))
 
 
-#: Placeholder tokens the packaging step must not ship unresolved. A manifest
-#: uploaded with a literal ``${{TEAMS_BOT_APP_ID}}`` installs, and then every
-#: proactive message fails at send time against a bot id that does not exist —
-#: a failure that surfaces days later, in production, to the client.
+#: Per-deployment token, substituted by the provisioning toolchain exactly as
+#: ``${{OAUTH2_CONFIGURATION_ID}}`` already is in ``ai-plugin.json``. It is
+#: therefore expected in the repository copy of the manifest, and only a
+#: RELEASE build (``--require-resolved``) insists it has been replaced — a
+#: manifest uploaded with the literal token installs cleanly and then fails
+#: every proactive send, days later, in production.
 _PLACEHOLDER = "${{TEAMS_BOT_APP_ID}}"
 
 
-def _validate_manifest(manifest: dict, *, allow_placeholders: bool) -> None:
+def _validate_manifest(manifest: dict, *, require_resolved: bool = False) -> None:
     """Check the capabilities this package is required to carry.
 
     The declarative agent and the bot are separate capabilities of ONE app.
@@ -96,17 +98,16 @@ def _validate_manifest(manifest: dict, *, allow_placeholders: bool) -> None:
                 f"the bot declares the {unsupported!r} scope, which v1 does "
                 f"not implement")
 
-    if allow_placeholders:
+    if not require_resolved:
         return
     blob = json.dumps(manifest)
     if _PLACEHOLDER in blob:
         raise SystemExit(
             f"{_PLACEHOLDER} is unresolved in manifest.json. Set the bot app "
-            f"id (or pass --allow-placeholders when your provisioning "
-            f"toolchain substitutes it).")
+            f"id before building a release package.")
 
 
-def build(out_dir: Path, *, allow_placeholders: bool = False) -> Path:
+def build(out_dir: Path, *, require_resolved: bool = False) -> Path:
     for name in PACKAGE_FILES:
         path = HERE / name
         if not path.exists():
@@ -114,7 +115,7 @@ def build(out_dir: Path, *, allow_placeholders: bool = False) -> Path:
         if name.endswith(".json"):
             data = json.loads(path.read_text(encoding="utf-8"))  # bad JSON → fail fast
             if name == "manifest.json":
-                _validate_manifest(data, allow_placeholders=allow_placeholders)
+                _validate_manifest(data, require_resolved=require_resolved)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_path = out_dir / "trakt-copilot-agent.zip"
@@ -130,11 +131,12 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default=str(HERE / "dist"),
                     help="output directory (default: deploy/copilot-agent/dist)")
-    ap.add_argument("--allow-placeholders", action="store_true",
-                    help="permit unresolved ${{...}} tokens, for a toolchain "
-                         "that substitutes them at provisioning time")
+    ap.add_argument("--require-resolved", action="store_true",
+                    help="fail if a ${{...}} token is still unresolved — use "
+                         "for a release build, where the provisioning "
+                         "toolchain has already substituted them")
     args = ap.parse_args(argv)
-    zip_path = build(Path(args.out), allow_placeholders=args.allow_placeholders)
+    zip_path = build(Path(args.out), require_resolved=args.require_resolved)
     print(f"wrote {zip_path}")
     return 0
 
