@@ -16,6 +16,11 @@ Three checks, each guarding a failure mode that has actually reached production:
    so the host started, the trigger registered, and the omission only appeared on
    the first blob arrival.
 
+   `trakt_notifications/` and `trakt_core/` were the same omission for the Teams
+   delivery worker, and quieter still: its import is lazy AND inside an
+   `except Exception`, so the timer fired every five minutes, logged a failure
+   and delivered nothing. Both are now required and probed.
+
 2. REQUIREMENTS — every third-party module that closure imports is *declared* in
    the requirements.txt being shipped. The previous check pip-installed a
    hardcoded list, so a dependency missing from requirements.txt was invisible:
@@ -51,6 +56,19 @@ REQUIRED_PATHS = (
     "operations_control/engine.py",
     "operations_control/stores.py",
     "mi_agent_api/__init__.py",
+    # The Teams delivery worker. Reached from the timer trigger through a lazy
+    # import wrapped in `except Exception`, so its absence is quieter than the
+    # OCC omission above: the host starts, the timer registers and fires, and
+    # nothing is ever delivered.
+    "trakt_notifications/__init__.py",
+    "trakt_notifications/delivery.py",
+    "trakt_notifications/trigger.py",
+    # Imported at MODULE scope by mi_agent_api.insight_engine, which the
+    # notification worker resolves its governed inputs through. The OCC chain
+    # survives without it (storage.py catches the ImportError), so nothing
+    # before this feature would have caught the omission.
+    "trakt_core/__init__.py",
+    "trakt_core/perf.py",
 )
 
 #: Distribution name -> the module the traced closure imports. Established by
@@ -64,17 +82,41 @@ REQUIRED_DISTRIBUTIONS = {
     "openpyxl": "openpyxl",
 }
 
-#: The lazy chain to exercise inside the unpacked artefact.
+#: The lazy chains to exercise inside the unpacked artefact.
+#:
+#: Both entry points are covered. The OCC chain is reached from the Event Grid
+#: trigger; the notification chain from the timer trigger. Each hop below is an
+#: import that happens INSIDE a handler at runtime, which is exactly why
+#: `import function_app` succeeding proves nothing about either.
 IMPORT_PROBE = """
 import sys
 sys.path.insert(0, ".")
 import function_app
 print("  import function_app OK")
+
+# --- OCC intake chain (Event Grid trigger) -------------------------------- #
 from apps.blob_trigger_app import occ_intake
 assert hasattr(occ_intake, "handle_arrival"), "occ_intake.handle_arrival missing"
 from operations_control.engine import OpsEngine
 from operations_control.stores import OpsStore
 print("  OCC intake chain OK:", OpsEngine.__name__, OpsStore.__name__)
+
+# --- Teams notification chain (timer trigger) ----------------------------- #
+# function_app.deliver_teams_notifications imports these lazily inside an
+# `except Exception`, so a missing package degrades to a log line rather than a
+# crash. Imported eagerly here so the omission fails the BUILD instead.
+from trakt_notifications.config import enabled
+from trakt_notifications.delivery import run_once, DeliveryWorker
+assert callable(run_once), "trakt_notifications.delivery.run_once missing"
+# The approval hook, reached from operations_control.engine.approve_publication.
+from trakt_notifications.trigger import on_publication_approved
+assert callable(on_publication_approved), "the approval hook is missing"
+# The deepest hop: the worker resolves governed MI through insight_engine, which
+# imports trakt_core.perf at module scope.
+import trakt_core.perf
+from mi_agent_api import insight_engine
+assert hasattr(insight_engine, "build"), "insight_engine.build missing"
+print("  Teams notification chain OK:", DeliveryWorker.__name__)
 """
 
 
@@ -134,7 +176,8 @@ def check_imports(zip_path: pathlib.Path, workdir: pathlib.Path) -> None:
     print(result.stdout.rstrip())
     if result.returncode != 0:
         print(result.stderr.rstrip())
-        fail("the unpacked artefact cannot import the OCC intake chain")
+        fail("the unpacked artefact cannot import the OCC intake chain or the "
+             "Teams notification chain")
 
 
 def main() -> None:

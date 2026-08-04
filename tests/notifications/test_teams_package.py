@@ -73,6 +73,27 @@ def test_the_manifest_schema_supports_both_capabilities(manifest):
     assert "v1.19" in manifest["$schema"]
 
 
+def test_the_manifest_declares_no_sso_configuration(manifest):
+    """``webApplicationInfo`` exists ONLY to declare the Entra app for Teams
+    SSO — a tab calling ``getAuthToken()``, or a bot doing SSO token exchange.
+
+    This app does neither. The bot is ``isNotificationOnly``, so it cannot
+    receive a turn that would start an auth flow; outbound sends use
+    client-credentials against Bot Framework and inbound activities are
+    validated as channel tokens. Neither involves a user token.
+
+    Declaring it anyway would be unused identity configuration AND an upload
+    risk: Teams validates ``resource`` against a real Application ID URI on the
+    Entra app, so a URI that was never registered can fail the package. The
+    Copilot capability has always shipped without it and authenticates through
+    the API plugin's own OAuth runtime instead.
+    """
+    assert "webApplicationInfo" not in manifest
+    # The Copilot side keeps its own, separate auth declaration.
+    plugin = json.loads((AGENT_DIR / "ai-plugin.json").read_text(encoding="utf-8"))
+    assert plugin["runtimes"][0]["auth"]["type"] == "OAuthPluginVault"
+
+
 # --------------------------------------------------------------------------- #
 # Packaging guards
 # --------------------------------------------------------------------------- #
@@ -111,6 +132,82 @@ def test_the_package_builds_and_carries_every_artefact(tmp_path):
     assert {"manifest.json", "declarativeAgent.json", "ai-plugin.json",
             "trakt-copilot-openapi.yaml", "color.png",
             "outline.png"} <= names
+
+
+# --------------------------------------------------------------------------- #
+# Build-time substitution of the bot app id
+# --------------------------------------------------------------------------- #
+PILOT_BOT_ID = "3f6a1c2e-8b47-4d95-a10f-2c7e5b9d4408"
+
+
+def _packaged_manifest(zip_path) -> dict:
+    import zipfile
+    with zipfile.ZipFile(zip_path) as archive:
+        return json.loads(archive.read("manifest.json").decode("utf-8"))
+
+
+def test_the_bot_app_id_is_substituted_into_the_package(tmp_path):
+    zip_path = package_agent.build(tmp_path, require_resolved=True,
+                                   bot_app_id=PILOT_BOT_ID)
+    packaged = _packaged_manifest(zip_path)
+    assert packaged["bots"][0]["botId"] == PILOT_BOT_ID
+
+
+def test_substitution_never_rewrites_the_repository_manifest(tmp_path):
+    """The id belongs to a deployment, not to the source tree — a build must
+    not leave the working copy dirty or commit a per-tenant value."""
+    before = (AGENT_DIR / "manifest.json").read_text(encoding="utf-8")
+    package_agent.build(tmp_path, require_resolved=True,
+                        bot_app_id=PILOT_BOT_ID)
+    after = (AGENT_DIR / "manifest.json").read_text(encoding="utf-8")
+    assert before == after
+    assert "${{TEAMS_BOT_APP_ID}}" in after
+
+
+def test_a_substituted_package_carries_no_unresolved_bot_token(tmp_path):
+    import zipfile
+    zip_path = package_agent.build(tmp_path, require_resolved=True,
+                                   bot_app_id=PILOT_BOT_ID)
+    with zipfile.ZipFile(zip_path) as archive:
+        for name in ("manifest.json", "declarativeAgent.json",
+                     "ai-plugin.json", "trakt-copilot-openapi.yaml"):
+            assert "${{TEAMS_BOT_APP_ID}}" not in archive.read(name).decode("utf-8")
+
+
+def test_substitution_leaves_the_copilot_oauth_token_alone(tmp_path):
+    """``${{OAUTH2_CONFIGURATION_ID}}`` is a different deployment token with its
+    own substitution step; this build must not touch it."""
+    import zipfile
+    zip_path = package_agent.build(tmp_path, require_resolved=False,
+                                   bot_app_id=PILOT_BOT_ID)
+    with zipfile.ZipFile(zip_path) as archive:
+        plugin = archive.read("ai-plugin.json").decode("utf-8")
+    assert "${{OAUTH2_CONFIGURATION_ID}}" in plugin
+
+
+def test_a_release_build_still_fails_without_an_id(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        package_agent.build(tmp_path, require_resolved=True, bot_app_id=None)
+    assert "TEAMS_BOT_APP_ID" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("bad", ["not-a-guid", "3f6a1c2e8b474d95a10f2c7e5b9d4408",
+                                 "<PASTE THE REAL BOT CLIENT ID HERE>", "12345"])
+def test_a_malformed_bot_app_id_is_refused(bad):
+    """A typo would install cleanly and then fail every proactive send."""
+    with pytest.raises(SystemExit) as excinfo:
+        package_agent.resolve_bot_app_id(bad)
+    assert "not a valid Entra application" in str(excinfo.value)
+
+
+def test_the_bot_app_id_can_come_from_the_environment(monkeypatch):
+    monkeypatch.setenv(package_agent.BOT_APP_ID_ENV, PILOT_BOT_ID)
+    assert package_agent.resolve_bot_app_id(None) == PILOT_BOT_ID
+
+
+def test_no_id_anywhere_leaves_the_token_in_place(monkeypatch):
+    monkeypatch.delenv(package_agent.BOT_APP_ID_ENV, raising=False)
+    assert package_agent.resolve_bot_app_id(None) is None
 
 
 # --------------------------------------------------------------------------- #
