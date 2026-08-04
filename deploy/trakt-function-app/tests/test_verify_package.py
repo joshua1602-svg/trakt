@@ -141,6 +141,34 @@ def test_the_occ_required_paths_are_all_still_declared():
 # --------------------------------------------------------------------------- #
 # The import probe
 # --------------------------------------------------------------------------- #
+def test_plotly_is_declared_for_the_notification_chain():
+    """`mi_agent/__init__.py` eagerly imports the chart factory, so importing
+    ANY mi_agent submodule pulls in plotly:
+
+        trakt_notifications.risk_review
+          -> mi_agent.concentration_tests.forward
+          -> mi_agent/__init__.py -> mi_chart_factory -> plotly.express
+
+    The OCC chain never touches mi_agent, which is why nothing needed this
+    before. Listing it here does two things: asserts requirements.txt declares
+    it, and puts it in the environment the import probe runs against.
+    """
+    assert vp.REQUIRED_DISTRIBUTIONS.get("plotly") == "plotly"
+
+
+def test_every_required_distribution_is_declared_in_requirements():
+    """The shipped requirements.txt is what the Function App installs — a
+    distribution the probe needs but requirements.txt omits would pass CI and
+    fail at runtime."""
+    text = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    lines = [l.strip() for l in text.splitlines()
+             if l.strip() and not l.strip().startswith("#")]
+    for dist in vp.REQUIRED_DISTRIBUTIONS:
+        assert any(l.lower().startswith(dist.lower()) for l in lines), (
+            f"{dist} is required by the import probe but requirements.txt "
+            f"does not declare it")
+
+
 def test_the_probe_exercises_both_trigger_chains():
     """`import function_app` succeeds with either package missing, which is
     exactly why the probe has to reach past it."""

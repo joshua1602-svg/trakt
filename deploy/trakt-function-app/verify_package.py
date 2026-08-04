@@ -80,6 +80,14 @@ REQUIRED_DISTRIBUTIONS = {
     "pandas": "pandas",
     "numpy": "numpy",
     "openpyxl": "openpyxl",
+    # Reached through the notification chain, not the OCC one:
+    #   trakt_notifications.risk_review -> mi_agent.concentration_tests.forward
+    #   -> mi_agent/__init__.py -> mi_chart_factory -> plotly.express
+    # `mi_agent` is a package whose __init__ eagerly imports the chart factory,
+    # so importing ANY submodule of it pulls plotly in. Already declared in
+    # requirements.txt for the serving layer; listing it here is what makes the
+    # verifier ASSERT that, and what puts it in the probe environment.
+    "plotly": "plotly",
 }
 
 #: The lazy chains to exercise inside the unpacked artefact.
