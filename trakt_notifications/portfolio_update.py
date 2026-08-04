@@ -55,6 +55,11 @@ def build(inputs: GovernedInputs, *, update_type: str,
     funded_as_of = inputs.source_dates.get("funded_as_of")
 
     items: List[MessageItem] = []
+    #: Caveats about what the card is showing. Held apart from the observations
+    #: because they must survive the item cap: a note that comparisons are
+    #: based on two weeks of history is exactly the line a reader needs, and
+    #: exactly the line a naive cap would drop first.
+    disclosures: List[MessageItem] = []
     insight_ids: List[str] = []
     leads: List[str] = []
 
@@ -63,23 +68,31 @@ def build(inputs: GovernedInputs, *, update_type: str,
         if lead:
             leads.append(lead)
         items.extend(_pipeline_items(inputs, insight_ids))
+        reason = _unavailable_comparison_reason(inputs)
+        if reason:
+            disclosures.append(MessageItem(
+                text=reason, metric="five_week_comparison", unavailable=True))
     if update_type in (UPDATE_FUNDED, UPDATE_COMBINED):
         lead = _funded_lead(inputs, update_type, funded_as_of)
         if lead:
             leads.append(lead)
-        items.extend(_funded_items(inputs, insight_ids))
+        funded, funded_disclosures = _funded_items(inputs, insight_ids)
+        items.extend(funded)
+        disclosures.extend(funded_disclosures)
 
     headline = _headline(inputs, update_type, pipeline_as_of, funded_as_of)
 
-    # The cap is a presentation limit, not a selection one: items are already
-    # ordered most-material-first by the sequence they are appended in.
-    kept = items[:max_items]
+    # The cap governs OBSERVATIONS, not disclosures. Items are already ordered
+    # most-informative-first by the sequence they were appended in.
+    budget = max(max_items - len(disclosures), 1)
+    kept = items[:budget]
     if len(items) > len(kept):
         # Never silently truncate — a card that dropped two observations must
         # not read as though it showed everything.
-        kept = kept[:max_items - 1] + [MessageItem(
-            text=(f"{len(items) - (max_items - 1)} further observations are in "
-                  f"Trakt."), metric="truncated")]
+        kept = kept[:max(budget - 1, 0)] + [MessageItem(
+            text=(f"{len(items) - max(budget - 1, 0)} further observations are "
+                  f"in Trakt."), metric="truncated")]
+    kept = kept + disclosures
 
     return NotificationMessage(
         message_type=MESSAGE_PORTFOLIO_UPDATE,
@@ -135,17 +148,24 @@ def _comparison_clause(inputs: GovernedInputs, metric: str) -> Optional[str]:
 
 
 def _unavailable_comparison_reason(inputs: GovernedInputs) -> Optional[str]:
-    """Why no five-week comparison is shown, in the reader's language."""
+    """Why the pipeline five-week comparison is missing or weak.
+
+    Names the PIPELINE comparison specifically. The completions comparison
+    comes from the origination funnel, which is a separate governed source and
+    can still be available when this one is not — a blanket "five-week
+    comparisons are unavailable" alongside a completions comparison would
+    contradict itself on the same card.
+    """
     if inputs.missing(CAP_PIPELINE_EVOLUTION):
-        return ("Five-week comparisons are unavailable: the governed weekly "
-                "series could not be resolved for this update.")
+        return ("Pipeline five-week comparisons are unavailable: the governed "
+                "weekly series could not be resolved for this update.")
     block = _five_week(inputs)
     if not block.get("available"):
-        return ("Five-week comparisons are unavailable: no prior weekly "
-                "history has been observed for this portfolio yet.")
+        return ("Pipeline five-week comparisons are unavailable: no prior "
+                "weekly history has been observed for this portfolio yet.")
     weeks = int(block.get("weeksObserved") or 0)
     if weeks < int(block.get("window") or 5):
-        return (f"Five-week comparisons are based on {weeks} observed "
+        return (f"Pipeline five-week comparisons are based on {weeks} observed "
                 f"week{'s' if weeks != 1 else ''} so far.")
     return None
 
@@ -224,10 +244,6 @@ def _pipeline_items(inputs: GovernedInputs,
     if conversion is not None:
         items.append(conversion)
 
-    reason = _unavailable_comparison_reason(inputs)
-    if reason:
-        items.append(MessageItem(text=reason, metric="five_week_comparison",
-                                 unavailable=True))
     return items
 
 
@@ -346,12 +362,13 @@ def _funded_lead(inputs: GovernedInputs, update_type: str,
     return lead + "."
 
 
-def _funded_items(inputs: GovernedInputs,
-                  insight_ids: List[str]) -> List[MessageItem]:
+def _funded_items(inputs: GovernedInputs, insight_ids: List[str]
+                  ) -> "tuple[List[MessageItem], List[MessageItem]]":
+    """``(observations, disclosures)`` — disclosures survive the item cap."""
     movement = inputs.funded_movement or {}
     if not movement.get("available"):
         reason = inputs.unavailable.get(CAP_FUNDED_MOVEMENT) or movement.get("reason")
-        return [MessageItem(
+        return [], [MessageItem(
             text=("Funded movement is unavailable for this update"
                   + (f": {reason}." if reason else ".")),
             metric="funded_movement", unavailable=True)]
@@ -394,7 +411,7 @@ def _funded_items(inputs: GovernedInputs,
             text=(f"Largest regional contribution: {primary['region']} at "
                   f"{fmt.signed_money(primary.get('delta'))}."),
             metric="region_contribution", raw=primary.get("delta")))
-    return items
+    return items, []
 
 
 # --------------------------------------------------------------------------- #

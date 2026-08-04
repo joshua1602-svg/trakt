@@ -706,6 +706,13 @@ def compute_drivers_for_test(config: ActiveConfiguration,
 # --------------------------------------------------------------------------- #
 # Dimension contributors — the same drivers, aggregated, with no loan-level data
 # --------------------------------------------------------------------------- #
+#: Label for a case whose broker or region is missing. Never dropped: a
+#: contribution that disappeared from the grouping would break the
+#: reconciliation to the expected numerator movement, and an unattributed
+#: exposure is itself worth a reader seeing.
+UNATTRIBUTED = "Unattributed"
+
+
 def driver_contributors(test: ActiveTest, lib: ConcentrationLibrary,
                         expected_frame: Optional[pd.DataFrame],
                         funded_test_row: Dict[str, Any],
@@ -771,12 +778,24 @@ def driver_contributors(test: ActiveTest, lib: ConcentrationLibrary,
     broker_col = resolve_role_column(frame, lib, "broker")
     region_col = resolve_role_column(frame, lib, "region")
 
+    def _labels(column: str) -> pd.Series:
+        """Group keys for one dimension, with every case accounted for.
+
+        ``fillna`` runs BEFORE ``astype(str)``: on an object column pandas
+        renders a missing value as NaN rather than as the string "None", and
+        ``groupby`` drops NaN keys by default — so an unattributed case would
+        vanish from the grouping and the totals would stop reconciling to the
+        expected numerator movement. Labelling it is the only option that keeps
+        the reconciliation honest.
+        """
+        return (rows[column].fillna(UNATTRIBUTED).astype(str).str.strip()
+                .replace({"": UNATTRIBUTED, "nan": UNATTRIBUTED,
+                          "None": UNATTRIBUTED, "NaT": UNATTRIBUTED}))
+
     def _group(column: Optional[str]) -> List[Dict[str, Any]]:
         if not column or column not in rows.columns:
             return []
-        labels = rows[column].astype(str).str.strip().replace(
-            {"": "Unattributed", "nan": "Unattributed",
-             "None": "Unattributed"})
+        labels = _labels(column)
         grouped = contribution.groupby(labels)
         counts = labels.groupby(labels).size()
         out = [{
@@ -799,11 +818,7 @@ def driver_contributors(test: ActiveTest, lib: ConcentrationLibrary,
             return []
         if broker_col not in rows.columns or dim_col not in rows.columns:
             return []
-        brokers = rows[broker_col].astype(str).str.strip().replace(
-            {"": "Unattributed", "nan": "Unattributed", "None": "Unattributed"})
-        dims = rows[dim_col].astype(str).str.strip().replace(
-            {"": "Unattributed", "nan": "Unattributed", "None": "Unattributed"})
-        keys = list(zip(brokers, dims))
+        keys = list(zip(_labels(broker_col), _labels(dim_col)))
         index = pd.MultiIndex.from_tuples(keys, names=["broker", "dimension"])
         series = pd.Series(contribution.values, index=index)
         counts = pd.Series(1, index=index).groupby(level=[0, 1]).sum()

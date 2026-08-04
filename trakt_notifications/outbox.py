@@ -350,10 +350,14 @@ def _redact(error: str) -> str:
     """
     text = str(error or "").strip()
     lowered = text.lower()
-    for marker in ("bearer ", "authorization", "access_token", "password",
-                   "client_secret", "sig="):
-        idx = lowered.find(marker)
-        if idx >= 0:
-            text = text[:idx] + "[redacted]"
-            break
+    # Cut at the EARLIEST marker, not the first one in scan order. A message
+    # carrying a signed URL followed by an Authorization header would otherwise
+    # be truncated after the header and leave the signature intact.
+    positions = [idx for idx in
+                 (lowered.find(marker) for marker in
+                  ("bearer ", "authorization", "access_token", "password",
+                   "client_secret", "sig=", "secret"))
+                 if idx >= 0]
+    if positions:
+        text = text[:min(positions)] + "[redacted]"
     return text[:500]
