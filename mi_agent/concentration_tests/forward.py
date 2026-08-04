@@ -701,3 +701,152 @@ def compute_drivers_for_test(config: ActiveConfiguration,
                                               STATE_EXPECTED)
     return pipeline_drivers(test, lib, expected_frame, funded_test_row,
                             external=external)
+
+
+# --------------------------------------------------------------------------- #
+# Dimension contributors — the same drivers, aggregated, with no loan-level data
+# --------------------------------------------------------------------------- #
+def driver_contributors(test: ActiveTest, lib: ConcentrationLibrary,
+                        expected_frame: Optional[pd.DataFrame],
+                        funded_test_row: Dict[str, Any],
+                        *, top_n: int = 5, external=None) -> Dict[str, Any]:
+    """Which broker, which region, and which of their intersections account for
+    a test's expected movement.
+
+    :func:`pipeline_drivers` answers the same question per CASE. That is the
+    right answer for the drill-through drawer and the wrong one for any channel
+    that must not carry loan-level data, so this aggregates the identical
+    contributions instead of listing them.
+
+    It introduces no methodology. It runs the SAME evaluator, over the SAME
+    expected state frame, taking the SAME numerator mask and the SAME
+    ``balance x completion probability`` contribution ``pipeline_drivers``
+    uses, and groups them. The grouped totals therefore reconcile to
+    ``expectedNumeratorMovement`` by construction, exactly as the per-case list
+    does, and ``reconciles`` reports it rather than assuming it.
+
+    No case identifier is emitted, by construction rather than by filtering:
+    the per-case series is consumed into a ``groupby`` and never returned.
+    """
+    metric = lib.get(test.metric_id)
+    if metric is None or treatment_for(lib, test) != TREATMENT_EXPOSURE:
+        return {"available": False,
+                "reason": ("Contributor attribution is available for "
+                           "exposure-weighted metric families only."),
+                "contributors": []}
+    if expected_frame is None or expected_frame.empty:
+        return {"available": False,
+                "reason": "No expected pipeline population is available.",
+                "contributors": []}
+
+    comp = evaluate_metric(expected_frame, lib, metric,
+                           dict(test.parameters or {}), external=external)
+    if comp.data_status != DATA_OK or comp.mask is None:
+        return {"available": False,
+                "reason": (comp.notes
+                           or "The expected state could not be evaluated."),
+                "contributors": []}
+
+    frame = expected_frame
+    is_pipeline = frame[STATE_COMPONENT_COL] == "pipeline"
+    in_numerator = comp.mask.reindex(frame.index, fill_value=False) & is_pipeline
+    rows = frame[in_numerator]
+    if rows.empty:
+        return {"available": False,
+                "reason": ("No pipeline case contributes to this test's "
+                           "expected numerator."),
+                "contributors": []}
+
+    bal_col = resolve_role_column(frame, lib, "balance_current")
+    prob = coerce_numeric(rows[PROBABILITY_COL])
+    bal = (coerce_numeric(rows[bal_col]) if bal_col
+           else pd.Series(0.0, index=rows.index))
+    contribution = (bal * prob).fillna(0.0)
+    total = float(contribution.sum())
+
+    # The test's own dimension (region for a regional test, broker for a broker
+    # test, and so on) plus the broker dimension, resolved through the governed
+    # role map rather than by guessing a column name.
+    dim_col = next(iter(comp.resolved_columns.values()), None)
+    broker_col = resolve_role_column(frame, lib, "broker")
+    region_col = resolve_role_column(frame, lib, "region")
+
+    def _group(column: Optional[str]) -> List[Dict[str, Any]]:
+        if not column or column not in rows.columns:
+            return []
+        labels = rows[column].astype(str).str.strip().replace(
+            {"": "Unattributed", "nan": "Unattributed",
+             "None": "Unattributed"})
+        grouped = contribution.groupby(labels)
+        counts = labels.groupby(labels).size()
+        out = [{
+            "name": str(name),
+            "expectedContribution": round(float(value), 2),
+            "shareOfMovement": (round(float(value) / total, 4)
+                                if total else None),
+            "caseCount": int(counts.get(name, 0)),
+        } for name, value in grouped.sum().items()]
+        # Descending contribution, then name — two equal contributors must not
+        # swap places between runs, or a "largest contributor" statement would
+        # be non-deterministic.
+        out.sort(key=lambda r: (-r["expectedContribution"], r["name"]))
+        return out[:top_n]
+
+    def _group_pair() -> List[Dict[str, Any]]:
+        """Broker x the test's own dimension — the intersection that answers
+        'where is this flow coming from', which neither margin can."""
+        if not broker_col or not dim_col or broker_col == dim_col:
+            return []
+        if broker_col not in rows.columns or dim_col not in rows.columns:
+            return []
+        brokers = rows[broker_col].astype(str).str.strip().replace(
+            {"": "Unattributed", "nan": "Unattributed", "None": "Unattributed"})
+        dims = rows[dim_col].astype(str).str.strip().replace(
+            {"": "Unattributed", "nan": "Unattributed", "None": "Unattributed"})
+        keys = list(zip(brokers, dims))
+        index = pd.MultiIndex.from_tuples(keys, names=["broker", "dimension"])
+        series = pd.Series(contribution.values, index=index)
+        counts = pd.Series(1, index=index).groupby(level=[0, 1]).sum()
+        out = [{
+            "broker": str(b), "dimension": str(d),
+            "expectedContribution": round(float(v), 2),
+            "shareOfMovement": round(float(v) / total, 4) if total else None,
+            "caseCount": int(counts.loc[(b, d)]),
+        } for (b, d), v in series.groupby(level=[0, 1]).sum().items()]
+        out.sort(key=lambda r: (-r["expectedContribution"], r["broker"],
+                                r["dimension"]))
+        return out[:top_n]
+
+    by_dimension = _group(dim_col)
+    by_broker = _group(broker_col)
+    by_region = _group(region_col) if region_col != dim_col else []
+    by_pair = _group_pair()
+
+    funded_num = float(funded_test_row.get("numeratorValue") or 0.0)
+    return {
+        "available": True,
+        "testId": test.test_id,
+        "displayName": test.display_name,
+        "dimensionColumn": dim_col,
+        "brokerColumn": broker_col,
+        "regionColumn": region_col,
+        "expectedNumeratorMovement": round(total, 2),
+        "expectedDenominator": (round(float(comp.denominator_value), 2)
+                                if comp.denominator_value is not None else None),
+        "byDimension": by_dimension,
+        "byBroker": by_broker,
+        "byRegion": by_region,
+        "byBrokerDimension": by_pair,
+        # The single largest intersection where one exists, else the largest
+        # single dimension. This is what a "primary projected driver" statement
+        # may cite — and nothing else may be cited as one.
+        "primaryContributor": (by_pair[0] if by_pair
+                               else (by_dimension[0] if by_dimension else None)),
+        "reconciles": bool(
+            comp.numerator_value is None
+            or abs((comp.numerator_value or 0.0) - funded_num - total) < 0.01),
+        # Stated explicitly so a consumer never has to infer it from absence.
+        "loanLevelExcluded": True,
+        "basis": ("expected contribution = balance x governed completion "
+                  "probability, grouped; identical to the per-case drivers"),
+    }

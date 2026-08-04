@@ -613,12 +613,75 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
         "uniqueWeeklyExtractsUsed": inv.get("uniqueWeeklyExtractsUsed"),
         "periods": periods,
         "byStage": by_stage,
+        # Governed trailing five-week average of the SAME weekly series above,
+        # using the SAME window and the SAME trailing-mean helper the funnel
+        # already publishes per stage. Additive: no existing field changes.
+        "fiveWeekAverage": five_week_average(periods),
         "lineage": {
             "source": "governed weekly pipeline extracts (deduplicated)",
             "metric": "origination pipeline amount / weighted expected funded per extract",
+            "fiveWeekAverage": _FIVE_WEEK_BASIS,
             "primarySourcePreference": inv.get("primarySourcePreference"),
         },
         "singlePeriod": len(periods) <= 1,
+    }
+
+
+#: How the total-pipeline five-week average is defined. Stated once, quoted by
+#: every channel that shows the comparison, so a card and a chart can never
+#: describe the same number differently.
+_FIVE_WEEK_BASIS = (
+    "trailing mean of the last 5 governed weekly extracts INCLUDING the current "
+    "week, on the pipeline STOCK level (the same window and convention as the "
+    "origination funnel's fiveWeekAvgStock* fields)")
+
+#: The metrics the trailing average is published for. Each is already a governed
+#: per-week value on ``periods[].metrics`` — this adds no new measure.
+_FIVE_WEEK_METRICS = ("pipeline_amount", "pipeline_case_count",
+                      "weighted_expected_funded_amount")
+
+
+def five_week_average(periods: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Trailing five-week average of the governed weekly pipeline series.
+
+    THE governed total-pipeline five-week comparison, shared by React, the
+    investor deck and the Teams Portfolio Update so none of them has to derive
+    one. It computes nothing new: it is the existing trailing-mean helper over
+    the existing per-week metrics, at the existing 5-week window.
+
+    ``weeksObserved`` is published alongside every value because a "five-week
+    average" over two weeks of history is a materially weaker statement, and a
+    caller that cannot see the sample size cannot know to say so. ``available``
+    is False when there is no history at all — a caller must then omit the
+    comparison with a reason rather than compare against a fabricated baseline.
+    """
+    window = _CONVERSION_WINDOW
+    values: Dict[str, Optional[float]] = {}
+    observed: Dict[str, int] = {}
+    current: Dict[str, Optional[float]] = {}
+    for metric in _FIVE_WEEK_METRICS:
+        series = [(p.get("metrics") or {}).get(metric) for p in periods]
+        series = [(float(v) if v is not None else None) for v in series]
+        values[metric] = _trailing_avg(series, window)
+        observed[metric] = _window_count(series, window)
+        current[metric] = series[-1] if series else None
+
+    return {
+        "available": any(v is not None for v in values.values()),
+        "window": window,
+        "basis": _FIVE_WEEK_BASIS,
+        "weeksObserved": max(observed.values()) if observed else 0,
+        "weeksObservedByMetric": observed,
+        "current": current,
+        "average": values,
+        # Signed percentage difference of the current week against the trailing
+        # mean, per metric. Emitted here rather than at each call site so every
+        # channel divides the same way round and rounds identically.
+        "differencePct": {
+            m: (round((current[m] - values[m]) / abs(values[m]) * 100.0, 1)
+                if current.get(m) is not None and values.get(m) else None)
+            for m in _FIVE_WEEK_METRICS
+        },
     }
 
 
