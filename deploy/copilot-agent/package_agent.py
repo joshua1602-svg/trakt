@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import struct
 import sys
 import zipfile
@@ -107,21 +109,68 @@ def _validate_manifest(manifest: dict, *, require_resolved: bool = False) -> Non
             f"id before building a release package.")
 
 
-def build(out_dir: Path, *, require_resolved: bool = False) -> Path:
+#: A bot app id is an Entra application (client) id — a GUID. Validated before
+#: substitution because a typo produces a package that installs cleanly and
+#: then fails every proactive send against an app id that does not exist.
+_GUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+#: Environment fallback, so CI can supply the id without it appearing in a
+#: command line (and therefore in a build log).
+BOT_APP_ID_ENV = "TEAMS_BOT_APP_ID"
+
+
+def resolve_bot_app_id(explicit: str | None = None) -> str | None:
+    """The bot app id to substitute, from the flag or the environment.
+
+    Returns ``None`` when neither is set, which leaves the token in place — a
+    development build stays possible without the real id.
+    """
+    value = (explicit or os.environ.get(BOT_APP_ID_ENV) or "").strip()
+    if not value:
+        return None
+    if not _GUID_RE.match(value):
+        raise SystemExit(
+            f"{value!r} is not a valid Entra application (client) id. Expected "
+            f"a GUID like 00000000-0000-0000-0000-000000000000.")
+    return value
+
+
+def substitute(text: str, bot_app_id: str | None) -> str:
+    """Replace the bot app id token in a package file's TEXT.
+
+    Substitution happens on the way into the archive; the repository copy is
+    never rewritten. That is the point — the id belongs to a deployment, not to
+    the source tree, and a build must not leave the working copy dirty.
+    """
+    if not bot_app_id:
+        return text
+    return text.replace(_PLACEHOLDER, bot_app_id)
+
+
+def build(out_dir: Path, *, require_resolved: bool = False,
+          bot_app_id: str | None = None) -> Path:
+    """Build the package, substituting per-deployment tokens on the way in."""
+    rendered: dict[str, str] = {}
     for name in PACKAGE_FILES:
         path = HERE / name
         if not path.exists():
             raise SystemExit(f"missing package file: {path}")
+        text = substitute(path.read_text(encoding="utf-8"), bot_app_id)
+        rendered[name] = text
         if name.endswith(".json"):
-            data = json.loads(path.read_text(encoding="utf-8"))  # bad JSON → fail fast
+            data = json.loads(text)  # bad JSON → fail fast
             if name == "manifest.json":
+                # Validated AFTER substitution, so --require-resolved checks
+                # what will actually ship rather than what is in the repository.
                 _validate_manifest(data, require_resolved=require_resolved)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_path = out_dir / "trakt-copilot-agent.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for name in PACKAGE_FILES:
-            zf.write(HERE / name, arcname=name)
+            zf.writestr(name, rendered[name])
         zf.writestr("color.png", _png(192, 192, (*ACCENT_RGB, 255)))
         zf.writestr("outline.png", _png(32, 32, (255, 255, 255, 255)))
     return zip_path
@@ -135,9 +184,21 @@ def main(argv: list[str] | None = None) -> int:
                     help="fail if a ${{...}} token is still unresolved — use "
                          "for a release build, where the provisioning "
                          "toolchain has already substituted them")
+    ap.add_argument("--bot-app-id", default=None,
+                    help=f"Entra application (client) id of the Teams bot, "
+                         f"substituted into the packaged manifest. Falls back "
+                         f"to ${BOT_APP_ID_ENV}. The repository copy of "
+                         f"manifest.json is never rewritten.")
     args = ap.parse_args(argv)
-    zip_path = build(Path(args.out), require_resolved=args.require_resolved)
+    bot_app_id = resolve_bot_app_id(args.bot_app_id)
+    zip_path = build(Path(args.out), require_resolved=args.require_resolved,
+                     bot_app_id=bot_app_id)
     print(f"wrote {zip_path}")
+    if bot_app_id:
+        # The bot app id is public (it ships inside the manifest), so echoing it
+        # is safe and lets the operator confirm the package carries the id they
+        # intended. The client SECRET is never handled here at all.
+        print(f"bot app id substituted: {bot_app_id}")
     return 0
 
 
