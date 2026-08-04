@@ -73,6 +73,27 @@ def test_the_manifest_schema_supports_both_capabilities(manifest):
     assert "v1.19" in manifest["$schema"]
 
 
+def test_the_manifest_declares_no_sso_configuration(manifest):
+    """``webApplicationInfo`` exists ONLY to declare the Entra app for Teams
+    SSO — a tab calling ``getAuthToken()``, or a bot doing SSO token exchange.
+
+    This app does neither. The bot is ``isNotificationOnly``, so it cannot
+    receive a turn that would start an auth flow; outbound sends use
+    client-credentials against Bot Framework and inbound activities are
+    validated as channel tokens. Neither involves a user token.
+
+    Declaring it anyway would be unused identity configuration AND an upload
+    risk: Teams validates ``resource`` against a real Application ID URI on the
+    Entra app, so a URI that was never registered can fail the package. The
+    Copilot capability has always shipped without it and authenticates through
+    the API plugin's own OAuth runtime instead.
+    """
+    assert "webApplicationInfo" not in manifest
+    # The Copilot side keeps its own, separate auth declaration.
+    plugin = json.loads((AGENT_DIR / "ai-plugin.json").read_text(encoding="utf-8"))
+    assert plugin["runtimes"][0]["auth"]["type"] == "OAuthPluginVault"
+
+
 # --------------------------------------------------------------------------- #
 # Packaging guards
 # --------------------------------------------------------------------------- #
@@ -130,8 +151,6 @@ def test_the_bot_app_id_is_substituted_into_the_package(tmp_path):
                                    bot_app_id=PILOT_BOT_ID)
     packaged = _packaged_manifest(zip_path)
     assert packaged["bots"][0]["botId"] == PILOT_BOT_ID
-    assert packaged["webApplicationInfo"]["id"] == PILOT_BOT_ID
-    assert PILOT_BOT_ID in packaged["webApplicationInfo"]["resource"]
 
 
 def test_substitution_never_rewrites_the_repository_manifest(tmp_path):

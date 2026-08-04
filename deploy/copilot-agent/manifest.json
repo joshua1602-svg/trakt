@@ -42,10 +42,6 @@
       "supportsVideo": false
     }
   ],
-  "webApplicationInfo": {
-    "id": "${{TEAMS_BOT_APP_ID}}",
-    "resource": "api://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net/${{TEAMS_BOT_APP_ID}}"
-  },
   "validDomains": [
     "trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net"
   ]
