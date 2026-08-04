@@ -429,30 +429,112 @@ def _origination_labels(df, grain: str = "Y"):
     return None
 
 
+#: Loan identifier columns, in preference order. Cohort membership is a set of
+#: these; without one, a static pool cannot be formed and the service says so
+#: rather than falling back to a per-period filter that only looks like one.
+_LOAN_ID_COLS = ("unique_identifier", "loan_id", "account_id", "loan_reference")
+
+#: Bumped whenever the membership rule or the emitted contract changes, so every
+#: channel can assert it is reading the same methodology.
+COHORT_METHODOLOGY_VERSION = "static-pool-2"
+
+
+def _loan_id_col(df) -> Optional[str]:
+    return next((c for c in _LOAN_ID_COLS if c in getattr(df, "columns", ())), None)
+
+
+def _member_ids(df, col: str) -> set:
+    ids = df[col].dropna().astype(str)
+    return set(ids.tolist())
+
+
 def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
                               lens_filters: Optional[Dict[str, str]] = None,
                               lens_label: str = "Total",
                               vintage: Optional[str] = None, grain: str = "Y",
                               to_run_id: Optional[str] = None) -> Dict[str, Any]:
-    """Static-pool progression: how a cohort's funded metrics (balance, loan
-    count, WA LTV, WA rate, NNEG exposure/headroom) evolve ACROSS reporting
-    periods. The cohort is defined by a source-portfolio lens (Total / direct /
-    acquired / a cohort id like ``acquired_001``) AND, optionally, an origination
-    ``vintage`` at the chosen ``grain`` (Y/Q/M) — so "acquired_001 loans
-    originated in 2023" is a first-class cohort even within the consolidated book."""
-    vintage_filterable = True
-    periods: List[Dict[str, Any]] = []
-    for fr in funded_frames(output_root, client_id, to_run_id):
+    """Static-pool progression: a cohort FIXED AT FORMATION, tracked forward.
+
+    The membership rule, and the whole point of this service:
+
+      1. the formation cut is the earliest reporting period in which the cohort
+         has any loans;
+      2. the loan identifiers present at that cut ARE the cohort, for life;
+      3. every later period reports only those identifiers;
+      4. surviving membership is therefore always a subset of formation
+         membership, and the surviving count can hold or fall but never rise;
+      5. a loan boarded later carrying an old origination date does NOT enter an
+         already-formed pool;
+      6. exits are formation identifiers no longer present.
+
+    This replaced a per-period re-filter on origination vintage. That rule
+    reselected members every period, so a late-boarded loan of an earlier vintage
+    joined its cohort and the "surviving" count rose — which made retention,
+    exits and seasoning measures of a moving population. The vintage filter is
+    still what SELECTS the cohort at formation; it is no longer what defines
+    membership afterwards.
+
+    Balance may exceed 100% of formation, because roll-up interest accrues on
+    surviving loans. Loan count may not.
+
+    A corrected upload for a later reporting date replaces that period's
+    observation without touching the formation rule; a corrected FORMATION
+    snapshot re-forms the pool, because the formation cut is derived from the
+    frames rather than stored.
+    """
+    frames = list(funded_frames(output_root, client_id, to_run_id))
+    scoped: List[Dict[str, Any]] = []
+    for fr in frames:
         d = _scope_frame_lens(fr.get("df"), lens_filters)
-        if d is None:
-            continue
+        if d is not None:
+            scoped.append({**fr, "df": d})
+
+    id_col = next((_loan_id_col(f["df"]) for f in scoped if _loan_id_col(f["df"])), None)
+    vintage_filterable = True
+
+    # -- 1/2. formation: the earliest period holding this cohort -------------
+    formation: Optional[Dict[str, Any]] = None
+    formation_at = -1                      # INDEX, not identity: `formation`
+    formation_ids: set = set()             # is a rebuilt dict, never `fr` itself
+    for i, fr in enumerate(scoped):
+        d = fr["df"]
         if vintage:
             labels = _origination_labels(d, grain)
             if labels is None:
                 vintage_filterable = False
-                d = d.iloc[0:0]
-            else:
-                d = d[labels.astype(str) == str(vintage)]
+                continue
+            d = d[labels.astype(str) == str(vintage)]
+        if len(d):
+            formation = {**fr, "df": d}
+            formation_at = i
+            if id_col:
+                formation_ids = _member_ids(d, id_col)
+            break
+
+    periods: List[Dict[str, Any]] = []
+    data_quality: Dict[str, Any] = {}
+    if formation is not None and id_col:
+        # Duplicate identifiers within the formation cut are a data-quality
+        # finding, not something to silently de-duplicate away: the count and the
+        # id-set would then disagree, and every retention figure divides by one
+        # of them.
+        dup = int(len(formation["df"]) - len(formation_ids))
+        if dup:
+            data_quality["duplicate_formation_ids"] = dup
+
+    for i, fr in enumerate(scoped):
+        if formation is None or i < formation_at:
+            continue                       # periods BEFORE formation are not the pool
+        d = fr["df"]
+        if id_col:
+            # -- 3. only the frozen identifiers, never a re-filter ------------
+            d = d[d[id_col].astype(str).isin(formation_ids)]
+        else:
+            # Without an identifier this cannot be a static pool. Report the
+            # formation cut alone rather than a series that only looks like one.
+            d = d if i == formation_at else d.iloc[0:0]
+
+        surviving_ids = _member_ids(d, id_col) if id_col else set()
         metrics: Dict[str, Any] = {
             "funded_balance": _bal_sum(d),
             "loan_count": int(len(d)),
@@ -461,10 +543,25 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
             "avg_borrower_age": _simple_avg(d, "youngest_borrower_age"),
         }
         metrics.update(_nneg_metrics(d))
+        formation_balance = _bal_sum(formation["df"]) if formation is not None else None
+        formation_count = int(len(formation["df"])) if formation is not None else 0
+        exits = max(0, len(formation_ids) - len(surviving_ids)) if id_col else None
         periods.append({
             "period": _period_label(fr),
             "reporting_date": fr.get("reporting_date"),
+            "source_run": fr.get("run_id"),
+            "snapshot": fr.get("source"),
             "loanCount": int(len(d)),
+            "survivingLoanCount": int(len(d)),
+            "survivingLoanIds": sorted(surviving_ids) if id_col else None,
+            "survivingBalance": metrics["funded_balance"],
+            "exitsCount": exits,
+            "loanRetention": (round(len(surviving_ids) / len(formation_ids) * 100.0, 4)
+                              if id_col and formation_ids else None),
+            "balanceRetention": (round(metrics["funded_balance"] / formation_balance * 100.0, 4)
+                                 if formation_balance else None),
+            "seasoningPeriods": len(periods),
+            "monthsOnBook": _simple_avg(d, "months_on_book"),
             "metrics": metrics,
         })
 
@@ -474,26 +571,49 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
         reason = ("no loans match this cohort in any reporting period"
                   if vintage_filterable else
                   "origination vintage is not available on the funded tape")
+    elif not id_col:
+        reason = ("the funded tape carries no loan identifier, so cohort "
+                  "membership cannot be fixed at formation")
     metric_keys = ["funded_balance", "loan_count", "wa_ltv", "wa_interest_rate",
                    "avg_borrower_age"]
     if any("nneg_exposure" in p["metrics"] for p in periods):
         metric_keys += ["nneg_exposure", "nneg_headroom", "nneg_headroom_pct"]
+
+    counts = [p["loanCount"] for p in periods if p["loanCount"]]
+    if any(b > a for a, b in zip(counts, counts[1:])):
+        # Cannot happen with a frozen set; asserted here so a future regression
+        # surfaces in the contract rather than in a slide.
+        data_quality["membership_not_fixed"] = True
+
     return {
         "dataset": "cohort_progression",
         "portfolioId": client_id,
-        "available": available,
+        "available": available and bool(id_col),
         "reason": reason,
         "lens": lens_label,
         "vintage": vintage,
         "grain": grain,
+        # -- the versioned static-pool contract ------------------------------
+        "methodologyVersion": COHORT_METHODOLOGY_VERSION,
+        "membershipRule": "fixed_at_formation",
+        "cohortId": f"{lens_label}:{vintage}" if vintage else lens_label,
+        "loanIdColumn": id_col,
+        "formationDate": formation.get("reporting_date") if formation else None,
+        "formationPeriod": _period_label(formation) if formation else None,
+        "formationLoanIds": sorted(formation_ids) if id_col else None,
+        "formationLoanCount": len(formation_ids) if id_col else (
+            int(len(formation["df"])) if formation is not None else 0),
+        "formationBalance": _bal_sum(formation["df"]) if formation is not None else None,
+        "dataQuality": data_quality,
         "metricsAvailable": metric_keys,
         "periods": periods,
         "singlePeriod": len([p for p in periods if p["loanCount"]]) <= 1,
         "lineage": {
             "source": "governed funded reporting periods (static pool)",
             "metric": "cohort funded metrics per reporting period",
-            "note": ("Static-pool seasoning: the SAME cohort (source portfolio "
-                     "± origination vintage) tracked across reporting periods."),
+            "note": ("Static pool: the loan identifiers present at the formation "
+                     "cut, tracked forward. Membership is frozen at formation, so "
+                     "the surviving count can hold or fall but never rise."),
         },
     }
 

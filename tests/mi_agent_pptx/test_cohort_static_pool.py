@@ -58,16 +58,14 @@ def _progression(root, vintage="2020"):
 # The membership rule, proven on identifiers.
 # --------------------------------------------------------------------------- #
 
-def test_the_service_selects_members_by_vintage_not_by_a_frozen_id_set(tmp_path):
-    """THE root-cause test.
+def test_a_late_boarded_loan_does_not_enter_an_already_formed_pool(tmp_path):
+    """THE root-cause test, now asserting the fixed contract.
 
     Period 2 keeps both formation loans AND boards a third carrying a 2020
-    origination date. A pool frozen at formation reports 2 loans in both
-    periods. This service reports 3, because membership is a per-period filter
-    on origination vintage.
-
-    This is a statement about the governed service, not a complaint about it:
-    the deck's job is to notice and decline, never to re-derive membership.
+    origination date. Under the previous per-period re-filter the service
+    reported 3 — the late arrival joined its vintage. Membership is now frozen
+    at the formation cut, so it reports 2 in both periods and the newcomer is
+    excluded by identifier.
     """
     root = tmp_path / "root"
     _write(root, "mi_2026_05", "2026-05-31",
@@ -78,11 +76,16 @@ def test_the_service_selects_members_by_vintage_not_by_a_frozen_id_set(tmp_path)
             _loan("L2", 100_000.0, "2026-06-30", "2020-04-01"),
             _loan("L3", 100_000.0, "2026-06-30", "2020-09-01")])   # boarded late
 
-    counts = [p["loanCount"] for p in _progression(root)["periods"]]
-    assert counts == [2, 3], (
-        "the governed service no longer re-filters membership per period — if it "
-        "now freezes a loan-id set at formation, the deck's exclusion rule and "
-        "this test should both be revisited")
+    payload = _progression(root)
+    counts = [p["loanCount"] for p in payload["periods"]]
+    assert counts == [2, 2], "a late-boarded loan entered an already-formed pool"
+    assert payload["membershipRule"] == "fixed_at_formation"
+    assert payload["formationLoanIds"] == ["L1", "L2"]
+    assert payload["formationLoanCount"] == 2
+    # The newcomer is absent from every surviving set, by identifier.
+    for period in payload["periods"]:
+        assert "L3" not in period["survivingLoanIds"]
+        assert set(period["survivingLoanIds"]) <= set(payload["formationLoanIds"])
 
 
 def test_a_closed_pool_is_reported_as_a_closed_pool(tmp_path):
@@ -103,13 +106,20 @@ def test_a_closed_pool_is_reported_as_a_closed_pool(tmp_path):
     assert series.formation_count == 4 and series.surviving_count == 3
     assert series.exits == 1
     assert series.retention("loan_count") == pytest.approx(75.0)
+    # And the contract carries the identifiers, not just the counts.
+    payload = _progression(root)
+    assert payload["formationLoanIds"] == sorted(formation)
+    assert payload["periods"][-1]["survivingLoanIds"] == sorted(survivors)
+    assert payload["periods"][-1]["exitsCount"] == 1
+    assert payload["periods"][-1]["loanRetention"] == pytest.approx(75.0)
 
 
 # --------------------------------------------------------------------------- #
 # What the deck does about it.
 # --------------------------------------------------------------------------- #
 
-def test_a_cohort_that_gains_loans_is_never_plotted(tmp_path):
+def test_the_service_can_no_longer_produce_a_rising_cohort(tmp_path):
+    """The case the deck used to have to suppress now cannot arise upstream."""
     root = tmp_path / "root"
     _write(root, "mi_2026_05", "2026-05-31",
            [_loan("L1", 100_000.0, "2026-05-31", "2020-03-01")])
@@ -118,10 +128,9 @@ def test_a_cohort_that_gains_loans_is_never_plotted(tmp_path):
             _loan("L2", 100_000.0, "2026-06-30", "2020-09-01")])
 
     series = CO.adapt_progression(_progression(root), "2020")
-    assert series.violates_static_pool is True
-    assert CO.plottable([series]) == []
-    reasons = dict(CO.rejected([series]))
-    assert "not a fixed pool" in reasons["2020"]
+    assert series.violates_static_pool is False
+    assert [p.loan_count for p in series.live] == [1, 1]
+    assert CO.plottable([series]) == [series]
 
 
 def test_the_publication_gate_blocks_a_plotted_rising_cohort():
