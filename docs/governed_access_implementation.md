@@ -248,3 +248,29 @@ tenant coming from the grant.
    they now need a *provisioned* identity rather than any identity, which is
    narrower but not closed. Closing it is step 5b of the auth runbook (restrict
    inbound traffic to the Static Web App), and it remains outstanding.
+
+5. **Teams notification recipients are still authorised separately, and I did
+   not unify them.** Worth stating plainly because it is the one place the
+   "single mapping" claim needs qualifying.
+
+   Requirement 4 is met for the four channels named: React, the MI API, PPTX/deck
+   generation and Teams **deep links** all resolve identity through
+   `ExecutionContext`, and that context's tenant now comes from this directory.
+
+   But `trakt_notifications.recipients` (pre-existing, added with the Teams bot)
+   holds a per-recipient `portfolio_contexts` list with its own operator
+   approval step. It governs a different direction — whether Trakt may **push**
+   MI into a Teams chat — and it is deliberately *stricter*: there, an empty list
+   means *nothing* is authorised, whereas an empty list in the access directory
+   means *unrestricted*, because it is a restriction layered on top of being
+   listed at all.
+
+   Those two defaults are opposite, which is correct for their directions
+   (proactively sending data is a higher bar than answering someone who asked)
+   but is exactly the sort of thing that drifts. Collapsing them would change
+   push semantics and require migrating existing recipient records, so it is out
+   of scope for a narrow change. **Recommendation:** treat the directory as the
+   source of *who exists and for which tenant*, and keep the recipient store as
+   the *delivery opt-in*, with a follow-up that makes a recipient record
+   unusable once its identity is absent or disabled here. `test_governed_access.py`
+   asserts the bot path has not been silently re-plumbed in the meantime.

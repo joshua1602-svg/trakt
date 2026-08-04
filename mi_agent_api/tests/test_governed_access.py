@@ -503,6 +503,23 @@ class TestCrossChannel:
         """The guard must keep deferring to copilot_auth for /v1/copilot."""
         assert auth_mod.COPILOT_PATH_PREFIX == "/v1/copilot"
 
+    def test_the_teams_bot_prefix_still_bypasses_the_header_guard(self, provisioned):
+        """Bot Framework activities authenticate with a channel-issued token,
+        not the injected header, so they must keep deferring to teams_bot —
+        the same reasoning as Copilot. The directory governs what a person may
+        READ; outbound notification delivery is authorised separately by
+        trakt_notifications.recipients (see the implementation report)."""
+        assert auth_mod.TEAMS_BOT_PATH_PREFIX == "/v1/teams"
+
+        import inspect
+
+        from mi_agent_api import teams_bot
+
+        source = inspect.getsource(teams_bot)
+        assert "resolve_grant" not in source, (
+            "the bot registration path must not be re-plumbed through the "
+            "read-access directory without deciding what that means for push")
+
 
 # =========================================================================== #
 # 7. The UI quotes these constants — they must not drift
