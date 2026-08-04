@@ -243,14 +243,47 @@ class TestPortfolioContexts:
         r = client.get("/mi/snapshots", headers=_hdr("narrow@client.example"))
         assert r.status_code == 200
 
+    def test_a_body_borne_lens_is_gated_too(self, provisioned):
+        """``/mi/query`` takes the same scope as ``sourcePortfolioLens`` in the
+        POST body, where the global guard cannot see it. Missing that would let
+        a restricted account simply ask the question instead."""
+        r = client.post(
+            "/mi/query",
+            json={"question": "what is the book worth",
+                  "sourcePortfolioLens": "acquired"},
+            headers=_hdr("narrow@client.example"))
+        assert r.status_code == 403
+        assert r.json()["errorCode"] == ErrorCode.PERMISSION_DENIED
+
+    def test_the_body_borne_lens_is_allowed_when_entitled(self, provisioned):
+        r = client.post(
+            "/mi/query",
+            json={"question": "what is the book worth",
+                  "sourcePortfolioLens": "direct"},
+            headers=_hdr("narrow@client.example"))
+        assert r.status_code != 403
+
+    def test_deck_generation_cannot_export_an_unauthorised_context(self, provisioned):
+        """An investor pack is the artefact a scope restriction most needs to
+        bound: generating one over a context the account cannot view would
+        export precisely what it is not allowed to read."""
+        r = client.post("/mi/decks/generate",
+                        json={"portfolioContext": "acquired"},
+                        headers=_hdr("narrow@client.example"))
+        assert r.status_code == 403
+        assert r.json()["errorCode"] == ErrorCode.PERMISSION_DENIED
+
     def test_every_context_parameter_the_routes_accept_is_gated(self):
         """The guard checks a fixed list of query parameters. If a route ever
         introduces a third alias, this fails rather than letting the new name
         escape the check.
+
+        Body fields are checked separately because they cannot be gated in the
+        guard at all — reading the body there would consume the stream. Any new
+        one needs its own call to ``access.authorise_context`` in the handler,
+        and this test names the ones that have it.
         """
         import inspect
-
-        from mi_agent_api import app as app_mod
 
         declared = set()
         for route in app.routes:
@@ -270,6 +303,31 @@ class TestPortfolioContexts:
         assert not missed, (
             f"context-selecting parameters not gated by auth_guard: {missed}. "
             f"Add them to auth.CONTEXT_QUERY_PARAMS.")
+
+    def test_every_context_field_on_a_request_model_is_gated(self):
+        """The body-borne equivalent of the test above."""
+        from mi_agent_api import app as app_mod
+
+        #: Body fields that select a governed context, each already passed to
+        #: ``access.authorise_context`` by its handler.
+        gated_fields = {"sourcePortfolioLens", "portfolioContext"}
+
+        declared = set()
+        for name in dir(app_mod):
+            model = getattr(app_mod, name)
+            fields = getattr(model, "model_fields", None)
+            if not isinstance(fields, dict):
+                continue
+            for field in fields:
+                low = field.lower()
+                if "portfoliocontext" in low or low.endswith("lens"):
+                    declared.add(field)
+
+        missed = declared - gated_fields
+        assert not missed, (
+            f"context-selecting request-model fields with no authorisation "
+            f"check: {missed}. Call access.authorise_context on them in the "
+            f"handler and add them here.")
 
 
 # =========================================================================== #

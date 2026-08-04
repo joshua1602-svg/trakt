@@ -1418,6 +1418,13 @@ def generate_deck(req: DeckGenerateRequest, request: Request):
     artefact produced the same way and subject to the same publication gates.
     """
     context = _execution_context(request, channel=CHANNEL_REACT)
+    # Body-borne context, so the global guard cannot see it. An investor pack is
+    # exactly the artefact a scope restriction is meant to bound — generating one
+    # over a context the account cannot view would export what it cannot read.
+    grant = getattr(request.state, "access_grant", None)
+    if grant is not None:
+        trakt_access.authorise_context(grant, req.portfolioContext)
+
     return _generation_response(deck_generation_mod.request_generation(
         context, portfolio_id=req.portfolioId,
         portfolio_context=req.portfolioContext, period=req.period,
@@ -1758,6 +1765,14 @@ def query(req: QueryRequest, request: Request) -> Any:
     ``governance`` block; no pre-existing field changed.
     """
     context = _execution_context(request, channel=CHANNEL_REACT)
+    # ``sourcePortfolioLens`` is the same governed scope the GET routes take as
+    # ``portfolioContext``/``lens``, but it arrives in the BODY, where the global
+    # guard cannot see it. Gate it here or a context-restricted account could ask
+    # the question it is not entitled to ask.
+    grant = getattr(request.state, "access_grant", None)
+    if grant is not None:
+        trakt_access.authorise_context(grant, req.sourcePortfolioLens)
+
     result = mi_service.execute_governed_mi_query(
         mi_service.MiQueryRequest(
             question=req.question,
