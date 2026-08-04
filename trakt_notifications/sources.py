@@ -164,8 +164,15 @@ def _resolve_pipeline_side(inputs: GovernedInputs, pipeline_root: Optional[str],
         output_root, inputs.portfolio_id, funded_run_id, scope))
     inputs.concentration = concentration
 
+    # ``lag_weeks`` is passed exactly as the dashboard passes it. Omitting it
+    # would silently compute the conversion rate UNLAGGED — a different, larger
+    # number than the workspace and the Weekly Brief publish for the same week,
+    # which is precisely the two-channels-disagree failure this design exists
+    # to prevent.
     funnel = _safe(inputs, CAP_FUNNEL, lambda: evolution_mod.pipeline_funnel_evolution(
-        pipeline_root, inputs.portfolio_id, None, historical_model=history))
+        pipeline_root, inputs.portfolio_id, None,
+        lag_weeks=datasets_mod._kfi_lag_weeks_from_model(history),
+        historical_model=history))
     inputs.funnel = funnel
 
     evo = _safe(inputs, CAP_PIPELINE_EVOLUTION,
