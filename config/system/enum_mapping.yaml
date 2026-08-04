@@ -126,35 +126,38 @@ ESMA_Annex2:
   # You map to your chosen ESMA collateral classification
   # ============================================================
   collateral_type:
-    HOUSE: "R1"
-    DETACHED: "R1"
-    SEMI_DETACHED: "R1"
-    BUNGALOW: "R1"
+    # CORRECTED against the auth.099.001.04 XSD, whose CollTp enumeration is
+    # {INDV, ITEQ, MCHT, CARX, AERO, CBLD, CMTR, ENEQ, GUAR, IBLD, INDE, MDEQ,
+    #  MIXD, NACM, NALV, OFEQ, OTHR, OTFA, OTGI, OTRE, OTHV, OTHE, RALV, RBLD,
+    #  SECU}. The previous values (R1/R2/C1/C2) are not members of that set, so
+    # every Annex 2 submission carrying a mapped collateral type failed XSD
+    # validation at Gate 5.
+    HOUSE: RBLD
+    DETACHED: RBLD
+    SEMI_DETACHED: RBLD
+    BUNGALOW: RBLD
+    FLAT: RBLD
+    APARTMENT: RBLD
+    MAISONETTE: RBLD
+    RBLD: RBLD
+    MIXED_USE: MIXD
+    COMMERCIAL_RESIDENTIAL: MIXD
+    MIXD: MIXD
+    OFFICE: CBLD
+    RETAIL: CBLD
+    CBLD: CBLD
+    WAREHOUSE: IBLD
+    INDUSTRIAL: IBLD
+    IBLD: IBLD
+    LAND: OTRE
+    AGRICULTURAL: OTRE
+    DEVELOPMENT: OTRE
+    OTRE: OTRE
+    MANUAL: OTHR
+    OTHER: OTHR
+    UNKNOWN: OTHR
+    OTHR: OTHR
 
-    FLAT: "R2"
-    APARTMENT: "R2"
-    MAISONETTE: "R2"
-
-    MIXED_USE: "C1"
-    COMMERCIAL_RESIDENTIAL: "C1"
-
-    OFFICE: "C2"
-    RETAIL: "C2"
-    WAREHOUSE: "C2"
-    INDUSTRIAL: "C2"
-
-    LAND: "OTHR"
-    AGRICULTURAL: "OTHR"
-    DEVELOPMENT: "OTHR"
-    MANUAL: "OTHR"
-    OTHER: "OTHR"
-    UNKNOWN: "OTHR"
-
-
-  # ============================================================
-  # PROPERTY TYPE (RREC9)
-  # RHOS, RFLT, RBGL, PCMM, BIZZ, OTHR
-  # ============================================================
   property_type:
     DETACHED HOUSE: "RHOS"
     DETACHED: "RHOS"

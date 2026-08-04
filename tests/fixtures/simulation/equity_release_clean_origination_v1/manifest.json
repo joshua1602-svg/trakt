@@ -1,0 +1,49 @@
+{
+  "acquisition_date": null,
+  "asset_class": "equity_release",
+  "asset_subtype": "lump_sum",
+  "case_id": "equity_release_clean_origination_v1",
+  "client_id": "sim_equity_release",
+  "currency": "GBP",
+  "dialects": [
+    "clean_csv",
+    "lender_excel",
+    "european_locale_csv"
+  ],
+  "economic_intent": [
+    "new_origination",
+    "clean_performing"
+  ],
+  "expectation": "success",
+  "expected_failure_class": null,
+  "expected_validation_warnings": [],
+  "jurisdiction": "GB",
+  "months": 6,
+  "opening_loan_count": 120,
+  "portfolio_id": "direct_001",
+  "portfolio_type": "equity_release",
+  "profiles": [
+    "smoke",
+    "standard"
+  ],
+  "purpose": "Baseline: a clean, newly originated roll-up book. Proves the whole pathway end to end and gives every other equity-release case a green risk baseline to depart from.",
+  "regime": {
+    "applicability": "applicable",
+    "artefact_status": "supported",
+    "reason": "UK residential-secured exposures reported at exposure level.",
+    "regime_id": "ESMA_Annex2"
+  },
+  "risk_intent": {
+    "intended_status": "green",
+    "targeted_limits": []
+  },
+  "run_key": "equity_release_clean_origination_v1|equity_release|seed=41101|v1",
+  "scale": "small",
+  "schema_evolution": [],
+  "seed": 41101,
+  "seller_name": null,
+  "simulation_version": 1,
+  "source_portfolio_type": "direct",
+  "spv_id": "SPV_ER_1",
+  "start_reporting_date": "2025-01-31"
+}

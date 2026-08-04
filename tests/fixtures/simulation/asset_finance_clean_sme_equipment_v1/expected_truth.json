@@ -1,0 +1,612 @@
+{
+  "asset_class": "asset_finance",
+  "asset_subtype": "equipment_finance",
+  "case_id": "asset_finance_clean_sme_equipment_v1",
+  "client_id": "sim_asset_finance",
+  "currency": "GBP",
+  "expected_failure_class": null,
+  "expected_outcome": "success",
+  "expected_regime": {
+    "applicability": "applicable",
+    "artefact_status": "awaiting_configuration",
+    "reason": "Leasing exposures. The projection is supported; no XML delivery template is committed for Annex 8, so the artefact awaits deployment configuration.",
+    "regime_id": "ESMA_Annex8"
+  },
+  "expected_risk_status": "green",
+  "expected_targeted_limits": [],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 7932823.75,
+    "closing_loan_count": 139,
+    "direction": "increase",
+    "month_on_month_direction": [
+      "increase",
+      "decrease",
+      "increase",
+      "increase",
+      "increase",
+      "increase"
+    ],
+    "opening_balance": 6691109.28,
+    "opening_loan_count": 120,
+    "total_movement": 1241714.47
+  },
+  "periods": [
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_with_balloon": 0,
+        "balloon_share_of_balance": 0.0,
+        "total_balloon_amount": 0.0,
+        "total_current_residual_value": 902401.79
+      },
+      "closing_balance": 7125744.17,
+      "cohort_balances": {
+        "direct": 7125744.17
+      },
+      "exited_loan_count": 1,
+      "funded_additions": 675764.35,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 208532.97,
+        "group": "DIRECT_001-OBL-000021",
+        "share_percent": 2.9265,
+        "total": 7125744.17
+      },
+      "largest_concentrations": {
+        "collateral_type": {
+          "balance": 4467092.11,
+          "group": "Industrial",
+          "share_percent": 62.6895,
+          "total": 7125744.17
+        },
+        "contract_type": {
+          "balance": 2517868.89,
+          "group": "Hire Purchase",
+          "share_percent": 35.3348,
+          "total": 7125744.17
+        },
+        "industry": {
+          "balance": 1701675.47,
+          "group": "A - Agriculture",
+          "share_percent": 23.8807,
+          "total": 7125744.17
+        },
+        "manufacturer": {
+          "balance": 1060802.29,
+          "group": "GE HealthCare",
+          "share_percent": 14.8869,
+          "total": 7125744.17
+        },
+        "region": {
+          "balance": 1385427.45,
+          "group": "North East",
+          "share_percent": 19.4426,
+          "total": 7125744.17
+        },
+        "vendor": {
+          "balance": 1944196.47,
+          "group": "Northgate Plant Sales",
+          "share_percent": 27.2841,
+          "total": 7125744.17
+        }
+      },
+      "loan_count": 120,
+      "movement_delta": 434634.89,
+      "movement_reconciles": true,
+      "opening_balance": 6691109.28,
+      "period_index": 0,
+      "period_movement": 434634.89,
+      "principal_amortisation": 241129.46,
+      "recoveries": 0.0,
+      "redemptions": 0.0,
+      "repayments": 0.0,
+      "reported_row_count": 120,
+      "reporting_date": "2025-01-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 0.0,
+      "status_balances": {
+        "performing": 7125744.17
+      },
+      "status_counts": {
+        "performing": 120,
+        "redeemed": 1
+      },
+      "total_additions": 675764.35,
+      "total_reductions": 241129.46,
+      "vintage_balances": {
+        "2021": 263284.69,
+        "2022": 1519433.93,
+        "2023": 2426658.55,
+        "2024": 2240602.65,
+        "2025": 675764.35
+      },
+      "weighted_average_current_ltv": 74.019406,
+      "weighted_average_interest_rate": 8.205943,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_with_balloon": 0,
+        "balloon_share_of_balance": 0.0,
+        "total_balloon_amount": 0.0,
+        "total_current_residual_value": 927777.9
+      },
+      "closing_balance": 7038784.14,
+      "cohort_balances": {
+        "direct": 7038784.14
+      },
+      "exited_loan_count": 4,
+      "funded_additions": 273234.12,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 204277.2,
+        "group": "DIRECT_001-OBL-000021",
+        "share_percent": 2.9022,
+        "total": 7038784.14
+      },
+      "largest_concentrations": {
+        "collateral_type": {
+          "balance": 4409598.32,
+          "group": "Industrial",
+          "share_percent": 62.6472,
+          "total": 7038784.14
+        },
+        "contract_type": {
+          "balance": 2452863.56,
+          "group": "Hire Purchase",
+          "share_percent": 34.8478,
+          "total": 7038784.14
+        },
+        "industry": {
+          "balance": 1691968.18,
+          "group": "A - Agriculture",
+          "share_percent": 24.0378,
+          "total": 7038784.14
+        },
+        "manufacturer": {
+          "balance": 1018159.84,
+          "group": "GE HealthCare",
+          "share_percent": 14.465,
+          "total": 7038784.14
+        },
+        "region": {
+          "balance": 1346966.48,
+          "group": "North East",
+          "share_percent": 19.1364,
+          "total": 7038784.14
+        },
+        "vendor": {
+          "balance": 1902205.27,
+          "group": "Northgate Plant Sales",
+          "share_percent": 27.0246,
+          "total": 7038784.14
+        }
+      },
+      "loan_count": 122,
+      "movement_delta": -86960.03,
+      "movement_reconciles": true,
+      "opening_balance": 7125744.17,
+      "period_index": 1,
+      "period_movement": -86960.03,
+      "principal_amortisation": 252820.21,
+      "recoveries": 0.0,
+      "redemptions": 107373.94,
+      "repayments": 0.0,
+      "reported_row_count": 122,
+      "reporting_date": "2025-02-28",
+      "restatement": 0.0,
+      "rolled_up_interest": 0.0,
+      "status_balances": {
+        "performing": 7038784.14
+      },
+      "status_counts": {
+        "performing": 122,
+        "redeemed": 4
+      },
+      "total_additions": 273234.12,
+      "total_reductions": 360194.15,
+      "vintage_balances": {
+        "2021": 241569.67,
+        "2022": 1445216.92,
+        "2023": 2342296.78,
+        "2024": 2078897.58,
+        "2025": 930803.19
+      },
+      "weighted_average_current_ltv": 73.032932,
+      "weighted_average_interest_rate": 8.179553,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_with_balloon": 0,
+        "balloon_share_of_balance": 0.0,
+        "total_balloon_amount": 0.0,
+        "total_current_residual_value": 940545.95
+      },
+      "closing_balance": 7328272.65,
+      "cohort_balances": {
+        "direct": 7328272.65
+      },
+      "exited_loan_count": 3,
+      "funded_additions": 626988.71,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 200021.43,
+        "group": "DIRECT_001-OBL-000021",
+        "share_percent": 2.7294,
+        "total": 7328272.65
+      },
+      "largest_concentrations": {
+        "collateral_type": {
+          "balance": 4704424.37,
+          "group": "Industrial",
+          "share_percent": 64.1955,
+          "total": 7328272.65
+        },
+        "contract_type": {
+          "balance": 2731647.37,
+          "group": "Hire Purchase",
+          "share_percent": 37.2755,
+          "total": 7328272.65
+        },
+        "industry": {
+          "balance": 1853724.83,
+          "group": "A - Agriculture",
+          "share_percent": 25.2955,
+          "total": 7328272.65
+        },
+        "manufacturer": {
+          "balance": 985401.32,
+          "group": "GE HealthCare",
+          "share_percent": 13.4466,
+          "total": 7328272.65
+        },
+        "region": {
+          "balance": 1399007.03,
+          "group": "North East",
+          "share_percent": 19.0905,
+          "total": 7328272.65
+        },
+        "vendor": {
+          "balance": 1995968.95,
+          "group": "Northgate Plant Sales",
+          "share_percent": 27.2366,
+          "total": 7328272.65
+        }
+      },
+      "loan_count": 125,
+      "movement_delta": 289488.51,
+      "movement_reconciles": true,
+      "opening_balance": 7038784.14,
+      "period_index": 2,
+      "period_movement": 289488.51,
+      "principal_amortisation": 244498.64,
+      "recoveries": 0.0,
+      "redemptions": 93001.56,
+      "repayments": 0.0,
+      "reported_row_count": 125,
+      "reporting_date": "2025-03-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 0.0,
+      "status_balances": {
+        "performing": 7328272.65
+      },
+      "status_counts": {
+        "performing": 125,
+        "redeemed": 3
+      },
+      "total_additions": 626988.71,
+      "total_reductions": 337500.2,
+      "vintage_balances": {
+        "2021": 222606.58,
+        "2022": 1372396.37,
+        "2023": 2173420.92,
+        "2024": 2026417.63,
+        "2025": 1533431.15
+      },
+      "weighted_average_current_ltv": 73.430316,
+      "weighted_average_interest_rate": 8.133587,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_with_balloon": 0,
+        "balloon_share_of_balance": 0.0,
+        "total_balloon_amount": 0.0,
+        "total_current_residual_value": 986968.54
+      },
+      "closing_balance": 7504453.12,
+      "cohort_balances": {
+        "direct": 7504453.12
+      },
+      "exited_loan_count": 2,
+      "funded_additions": 432486.68,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 195765.66,
+        "group": "DIRECT_001-OBL-000021",
+        "share_percent": 2.6087,
+        "total": 7504453.12
+      },
+      "largest_concentrations": {
+        "collateral_type": {
+          "balance": 4946476.2,
+          "group": "Industrial",
+          "share_percent": 65.9139,
+          "total": 7504453.12
+        },
+        "contract_type": {
+          "balance": 2692799.89,
+          "group": "Hire Purchase",
+          "share_percent": 35.8827,
+          "total": 7504453.12
+        },
+        "industry": {
+          "balance": 1879963.13,
+          "group": "A - Agriculture",
+          "share_percent": 25.0513,
+          "total": 7504453.12
+        },
+        "manufacturer": {
+          "balance": 967628.28,
+          "group": "Massey Ferguson",
+          "share_percent": 12.8941,
+          "total": 7504453.12
+        },
+        "region": {
+          "balance": 1359818.96,
+          "group": "North East",
+          "share_percent": 18.1202,
+          "total": 7504453.12
+        },
+        "vendor": {
+          "balance": 1981746.08,
+          "group": "Northgate Plant Sales",
+          "share_percent": 26.4076,
+          "total": 7504453.12
+        }
+      },
+      "loan_count": 128,
+      "movement_delta": 176180.47,
+      "movement_reconciles": true,
+      "opening_balance": 7328272.65,
+      "period_index": 3,
+      "period_movement": 176180.47,
+      "principal_amortisation": 256306.21,
+      "recoveries": 0.0,
+      "redemptions": 0.0,
+      "repayments": 0.0,
+      "reported_row_count": 128,
+      "reporting_date": "2025-04-30",
+      "restatement": 0.0,
+      "rolled_up_interest": 0.0,
+      "status_balances": {
+        "performing": 7504453.12
+      },
+      "status_counts": {
+        "performing": 128,
+        "redeemed": 2
+      },
+      "total_additions": 432486.68,
+      "total_reductions": 256306.21,
+      "vintage_balances": {
+        "2021": 203973.83,
+        "2022": 1308593.85,
+        "2023": 2091024.6,
+        "2024": 1973937.68,
+        "2025": 1926923.16
+      },
+      "weighted_average_current_ltv": 72.868314,
+      "weighted_average_interest_rate": 8.11249,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_with_balloon": 0,
+        "balloon_share_of_balance": 0.0,
+        "total_balloon_amount": 0.0,
+        "total_current_residual_value": 1025771.72
+      },
+      "closing_balance": 7678399.29,
+      "cohort_balances": {
+        "direct": 7678399.29
+      },
+      "exited_loan_count": 1,
+      "funded_additions": 433280.14,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 191509.89,
+        "group": "DIRECT_001-OBL-000021",
+        "share_percent": 2.4941,
+        "total": 7678399.29
+      },
+      "largest_concentrations": {
+        "collateral_type": {
+          "balance": 5173051.03,
+          "group": "Industrial",
+          "share_percent": 67.3715,
+          "total": 7678399.29
+        },
+        "contract_type": {
+          "balance": 2735447.67,
+          "group": "Hire Purchase",
+          "share_percent": 35.6252,
+          "total": 7678399.29
+        },
+        "industry": {
+          "balance": 1962516.09,
+          "group": "A - Agriculture",
+          "share_percent": 25.5589,
+          "total": 7678399.29
+        },
+        "manufacturer": {
+          "balance": 1029693.0,
+          "group": "Massey Ferguson",
+          "share_percent": 13.4103,
+          "total": 7678399.29
+        },
+        "region": {
+          "balance": 1472731.14,
+          "group": "North East",
+          "share_percent": 19.1802,
+          "total": 7678399.29
+        },
+        "vendor": {
+          "balance": 1914866.74,
+          "group": "Northgate Plant Sales",
+          "share_percent": 24.9384,
+          "total": 7678399.29
+        }
+      },
+      "loan_count": 133,
+      "movement_delta": 173946.17,
+      "movement_reconciles": true,
+      "opening_balance": 7504453.12,
+      "period_index": 4,
+      "period_movement": 173946.17,
+      "principal_amortisation": 259333.97,
+      "recoveries": 0.0,
+      "redemptions": 0.0,
+      "repayments": 0.0,
+      "reported_row_count": 133,
+      "reporting_date": "2025-05-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 0.0,
+      "status_balances": {
+        "performing": 7678399.29
+      },
+      "status_counts": {
+        "performing": 133,
+        "redeemed": 1
+      },
+      "total_additions": 433280.14,
+      "total_reductions": 259333.97,
+      "vintage_balances": {
+        "2021": 187881.14,
+        "2022": 1248762.55,
+        "2023": 2008628.28,
+        "2024": 1921457.73,
+        "2025": 2311669.59
+      },
+      "weighted_average_current_ltv": 72.668776,
+      "weighted_average_interest_rate": 8.117252,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_with_balloon": 0,
+        "balloon_share_of_balance": 0.0,
+        "total_balloon_amount": 0.0,
+        "total_current_residual_value": 1032617.28
+      },
+      "closing_balance": 7932823.75,
+      "cohort_balances": {
+        "direct": 7932823.75
+      },
+      "exited_loan_count": 0,
+      "funded_additions": 519552.45,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 187254.12,
+        "group": "DIRECT_001-OBL-000021",
+        "share_percent": 2.3605,
+        "total": 7932823.75
+      },
+      "largest_concentrations": {
+        "collateral_type": {
+          "balance": 5164265.13,
+          "group": "Industrial",
+          "share_percent": 65.1,
+          "total": 7932823.75
+        },
+        "contract_type": {
+          "balance": 3083499.57,
+          "group": "Hire Purchase",
+          "share_percent": 38.8701,
+          "total": 7932823.75
+        },
+        "industry": {
+          "balance": 1900977.77,
+          "group": "A - Agriculture",
+          "share_percent": 23.9634,
+          "total": 7932823.75
+        },
+        "manufacturer": {
+          "balance": 1048846.61,
+          "group": "Massey Ferguson",
+          "share_percent": 13.2216,
+          "total": 7932823.75
+        },
+        "region": {
+          "balance": 1507154.43,
+          "group": "North East",
+          "share_percent": 18.999,
+          "total": 7932823.75
+        },
+        "vendor": {
+          "balance": 1847987.4,
+          "group": "Northgate Plant Sales",
+          "share_percent": 23.2955,
+          "total": 7932823.75
+        }
+      },
+      "loan_count": 139,
+      "movement_delta": 254424.46,
+      "movement_reconciles": true,
+      "opening_balance": 7678399.29,
+      "period_index": 5,
+      "period_movement": 254424.46,
+      "principal_amortisation": 265127.99,
+      "recoveries": 0.0,
+      "redemptions": 0.0,
+      "repayments": 0.0,
+      "reported_row_count": 139,
+      "reporting_date": "2025-06-30",
+      "restatement": 0.0,
+      "rolled_up_interest": 0.0,
+      "status_balances": {
+        "performing": 7932823.75
+      },
+      "status_counts": {
+        "performing": 139
+      },
+      "total_additions": 519552.45,
+      "total_reductions": 265127.99,
+      "vintage_balances": {
+        "2021": 175698.5,
+        "2022": 1188931.25,
+        "2023": 1926231.96,
+        "2024": 1868977.78,
+        "2025": 2772984.26
+      },
+      "weighted_average_current_ltv": 72.101354,
+      "weighted_average_interest_rate": 8.132855,
+      "write_offs": 0.0
+    }
+  ],
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41301,
+  "simulation_version": 1,
+  "spv_id": "SPV_AF_1",
+  "truth_version": 1
+}

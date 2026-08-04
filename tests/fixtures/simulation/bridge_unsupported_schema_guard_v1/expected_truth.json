@@ -1,0 +1,545 @@
+{
+  "asset_class": "bridge",
+  "asset_subtype": "residential_bridge",
+  "case_id": "bridge_unsupported_schema_guard_v1",
+  "client_id": "sim_bridge",
+  "currency": "GBP",
+  "expected_failure_class": "unsupported_source_schema",
+  "expected_outcome": "failure",
+  "expected_regime": {
+    "applicability": "not_applicable",
+    "artefact_status": "not_applicable",
+    "reason": "Guard case: the run never reaches a regime.",
+    "regime_id": null
+  },
+  "expected_risk_status": "green",
+  "expected_targeted_limits": [],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 33994356.24,
+    "closing_loan_count": 57,
+    "direction": "decrease",
+    "month_on_month_direction": [
+      "decrease",
+      "increase",
+      "decrease",
+      "decrease",
+      "decrease",
+      "decrease"
+    ],
+    "opening_balance": 39436656.52,
+    "opening_loan_count": 60,
+    "total_movement": -5442300.28
+  },
+  "periods": [
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_maturing_within_90_days": 2745528.78,
+        "extended_balance": 1491078.75,
+        "extended_share_percent": 4.0505,
+        "second_charge_balance": 0,
+        "share_maturing_within_90_days": 7.4583
+      },
+      "closing_balance": 36811916.71,
+      "cohort_balances": {
+        "direct": 36811916.71
+      },
+      "exited_loan_count": 5,
+      "funded_additions": 2166018.71,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 1794723.69,
+        "group": "DIRECT_001-OBL-000042",
+        "share_percent": 4.8754,
+        "total": 36811916.71
+      },
+      "largest_concentrations": {
+        "charge_type": {
+          "balance": 36811916.71,
+          "group": "First Charge",
+          "share_percent": 100.0,
+          "total": 36811916.71
+        },
+        "collateral_type": {
+          "balance": 22872340.59,
+          "group": "House",
+          "share_percent": 62.133,
+          "total": 36811916.71
+        },
+        "exit_route": {
+          "balance": 11435297.64,
+          "group": "Sale of Security",
+          "share_percent": 31.0641,
+          "total": 36811916.71
+        },
+        "region": {
+          "balance": 6756499.89,
+          "group": "London",
+          "share_percent": 18.3541,
+          "total": 36811916.71
+        }
+      },
+      "loan_count": 60,
+      "movement_delta": -2624739.81,
+      "movement_reconciles": true,
+      "opening_balance": 39436656.52,
+      "period_index": 0,
+      "period_movement": -2624739.81,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 5012776.86,
+      "repayments": 0.0,
+      "reported_row_count": 60,
+      "reporting_date": "2025-01-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 222018.34,
+      "status_balances": {
+        "arrears": 583069.15,
+        "performing": 36228847.56
+      },
+      "status_counts": {
+        "arrears": 1,
+        "performing": 59,
+        "redeemed": 5
+      },
+      "total_additions": 2166018.71,
+      "total_reductions": 5012776.86,
+      "vintage_balances": {
+        "2023": 1145793.67,
+        "2024": 33500104.33,
+        "2025": 2166018.71
+      },
+      "weighted_average_current_ltv": 65.083118,
+      "weighted_average_interest_rate": 10.806287,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_maturing_within_90_days": 1569238.49,
+        "extended_balance": 1909261.13,
+        "extended_share_percent": 5.0351,
+        "second_charge_balance": 0,
+        "share_maturing_within_90_days": 4.1384
+      },
+      "closing_balance": 37918849.77,
+      "cohort_balances": {
+        "direct": 37918849.77
+      },
+      "exited_loan_count": 3,
+      "funded_additions": 3736532.65,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 1794723.69,
+        "group": "DIRECT_001-OBL-000042",
+        "share_percent": 4.7331,
+        "total": 37918849.77
+      },
+      "largest_concentrations": {
+        "charge_type": {
+          "balance": 37918849.77,
+          "group": "First Charge",
+          "share_percent": 100.0,
+          "total": 37918849.77
+        },
+        "collateral_type": {
+          "balance": 22792735.85,
+          "group": "House",
+          "share_percent": 60.1092,
+          "total": 37918849.77
+        },
+        "exit_route": {
+          "balance": 10431341.12,
+          "group": "Sale of Security",
+          "share_percent": 27.5096,
+          "total": 37918849.77
+        },
+        "region": {
+          "balance": 6796176.58,
+          "group": "London",
+          "share_percent": 17.923,
+          "total": 37918849.77
+        }
+      },
+      "loan_count": 62,
+      "movement_delta": 1106933.06,
+      "movement_reconciles": true,
+      "opening_balance": 36811916.71,
+      "period_index": 1,
+      "period_movement": 1106933.06,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 2839313.51,
+      "repayments": 0.0,
+      "reported_row_count": 62,
+      "reporting_date": "2025-02-28",
+      "restatement": 0.0,
+      "rolled_up_interest": 209713.92,
+      "status_balances": {
+        "arrears": 588012.12,
+        "performing": 37330837.65
+      },
+      "status_counts": {
+        "arrears": 1,
+        "performing": 61,
+        "redeemed": 3
+      },
+      "total_additions": 3736532.65,
+      "total_reductions": 2839313.51,
+      "vintage_balances": {
+        "2023": 1155590.69,
+        "2024": 30843468.76,
+        "2025": 5919790.32
+      },
+      "weighted_average_current_ltv": 64.172707,
+      "weighted_average_interest_rate": 10.748637,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_maturing_within_90_days": 4042694.37,
+        "extended_balance": 2862891.38,
+        "extended_share_percent": 7.6506,
+        "second_charge_balance": 0,
+        "share_maturing_within_90_days": 10.8035
+      },
+      "closing_balance": 37420269.57,
+      "cohort_balances": {
+        "direct": 37420269.57
+      },
+      "exited_loan_count": 6,
+      "funded_additions": 2783046.89,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 1794723.69,
+        "group": "DIRECT_001-OBL-000042",
+        "share_percent": 4.7961,
+        "total": 37420269.57
+      },
+      "largest_concentrations": {
+        "charge_type": {
+          "balance": 37420269.57,
+          "group": "First Charge",
+          "share_percent": 100.0,
+          "total": 37420269.57
+        },
+        "collateral_type": {
+          "balance": 20983531.66,
+          "group": "House",
+          "share_percent": 56.0753,
+          "total": 37420269.57
+        },
+        "exit_route": {
+          "balance": 11996042.9,
+          "group": "Development Exit",
+          "share_percent": 32.0576,
+          "total": 37420269.57
+        },
+        "region": {
+          "balance": 6291421.32,
+          "group": "London",
+          "share_percent": 16.8129,
+          "total": 37420269.57
+        }
+      },
+      "loan_count": 61,
+      "movement_delta": -498580.2,
+      "movement_reconciles": true,
+      "opening_balance": 37918849.77,
+      "period_index": 2,
+      "period_movement": -498580.2,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 3489942.75,
+      "repayments": 0.0,
+      "reported_row_count": 61,
+      "reporting_date": "2025-03-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 208315.66,
+      "status_balances": {
+        "arrears": 592996.99,
+        "performing": 36827272.58
+      },
+      "status_counts": {
+        "arrears": 1,
+        "performing": 60,
+        "redeemed": 6
+      },
+      "total_additions": 2783046.89,
+      "total_reductions": 3489942.75,
+      "vintage_balances": {
+        "2023": 719316.07,
+        "2024": 27971661.19,
+        "2025": 8729292.31
+      },
+      "weighted_average_current_ltv": 64.445521,
+      "weighted_average_interest_rate": 10.853398,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_maturing_within_90_days": 3258570.77,
+        "extended_balance": 7016558.93,
+        "extended_share_percent": 19.7223,
+        "second_charge_balance": 0,
+        "share_maturing_within_90_days": 9.1592
+      },
+      "closing_balance": 35576865.18,
+      "cohort_balances": {
+        "direct": 35576865.18
+      },
+      "exited_loan_count": 6,
+      "funded_additions": 3204633.17,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 1794723.69,
+        "group": "DIRECT_001-OBL-000042",
+        "share_percent": 5.0446,
+        "total": 35576865.18
+      },
+      "largest_concentrations": {
+        "charge_type": {
+          "balance": 35576865.18,
+          "group": "First Charge",
+          "share_percent": 100.0,
+          "total": 35576865.18
+        },
+        "collateral_type": {
+          "balance": 19690415.06,
+          "group": "House",
+          "share_percent": 55.3461,
+          "total": 35576865.18
+        },
+        "exit_route": {
+          "balance": 11969248.79,
+          "group": "Development Exit",
+          "share_percent": 33.6433,
+          "total": 35576865.18
+        },
+        "region": {
+          "balance": 5411901.44,
+          "group": "East of England",
+          "share_percent": 15.2119,
+          "total": 35576865.18
+        }
+      },
+      "loan_count": 60,
+      "movement_delta": -1843404.39,
+      "movement_reconciles": true,
+      "opening_balance": 37420269.57,
+      "period_index": 3,
+      "period_movement": -1843404.39,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 5137054.41,
+      "repayments": 112194.03,
+      "reported_row_count": 60,
+      "reporting_date": "2025-04-30",
+      "restatement": 0.0,
+      "rolled_up_interest": 201210.88,
+      "status_balances": {
+        "performing": 35576865.18
+      },
+      "status_counts": {
+        "performing": 60,
+        "redeemed": 6
+      },
+      "total_additions": 3204633.17,
+      "total_reductions": 5249248.44,
+      "vintage_balances": {
+        "2023": 725524.37,
+        "2024": 23723792.49,
+        "2025": 11127548.32
+      },
+      "weighted_average_current_ltv": 62.442683,
+      "weighted_average_interest_rate": 10.759492,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_maturing_within_90_days": 3603687.05,
+        "extended_balance": 5967055.15,
+        "extended_share_percent": 17.4703,
+        "second_charge_balance": 0,
+        "share_maturing_within_90_days": 10.5508
+      },
+      "closing_balance": 34155479.94,
+      "cohort_balances": {
+        "direct": 34155479.94
+      },
+      "exited_loan_count": 7,
+      "funded_additions": 3552658.85,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 2094114.93,
+        "group": "DIRECT_001-OBL-000082",
+        "share_percent": 6.1311,
+        "total": 34155479.94
+      },
+      "largest_concentrations": {
+        "charge_type": {
+          "balance": 34155479.94,
+          "group": "First Charge",
+          "share_percent": 100.0,
+          "total": 34155479.94
+        },
+        "collateral_type": {
+          "balance": 21732537.93,
+          "group": "House",
+          "share_percent": 63.6283,
+          "total": 34155479.94
+        },
+        "exit_route": {
+          "balance": 13668156.01,
+          "group": "Development Exit",
+          "share_percent": 40.0175,
+          "total": 34155479.94
+        },
+        "region": {
+          "balance": 5304353.27,
+          "group": "London",
+          "share_percent": 15.53,
+          "total": 34155479.94
+        }
+      },
+      "loan_count": 58,
+      "movement_delta": -1421385.24,
+      "movement_reconciles": true,
+      "opening_balance": 35576865.18,
+      "period_index": 4,
+      "period_movement": -1421385.24,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 5148518.75,
+      "repayments": 0.0,
+      "reported_row_count": 58,
+      "reporting_date": "2025-05-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 174474.66,
+      "status_balances": {
+        "arrears": 942084.52,
+        "performing": 33213395.42
+      },
+      "status_counts": {
+        "arrears": 2,
+        "performing": 56,
+        "redeemed": 7
+      },
+      "total_additions": 3552658.85,
+      "total_reductions": 5148518.75,
+      "vintage_balances": {
+        "2023": 731786.25,
+        "2024": 18694007.75,
+        "2025": 14729685.94
+      },
+      "weighted_average_current_ltv": 61.790336,
+      "weighted_average_interest_rate": 10.603122,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_maturing_within_90_days": 4676189.3,
+        "extended_balance": 6699996.16,
+        "extended_share_percent": 19.7091,
+        "second_charge_balance": 0,
+        "share_maturing_within_90_days": 13.7558
+      },
+      "closing_balance": 33994356.24,
+      "cohort_balances": {
+        "direct": 33994356.24
+      },
+      "exited_loan_count": 6,
+      "funded_additions": 3256505.12,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 2110501.38,
+        "group": "DIRECT_001-OBL-000082",
+        "share_percent": 6.2084,
+        "total": 33994356.24
+      },
+      "largest_concentrations": {
+        "charge_type": {
+          "balance": 33994356.24,
+          "group": "First Charge",
+          "share_percent": 100.0,
+          "total": 33994356.24
+        },
+        "collateral_type": {
+          "balance": 21077126.73,
+          "group": "House",
+          "share_percent": 62.0018,
+          "total": 33994356.24
+        },
+        "exit_route": {
+          "balance": 12405837.93,
+          "group": "Development Exit",
+          "share_percent": 36.4938,
+          "total": 33994356.24
+        },
+        "region": {
+          "balance": 5148490.25,
+          "group": "East of England",
+          "share_percent": 15.1451,
+          "total": 33994356.24
+        }
+      },
+      "loan_count": 57,
+      "movement_delta": -161123.7,
+      "movement_reconciles": true,
+      "opening_balance": 34155479.94,
+      "period_index": 5,
+      "period_movement": -161123.7,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 3479310.24,
+      "repayments": 98322.51,
+      "reported_row_count": 57,
+      "reporting_date": "2025-06-30",
+      "restatement": 0.0,
+      "rolled_up_interest": 160003.93,
+      "status_balances": {
+        "arrears": 339570.56,
+        "performing": 33654785.68
+      },
+      "status_counts": {
+        "arrears": 1,
+        "performing": 56,
+        "redeemed": 6
+      },
+      "total_additions": 3256505.12,
+      "total_reductions": 3577632.75,
+      "vintage_balances": {
+        "2023": 738102.18,
+        "2024": 16491291.19,
+        "2025": 16764962.87
+      },
+      "weighted_average_current_ltv": 62.114153,
+      "weighted_average_interest_rate": 10.686608,
+      "write_offs": 0.0
+    }
+  ],
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41901,
+  "simulation_version": 1,
+  "spv_id": "SPV_BR_1",
+  "truth_version": 1
+}

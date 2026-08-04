@@ -412,6 +412,21 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
 
     hq_recs = _count_hq_recommendations(header, min_conf=0.88)
 
+    # A source that resolves to NO canonical field at all is not a loan tape
+    # this platform understands. Left to run, Gate 1 reported OK, the transform
+    # produced an empty canonical, and every later gate reported OK on zero
+    # rows — so an unreadable file and a genuinely empty portfolio became
+    # indistinguishable, and the run exited 0. Refuse here instead: an
+    # unresolvable schema is a governed ingestion outcome, not a silent success.
+    if fields_mapped == 0:
+        raise RuntimeError(
+            "[Gate 1] Unsupported source schema: no canonical field could be "
+            f"resolved from {input_path.name}. Every header was unmapped, so "
+            "the run would produce an empty canonical rather than a portfolio. "
+            "Supply an approved onboarding-contract alias overlay "
+            "(--extra-aliases-dir) or correct the source headers."
+        )
+
     if fields_mapped is not None:
         print(f"[Gate 1] Semantic alignment.............. OK {fields_mapped} fields mapped | {hq_recs} HQ recommendations")
     else:
@@ -724,9 +739,31 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
             "--currency", args.currency,
         ])
     else:
+        # The generic builder renders a Jinja template. Only Annex 2 has a
+        # committed delivery template in this repository, so for every other
+        # regime the template is DEPLOYMENT CONFIGURATION supplied through
+        # --regime-xml-template. Without one, refuse here with an explicit,
+        # actionable reason: previously this call fell through to the builder's
+        # own default ("esma_template.xml", which does not exist) and died
+        # inside a subprocess with a Jinja TemplateNotFound, which reads as a
+        # crash rather than as "this regime's delivery is not configured yet".
+        template = getattr(args, "regime_xml_template", None)
+        if not template:
+            raise RuntimeError(
+                f"[Gate 5] Regulatory delivery for {regime} is not configured: "
+                f"no XML template is committed for this regime and none was "
+                f"supplied. The Gate 4 projection at {projected} is complete and "
+                f"valid; supply --regime-xml-template <path> to produce the "
+                f"artefact. Annex 2 is the only regime with a committed "
+                f"delivery template (xml_builder_annex2 + XSD validation)."
+            )
+        if not Path(template).exists():
+            raise RuntimeError(
+                f"[Gate 5] --regime-xml-template {template!r} does not exist.")
         _run([
             py, _script("xml_builder"),
             "--input", str(projected),
+            "--template", str(template),
             "--output", str(xml_out),
             "--currency", args.currency,
         ])
@@ -1053,6 +1090,12 @@ examples:
     ap.add_argument("--annex2-xsd", default=str(CONFIG_ROOT / "system" / "DRAFT1auth.099.001.04_1.3.0.xsd"))
     ap.add_argument("--annex2-performance-mode", choices=["PRF", "NPRF"], default="PRF")
     ap.add_argument("--annex2-delivery-rules", default=str(CONFIG_ROOT / "regime" / "annex2_delivery_rules.yaml"))
+    ap.add_argument(
+        "--regime-xml-template", dest="regime_xml_template", default=None,
+        help="Jinja XML delivery template for a NON-Annex-2 regime "
+             "(ESMA_Annex3/4/8/9). Annex 2 has a committed builder and XSD and "
+             "ignores this. Without it, Gate 5 refuses with an explicit "
+             "'delivery not configured' error rather than crashing.")
 
     # Shared
     ap.add_argument("--code-order-yaml", default=str(CONFIG_ROOT / "system" / "esma_code_order.yaml"))

@@ -10,6 +10,14 @@ purpose:
     PURC: PURC
     RMRT: RMRT
     EQRE: EQRE
+    # Added for the bridge and asset-finance asset classes. Every value on the
+    # right is a token config/system/enum_mapping.yaml already accepts for the
+    # ESMA Annex 2 purpose field, so canonical validation and regime projection
+    # agree on the same vocabulary.
+    Other: OTHR
+    OTHR: OTHR
+    Business finance: BSFN
+    BSFN: BSFN
   learned:
     home improv: RENV
     refurb project: RENV
@@ -24,6 +32,16 @@ property_type:
     RHOS: RHOS
     RFLT: RFLT
     RBGL: RBGL
+    # Commercial and mixed-use collateral, introduced with bridge lending.
+    Office: BIZZ
+    Retail: BIZZ
+    Industrial: BIZZ
+    BIZZ: BIZZ
+    Mixed_use: PCMM
+    Mixed Use: PCMM
+    PCMM: PCMM
+    Other: OTHR
+    OTHR: OTHR
 
 customer_type:
   manual:
@@ -40,6 +58,15 @@ employment_status:
 amortisation_type:
   manual:
     Interest roll-up: OTHR
+    # Bridge lending is bullet-repaid; asset finance amortises on a level
+    # instalment. Both tokens are already keys of the ESMA Annex 2 amortisation
+    # map, so they resolve exactly rather than through a fuzzy guess.
+    Bullet: BULLET
+    BULLET: BULLET
+    French: FRENCH
+    FRENCH: FRENCH
+    Other: OTHER
+    OTHER: OTHER
 
 current_valuation_method:
   manual:
@@ -49,6 +76,23 @@ current_valuation_method:
 collateral_type:
   manual:
     residential property: RBLD
+    # Collateral classes introduced with bridge lending and asset finance. Each
+    # right-hand token is a key of the ESMA Annex 2 collateral_type map.
+    House: HOUSE
+    HOUSE: HOUSE
+    Flat: FLAT
+    FLAT: FLAT
+    Office: OFFICE
+    OFFICE: OFFICE
+    Retail: RETAIL
+    RETAIL: RETAIL
+    Industrial: INDUSTRIAL
+    INDUSTRIAL: INDUSTRIAL
+    Mixed_use: MIXED_USE
+    Mixed Use: MIXED_USE
+    MIXED_USE: MIXED_USE
+    Other: OTHER
+    OTHER: OTHER
 
 interest_rate_type:
   manual:

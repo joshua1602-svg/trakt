@@ -211,12 +211,25 @@ def build_provenance(
 def stamp_dataframe(df: "pd.DataFrame", provenance: Provenance) -> "pd.DataFrame":
     """Stamp every row of ``df`` with the provenance fields (in place).
 
-    Run-level metadata is authoritative: existing provenance columns are
-    overwritten so a tape can never carry a stale or conflicting source tag.
+    Run-level metadata is authoritative: where the run SUPPLIES a value, the
+    column is overwritten so a tape can never carry a stale or conflicting
+    source tag.
+
+    Where the run supplies NOTHING for an optional provenance field, an existing
+    column is left alone. Blanking it is not authority, it is data loss:
+    ``seller_name`` is a shared canonical field, and an asset-finance tape that
+    names the vendor who introduced each agreement had that value silently
+    erased on every direct-origination run — the field then resolved as empty for
+    vendor-concentration analysis. The two REQUIRED fields
+    (``source_portfolio_id`` / ``portfolio_cohort``) always carry a value, so
+    this cannot leave a row untagged.
     """
     row = provenance.as_row()
     for field in PROVENANCE_FIELDS:
-        df[field] = row.get(field)
+        value = row.get(field)
+        if value is None and field not in REQUIRED_PROVENANCE_FIELDS and field in df.columns:
+            continue
+        df[field] = value
     return df
 
 

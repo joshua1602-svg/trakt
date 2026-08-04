@@ -1,0 +1,55 @@
+{
+  "acquisition_date": null,
+  "asset_class": "equity_release",
+  "asset_subtype": "lump_sum",
+  "case_id": "equity_release_missing_mandatory_guard_v1",
+  "client_id": "sim_equity_release",
+  "currency": "GBP",
+  "dialects": [
+    "clean_csv"
+  ],
+  "economic_intent": [
+    "clean_performing"
+  ],
+  "expectation": "failure",
+  "expected_failure_class": "missing_mandatory_data",
+  "expected_validation_warnings": [],
+  "jurisdiction": "GB",
+  "months": 6,
+  "opening_loan_count": 60,
+  "portfolio_id": "direct_001",
+  "portfolio_type": "equity_release",
+  "profiles": [
+    "guard",
+    "standard"
+  ],
+  "purpose": "A source that omits a mandatory canonical input. Proves the canonical validator blocks the run at Gate 2 rather than producing a book with a silently absent core field.",
+  "regime": {
+    "applicability": "not_applicable",
+    "artefact_status": "not_applicable",
+    "reason": "Guard case: the run never reaches a regime.",
+    "regime_id": null
+  },
+  "risk_intent": {
+    "intended_status": "green",
+    "targeted_limits": []
+  },
+  "run_key": "equity_release_missing_mandatory_guard_v1|equity_release|seed=41902|v1",
+  "scale": "small",
+  "schema_evolution": [
+    {
+      "detail": {
+        "column": "current_outstanding_balance"
+      },
+      "from_period": 0,
+      "kind": "drop_mandatory_column",
+      "purpose": "The mandatory current-balance column is withheld."
+    }
+  ],
+  "seed": 41902,
+  "seller_name": null,
+  "simulation_version": 1,
+  "source_portfolio_type": "direct",
+  "spv_id": "SPV_ER_1",
+  "start_reporting_date": "2025-01-31"
+}

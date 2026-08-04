@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-07-27T10:59:46.015142+00:00'
+  generated_at: '2026-08-04T15:54:42.903166+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -21,9 +21,9 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 106
-  core_field_count: 73
-  extended_field_count: 33
+  field_count: 116
+  core_field_count: 80
+  extended_field_count: 36
   derived_field_count: 16
   virtual_field_count: 15
   missing_curated_fields: []
@@ -307,6 +307,39 @@ fields:
     notes: ''
     derived: true
     derived_from: number_of_days_in_arrears
+  balloon_amount:
+    canonical_field: balloon_amount
+    mi_tier: core
+    business_name: Balloon Amount
+    display_name: Balloon Amount
+    business_description: Contractual balloon payment due at the end of the agreement.
+    description: ''
+    synonyms:
+    - balloon
+    - balloon amount
+    - balloon payment
+    - final payment
+    source_criteria:
+    - curated
+    role: metric
+    format: currency
+    chartable: true
+    allowed_aggregations:
+    - sum
+    - avg
+    - median
+    default_aggregation: sum
+    allowed_chart_roles:
+    - y
+    - size
+    - x
+    - bucket
+    - filter
+    - color
+    default_chart_role: y
+    weight_field: null
+    bucket_field: null
+    notes: ''
   borrower_1_gender:
     canonical_field: borrower_1_gender
     mi_tier: core
@@ -463,6 +496,37 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  charge_type:
+    canonical_field: charge_type
+    mi_tier: core
+    business_name: Charge Rank
+    display_name: Charge Type
+    business_description: First or second charge over the security.
+    description: ''
+    synonyms:
+    - charge type
+    - charge rank
+    - first charge
+    - second charge
+    - security rank
+    source_criteria:
+    - curated
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   collateral_geography:
     canonical_field: collateral_geography
     mi_tier: core
@@ -478,6 +542,36 @@ fields:
     - property region
     - location
     - collateral geography
+    source_criteria:
+    - curated
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  collateral_type:
+    canonical_field: collateral_type
+    mi_tier: core
+    business_name: Collateral Type
+    display_name: Collateral Type
+    business_description: Class of the security or financed asset.
+    description: ''
+    synonyms:
+    - collateral type
+    - security type
+    - security category
+    - asset class
     source_criteria:
     - curated
     role: dimension
@@ -754,6 +848,38 @@ fields:
     weight_field: null
     bucket_field: ticket_bucket
     notes: ''
+  current_residual_value_of_asset:
+    canonical_field: current_residual_value_of_asset
+    mi_tier: core
+    business_name: Residual Value
+    display_name: Current Residual Value Of Asset
+    business_description: Current estimated residual value of the asset.
+    description: ''
+    synonyms:
+    - residual value
+    - residual
+    - current residual value
+    source_criteria:
+    - curated
+    role: metric
+    format: currency
+    chartable: true
+    allowed_aggregations:
+    - sum
+    - avg
+    - median
+    default_aggregation: sum
+    allowed_chart_roles:
+    - y
+    - size
+    - x
+    - bucket
+    - filter
+    - color
+    default_chart_role: y
+    weight_field: null
+    bucket_field: null
+    notes: ''
   current_valuation_amount:
     canonical_field: current_valuation_amount
     mi_tier: core
@@ -856,6 +982,34 @@ fields:
     - last arrears date
     source_criteria:
     - layer:performance
+    role: date
+    format: date
+    chartable: false
+    allowed_aggregations:
+    - count
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - filter
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  date_of_lease_expiration:
+    canonical_field: date_of_lease_expiration
+    mi_tier: extended
+    business_name: Agreement Expiry
+    display_name: Date Of Lease Expiration
+    business_description: Contractual expiry date of the lease / agreement.
+    description: ''
+    synonyms:
+    - lease expiry
+    - agreement expiry
+    - expiry date
+    - lease expiration
+    source_criteria:
+    - curated
     role: date
     format: date
     chartable: false
@@ -1910,6 +2064,36 @@ fields:
     notes: ''
     derived: true
     derived_from: current_loan_to_value
+  manufacturer:
+    canonical_field: manufacturer
+    mi_tier: core
+    business_name: Manufacturer
+    display_name: Manufacturer
+    business_description: Manufacturer of the financed asset.
+    description: ''
+    synonyms:
+    - manufacturer
+    - make
+    - asset manufacturer
+    - equipment manufacturer
+    source_criteria:
+    - curated
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   maturity_date:
     canonical_field: maturity_date
     mi_tier: core
@@ -1969,6 +2153,35 @@ fields:
     notes: ''
     derived: true
     derived_from: maturity_date
+  model:
+    canonical_field: model
+    mi_tier: extended
+    business_name: Asset Model
+    display_name: Model
+    business_description: Model / equipment category of the financed asset.
+    description: ''
+    synonyms:
+    - model
+    - asset model
+    - equipment model
+    source_criteria:
+    - curated
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   months_on_book:
     canonical_field: months_on_book
     mi_tier: core
@@ -2005,6 +2218,37 @@ fields:
     notes: ''
     virtual: true
     derived_from: funding_date
+  nace_industry_code:
+    canonical_field: nace_industry_code
+    mi_tier: core
+    business_name: Industry
+    display_name: Nace Industry Code
+    business_description: Lessee / obligor industry classification.
+    description: ''
+    synonyms:
+    - industry
+    - sector
+    - lessee industry
+    - obligor industry
+    - nace
+    source_criteria:
+    - curated
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: balance_sum
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   negative_equity_guarantee:
     canonical_field: negative_equity_guarantee
     mi_tier: core
@@ -2207,6 +2451,39 @@ fields:
     - median
     - distribution
     default_aggregation: avg
+    allowed_chart_roles:
+    - x
+    - y
+    - bucket
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+  number_of_leased_objects:
+    canonical_field: number_of_leased_objects
+    mi_tier: extended
+    business_name: Units Financed
+    display_name: Number Of Leased Objects
+    business_description: Number of assets financed under the agreement.
+    description: ''
+    synonyms:
+    - units
+    - units financed
+    - number of assets
+    - leased objects
+    source_criteria:
+    - curated
+    role: metric
+    format: integer
+    chartable: true
+    allowed_aggregations:
+    - sum
+    - avg
+    - median
+    - distribution
+    default_aggregation: sum
     allowed_chart_roles:
     - x
     - y
@@ -2970,6 +3247,38 @@ fields:
     bucket_field: null
     notes: ''
     virtual: true
+  seller_name:
+    canonical_field: seller_name
+    mi_tier: core
+    business_name: Vendor
+    display_name: Seller Name
+    business_description: Seller / introducing vendor or dealer of the agreement or acquired book.
+    description: ''
+    synonyms:
+    - vendor
+    - seller
+    - dealer
+    - introducer
+    - vendor name
+    - seller name
+    source_criteria:
+    - curated
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
   source_portfolio_id:
     canonical_field: source_portfolio_id
     mi_tier: core

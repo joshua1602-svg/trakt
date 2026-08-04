@@ -128,3 +128,8 @@ synthetic_demo/output/multibook/validation/platform_2026-05-31_*
 # enforces. The demo commits only the reconciliation, which carries the preflight
 # verdict it needs.
 synthetic_demo/output/multibook/*ESMA_Annex2*
+
+# Asset-class hardening framework run evidence (simulation/runner.py).
+# Generated sources, canonical outputs and run summaries are reproducible from
+# the committed manifests and are never committed themselves.
+out_simulation/

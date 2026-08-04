@@ -1,0 +1,48 @@
+{
+  "acquisition_date": null,
+  "asset_class": "bridge",
+  "asset_subtype": "residential_bridge",
+  "case_id": "bridge_clean_short_duration_v1",
+  "client_id": "sim_bridge",
+  "currency": "GBP",
+  "dialects": [
+    "clean_csv",
+    "lender_excel",
+    "european_locale_csv"
+  ],
+  "economic_intent": [
+    "clean_performing"
+  ],
+  "expectation": "success",
+  "expected_failure_class": null,
+  "expected_validation_warnings": [],
+  "jurisdiction": "GB",
+  "months": 6,
+  "opening_loan_count": 110,
+  "portfolio_id": "direct_001",
+  "portfolio_type": "cre",
+  "profiles": [
+    "smoke",
+    "standard"
+  ],
+  "purpose": "Baseline: a clean, performing short-duration first-charge book. Proves bridge runs the full production pathway under --portfolio-type cre with no registry change.",
+  "regime": {
+    "applicability": "applicable",
+    "artefact_status": "awaiting_configuration",
+    "reason": "Commercial-real-estate-secured exposures. The projection is supported; no XML delivery template is committed for Annex 3, so the artefact awaits deployment configuration.",
+    "regime_id": "ESMA_Annex3"
+  },
+  "risk_intent": {
+    "intended_status": "green",
+    "targeted_limits": []
+  },
+  "run_key": "bridge_clean_short_duration_v1|bridge|seed=41201|v1",
+  "scale": "small",
+  "schema_evolution": [],
+  "seed": 41201,
+  "seller_name": null,
+  "simulation_version": 1,
+  "source_portfolio_type": "direct",
+  "spv_id": "SPV_BR_1",
+  "start_reporting_date": "2025-01-31"
+}

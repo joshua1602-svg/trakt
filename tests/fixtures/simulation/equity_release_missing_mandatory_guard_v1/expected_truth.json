@@ -1,0 +1,526 @@
+{
+  "asset_class": "equity_release",
+  "asset_subtype": "lump_sum",
+  "case_id": "equity_release_missing_mandatory_guard_v1",
+  "client_id": "sim_equity_release",
+  "currency": "GBP",
+  "expected_failure_class": "missing_mandatory_data",
+  "expected_outcome": "failure",
+  "expected_regime": {
+    "applicability": "not_applicable",
+    "artefact_status": "not_applicable",
+    "reason": "Guard case: the run never reaches a regime.",
+    "regime_id": null
+  },
+  "expected_risk_status": "green",
+  "expected_targeted_limits": [],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 11133911.71,
+    "closing_loan_count": 64,
+    "direction": "increase",
+    "month_on_month_direction": [
+      "increase",
+      "decrease",
+      "increase",
+      "increase",
+      "increase",
+      "increase"
+    ],
+    "opening_balance": 10333983.23,
+    "opening_loan_count": 61,
+    "total_movement": 799928.48
+  },
+  "periods": [
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_over_60_percent_ltv": 868686.8,
+        "weighted_average_borrower_age": 72.476502
+      },
+      "closing_balance": 10467039.99,
+      "cohort_balances": {
+        "direct": 10467039.99
+      },
+      "exited_loan_count": 0,
+      "funded_additions": 77619.73,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 471651.54,
+        "group": "DIRECT_001-OBL-000015",
+        "share_percent": 4.5061,
+        "total": 10467039.99
+      },
+      "largest_concentrations": {
+        "cohort": {
+          "balance": 10467039.99,
+          "group": "direct",
+          "share_percent": 100.0,
+          "total": 10467039.99
+        },
+        "product": {
+          "balance": 10467039.99,
+          "group": "Lump Sum",
+          "share_percent": 100.0,
+          "total": 10467039.99
+        },
+        "region": {
+          "balance": 2738487.79,
+          "group": "London",
+          "share_percent": 26.163,
+          "total": 10467039.99
+        }
+      },
+      "loan_count": 61,
+      "movement_delta": 133056.76,
+      "movement_reconciles": true,
+      "opening_balance": 10333983.23,
+      "period_index": 0,
+      "period_movement": 133056.76,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 0.0,
+      "repayments": 0.0,
+      "reported_row_count": 61,
+      "reporting_date": "2025-01-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 55437.03,
+      "status_balances": {
+        "performing": 10467039.99
+      },
+      "status_counts": {
+        "performing": 61
+      },
+      "total_additions": 77619.73,
+      "total_reductions": 0.0,
+      "vintage_balances": {
+        "2015": 664724.88,
+        "2016": 788375.39,
+        "2017": 1271676.94,
+        "2018": 494345.9,
+        "2019": 1947615.33,
+        "2020": 1892885.54,
+        "2021": 666464.87,
+        "2022": 818525.59,
+        "2023": 1348308.03,
+        "2024": 496497.79,
+        "2025": 77619.73
+      },
+      "weighted_average_current_ltv": 45.65241,
+      "weighted_average_interest_rate": 6.439052,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_over_60_percent_ltv": 1075812.49,
+        "weighted_average_borrower_age": 72.345851
+      },
+      "closing_balance": 10403560.77,
+      "cohort_balances": {
+        "direct": 10403560.77
+      },
+      "exited_loan_count": 1,
+      "funded_additions": 108651.81,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 474515.64,
+        "group": "DIRECT_001-OBL-000015",
+        "share_percent": 4.5611,
+        "total": 10403560.77
+      },
+      "largest_concentrations": {
+        "cohort": {
+          "balance": 10403560.77,
+          "group": "direct",
+          "share_percent": 100.0,
+          "total": 10403560.77
+        },
+        "product": {
+          "balance": 10403560.77,
+          "group": "Lump Sum",
+          "share_percent": 100.0,
+          "total": 10403560.77
+        },
+        "region": {
+          "balance": 2753446.14,
+          "group": "London",
+          "share_percent": 26.4664,
+          "total": 10403560.77
+        }
+      },
+      "loan_count": 61,
+      "movement_delta": -63479.22,
+      "movement_reconciles": true,
+      "opening_balance": 10467039.99,
+      "period_index": 1,
+      "period_movement": -63479.22,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 228295.9,
+      "repayments": 0.0,
+      "reported_row_count": 61,
+      "reporting_date": "2025-02-28",
+      "restatement": 0.0,
+      "rolled_up_interest": 56164.87,
+      "status_balances": {
+        "performing": 10403560.77
+      },
+      "status_counts": {
+        "performing": 61,
+        "redeemed": 1
+      },
+      "total_additions": 108651.81,
+      "total_reductions": 228295.9,
+      "vintage_balances": {
+        "2015": 668319.1,
+        "2016": 792715.62,
+        "2017": 1278611.83,
+        "2018": 496996.89,
+        "2019": 1957839.28,
+        "2020": 1903526.32,
+        "2021": 669837.26,
+        "2022": 594268.75,
+        "2023": 1355557.9,
+        "2024": 499189.37,
+        "2025": 186698.45
+      },
+      "weighted_average_current_ltv": 45.908187,
+      "weighted_average_interest_rate": 6.459461,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_over_60_percent_ltv": 1082032.33,
+        "weighted_average_borrower_age": 72.317415
+      },
+      "closing_balance": 10574427.43,
+      "cohort_balances": {
+        "direct": 10574427.43
+      },
+      "exited_loan_count": 1,
+      "funded_additions": 232921.27,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 477397.14,
+        "group": "DIRECT_001-OBL-000015",
+        "share_percent": 4.5146,
+        "total": 10574427.43
+      },
+      "largest_concentrations": {
+        "cohort": {
+          "balance": 10574427.43,
+          "group": "direct",
+          "share_percent": 100.0,
+          "total": 10574427.43
+        },
+        "product": {
+          "balance": 10574427.43,
+          "group": "Lump Sum",
+          "share_percent": 100.0,
+          "total": 10574427.43
+        },
+        "region": {
+          "balance": 2768486.99,
+          "group": "London",
+          "share_percent": 26.181,
+          "total": 10574427.43
+        }
+      },
+      "loan_count": 61,
+      "movement_delta": 170866.66,
+      "movement_reconciles": true,
+      "opening_balance": 10403560.77,
+      "period_index": 2,
+      "period_movement": 170866.66,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 118055.75,
+      "repayments": 0.0,
+      "reported_row_count": 61,
+      "reporting_date": "2025-03-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 56001.14,
+      "status_balances": {
+        "performing": 10574427.43
+      },
+      "status_counts": {
+        "performing": 61,
+        "redeemed": 1
+      },
+      "total_additions": 232921.27,
+      "total_reductions": 118055.75,
+      "vintage_balances": {
+        "2015": 671932.95,
+        "2016": 797079.84,
+        "2017": 1285585.11,
+        "2018": 499662.13,
+        "2019": 1968117.7,
+        "2020": 1914227.56,
+        "2021": 673226.78,
+        "2022": 597283.05,
+        "2023": 1362847.29,
+        "2024": 383839.82,
+        "2025": 420625.2
+      },
+      "weighted_average_current_ltv": 46.012917,
+      "weighted_average_interest_rate": 6.43211,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_over_60_percent_ltv": 1295795.5,
+        "weighted_average_borrower_age": 72.192878
+      },
+      "closing_balance": 10598671.38,
+      "cohort_balances": {
+        "direct": 10598671.38
+      },
+      "exited_loan_count": 1,
+      "funded_additions": 100529.67,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 480296.13,
+        "group": "DIRECT_001-OBL-000015",
+        "share_percent": 4.5317,
+        "total": 10598671.38
+      },
+      "largest_concentrations": {
+        "cohort": {
+          "balance": 10598671.38,
+          "group": "direct",
+          "share_percent": 100.0,
+          "total": 10598671.38
+        },
+        "product": {
+          "balance": 10598671.38,
+          "group": "Lump Sum",
+          "share_percent": 100.0,
+          "total": 10598671.38
+        },
+        "region": {
+          "balance": 2783610.79,
+          "group": "London",
+          "share_percent": 26.2638,
+          "total": 10598671.38
+        }
+      },
+      "loan_count": 61,
+      "movement_delta": 24243.95,
+      "movement_reconciles": true,
+      "opening_balance": 10574427.43,
+      "period_index": 3,
+      "period_movement": 24243.95,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 132965.63,
+      "repayments": 0.0,
+      "reported_row_count": 61,
+      "reporting_date": "2025-04-30",
+      "restatement": 0.0,
+      "rolled_up_interest": 56679.91,
+      "status_balances": {
+        "performing": 10598671.38
+      },
+      "status_counts": {
+        "performing": 61,
+        "redeemed": 1
+      },
+      "total_additions": 100529.67,
+      "total_reductions": 132965.63,
+      "vintage_balances": {
+        "2015": 675566.54,
+        "2016": 801468.19,
+        "2017": 1292597.02,
+        "2018": 502341.74,
+        "2019": 1978450.88,
+        "2020": 1792023.99,
+        "2021": 676633.51,
+        "2022": 600312.74,
+        "2023": 1370176.42,
+        "2024": 385973.21,
+        "2025": 523127.14
+      },
+      "weighted_average_current_ltv": 45.899612,
+      "weighted_average_interest_rate": 6.436784,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_over_60_percent_ltv": 1506392.79,
+        "weighted_average_borrower_age": 72.223848
+      },
+      "closing_balance": 10764454.02,
+      "cohort_balances": {
+        "direct": 10764454.02
+      },
+      "exited_loan_count": 0,
+      "funded_additions": 108931.52,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 483212.73,
+        "group": "DIRECT_001-OBL-000015",
+        "share_percent": 4.489,
+        "total": 10764454.02
+      },
+      "largest_concentrations": {
+        "cohort": {
+          "balance": 10764454.02,
+          "group": "direct",
+          "share_percent": 100.0,
+          "total": 10764454.02
+        },
+        "product": {
+          "balance": 10764454.02,
+          "group": "Lump Sum",
+          "share_percent": 100.0,
+          "total": 10764454.02
+        },
+        "region": {
+          "balance": 2798818.0,
+          "group": "London",
+          "share_percent": 26.0006,
+          "total": 10764454.02
+        }
+      },
+      "loan_count": 62,
+      "movement_delta": 165782.64,
+      "movement_reconciles": true,
+      "opening_balance": 10598671.38,
+      "period_index": 4,
+      "period_movement": 165782.64,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 0.0,
+      "repayments": 0.0,
+      "reported_row_count": 62,
+      "reporting_date": "2025-05-31",
+      "restatement": 0.0,
+      "rolled_up_interest": 56851.12,
+      "status_balances": {
+        "performing": 10764454.02
+      },
+      "status_counts": {
+        "performing": 62
+      },
+      "total_additions": 108931.52,
+      "total_reductions": 0.0,
+      "vintage_balances": {
+        "2015": 679219.98,
+        "2016": 805880.8,
+        "2017": 1299647.75,
+        "2018": 505035.77,
+        "2019": 1988839.13,
+        "2020": 1802147.72,
+        "2021": 680057.55,
+        "2022": 603357.9,
+        "2023": 1377545.5,
+        "2024": 388118.45,
+        "2025": 634603.47
+      },
+      "weighted_average_current_ltv": 45.914722,
+      "weighted_average_interest_rate": 6.444276,
+      "write_offs": 0.0
+    },
+    {
+      "acquired_additions": 0.0,
+      "asset_disposals": 0.0,
+      "asset_measures": {
+        "balance_over_60_percent_ltv": 1514773.24,
+        "weighted_average_borrower_age": 72.144974
+      },
+      "closing_balance": 11133911.71,
+      "cohort_balances": {
+        "direct": 11133911.71
+      },
+      "exited_loan_count": 0,
+      "funded_additions": 311650.06,
+      "further_advances": 0.0,
+      "largest_borrower": {
+        "balance": 486147.04,
+        "group": "DIRECT_001-OBL-000015",
+        "share_percent": 4.3664,
+        "total": 11133911.71
+      },
+      "largest_concentrations": {
+        "cohort": {
+          "balance": 11133911.71,
+          "group": "direct",
+          "share_percent": 100.0,
+          "total": 11133911.71
+        },
+        "product": {
+          "balance": 11133911.71,
+          "group": "Lump Sum",
+          "share_percent": 100.0,
+          "total": 11133911.71
+        },
+        "region": {
+          "balance": 2814109.09,
+          "group": "London",
+          "share_percent": 25.2751,
+          "total": 11133911.71
+        }
+      },
+      "loan_count": 64,
+      "movement_delta": 369457.69,
+      "movement_reconciles": true,
+      "opening_balance": 10764454.02,
+      "period_index": 5,
+      "period_movement": 369457.69,
+      "principal_amortisation": 0.0,
+      "recoveries": 0.0,
+      "redemptions": 0.0,
+      "repayments": 0.0,
+      "reported_row_count": 64,
+      "reporting_date": "2025-06-30",
+      "restatement": 0.0,
+      "rolled_up_interest": 57807.63,
+      "status_balances": {
+        "performing": 11133911.71
+      },
+      "status_counts": {
+        "performing": 64
+      },
+      "total_additions": 311650.06,
+      "total_reductions": 0.0,
+      "vintage_balances": {
+        "2015": 682893.37,
+        "2016": 810317.8,
+        "2017": 1306737.55,
+        "2018": 507744.31,
+        "2019": 1999282.74,
+        "2020": 1812329.31,
+        "2021": 683498.99,
+        "2022": 606418.6,
+        "2023": 1384954.75,
+        "2024": 390275.63,
+        "2025": 949458.66
+      },
+      "weighted_average_current_ltv": 45.702769,
+      "weighted_average_interest_rate": 6.445027,
+      "write_offs": 0.0
+    }
+  ],
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41902,
+  "simulation_version": 1,
+  "spv_id": "SPV_ER_1",
+  "truth_version": 1
+}

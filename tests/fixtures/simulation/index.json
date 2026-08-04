@@ -1,0 +1,50 @@
+[
+  {
+    "asset_class": "equity_release",
+    "case_id": "equity_release_clean_origination_v1",
+    "manifest_hash": "sha256:2d380c5ba6bb2e74a5af0bd185381f0b",
+    "reason": "clean equity-release baseline \u2014 the whole pathway's reference case",
+    "seed": 41101,
+    "simulation_version": 1
+  },
+  {
+    "asset_class": "bridge",
+    "case_id": "bridge_clean_short_duration_v1",
+    "manifest_hash": "sha256:676b279adf928f7c91874cf56444a579",
+    "reason": "clean bridge baseline \u2014 short-duration first-charge economics",
+    "seed": 41201,
+    "simulation_version": 1
+  },
+  {
+    "asset_class": "asset_finance",
+    "case_id": "asset_finance_clean_sme_equipment_v1",
+    "manifest_hash": "sha256:c2ba7655b90beacca9029aafca5ba350",
+    "reason": "clean asset-finance baseline \u2014 equipment finance as a subtype",
+    "seed": 41301,
+    "simulation_version": 1
+  },
+  {
+    "asset_class": "bridge",
+    "case_id": "bridge_maturity_wall_v1",
+    "manifest_hash": "sha256:40bd7fa95dad5e567da63ae6a1dd2ffc",
+    "reason": "schema drift: a header renamed mid-history must still resolve",
+    "seed": 41204,
+    "simulation_version": 1
+  },
+  {
+    "asset_class": "bridge",
+    "case_id": "bridge_unsupported_schema_guard_v1",
+    "manifest_hash": "sha256:9b15317f868a2e6e23ca9220a56f212f",
+    "reason": "intended failure: an unresolvable source schema must be refused",
+    "seed": 41901,
+    "simulation_version": 1
+  },
+  {
+    "asset_class": "equity_release",
+    "case_id": "equity_release_missing_mandatory_guard_v1",
+    "manifest_hash": "sha256:f22811501e59e4f160395dd666cb46f1",
+    "reason": "intended failure: a withheld mandatory column must block at Gate 2",
+    "seed": 41902,
+    "simulation_version": 1
+  }
+]

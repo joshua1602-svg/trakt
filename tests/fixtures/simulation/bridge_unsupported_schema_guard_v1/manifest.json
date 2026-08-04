@@ -1,0 +1,53 @@
+{
+  "acquisition_date": null,
+  "asset_class": "bridge",
+  "asset_subtype": "residential_bridge",
+  "case_id": "bridge_unsupported_schema_guard_v1",
+  "client_id": "sim_bridge",
+  "currency": "GBP",
+  "dialects": [
+    "clean_csv"
+  ],
+  "economic_intent": [
+    "clean_performing"
+  ],
+  "expectation": "failure",
+  "expected_failure_class": "unsupported_source_schema",
+  "expected_validation_warnings": [],
+  "jurisdiction": "GB",
+  "months": 6,
+  "opening_loan_count": 60,
+  "portfolio_id": "direct_001",
+  "portfolio_type": "cre",
+  "profiles": [
+    "guard",
+    "standard"
+  ],
+  "purpose": "An ambiguous source schema whose headers cannot be resolved to the canonical model. Proves ingestion refuses rather than guessing, and that the refusal is classified.",
+  "regime": {
+    "applicability": "not_applicable",
+    "artefact_status": "not_applicable",
+    "reason": "Guard case: the run never reaches a regime.",
+    "regime_id": null
+  },
+  "risk_intent": {
+    "intended_status": "green",
+    "targeted_limits": []
+  },
+  "run_key": "bridge_unsupported_schema_guard_v1|bridge|seed=41901|v1",
+  "scale": "small",
+  "schema_evolution": [
+    {
+      "detail": {},
+      "from_period": 0,
+      "kind": "ambiguous_schema",
+      "purpose": "Every header is replaced with an opaque positional label; nothing may resolve."
+    }
+  ],
+  "seed": 41901,
+  "seller_name": null,
+  "simulation_version": 1,
+  "source_portfolio_type": "direct",
+  "spv_id": "SPV_BR_1",
+  "start_reporting_date": "2025-01-31"
+}
