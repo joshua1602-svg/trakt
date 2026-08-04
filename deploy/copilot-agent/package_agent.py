@@ -60,13 +60,61 @@ def _png(width: int, height: int, rgba: tuple[int, int, int, int]) -> bytes:
             + chunk(b"IEND", b""))
 
 
-def build(out_dir: Path) -> Path:
+#: Placeholder tokens the packaging step must not ship unresolved. A manifest
+#: uploaded with a literal ``${{TEAMS_BOT_APP_ID}}`` installs, and then every
+#: proactive message fails at send time against a bot id that does not exist —
+#: a failure that surfaces days later, in production, to the client.
+_PLACEHOLDER = "${{TEAMS_BOT_APP_ID}}"
+
+
+def _validate_manifest(manifest: dict, *, allow_placeholders: bool) -> None:
+    """Check the capabilities this package is required to carry.
+
+    The declarative agent and the bot are separate capabilities of ONE app.
+    Losing either during an edit is silent — the package still validates and
+    installs — so both are asserted here rather than trusted.
+    """
+    agents = (manifest.get("copilotAgents") or {}).get("declarativeAgents") or []
+    if not agents:
+        raise SystemExit(
+            "manifest.json no longer declares a declarative agent: the "
+            "existing Copilot capability must be preserved")
+
+    bots = manifest.get("bots") or []
+    if not bots:
+        raise SystemExit(
+            "manifest.json declares no bot: proactive notifications require "
+            "the bot capability in this same package")
+    bot = bots[0]
+    if "personal" not in (bot.get("scopes") or []):
+        raise SystemExit(
+            "the bot must declare the 'personal' scope: v1 delivers to 1:1 "
+            "chats only")
+    for unsupported in ("team", "groupChat", "groupchat"):
+        if unsupported in (bot.get("scopes") or []):
+            raise SystemExit(
+                f"the bot declares the {unsupported!r} scope, which v1 does "
+                f"not implement")
+
+    if allow_placeholders:
+        return
+    blob = json.dumps(manifest)
+    if _PLACEHOLDER in blob:
+        raise SystemExit(
+            f"{_PLACEHOLDER} is unresolved in manifest.json. Set the bot app "
+            f"id (or pass --allow-placeholders when your provisioning "
+            f"toolchain substitutes it).")
+
+
+def build(out_dir: Path, *, allow_placeholders: bool = False) -> Path:
     for name in PACKAGE_FILES:
         path = HERE / name
         if not path.exists():
             raise SystemExit(f"missing package file: {path}")
         if name.endswith(".json"):
-            json.loads(path.read_text(encoding="utf-8"))  # fail fast on bad JSON
+            data = json.loads(path.read_text(encoding="utf-8"))  # bad JSON → fail fast
+            if name == "manifest.json":
+                _validate_manifest(data, allow_placeholders=allow_placeholders)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_path = out_dir / "trakt-copilot-agent.zip"
@@ -82,8 +130,11 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default=str(HERE / "dist"),
                     help="output directory (default: deploy/copilot-agent/dist)")
+    ap.add_argument("--allow-placeholders", action="store_true",
+                    help="permit unresolved ${{...}} tokens, for a toolchain "
+                         "that substitutes them at provisioning time")
     args = ap.parse_args(argv)
-    zip_path = build(Path(args.out))
+    zip_path = build(Path(args.out), allow_placeholders=args.allow_placeholders)
     print(f"wrote {zip_path}")
     return 0
 

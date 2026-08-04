@@ -62,6 +62,12 @@ OPEN_PATHS: Set[str] = {"/", "/health", "/openapi.json", "/docs", "/docs/oauth2-
 # header, so this guard does not apply to them — their own guard fails closed.
 COPILOT_PATH_PREFIX = "/v1/copilot"
 
+# The Teams bot messaging endpoint is called by the Bot Framework service, not
+# by a signed-in user, so no Easy Auth header exists on those requests either.
+# It validates the channel-issued token itself (see teams_bot.py) and fails
+# closed when it is unconfigured.
+TEAMS_BOT_PATH_PREFIX = "/v1/teams"
+
 # Claim types that carry the role in App Service Easy Auth principals.
 _ROLE_CLAIM_TYPES = {
     "roles",
@@ -211,6 +217,11 @@ async def auth_guard(request: Request) -> None:
         # Copilot actions are guarded by copilot_auth.copilot_auth_guard (Entra
         # bearer-token validation, fail closed). The Easy-Auth header contract
         # does not exist on those calls.
+        return
+    if path.startswith(TEAMS_BOT_PATH_PREFIX):
+        # Bot Framework activities are guarded by
+        # teams_bot.validate_activity_token (channel-issued token validation,
+        # fail closed). Same reasoning as the Copilot prefix above.
         return
 
     if not _auth_enabled():

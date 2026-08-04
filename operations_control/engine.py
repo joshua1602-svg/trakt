@@ -1666,7 +1666,41 @@ class OpsEngine:
                                 detail={"publication_id": pub["publication_id"],
                                         "version": pub.get("version"),
                                         "approval_scope": remember_scope})
+        self._notify_publication(run, pub)
         return pub
+
+    def _notify_publication(self, run: WorkflowRun,
+                            pub: Dict[str, Any]) -> None:
+        """Hand the approved update to the proactive notification pathway.
+
+        Deliberately the LAST thing publication does, and deliberately unable
+        to affect it. The operator has already approved, the artefacts are
+        already promoted and the audit entry is already written; a notification
+        defect must not turn a completed governed action into an error or a
+        rollback. It writes durable intent and returns — the Teams call happens
+        later, in a worker, so publication never waits on Microsoft.
+
+        The tenant comes from the run, never from a caller: there is no
+        parameter through which a different one could be named.
+        """
+        try:
+            from trakt_notifications import trigger as _notifications
+        except Exception:  # noqa: BLE001 - the package is optional at runtime
+            return
+        try:
+            outcome = _notifications.on_publication_approved(
+                tenant_id=run.client_id,
+                portfolio_id=run.client_id,
+                datasets=[run.delivery.get("dataset", "funded")],
+                approved_run_ids=[r for r in (run.orchestrator_run_id,) if r],
+                run_status=run.status,
+                funded_run_id=run.orchestrator_run_id or None)
+            self.store.append_audit(
+                run.client_id, "publication_notified", actor="system",
+                workflow_id=run.workflow_id, detail=outcome.to_dict())
+        except Exception:  # noqa: BLE001 - a publication is never lost to this
+            logger.exception("proactive notification failed for %s",
+                             run.workflow_id)
 
     def _promote_source(self, run: WorkflowRun, actor: str) -> None:
         from apps.blob_trigger_app import approvals as _approvals
