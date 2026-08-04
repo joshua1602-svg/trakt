@@ -34,6 +34,8 @@ import logging
 import os
 from typing import Any, Iterable, Optional
 
+from trakt_core.access import AccessGrant
+from trakt_core.access import scopes_for as access_scopes_for
 from trakt_core.context import (
     ACTOR_SERVICE,
     ACTOR_USER,
@@ -129,15 +131,23 @@ def context_from_principal(
     principal: Any,
     *,
     tenant_id: str,
+    grant: Optional[AccessGrant] = None,
     channel: str = CHANNEL_REACT,
     request_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
 ) -> ExecutionContext:
     """Build a context from an Easy Auth / SWA principal (``auth.Principal``).
 
-    ``tenant_id`` is deployment configuration, never a principal claim: this is a
-    deployment-per-tenant product, and taking the tenant from a token claim would
-    make it caller-influenced.
+    The tenant comes from ``grant`` when the caller was resolved against the
+    governed access directory, and only falls back to ``tenant_id`` (deployment
+    configuration) when there is no grant — the explicit local-development
+    bypass, where authentication itself is switched off.
+
+    Either way the tenant is never a principal claim and never request data.
+    Before the directory existed it was a single deployment-wide value, so every
+    authenticated user got the same tenant; now each identity carries its own,
+    which is what makes a cross-tenant request refusable rather than
+    unrepresentable.
     """
     require_trustworthy_platform_auth()
     if principal is None:
@@ -147,11 +157,12 @@ def context_from_principal(
                 or getattr(principal, "user_details", None)
                 or "unknown-principal")
     return ExecutionContext(
-        tenant_id=tenant_id,
+        tenant_id=grant.tenant_id if grant is not None else tenant_id,
         actor_id=str(actor_id),
         actor_type=ACTOR_USER,
         channel=channel,
-        scopes=_scopes_for(getattr(principal, "roles", ()) or ()),
+        scopes=(access_scopes_for(grant) if grant is not None
+                else _scopes_for(getattr(principal, "roles", ()) or ())),
         request_id=request_id or new_request_id(),
         correlation_id=correlation_id,
         actor_label=getattr(principal, "user_details", None),

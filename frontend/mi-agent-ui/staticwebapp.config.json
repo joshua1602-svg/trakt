@@ -28,11 +28,6 @@
     },
 
     {
-      "route": "/.auth/invitations/*",
-      "allowedRoles": ["anonymous", "authenticated"]
-    },
-
-    {
       "route": "/login",
       "rewrite": "/.auth/login/aad"
     },
@@ -43,7 +38,7 @@
 
     {
       "route": "/api/*",
-      "allowedRoles": ["client", "operator"]
+      "allowedRoles": ["authenticated"]
     },
 
     {

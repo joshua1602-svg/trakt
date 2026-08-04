@@ -214,6 +214,10 @@ export class AgentError extends Error {
   constructor(
     message: string,
     readonly cause?: unknown,
+    /** The governed `errorCode` from the API envelope, when it sent one.
+     *  Lets the UI distinguish a refusal it should explain (an unprovisioned
+     *  account) from a failure it should offer to retry. */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "AgentError";

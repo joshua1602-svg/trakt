@@ -1,0 +1,68 @@
+# Trakt governed access directory.
+#
+# WHO MAY USE TRAKT, AND AS WHAT. Authentication happens in Azure (Static Web
+# Apps / Entra); this file decides what a verified identity is allowed to see.
+# It replaced Static Web Apps invitation roles, which proved unreliable in this
+# deployment and which put a Trakt governance decision in someone else's portal.
+#
+# Read by trakt_core/access.py. Every channel — React, the MI API, PPTX/deck
+# generation and Teams deep links — resolves through that one module, so a
+# change here applies everywhere at once.
+#
+# Operational notes
+# -----------------
+#  * Changes take effect on the next request. The loader keys its cache on the
+#    file's modification time, so no restart is needed.
+#  * This file is FAIL CLOSED. If it is missing, unparseable, or empty, nobody
+#    is provisioned and every authenticated caller is refused with
+#    ACCESS_NOT_PROVISIONED. That is deliberate: an authorisation source that
+#    degrades to "allow" is not an authorisation source.
+#  * Adding a user is a reviewable commit. That is the point.
+#
+# Fields
+# ------
+#   identities          One or more verified identifiers for the same person.
+#                       Match is case-insensitive and tried against every
+#                       identifier the platform supplies (email / UPN, and the
+#                       Entra object id). Email is the durable, readable choice
+#                       and is what we use below; an object id may be added
+#                       alongside it if a mailbox is ever renamed.
+#   tenant_id           The tenant whose book this identity may read. This is
+#                       what populates ExecutionContext.tenant_id — it is NEVER
+#                       taken from the request, so a caller cannot reach another
+#                       tenant by naming its portfolio.
+#   role                client | operator.
+#                         client   — the customer's users.
+#                         operator — us. Same read scopes today; the split
+#                                    exists so an operator-only capability can
+#                                    be gated later.
+#   portfolio_contexts  OPTIONAL allow-list of workspace contexts (the
+#                       `portfolioContext` / `lens` selector). OMIT IT for
+#                       unrestricted access within the tenant — that is the
+#                       normal case, and it means a new context does not
+#                       require re-editing every entry. When present, selecting
+#                       anything outside the list is refused.
+#   enabled             OPTIONAL, defaults to true. Set false to revoke access
+#                       while keeping the record and its history.
+#   display_name        OPTIONAL label for logs and /me. Never an access
+#                       decision.
+#
+# No secrets belong in this file. Identities are not credentials — possession of
+# an email address grants nothing without a successful Entra sign-in.
+
+version: 1
+
+principals:
+  - identities:
+      - admin@ratecheck.uk
+    tenant_id: ERE
+    role: operator
+    display_name: Trakt Operations
+    enabled: true
+
+  - identities:
+      - joshuahall@digifinsolutions.co.uk
+    tenant_id: ERE
+    role: operator
+    display_name: Joshua Hall
+    enabled: true

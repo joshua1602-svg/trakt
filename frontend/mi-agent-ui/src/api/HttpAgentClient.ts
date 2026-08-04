@@ -126,6 +126,29 @@ export class HttpAgentClient implements AgentClient {
     return `MI Agent API returned ${res.status} ${res.statusText} for ${path}`;
   }
 
+  /**
+   * The error for a failed response, preferring the API's governed envelope.
+   *
+   * Every governed refusal carries `{error, errorCode}`; a bare status line
+   * throws that away, which is how an unprovisioned account surfaced as
+   * "MI Agent API returned 403 for /mi/snapshots" — technically true and
+   * useless to the person reading it. Falls back to the status description when
+   * the body is not an envelope (a proxy or the platform answered, not us).
+   */
+  private async governedError(res: Response, path: string): Promise<AgentError> {
+    try {
+      const body = (await res.json()) as { error?: unknown; errorCode?: unknown };
+      const message = typeof body?.error === "string" ? body.error : undefined;
+      const code = typeof body?.errorCode === "string" ? body.errorCode : undefined;
+      if (message || code) {
+        return new AgentError(message ?? this.describeStatus(res, path), undefined, code);
+      }
+    } catch {
+      /* not a JSON envelope — fall through to the status description */
+    }
+    return new AgentError(this.describeStatus(res, path));
+  }
+
   private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     let res: Response;
     try {
@@ -134,7 +157,7 @@ export class HttpAgentClient implements AgentClient {
       if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
       throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
     }
-    if (!res.ok) throw new AgentError(this.describeStatus(res, path));
+    if (!res.ok) throw await this.governedError(res, path);
     try {
       return (await res.json()) as T;
     } catch (err) {

@@ -35,6 +35,7 @@ from fastapi.testclient import TestClient
 
 from mi_agent_api.app import app
 from mi_agent_api import gateway
+from trakt_core import access
 
 SWA_CONFIG = _REPO_ROOT / "frontend" / "mi-agent-ui" / "staticwebapp.config.json"
 SWA_WORKFLOW = (_REPO_ROOT / ".github" / "workflows"
@@ -51,12 +52,34 @@ def _principal(roles: List[str], user: str = "user@client-domain.com") -> str:
     }).encode("utf-8")).decode("ascii")
 
 
+#: Provisioned identities for these tests. Note what is NOT here: any role in
+#: the principal itself. Since authorisation moved to the governed directory,
+#: the principal only has to say who signed in — which is all SWA sends once
+#: invitation roles are out of the picture.
+_DIRECTORY = """
+version: 1
+principals:
+  - identities: [user@client-domain.com]
+    tenant_id: test-tenant
+    role: client
+  - identities: [ops@trakt.io]
+    tenant_id: test-tenant
+    role: operator
+"""
+
+
 @pytest.fixture()
-def auth_on(monkeypatch):
+def auth_on(monkeypatch, tmp_path):
     monkeypatch.setenv("MI_AGENT_AUTH_ENABLED", "true")
     monkeypatch.setenv("MI_AGENT_CLIENT_ROLE", "client")
     monkeypatch.setenv("MI_AGENT_OPERATOR_ROLE", "operator")
+    monkeypatch.setenv("MI_AGENT_CLIENT_ID", "test-tenant")
+    path = tmp_path / "access.yaml"
+    path.write_text(_DIRECTORY, encoding="utf-8")
+    monkeypatch.setenv("TRAKT_ACCESS_CONFIG", str(path))
+    access.reset_cache()
     yield
+    access.reset_cache()
 
 
 def _mi_routes() -> List[tuple]:
@@ -120,13 +143,22 @@ class TestNoAnonymousMiAccess:
         assert client.get("/me").status_code == 401
         assert client.get("/api/me").status_code == 401
 
-    def test_an_authenticated_caller_without_an_mi_role_gets_nothing(self, auth_on):
-        """Signed in is not the same as entitled."""
-        hdr = {"x-ms-client-principal": _principal(["anonymous", "authenticated"])}
+    def test_an_authenticated_but_unprovisioned_caller_gets_nothing(self, auth_on):
+        """Signed in is not the same as entitled.
+
+        A real Entra tenant will happily authenticate anyone the app
+        registration admits, so "the platform signed them in" cannot be the
+        whole check. This is the route-by-route proof that it is not.
+        """
+        hdr = {"x-ms-client-principal": _principal(
+            ["anonymous", "authenticated"], user="stranger@elsewhere.com")}
         for path, verb in _mi_routes():
             r = _call(path, verb, headers=hdr)
             assert r.status_code == 403, (
-                f"{verb} {path} admitted a caller with no MI role")
+                f"{verb} {path} admitted an unprovisioned caller")
+            assert r.json().get("errorCode") == "ACCESS_NOT_PROVISIONED", (
+                f"{verb} {path} refused without saying the account needs "
+                "provisioning — the UI cannot explain a bare 403")
 
     def test_a_malformed_principal_is_not_a_way_in(self, auth_on):
         for bad in ("", "not-base64", base64.b64encode(b"[]").decode(),
@@ -143,46 +175,53 @@ class TestNoAnonymousMiAccess:
 # =========================================================================== #
 class TestLinkedBackendPrincipal:
     """The path a real request takes: SWA authenticates, forwards the principal
-    under /api, the gateway strips the prefix, the guard admits the role."""
+    under /api, the gateway strips the prefix, the guard resolves the identity
+    against the governed directory.
 
-    def test_a_client_principal_under_the_api_prefix_is_admitted(self, auth_on):
+    Every principal below carries ``["authenticated"]`` and nothing more. That
+    is deliberate and is the central claim of this file after the migration: it
+    is exactly what Static Web Apps sends for a signed-in user with no
+    invitation role, which is the state every real user is in.
+    """
+
+    def test_a_provisioned_client_under_the_api_prefix_is_admitted(self, auth_on):
         r = client.get("/api/me", headers={
-            "x-ms-client-principal": _principal(["authenticated", "client"])})
+            "x-ms-client-principal": _principal(["authenticated"])})
         assert r.status_code == 200
         body = r.json()
         assert body["authenticated"] is True
-        assert "client" in body["roles"]
+        assert body["role"] == "client"
         assert body["isOperator"] is False
 
-    def test_an_operator_principal_is_admitted_and_flagged(self, auth_on):
+    def test_a_provisioned_operator_is_admitted_and_flagged(self, auth_on):
         r = client.get("/api/me", headers={
-            "x-ms-client-principal": _principal(["authenticated", "operator"])})
+            "x-ms-client-principal": _principal(["authenticated"], user="ops@trakt.io")})
         assert r.status_code == 200
         assert r.json()["isOperator"] is True
 
     def test_the_prefixed_and_bare_forms_resolve_to_the_same_route(self, auth_on):
-        hdr = {"x-ms-client-principal": _principal(["authenticated", "operator"])}
+        hdr = {"x-ms-client-principal": _principal(["authenticated"])}
         assert client.get("/me", headers=hdr).json() == \
             client.get("/api/me", headers=hdr).json()
 
     def test_an_mi_route_is_served_under_the_api_prefix(self, auth_on):
         """The whole point of the switch: /api/mi/... must not 404."""
-        hdr = {"x-ms-client-principal": _principal(["authenticated", "operator"])}
+        hdr = {"x-ms-client-principal": _principal(["authenticated"])}
         r = client.get("/api/mi/snapshots", headers=hdr)
         assert r.status_code == 200, (
             "the linked-backend path form must resolve — this exact mismatch "
             "produced the production 404s that gateway.py was written to fix")
 
     def test_an_unknown_prefixed_path_still_404s_with_its_own_path(self, auth_on):
-        hdr = {"x-ms-client-principal": _principal(["authenticated", "operator"])}
+        hdr = {"x-ms-client-principal": _principal(["authenticated"])}
         assert client.get("/api/mi/not-a-real-route", headers=hdr).status_code == 404
 
     def test_the_easy_auth_principal_shape_is_also_accepted(self, auth_on):
         """App Service Easy Auth sends a claims list, not userRoles — both are
-        the platform's, and both must work."""
+        the platform's, and both must work. The directory looks up the name
+        claim, so no role claim is needed."""
         payload = {"auth_typ": "aad", "name_typ": "name", "role_typ": "roles",
-                   "claims": [{"typ": "roles", "val": "operator"},
-                              {"typ": "name", "val": "ops@trakt.io"}]}
+                   "claims": [{"typ": "name", "val": "ops@trakt.io"}]}
         hdr = base64.b64encode(json.dumps(payload).encode()).decode()
         r = client.get("/api/me", headers={"x-ms-client-principal": hdr})
         assert r.status_code == 200
@@ -229,13 +268,34 @@ class TestDeploymentContract:
         assert catch_all, "no catch-all route rule — the site would be public"
         assert catch_all[0].get("allowedRoles") == ["authenticated"]
 
-    def test_the_api_route_requires_an_mi_role(self):
+    def test_the_api_route_requires_authentication_only(self):
+        """SWA is the AUTHENTICATION boundary, not the authorisation one.
+
+        It used to require ``client``/``operator`` here, which meant every user
+        needed an accepted SWA invitation. Invitation acceptance never created a
+        role record in this deployment, so every signed-in user was refused at
+        this rule with a 403 the UI could not explain.
+
+        Requiring only ``authenticated`` is not a weakening: an anonymous caller
+        still cannot pass, and what a signed-in caller may actually SEE is now
+        decided by the governed access directory behind this rule — which fails
+        closed on an identity it does not list.
+        """
         routes = self._swa().get("routes") or []
         api = [r for r in routes if r.get("route") == "/api/*"]
         assert api, "no rule guarding the linked backend"
-        assert set(api[0].get("allowedRoles") or []) == {"client", "operator"}, (
-            "the linked backend must be restricted to the MI roles, so an "
-            "authenticated user without one cannot reach portfolio data")
+        assert set(api[0].get("allowedRoles") or []) == {"authenticated"}, (
+            "the linked backend must still require a signed-in user; "
+            "authorisation is the access directory's job, not SWA's")
+
+    def test_no_invitation_only_route_remains(self):
+        """The invitation flow is abandoned, so the rule that existed only to
+        expose it should not linger and imply the mechanism is still in use."""
+        routes = self._swa().get("routes") or []
+        invitation = [r for r in routes
+                      if "invitation" in str(r.get("route", "")).lower()]
+        assert not invitation, (
+            f"invitation-specific route(s) still declared: {invitation}")
 
     def test_the_api_path_is_not_swallowed_by_the_spa_fallback(self):
         excluded = ((self._swa().get("navigationFallback") or {})

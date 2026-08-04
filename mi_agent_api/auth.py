@@ -11,10 +11,26 @@ supported pattern for Easy Auth / SWA linked backends. It:
   * parses the injected principal (both the SWA and App Service Easy Auth
     header shapes are supported);
   * exposes a global FastAPI dependency (:func:`auth_guard`) that requires an
-    authenticated principal carrying an MI role on every ``/mi/*`` route while
-    leaving liveness/probe routes open;
-  * distinguishes the ``client`` role (the customer's ~5 users) from the
-    ``operator`` role (us), so authorization decisions can branch on it.
+    authenticated principal on every ``/mi/*`` route while leaving
+    liveness/probe routes open;
+  * resolves that verified identity against the **governed access directory**
+    (:mod:`trakt_core.access`), which decides tenant, role, portfolio contexts
+    and whether the account is live at all.
+
+Where authorisation comes from
+------------------------------
+It used to come from the roles Static Web Apps attached to an accepted
+invitation (``userRoles`` containing ``client``/``operator``). That is no longer
+the authority: invitation acceptance proved unreliable in this deployment, and
+more fundamentally, who may read a tenant's book is a Trakt governance decision
+that belongs in reviewable configuration rather than in a portal click.
+
+The directory is now the sole authority. A principal that still carries a legacy
+SWA ``client``/``operator`` role is accepted and parsed exactly as before — the
+role simply no longer decides anything. That keeps existing sessions and the
+existing header shapes working while the decision moves; it does NOT grant
+access to an identity the directory does not list, because the fail-closed
+requirement outranks the compatibility one.
 
 Environment configuration:
 
@@ -45,6 +61,9 @@ from typing import Any, Dict, List, Optional, Set
 
 from fastapi import HTTPException, Request, status
 
+from trakt_core import access
+from trakt_core.errors import ErrorCode, TraktError
+
 logger = logging.getLogger("mi_agent_api.auth")
 
 PRINCIPAL_HEADER = "x-ms-client-principal"
@@ -61,6 +80,17 @@ OPEN_PATHS: Set[str] = {"/", "/health", "/openapi.json", "/docs", "/docs/oauth2-
 # bearer token (see copilot_auth.py) instead of the platform-injected Easy Auth
 # header, so this guard does not apply to them — their own guard fails closed.
 COPILOT_PATH_PREFIX = "/v1/copilot"
+
+#: Query parameters that select a governed portfolio context. ``portfolioContext``
+#: is the current name and ``lens`` is the older alias several routes still
+#: accept (``_resolve_portfolio_context(portfolioContext or lens, ...)``), so
+#: both must be gated — enforcing only the new name would leave the alias as an
+#: unchecked way to ask for a context the caller is not entitled to.
+#:
+#: ``test_governed_access.py`` asserts this set covers every context-selecting
+#: parameter the route signatures actually declare, so adding a third alias
+#: fails a test rather than silently escaping the check.
+CONTEXT_QUERY_PARAMS = ("portfolioContext", "lens")
 
 # The Teams bot messaging endpoint is called by the Bot Framework service, not
 # by a signed-in user, so no Easy Auth header exists on those requests either.
@@ -81,6 +111,16 @@ _NAME_CLAIM_TYPES = {
     "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
     "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
 }
+
+
+def _norm_tenant(value: Optional[str]) -> str:
+    """Tenant identifiers compare case-insensitively.
+
+    ``MI_AGENT_CLIENT_ID`` is typed by hand into Azure app settings and the
+    directory is typed by hand into YAML; ``ERE`` and ``ere`` naming the same
+    tenant must not lock everyone out over capitalisation.
+    """
+    return str(value or "").strip().lower()
 
 
 def _auth_enabled() -> bool:
@@ -122,7 +162,23 @@ class Principal:
 
     @property
     def has_mi_role(self) -> bool:
+        """Whether the platform attached a legacy SWA MI role.
+
+        Retained for compatibility and for the ``/me`` payload. **No longer an
+        access decision** — :mod:`trakt_core.access` is the authority. Kept so
+        that a deployment mid-migration can still see what the platform sent.
+        """
         return self.is_operator or self.is_client
+
+    def directory_identifiers(self) -> tuple:
+        """Verified identifiers to look up in the access directory.
+
+        Both are platform-verified: ``user_details`` is the email/UPN Entra
+        returned and ``user_id`` is the object id. Neither is caller-supplied
+        once the principal header is trustworthy, which is exactly the condition
+        :func:`mi_agent_api.identity.require_trustworthy_platform_auth` enforces.
+        """
+        return (self.user_details, self.user_id)
 
     def to_public(self) -> Dict[str, Any]:
         """A minimal, non-sensitive view for logging / echoing to the UI."""
@@ -204,11 +260,24 @@ def principal_from_request(request: Request) -> Optional[Principal]:
 
 
 async def auth_guard(request: Request) -> None:
-    """Global dependency: enforce authentication + MI role on protected routes.
+    """Global dependency: authenticate, then authorise against the directory.
 
-    Open (probe/index/docs) paths pass through. On protected paths a missing
-    principal is 401 and a principal without an MI role is 403. The resolved
-    principal is stashed on ``request.state.principal`` for handlers/logging.
+    Open (probe/index/docs) paths pass through. On protected paths:
+
+      * no principal                      -> 401 (the platform did not sign
+                                             anyone in)
+      * principal not in the directory    -> 403 ACCESS_NOT_PROVISIONED
+      * principal present but disabled    -> 403 ACCESS_DISABLED
+
+    The resolved principal is stashed on ``request.state.principal`` and the
+    resolved grant on ``request.state.access_grant``, so a handler builds its
+    :class:`~trakt_core.context.ExecutionContext` from facts this guard already
+    verified rather than resolving identity a second time.
+
+    The two 403s are raised as :class:`~trakt_core.errors.TraktError` rather
+    than ``HTTPException`` so they carry a machine-readable ``errorCode`` that
+    the UI can distinguish from a generic failure — the app's TraktError handler
+    maps them to their status.
     """
     path = request.url.path.rstrip("/") or "/"
     if path in OPEN_PATHS or request.method == "OPTIONS":
@@ -225,8 +294,14 @@ async def auth_guard(request: Request) -> None:
         return
 
     if not _auth_enabled():
+        # Explicit local-development / test bypass. No principal is verified, so
+        # there is nothing to look up: the directory is skipped entirely and the
+        # deployment-wide tenant applies. This branch is unreachable in Azure —
+        # identity.require_trustworthy_platform_auth refuses to serve a
+        # production request whose principal header could be forged.
         request.state.principal = Principal(
             user_details="local-dev", roles={_operator_role()}, synthetic=True)
+        request.state.access_grant = None
         return
 
     principal = principal_from_request(request)
@@ -235,10 +310,37 @@ async def auth_guard(request: Request) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required.",
         )
-    if not principal.has_mi_role:
-        # Authenticated but no client/operator app-role assigned → fail closed.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No MI access role assigned to this account.",
+    # Authenticated. What that identity may see is Trakt's decision, not the
+    # platform's: resolve it against the governed directory, which raises the
+    # governed 403 for an unprovisioned or disabled account.
+    grant = access.resolve_grant(*principal.directory_identifiers())
+    # This is a deployment-per-tenant product: the dataset layer resolves data
+    # from deployment configuration (``dependencies.default_tenant_id``), not
+    # from the context. A grant naming a DIFFERENT tenant therefore cannot be
+    # served here — honouring it would hand this deployment's book to someone
+    # entitled to another one. Refuse rather than silently serve.
+    #
+    # Imported lazily: ``dependencies`` pulls in the dataset layer, and auth
+    # must stay importable without it.
+    from .dependencies import default_tenant_id
+
+    deployment_tenant = default_tenant_id()
+    if _norm_tenant(grant.tenant_id) != _norm_tenant(deployment_tenant):
+        logger.warning(
+            "access grant for %s names tenant %r but this deployment serves %r",
+            grant.subject, grant.tenant_id, deployment_tenant)
+        raise TraktError(
+            ErrorCode.TENANT_MISMATCH,
+            "This account is provisioned for a different Trakt tenant than the "
+            "one this deployment serves.",
+            details={"tenant_id": grant.tenant_id},
         )
+    # A grant may be narrowed to particular workspace contexts. Check it here,
+    # on the raw request, rather than inside the resolver: the resolver is
+    # documented never to raise and returns None on failure, which every route
+    # treats as "unscoped" — so refusing there would silently WIDEN a denied
+    # request to the full book instead of blocking it.
+    for param in CONTEXT_QUERY_PARAMS:
+        access.authorise_context(grant, request.query_params.get(param))
+    request.state.access_grant = grant
     request.state.principal = principal

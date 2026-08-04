@@ -73,6 +73,7 @@ from trakt_core.portfolio import (
     CAP_RUNOFF_FORECAST,
     REASON_NON_ORIGINATING,
 )
+from trakt_core import access as trakt_access
 from trakt_core.errors import TraktError
 from trakt_core.runtime import runtime_mode, validate_runtime_mode
 from trakt_core import perf
@@ -147,6 +148,10 @@ def _execution_context(request: "Request", *, channel: str):
     return identity_mod.context_from_principal(
         principal,
         tenant_id=default_tenant_id(),
+        # Resolved by auth_guard against the governed access directory. Absent
+        # only on the local-development bypass, where the deployment-wide tenant
+        # is still the right answer.
+        grant=getattr(request.state, "access_grant", None),
         channel=channel,
         request_id=request.headers.get("x-request-id") or None,
         correlation_id=request.headers.get("x-correlation-id") or None,
@@ -329,6 +334,12 @@ def health() -> Dict[str, Any]:
             "runtimeMode": runtime_mode(),
             "tenantId": default_tenant_id(),
             "platformAuth": identity_mod.platform_auth_status(),
+            # The governed access directory's posture. Surfaced on an OPEN route
+            # deliberately: if the directory failed to deploy, every signed-in
+            # user is refused, and the one thing needed to diagnose that must
+            # not itself require getting past the directory. Counts and the
+            # source path only — never who is provisioned.
+            "accessDirectory": trakt_access.directory_status(),
         },
         # How this deployment is reachable. Surfaced so a 404 can be diagnosed
         # with one request: it states the gateway prefix the API accepts and the
@@ -345,14 +356,27 @@ def health() -> Dict[str, Any]:
 
 @app.get("/me")
 def me(request: Request) -> Dict[str, Any]:
-    """The authenticated caller as the API resolved them (identity + MI roles).
+    """The authenticated caller as the API resolved them.
 
     Useful for the UI to show who is signed in and whether they hold the
-    operator role. Requires authentication (via the global guard)."""
+    operator role. Requires authentication (via the global guard).
+
+    The role reported here is the one the **governed access directory** granted,
+    not whatever roles the platform attached. Those are echoed separately under
+    ``platformRoles`` so a migration can see what SWA is still sending, but they
+    no longer decide anything — reporting them as the role would tell the UI a
+    provisioned operator was not one.
+    """
     principal = getattr(request.state, "principal", None) or principal_from_request(request)
     if principal is None:
         return {"authenticated": False}
-    return {"authenticated": True, **principal.to_public()}
+    payload: Dict[str, Any] = {"authenticated": True, **principal.to_public()}
+    grant = getattr(request.state, "access_grant", None)
+    if grant is not None:
+        payload.update(grant.to_public())
+        payload["platformRoles"] = sorted(principal.roles)
+        payload["provisioned"] = True
+    return payload
 
 
 @app.get("/mi/catalogue")

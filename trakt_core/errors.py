@@ -47,6 +47,15 @@ class ErrorCode:
     SCOPE_MISSING = "SCOPE_MISSING"
     TENANT_MISMATCH = "TENANT_MISMATCH"
     PORTFOLIO_NOT_AUTHORISED = "PORTFOLIO_NOT_AUTHORISED"
+    #: Authenticated by the platform, but absent from the governed access
+    #: directory. Distinct from PERMISSION_DENIED because the remedy is
+    #: different and the UI says so: nothing is broken and retrying will not
+    #: help — a Trakt administrator has to provision the account.
+    ACCESS_NOT_PROVISIONED = "ACCESS_NOT_PROVISIONED"
+    #: Present in the directory but switched off. Kept separate from
+    #: NOT_PROVISIONED so revocation is visible in logs as revocation rather
+    #: than looking like an account that was never set up.
+    ACCESS_DISABLED = "ACCESS_DISABLED"
 
     # -- input ------------------------------------------------------------- #
     INVALID_INPUT = "INVALID_INPUT"
@@ -94,6 +103,8 @@ _CODES: Dict[str, _CodeSpec] = {
     ErrorCode.SCOPE_MISSING: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.TENANT_MISMATCH: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.PORTFOLIO_NOT_AUTHORISED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.ACCESS_NOT_PROVISIONED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.ACCESS_DISABLED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
 
     ErrorCode.INVALID_INPUT: _CodeSpec(ErrorCategory.INPUT, False, 400),
 

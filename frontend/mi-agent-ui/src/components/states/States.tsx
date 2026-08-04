@@ -1,6 +1,8 @@
 /** Shared empty / loading / error states for the artifact canvas. */
-import { AlertTriangle, Inbox, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, Inbox, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
+
+import { accessRefusal } from "@/domain/accessErrors";
 
 export function LoadingState() {
   return (
@@ -37,6 +39,21 @@ export function EmptyState({
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  // A governed access refusal is not a fault. Retrying cannot clear it, so the
+  // panel states the actual condition and drops the Retry button rather than
+  // inviting a loop that can never terminate.
+  const refusal = accessRefusal(message);
+  if (refusal) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/5 px-6 py-8 text-center">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400/10 text-amber-400">
+          <ShieldAlert size={20} />
+        </div>
+        <div className="mt-3 text-sm font-medium text-ink-100">{refusal.title}</div>
+        <p className="mt-1 max-w-sm text-xs text-ink-400">{refusal.detail}</p>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-rose-400/20 bg-rose-400/5 px-6 py-8 text-center">
       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-400/10 text-rose-400">
