@@ -84,7 +84,16 @@ here is exercised by the framework; nothing is re-implemented.
    business vocabulary, so the governed MI Agent could not answer "balance by
    charge rank" or "exposure by vendor". They are now curated
    (`mi_agent/build_mi_semantics_registry.py`, 106 → 116 fields).
-6. **`spv_id` is a gap.** It is a reserved snapshot column (`snapshot/model.py`)
+6. **`engine/platform_assembler.py` was never exercised, and the framework
+   said it was.** ``simulation/pipeline.py`` shipped a declared
+   ``PRODUCTION_MODULES`` tuple naming the assembler, which every
+   ``run_summary.json`` reported — while the wrapper that would have called it
+   was dead code. Assembly is a no-op for a client delivering ONE portfolio, so
+   nothing had ever needed it. Fixed on both sides: a multi-source case now
+   drives the production Assembler Agent for real, and a run summary reports
+   only modules **observed** to execute, each with the evidence that proves it
+   (see §7).
+7. **`spv_id` is a gap.** It is a reserved snapshot column (`snapshot/model.py`)
    and a governed risk field role (`spv`), but it is **not** in the canonical field
    registry, so a funded SPV segmentation cannot round-trip through canonical
    today. The framework therefore carries the funding structure on the production
@@ -98,7 +107,7 @@ here is exercised by the framework; nothing is re-implemented.
 ```
 simulation/
   models.py            typed manifest + loan-state + movement + failure vocabulary
-  manifests.py         the catalogue (18 economic + 2 guard), validation, JSON round-trip
+  manifests.py         the catalogue (18 economic + 1 multi-source + 2 guard)
   generator.py         seeded economic generator (asset-class agnostic core)
   history.py           month-by-month roll-forward + movement reconciliation
   reference_truth.py   INDEPENDENT expected truth (small, transparent arithmetic)
@@ -267,7 +276,73 @@ flap on shared CI hardware.
 
 ---
 
-## 6. What runs in the ordinary test suite
+## 6. Multi-source funded books and platform assembly
+
+One client, ONE SPV, two separately delivered funded populations — directly
+originated lending and an acquired back book, on aligned monthly reporting
+dates with distinct loan identifiers. `direct` / `acquired` is **provenance
+inside the SPV**, not a second SPV: both sources share `spv_id`, and the
+distinction lives on the production provenance fields `source_portfolio_id` and
+`source_portfolio_type`, which is exactly what `trakt_core.portfolio
+.resolve_scope` groups on.
+
+This is the only case shape that exercises `engine/platform_assembler.py`, and
+it does so through the real production entry point —
+`engine.assembler_agent.run_assembler_agent`, the same function
+`apps.blob_trigger_app.assembler_refresh.default_assembler_refresher` calls.
+The framework supplies the inputs and a deterministic run identity (the
+assembler's default `created_at` is `datetime.now()`, which would make the
+lineage manifest irreproducible); it contributes nothing else.
+
+The assembled platform canonical then becomes the input to **every** downstream
+stage — snapshot registration, MI, risk, the governed Agent and the regime — so
+the SPV is answered as one book rather than one of its parts.
+
+| Property verified | How |
+|---|---|
+| Both deliveries assemble into one SPV view | every period's platform canonical carries both `source_portfolio_id`s |
+| SPV balance and count = direct + acquired | against `combine_truths`, which ADDS the independently computed per-source truths |
+| Provenance survives assembly | `source_portfolio_id` / `source_portfolio_type` non-null and unrewritten |
+| No duplication or omission | composite key `source_portfolio_id + loan_identifier` unique; loan ids distinct across sources; row count equals the sum |
+| Reporting-date resolution | every assembled row carries the cut's date; the snapshot store resolves each period back |
+| Total / direct / acquired MI reconcile | three governed questions through the production `source_portfolio_lens`; parts sum to the whole and no part equals the whole |
+| Risk at total and provenance-filtered scope | `resolve_scope` + `apply_scope` narrow the frame, then the same `evaluate_active_tests`; no limit may become `unavailable`, and the scopes must partition the book exactly |
+
+A single-source case records the assembly stage as **skipped, with the reason** —
+there is nothing to consolidate, and running the assembler over one input would
+prove nothing while appearing to.
+
+Combining truths is deliberately partial. Balances, counts, movements, status /
+vintage / cohort breakdowns and *balance-weighted* averages recombine exactly.
+`largest_concentrations`, `largest_borrower` and `asset_measures` do **not** —
+the largest region across two deliveries is not derivable from each delivery's
+own largest region — so the SPV truth omits them and the assertions that would
+need them say they skipped, rather than approximating an expectation from the
+platform they are checking.
+
+---
+
+## 7. Production-module coverage is observed, not declared
+
+`run_summary.json` reports `production_modules` **and**
+`production_module_evidence`: a module appears only because something recorded
+proof that it ran during that case — a gate banner the orchestrator printed, an
+assembler manifest, a returned snapshot id.
+
+This replaced a declared `PRODUCTION_MODULES` tuple that listed
+`engine.platform_assembler` on every run while nothing ever called it. A
+declared list is a claim about coverage published in the very evidence a reader
+would use to check coverage, which is the worst place for a claim to be wrong.
+
+`simulation.pipeline.KNOWN_PRODUCTION_MODULES` remains, but only as a closed
+vocabulary: `observe()` rejects a module outside it, so the reporting surface
+cannot grow silently either. `tests/test_simulation_multi_source.py` pins both
+directions — the assembler IS reported for a multi-source run, and is NOT
+reported for a single-source one.
+
+---
+
+## 8. What runs in the ordinary test suite
 
 | Test file | Covers |
 |---|---|
@@ -275,3 +350,4 @@ flap on shared CI hardware.
 | `tests/test_simulation_pipeline.py` | source → canonical through the real gates, cross-dialect equivalence, one end-to-end case, both guard cases failing at the right boundary |
 | `tests/test_simulation_platform_extensions.py` | the governed-library extensions, the three defect fixes, the KPI evidence enhancement, and the recorded limitations |
 | `tests/test_simulation_regression_fixtures.py` | the pinned economics still reproduce byte-for-byte from their committed manifests |
+| `tests/test_simulation_multi_source.py` | the multi-source SPV: manifest rules, independent truth combination, one end-to-end assembled run, and the observed-module reporting rule |

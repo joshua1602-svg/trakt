@@ -304,6 +304,131 @@ def _direction(current: float, prior: float, tolerance: float = 0.5) -> str:
     return "flat"
 
 
+#: Period figures that are ADDITIVE across separately delivered funded
+#: populations inside one SPV. A balance or a count sums; a weighted average
+#: does not, and a "largest concentration" is not the sum of two largests, so
+#: neither is combined here — the SPV-level value for those is measured from
+#: the assembled book, never inferred.
+_ADDITIVE_PERIOD_FIELDS = (
+    "loan_count", "exited_loan_count", "reported_row_count",
+    "opening_balance", "closing_balance", "period_movement",
+    "funded_additions", "acquired_additions", "total_additions",
+    "rolled_up_interest", "further_advances", "redemptions", "repayments",
+    "principal_amortisation", "total_reductions", "write_offs", "recoveries",
+    "asset_disposals", "restatement", "movement_delta",
+)
+
+
+def combine_truths(case: CaseManifest,
+                   by_source: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """The SPV-level expected truth for a multi-source case.
+
+    Computed by ADDING the independently computed per-source truths, which is
+    the whole point: the platform figure a case asserts against is arrived at
+    without reading anything the platform produced, and without re-running the
+    generator over a merged book.
+
+    Only genuinely additive figures are combined. Weighted averages and
+    largest-concentration figures are deliberately omitted rather than
+    approximated — an SPV's weighted-average LTV is not the sum, nor the mean,
+    of its parts' weighted averages.
+    """
+    order = [s.portfolio_id for s in case.funded_sources()]
+    firsts = [by_source[pid] for pid in order]
+    dates = firsts[0]["reporting_dates"]
+    for pid in order:
+        if by_source[pid]["reporting_dates"] != dates:
+            raise ValueError(
+                f"{pid}: reporting dates differ across sources; a multi-source "
+                f"SPV must deliver aligned month-ends")
+
+    periods: List[Dict[str, Any]] = []
+    for index, date in enumerate(dates):
+        parts = [by_source[pid]["periods"][index] for pid in order]
+        combined: Dict[str, Any] = {"reporting_date": date, "period_index": index}
+        for field in _ADDITIVE_PERIOD_FIELDS:
+            values = [p[field] for p in parts]
+            total = sum(values)
+            combined[field] = (round(total, 2) if isinstance(total, float)
+                               else int(total))
+        combined["movement_reconciles"] = all(p["movement_reconciles"]
+                                              for p in parts)
+        # Key-wise sums: a status balance, a vintage balance and a cohort
+        # balance all add across separately delivered populations.
+        for field in ("status_balances", "status_counts", "vintage_balances",
+                      "cohort_balances"):
+            merged: Dict[str, float] = defaultdict(float)
+            for part in parts:
+                for key, value in (part.get(field) or {}).items():
+                    merged[key] += value
+            combined[field] = {
+                k: (round(v, 2) if isinstance(v, float) else int(v))
+                for k, v in sorted(merged.items())}
+        # A BALANCE-weighted average recombines exactly, because the weight is
+        # the balance each part already reports: Σ(avg_i · bal_i) / Σ(bal_i).
+        for field in ("weighted_average_current_ltv",
+                      "weighted_average_interest_rate"):
+            num = sum((p[field] or 0.0) * p["closing_balance"]
+                      for p in parts if p.get(field) is not None)
+            den = sum(p["closing_balance"] for p in parts
+                      if p.get(field) is not None)
+            combined[field] = round(num / den, 6) if den else None
+        # Deliberately NOT combined: ``largest_concentrations``,
+        # ``largest_borrower`` and ``asset_measures``. The largest group in a
+        # combined book is not the larger of two largest groups — the true
+        # answer needs the full group breakdown, which the per-source truth
+        # does not carry. Rather than approximate it, the SPV truth omits the
+        # figure and the assertions that need it state that they skipped it.
+        combined["by_source"] = {
+            pid: {"loan_count": by_source[pid]["periods"][index]["loan_count"],
+                  "closing_balance":
+                      by_source[pid]["periods"][index]["closing_balance"],
+                  "opening_balance":
+                      by_source[pid]["periods"][index]["opening_balance"]}
+            for pid in order}
+        periods.append(combined)
+
+    first, last = periods[0], periods[-1]
+    sources = {s.portfolio_id: s.source_portfolio_type
+               for s in case.funded_sources()}
+    return {
+        "truth_version": TRUTH_VERSION,
+        "case_id": case.case_id, "seed": case.seed,
+        "simulation_version": case.simulation_version,
+        "asset_class": case.asset_class, "asset_subtype": case.asset_subtype,
+        "client_id": case.client_id, "portfolio_id": case.portfolio_id,
+        "spv_id": case.spv_id, "currency": case.currency,
+        "multi_source": True,
+        "source_portfolio_ids": order,
+        "source_portfolio_types": sources,
+        "reporting_dates": list(dates),
+        "periods": periods,
+        "by_source": by_source,
+        "history_summary": {
+            "opening_balance": first["opening_balance"],
+            "closing_balance": last["closing_balance"],
+            "total_movement": round(last["closing_balance"]
+                                    - first["opening_balance"], 2),
+            "direction": _direction(last["closing_balance"],
+                                    first["opening_balance"]),
+            "month_on_month_direction": [
+                _direction(p["closing_balance"], p["opening_balance"])
+                for p in periods],
+            "opening_loan_count": first["loan_count"],
+            "closing_loan_count": last["loan_count"],
+        },
+        "expected_risk_status": case.risk_intent.intended_status,
+        "expected_targeted_limits": list(case.risk_intent.targeted_limits),
+        "expected_regime": {
+            "applicability": case.regime.applicability,
+            "regime_id": case.regime.regime_id,
+            "artefact_status": case.regime.artefact_status,
+            "reason": case.regime.reason,
+        },
+        "expected_validation_warnings": list(case.expected_validation_warnings),
+    }
+
+
 def write_expected_truth(truth: Dict[str, Any], path: Path) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -313,5 +438,5 @@ def write_expected_truth(truth: Dict[str, Any], path: Path) -> Path:
     return path
 
 
-__all__ = ["TRUTH_VERSION", "build_expected_truth", "period_truth",
-           "write_expected_truth"]
+__all__ = ["TRUTH_VERSION", "build_expected_truth", "combine_truths",
+           "period_truth", "write_expected_truth"]

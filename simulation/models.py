@@ -25,6 +25,14 @@ ASSET_BRIDGE = "bridge"
 ASSET_FINANCE = "asset_finance"
 ASSET_CLASSES: Tuple[str, ...] = (ASSET_EQUITY_RELEASE, ASSET_BRIDGE, ASSET_FINANCE)
 
+#: Funded provenance INSIDE one SPV. These are the values the production
+#: provenance field ``source_portfolio_type`` carries and the values
+#: ``trakt_core.portfolio.resolve_scope`` groups on, so the vocabulary is
+#: theirs, not the framework's.
+SOURCE_DIRECT = "direct"
+SOURCE_ACQUIRED = "acquired"
+SOURCE_PORTFOLIO_TYPES: Tuple[str, ...] = (SOURCE_DIRECT, SOURCE_ACQUIRED)
+
 #: Recognised subtypes per asset class. The subtype drives contract and
 #: collateral configuration only; it never selects a different code path.
 ASSET_SUBTYPES: Dict[str, Tuple[str, ...]] = {
@@ -260,6 +268,47 @@ class RegimeIntent:
 
 
 @dataclass(frozen=True)
+class FundedSource:
+    """One separately delivered funded population inside ONE SPV.
+
+    A managed client does not deliver its book as a single file. Directly
+    originated lending and an acquired back book arrive as separate deliveries,
+    on the same monthly reporting dates, and are consolidated by
+    ``engine/platform_assembler.py`` into one platform view.
+
+    ``direct`` / ``acquired`` is PROVENANCE INSIDE one SPV, not a second SPV:
+    every source in a case shares the case's ``spv_id``. The distinction is
+    carried on the production provenance fields (``source_portfolio_id``,
+    ``source_portfolio_type``), which is what the governed scope resolver reads
+    when it is asked for "total", "direct" or "acquired".
+    """
+
+    portfolio_id: str
+    source_portfolio_type: str          # direct | acquired
+    #: Fraction of the case's opening loan count this source carries.
+    share: float
+    #: Added to the case seed so each source draws its OWN deterministic
+    #: stream. Two sources must not be the same book under two labels.
+    seed_offset: int
+    #: Mandatory for an acquired book — ``engine.provenance`` fails closed.
+    acquisition_date: Optional[str] = None
+    seller_name: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.source_portfolio_type not in SOURCE_PORTFOLIO_TYPES:
+            raise ValueError(f"unknown source portfolio type "
+                             f"{self.source_portfolio_type!r}")
+        if not 0.0 < self.share <= 1.0:
+            raise ValueError(f"share must be in (0, 1]: {self.share!r}")
+        if self.source_portfolio_type == SOURCE_ACQUIRED and not self.acquisition_date:
+            raise ValueError(f"{self.portfolio_id}: an acquired source must "
+                             f"declare its acquisition_date")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
+
+@dataclass(frozen=True)
 class CaseManifest:
     """One versioned, seed-controlled simulation case.
 
@@ -308,6 +357,11 @@ class CaseManifest:
     profiles: Tuple[str, ...] = ("standard",)
     #: Validation warnings the run is expected to emit (substring match).
     expected_validation_warnings: Tuple[str, ...] = ()
+    #: Separately delivered funded populations inside THIS case's one SPV.
+    #: Empty means single-source, which is every case that predates the
+    #: multi-source work — and ``to_dict`` omits the key when empty so those
+    #: cases' committed manifest hashes are unchanged.
+    sources: Tuple[FundedSource, ...] = ()
 
     # -- identity ---------------------------------------------------------- #
     @property
@@ -330,6 +384,41 @@ class CaseManifest:
         from .dates import month_end_series
         return month_end_series(self.start_reporting_date, self.months)
 
+    # -- funded sources ---------------------------------------------------- #
+    @property
+    def is_multi_source(self) -> bool:
+        return len(self.sources) > 1
+
+    def funded_sources(self) -> List[FundedSource]:
+        """The funded populations this case delivers, always at least one.
+
+        A single-source case answers with the source its top-level fields
+        already describe, so every stage can be written once against a list
+        instead of branching on whether the case is multi-source.
+        """
+        if self.sources:
+            return list(self.sources)
+        return [FundedSource(
+            portfolio_id=self.portfolio_id,
+            source_portfolio_type=self.source_portfolio_type,
+            share=1.0, seed_offset=0,
+            acquisition_date=self.acquisition_date,
+            seller_name=self.seller_name)]
+
+    def source_case(self, source: FundedSource) -> "CaseManifest":
+        """This case as it applies to ONE funded source.
+
+        The source's own seed offset, portfolio id and provenance are pushed
+        onto a copy, so every existing single-source code path — generation,
+        rendering, the provenance CLI — works unchanged per source.
+        """
+        return dataclasses.replace(
+            self, seed=self.seed + source.seed_offset,
+            portfolio_id=source.portfolio_id,
+            source_portfolio_type=source.source_portfolio_type,
+            acquisition_date=source.acquisition_date,
+            seller_name=source.seller_name, sources=())
+
     # -- serialisation ----------------------------------------------------- #
     def to_dict(self) -> Dict[str, Any]:
         out = dataclasses.asdict(self)
@@ -346,6 +435,14 @@ class CaseManifest:
             for s in self.schema_evolution]
         out["portfolio_type"] = self.portfolio_type
         out["run_key"] = self.run_key
+        # Omitted entirely when empty: a single-source case must serialise
+        # exactly as it did before multi-source existed, so its committed
+        # manifest hash — and therefore its pinned regression fixture — is
+        # unchanged by the mere existence of the field.
+        if self.sources:
+            out["sources"] = [s.to_dict() for s in self.sources]
+        else:
+            out.pop("sources", None)
         return out
 
     @classmethod
@@ -367,6 +464,14 @@ class CaseManifest:
                             purpose=s.get("purpose", ""),
                             detail=dict(s.get("detail") or {}))
             for s in (payload.get("schema_evolution") or ()))
+        payload["sources"] = tuple(
+            FundedSource(portfolio_id=s["portfolio_id"],
+                         source_portfolio_type=s["source_portfolio_type"],
+                         share=float(s["share"]),
+                         seed_offset=int(s["seed_offset"]),
+                         acquisition_date=s.get("acquisition_date"),
+                         seller_name=s.get("seller_name"))
+            for s in (payload.get("sources") or ()))
         for key in ("dialects", "economic_intent", "profiles",
                     "expected_validation_warnings"):
             if key in payload and payload[key] is not None:
@@ -482,6 +587,10 @@ STAGE_RENDER = "render"
 STAGE_INGEST = "ingest"
 STAGE_CANONICAL = "canonical"
 STAGE_EQUIVALENCE = "canonical_equivalence"
+#: Consolidation of separately delivered funded populations into the SPV view.
+#: Skipped, with a reason, for a single-source case — there is nothing to
+#: assemble, and a skipped stage must never read as a passed one.
+STAGE_ASSEMBLE = "platform_assembly"
 STAGE_HISTORY = "history_integration"
 STAGE_MI = "mi"
 STAGE_RISK = "risk"
@@ -489,8 +598,8 @@ STAGE_AGENT = "agent"
 STAGE_REGIME = "regime"
 STAGES: Tuple[str, ...] = (
     STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_CANONICAL,
-    STAGE_EQUIVALENCE, STAGE_HISTORY, STAGE_MI, STAGE_RISK, STAGE_AGENT,
-    STAGE_REGIME,
+    STAGE_EQUIVALENCE, STAGE_ASSEMBLE, STAGE_HISTORY, STAGE_MI, STAGE_RISK,
+    STAGE_AGENT, STAGE_REGIME,
 )
 
 
@@ -566,6 +675,9 @@ class CaseResult:
     selected_stages: List[str] = field(default_factory=list)
     #: True when a run budget expired and the remaining stages were skipped.
     timed_out: bool = False
+    #: ``{production module: what proved it ran}``. Populated from OBSERVED
+    #: execution at the end of the run, never from a declared list.
+    production_module_evidence: Dict[str, str] = field(default_factory=dict)
 
     # -- outcome ----------------------------------------------------------- #
     @property
@@ -610,6 +722,7 @@ class CaseResult:
             "manifest_hash": self.manifest_hash,
             "assertions": self.assertion_counts(),
             "production_modules": sorted(set(self.production_modules)),
+            "production_module_evidence": dict(self.production_module_evidence),
             "timings": {k: round(v, 3) for k, v in self.timings.items()},
             "peak_memory_mb": self.peak_memory_mb,
             "stages": [s.to_dict() for s in self.stages],
@@ -623,7 +736,7 @@ __all__ = [
     "ASSET_FINANCE", "Assertion", "CLOSED_STATUSES", "CaseManifest",
     "CaseResult", "DIALECTS", "DIALECT_CLEAN_CSV", "DIALECT_LENDER_EXCEL",
     "DIALECT_LOCALE_CSV", "EXPECTATIONS", "EXPECT_FAILURE", "EXPECT_SUCCESS",
-    "EconomicHistory", "FailureClass", "LOAN_STATUSES", "LoanState",
+    "EconomicHistory", "FailureClass", "FundedSource", "LOAN_STATUSES", "LoanState",
     "MOVEMENT_KINDS", "MOVE_ACQUIRED", "MOVE_AMORTISATION", "MOVE_DISPOSAL",
     "MOVE_FUNDED", "MOVE_FURTHER_ADVANCE", "MOVE_INTEREST", "MOVE_RECOVERY",
     "MOVE_REDEMPTION", "MOVE_REPAYMENT", "MOVE_RESTATEMENT", "MOVE_WRITE_OFF",
@@ -631,8 +744,9 @@ __all__ = [
     "PeriodSnapshot", "REGIME_APPLICABILITY", "REGIME_APPLICABLE",
     "REGIME_AWAITING_DEAL_CONFIG", "REGIME_NOT_APPLICABLE",
     "REGIME_NOT_SUPPORTED", "RISK_AMBER", "RISK_GREEN", "RISK_RED",
-    "RISK_STATES", "RegimeIntent", "RiskIntent", "SCALES", "STAGES",
-    "STAGE_AGENT", "STAGE_CANONICAL", "STAGE_EQUIVALENCE", "STAGE_GENERATE",
+    "RISK_STATES", "RegimeIntent", "RiskIntent", "SCALES", "SOURCE_ACQUIRED",
+    "SOURCE_DIRECT", "SOURCE_PORTFOLIO_TYPES", "STAGES",
+    "STAGE_AGENT", "STAGE_ASSEMBLE", "STAGE_CANONICAL", "STAGE_EQUIVALENCE", "STAGE_GENERATE",
     "STAGE_HISTORY", "STAGE_INGEST", "STAGE_MI", "STAGE_REGIME", "STAGE_RENDER",
     "STAGE_RISK", "STATUS_ARREARS", "STATUS_DEFAULT", "STATUS_ENFORCEMENT",
     "STATUS_PERFORMING", "STATUS_REDEEMED", "STATUS_REPOSSESSED",

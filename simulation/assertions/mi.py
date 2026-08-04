@@ -206,6 +206,16 @@ def assert_concentration(store, case, truth: Dict[str, Any]) -> List[Assertion]:
     result = run_concentration(store, case.client_id, dimension, route="mi",
                                state="total_funded", reporting_date=date)
     frame = result.frame
+    if "largest_concentrations" not in final:
+        # A combined SPV truth deliberately does not carry a largest-group
+        # figure: the largest region across two deliveries is not derivable
+        # from each delivery's own largest region, and inventing it here would
+        # make the expected truth depend on the platform it is checking.
+        return [check(STAGE_MI,
+                      f"{date}: largest-region concentration (not combinable)",
+                      True, detail="Skipped for a multi-source SPV: the "
+                                   "expected figure is not derivable from the "
+                                   "per-source truths.")]
     expected = final["largest_concentrations"]["region"]
     if frame.empty:
         return [check(STAGE_MI, f"{date}: concentration produced rows", False,
@@ -287,7 +297,12 @@ def assert_asset_measure(store, case, truth: Dict[str, Any]) -> List[Assertion]:
     header = store.resolve_as_of(case.client_id, date, route="mi")
     frame = store.load_loans(header.snapshot_id)
     lib = load_library()
-    measures = final["asset_measures"]
+    measures = final.get("asset_measures")
+    if measures is None:
+        return [check(STAGE_MI, f"{date}: asset-specific measure (not combinable)",
+                      True, detail="Skipped for a multi-source SPV: shares and "
+                                   "weighted measures do not add across "
+                                   "separately delivered populations.")]
 
     if case.asset_class == "bridge":
         metric = lib.get("maturity_within_horizon_share")

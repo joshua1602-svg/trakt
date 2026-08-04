@@ -25,6 +25,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,9 +40,15 @@ ALIASES_ROOT = Path(__file__).resolve().parent / "aliases"
 PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
 PLATFORM_MANIFEST_NAME = "platform_canonical_manifest.json"
 
-#: Production modules this driver exercises, recorded on every run summary so a
-#: reader can see the framework really used the platform rather than a copy.
-PRODUCTION_MODULES = (
+#: Every production module the framework CAN exercise, with the evidence that
+#: proves it did. This is a lookup, NOT the thing reported: a run summary lists
+#: only what was observed (see :func:`observe` / :func:`observed_modules`).
+#:
+#: A declared list is a claim; this file previously shipped one, and it named
+#: ``engine.platform_assembler`` on every run even though nothing ever called
+#: it. Reporting a module that did not run overstates coverage in exactly the
+#: evidence a reader would use to check coverage, so the declaration is gone.
+KNOWN_PRODUCTION_MODULES = (
     "engine.orchestrator.trakt_run",
     "engine.gate_1_alignment.semantic_alignment",
     "engine.gate_2_transform.canonical_transform",
@@ -49,10 +56,66 @@ PRODUCTION_MODULES = (
     "engine.gate_3_validation.validate_canonical",
     "engine.gate_3_validation.validate_business_rules",
     "engine.gate_3_validation.aggregate_validation_results",
+    "engine.gate_4_projection.regime_projector",
+    "engine.gate_4b_delivery.annex2_delivery_normalizer",
+    "engine.gate_5_delivery.xml_builder_annex2",
     "engine.provenance",
+    "engine.assembler_agent",
     "engine.platform_assembler",
     "snapshot.adapters.local_fs.LocalFsSnapshotStore",
+    "mi_agent.mi_runtime",
+    "mi_agent.concentration_tests.evaluation",
+    "mi_agent_api.mi_service.execute_governed_mi_query",
 )
+
+#: Gate banner → the production module that printed it. The orchestrator prints
+#: one line per gate it actually ran, so the banner is evidence of execution
+#: rather than an assumption about what the orchestrator does.
+_GATE_BANNER_MODULES = (
+    ("[Gate 1]", "engine.gate_1_alignment.semantic_alignment"),
+    ("[Transform]", "engine.gate_2_transform.canonical_transform"),
+    ("[Gate 2.5]", "engine.gate_2_transform.lineage_tracker"),
+    ("[Gate 2]", "engine.gate_3_validation.validate_canonical"),
+    ("[Gate 3b]", "engine.gate_3_validation.aggregate_validation_results"),
+    ("[Gate 3]", "engine.gate_3_validation.validate_business_rules"),
+    ("[Gate 4]", "engine.gate_4_projection.regime_projector"),
+    ("[Gate 4b]", "engine.gate_4b_delivery.annex2_delivery_normalizer"),
+    ("[Gate 5]", "engine.gate_5_delivery.xml_builder_annex2"),
+)
+
+_OBSERVED: Dict[str, str] = {}
+_OBSERVED_LOCK = threading.Lock()
+
+
+def reset_observations() -> None:
+    """Start a run with no observations. Called once per case."""
+    with _OBSERVED_LOCK:
+        _OBSERVED.clear()
+
+
+def observe(module: str, evidence: str) -> None:
+    """Record that ``module`` genuinely ran, and what proves it."""
+    if module not in KNOWN_PRODUCTION_MODULES:
+        raise ValueError(
+            f"{module!r} is not a known production module; add it to "
+            f"KNOWN_PRODUCTION_MODULES so the vocabulary stays closed")
+    with _OBSERVED_LOCK:
+        _OBSERVED.setdefault(module, evidence)
+
+
+def observed_modules() -> Dict[str, str]:
+    """``{module: evidence}`` for everything observed so far this run."""
+    with _OBSERVED_LOCK:
+        return dict(sorted(_OBSERVED.items()))
+
+
+def _observe_gate_banners(run: "GateRun") -> None:
+    """Observe each gate the orchestrator REPORTED running."""
+    for line in run.gate_lines:
+        for prefix, module in _GATE_BANNER_MODULES:
+            if line.startswith(prefix):
+                observe(module, f"gate banner: {line[:110]}")
+                break
 
 
 class PipelineError(RuntimeError):
@@ -168,6 +231,12 @@ def run_mi_gates(source: Path, case, *, reporting_date: str, out_dir: Path,
     # A reported gate failure is a failed ingestion, whatever the exit code says.
     if run.ok and (run.canonical_validation_failed or run.canonical_row_count == 0):
         run.ok = False
+    if proc.returncode == 0 or run.gate_lines:
+        observe("engine.orchestrator.trakt_run",
+                f"invoked: {Path(TRAKT_RUN).name} --mode mi (rc={proc.returncode})")
+        observe("engine.provenance",
+                "provenance stamped on the canonical produced by --mode mi")
+        _observe_gate_banners(run)
     return run
 
 
@@ -207,21 +276,43 @@ def _read_json(path: Optional[Path]) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Platform consolidation
 # --------------------------------------------------------------------------- #
-def assemble_platform(canonicals: Sequence[Path], out_dir: Path) -> Dict[str, Any]:
-    """Run the production platform assembler over one period's canonicals."""
+def assemble_spv_canonical(canonicals: Sequence[Path], case, *,
+                           reporting_date: str, out_dir: Path) -> Dict[str, Any]:
+    """Consolidate one period's per-source canonicals into the SPV view.
+
+    Runs the PRODUCTION Assembler Agent — ``engine.assembler_agent
+    .run_assembler_agent``, the same function ``apps.blob_trigger_app
+    .assembler_refresh.default_assembler_refresher`` calls — which in turn runs
+    ``engine.platform_assembler.assemble_platform_canonical``. The framework
+    contributes the inputs and a deterministic run identity, nothing else.
+
+    ``assembler_run_id`` and ``created_at`` are derived from the case and the
+    reporting date rather than the wall clock, because the default is
+    ``datetime.now()`` and a benchmark that cannot reproduce its own manifest
+    is not evidence.
+    """
+    from engine.assembler_agent import run_assembler_agent
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    proc = _run([sys.executable, PLATFORM_ASSEMBLER, "--inputs", *canonicals,
-                 "--out-dir", out_dir])
-    if proc.returncode != 0:
-        raise PipelineError("platform_assembler failed",
-                            stdout=proc.stdout or "", stderr=proc.stderr or "",
-                            returncode=proc.returncode)
-    manifest = _read_json(out_dir / PLATFORM_MANIFEST_NAME)
-    if not (out_dir / PLATFORM_CANONICAL_NAME).exists():
+    result = run_assembler_agent(
+        [str(p) for p in canonicals], str(out_dir),
+        client_id=case.client_id, pipeline="mi",
+        assembler_run_id=f"asm_{case.case_id}_{reporting_date}",
+        created_at=f"{reporting_date}T00:00:00+00:00")
+    central = result.central_canonical_path
+    if central is None or not Path(central).exists():
         raise PipelineError(
-            f"platform_assembler produced no {PLATFORM_CANONICAL_NAME}",
-            stdout=proc.stdout or "", stderr=proc.stderr or "")
-    return {"canonical": out_dir / PLATFORM_CANONICAL_NAME, "manifest": manifest}
+            f"the assembler produced no central canonical for {reporting_date}",
+            stdout="", stderr=json.dumps(result.manifest, default=str)[:2000])
+    observe("engine.assembler_agent",
+            f"run_assembler_agent -> {Path(central).name} "
+            f"({result.manifest.get('assembler_run_id')})")
+    observe("engine.platform_assembler",
+            f"assemble_platform_canonical consolidated "
+            f"{len(result.manifest.get('inputs') or canonicals)} source canonical(s) "
+            f"for {reporting_date}")
+    return {"canonical": Path(central), "manifest": result.manifest,
+            "routing": result.routing}
 
 
 # --------------------------------------------------------------------------- #
@@ -258,6 +349,8 @@ def register_period(store, canonical: Path, case, *, reporting_date: str,
                   "portfolio_id": case.portfolio_id, "spv_id": case.spv_id,
                   "simulation_version": case.simulation_version})
     result = store.register_snapshot(header, frame)
+    observe("snapshot.adapters.local_fs.LocalFsSnapshotStore",
+            f"register_snapshot -> {result.snapshot_id} for {reporting_date}")
     return {"snapshot_id": result.snapshot_id, "created": result.created,
             "idempotent": result.idempotent, "issues": result.issues,
             "row_count": int(len(frame)), "reporting_date": reporting_date}
@@ -307,13 +400,18 @@ def run_regulatory_gates(source: Path, case, *, regime: str,
         cmd += ["--annex2-delivery-rules", overlay]
     started = time.monotonic()
     proc = _run(cmd)
-    return GateRun(
+    reg = GateRun(
         ok=proc.returncode == 0, returncode=proc.returncode,
         stdout=proc.stdout or "", stderr=proc.stderr or "",
         canonical_path=_find_canonical(out_dir, source),
         manifest=_read_json(out_dir / "run_manifest.json"),
         duration_seconds=time.monotonic() - started,
         command=[str(c) for c in cmd])
+    if proc.returncode == 0 or reg.gate_lines:
+        observe("engine.orchestrator.trakt_run",
+                f"invoked: trakt_run.py --mode regulatory --regime {regime}")
+        _observe_gate_banners(reg)
+    return reg
 
 
 def build_delivery_rules(case, out_dir: Path,
@@ -436,7 +534,8 @@ def publish_platform(run_dir: Path, case, *, reporting_date: str,
 
 
 __all__ = ["ALIASES_ROOT", "GateRun", "PLATFORM_CANONICAL_NAME",
-           "PLATFORM_MANIFEST_NAME", "PRODUCTION_MODULES", "PipelineError",
-           "REPO_ROOT", "assemble_platform", "mi_environment",
+           "KNOWN_PRODUCTION_MODULES", "PLATFORM_MANIFEST_NAME", "PipelineError",
+           "REPO_ROOT", "assemble_spv_canonical", "mi_environment", "observe",
+           "observed_modules", "reset_observations",
            "projected_regime_csv", "publish_platform", "register_period",
            "run_mi_gates", "run_regulatory_gates", "snapshot_store"]

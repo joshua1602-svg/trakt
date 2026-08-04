@@ -57,12 +57,22 @@ class TestCatalogue(unittest.TestCase):
         self.assertEqual(M.validate_catalogue(), {})
 
     def test_six_economic_cases_per_asset_family(self):
-        """The definition of done: six meaningful cases per family."""
+        """The definition of done: six meaningful cases per family.
+
+        Multi-source cases are counted separately: they exist to exercise
+        platform assembly across two funded deliveries, not to add a seventh
+        economic scenario to one family.
+        """
         economic = [c for c in M.all_cases()
-                    if c.expectation != EXPECT_FAILURE]
+                    if c.expectation != EXPECT_FAILURE and not c.is_multi_source]
         for asset_class in ASSET_CLASSES:
             cases = [c for c in economic if c.asset_class == asset_class]
             self.assertEqual(len(cases), 6, f"{asset_class}: {[c.case_id for c in cases]}")
+
+    def test_one_multi_source_case_exercises_platform_assembly(self):
+        multi = [c for c in M.all_cases() if c.is_multi_source]
+        self.assertEqual(len(multi), 1, [c.case_id for c in multi])
+        self.assertEqual(len(multi[0].sources), 2)
 
     def test_every_case_has_at_least_six_monthly_snapshots(self):
         for case in M.all_cases():
@@ -200,10 +210,11 @@ class TestBoundedExecution(unittest.TestCase):
         from simulation import runner as R
 
         self.assertEqual(R._selected_stages(["mi"]),
-                         ["generate", "render", "ingest",
+                         ["generate", "render", "ingest", "platform_assembly",
                           "history_integration", "mi"])
         self.assertEqual(R._selected_stages(["regime"]),
-                         ["generate", "render", "ingest", "regime"])
+                         ["generate", "render", "ingest", "platform_assembly",
+                          "regime"])
         self.assertEqual(R._selected_stages(None), list(STAGES))
 
     def test_an_unknown_stage_is_refused_rather_than_ignored(self):

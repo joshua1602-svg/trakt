@@ -41,8 +41,12 @@ from .models import (
     RISK_AMBER,
     RISK_GREEN,
     RISK_RED,
+    SOURCE_ACQUIRED,
+    SOURCE_DIRECT,
+    SOURCE_PORTFOLIO_TYPES,
     CaseManifest,
     FailureClass,
+    FundedSource,
     RegimeIntent,
     RiskIntent,
     SchemaEvolution,
@@ -443,7 +447,48 @@ _GUARDS: List[CaseManifest] = [
 ]
 
 #: The whole catalogue, in a stable order.
-CATALOGUE: List[CaseManifest] = _EQUITY_RELEASE + _BRIDGE + _ASSET_FINANCE + _GUARDS
+# --------------------------------------------------------------------------- #
+# Multi-source funded books — platform assembly
+#
+# One client, ONE SPV, two separately delivered funded populations. This is the
+# only case shape that exercises ``engine/platform_assembler.py``, because
+# assembly is a no-op when a client delivers a single portfolio.
+#
+# Direct/acquired here is PROVENANCE INSIDE the SPV, not a second SPV: both
+# sources share ``spv_id``, report on the same month-ends, and are consolidated
+# into one platform canonical that every downstream stage then reads.
+# --------------------------------------------------------------------------- #
+_MULTI_SOURCE: List[CaseManifest] = [
+    _case(
+        case_id="equity_release_spv_multi_source_v1", seed=41_701,
+        purpose=("One SPV fed by two separately delivered funded populations — "
+                 "directly originated lending and an acquired back book — on "
+                 "aligned monthly reporting dates. Proves the production "
+                 "platform assembler consolidates them into one SPV-level view "
+                 "with no duplication or omission, that direct/acquired "
+                 "provenance survives assembly, and that governed MI answers "
+                 "total-SPV, direct-only and acquired-only questions from the "
+                 "same assembled book without leaking between them."),
+        asset_class=ASSET_EQUITY_RELEASE, asset_subtype="mixed",
+        client_id="sim_multi_source", portfolio_id="direct_001",
+        spv_id="SPV_MS_1", opening_loan_count=120,
+        economic_intent=("mixed_cohorts", "seasoned_book"),
+        risk_intent=RiskIntent(RISK_GREEN), regime=_annex2(),
+        sources=(
+            FundedSource(portfolio_id="direct_001",
+                         source_portfolio_type=SOURCE_DIRECT,
+                         share=0.6, seed_offset=0),
+            FundedSource(portfolio_id="acquired_001",
+                         source_portfolio_type=SOURCE_ACQUIRED,
+                         share=0.4, seed_offset=7_919,
+                         acquisition_date="2024-12-31",
+                         seller_name="Simulated Portfolio Vendor Ltd"),
+        ),
+    ),
+]
+
+CATALOGUE: List[CaseManifest] = (_EQUITY_RELEASE + _BRIDGE + _ASSET_FINANCE
+                                 + _MULTI_SOURCE + _GUARDS)
 
 #: One standard-scale history per asset family, plus one large case overall.
 STANDARD_SCALE_CASES = ("equity_release_seasoned_rollup_v1",
@@ -506,6 +551,38 @@ def _supported_regimes() -> Sequence[str]:
     return VALID_REGULATORY_REGIMES
 
 
+def _validate_sources(case: CaseManifest) -> List[str]:
+    """Rules a multi-source case must satisfy to mean what it claims."""
+    problems: List[str] = []
+    if not case.sources:
+        return problems
+    if len(case.sources) < 2:
+        problems.append("declare two or more sources or none at all; a single "
+                        "entry is the default single-source case with extra "
+                        "ceremony")
+    ids = [s.portfolio_id for s in case.sources]
+    if len(set(ids)) != len(ids):
+        problems.append(f"source portfolio ids must be distinct: {ids}")
+    # Distinct ids give distinct loan identifiers for free, because the
+    # generator prefixes every loan id with its portfolio id.
+    offsets = [s.seed_offset for s in case.sources]
+    if len(set(offsets)) != len(offsets):
+        problems.append(f"source seed offsets must be distinct, or two sources "
+                        f"are the same book under two labels: {offsets}")
+    total = round(sum(s.share for s in case.sources), 9)
+    if total != 1.0:
+        problems.append(f"source shares must sum to exactly 1.0, got {total}")
+    types = {s.source_portfolio_type for s in case.sources}
+    if types != set(SOURCE_PORTFOLIO_TYPES):
+        problems.append(
+            f"a multi-source case exists to prove direct/acquired provenance "
+            f"survives assembly, so it must carry both; got {sorted(types)}")
+    if case.portfolio_id not in ids:
+        problems.append(f"the case's portfolio_id {case.portfolio_id!r} must be "
+                        f"one of its sources {ids}")
+    return problems
+
+
 def validate_manifest(case: CaseManifest, *,
                       check_regimes: bool = True) -> List[str]:
     """Return the problems with *case*; empty means it is safe to run."""
@@ -544,6 +621,7 @@ def validate_manifest(case: CaseManifest, *,
     if case.source_portfolio_type == "acquired" and not case.acquisition_date:
         problems.append("an acquired portfolio must state its acquisition_date; "
                         "engine.provenance fails closed without one")
+    problems += _validate_sources(case)
     if case.regime.applicability == REGIME_APPLICABLE:
         if not case.regime.regime_id:
             problems.append("an applicable regime must name a regime_id")

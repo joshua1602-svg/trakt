@@ -42,6 +42,7 @@ from . import pipeline as P
 from .assertions import canonical as A_canonical
 from .assertions import history as A_history
 from .assertions import mi as A_mi
+from .assertions import platform as A_platform
 from .assertions import regime as A_regime
 from .assertions import risk as A_risk
 from .dialects import render
@@ -53,6 +54,7 @@ from .models import (
     SCALES,
     STAGES,
     STAGE_AGENT,
+    STAGE_ASSEMBLE,
     STAGE_CANONICAL,
     STAGE_EQUIVALENCE,
     STAGE_GENERATE,
@@ -68,7 +70,11 @@ from .models import (
     FailureClass,
     StageResult,
 )
-from .reference_truth import build_expected_truth, write_expected_truth
+from .reference_truth import (
+    build_expected_truth,
+    combine_truths,
+    write_expected_truth,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RUN_ROOT = REPO_ROOT / "out_simulation"
@@ -140,9 +146,9 @@ def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
         simulation_version=case.simulation_version, expectation=case.expectation,
         expected_failure_class=case.expected_failure_class,
         run_dir=str(run_dir), manifest_hash=case.content_hash(),
-        production_modules=list(P.PRODUCTION_MODULES),
         run_label=label, scale=scale)
     M.write_manifest(case, run_dir / "manifest.json")
+    P.reset_observations()
     if measure_memory:
         tracemalloc.start()
 
@@ -183,6 +189,7 @@ def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
 
     try:
         history = truth = sources = canonicals = None
+        assembled = None
         store = None
         if _gate(STAGE_GENERATE):
             history, truth = _stage_generate(case, run_dir, result, scale)
@@ -199,8 +206,11 @@ def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
         if _gate(STAGE_EQUIVALENCE, bool(canonicals)):
             _stage_equivalence(case, run_dir, result, canonicals, truth)
             tracker.done(result)
-        if _gate(STAGE_HISTORY, bool(canonicals)):
-            store = _stage_history(case, run_dir, result, canonicals, truth)
+        if _gate(STAGE_ASSEMBLE, bool(canonicals)):
+            assembled = _stage_assemble(case, run_dir, result, canonicals, truth)
+            tracker.done(result)
+        if _gate(STAGE_HISTORY, bool(assembled)):
+            store = _stage_history(case, run_dir, result, assembled, truth)
             tracker.done(result)
         if _gate(STAGE_MI, store is not None):
             _stage_mi(case, run_dir, result, store, truth)
@@ -209,10 +219,10 @@ def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
             _stage_risk(case, run_dir, result, store, truth)
             tracker.done(result)
         if _gate(STAGE_AGENT, store is not None):
-            _stage_agent(case, run_dir, result, store, truth, canonicals)
+            _stage_agent(case, run_dir, result, store, truth, assembled)
             tracker.done(result)
-        if _gate(STAGE_REGIME, bool(canonicals)):
-            _stage_regime(case, run_dir, result, canonicals, truth)
+        if _gate(STAGE_REGIME, bool(assembled)):
+            _stage_regime(case, run_dir, result, assembled, truth)
             tracker.done(result)
     except Exception as exc:  # noqa: BLE001 - an escape is itself a finding
         import traceback
@@ -237,11 +247,15 @@ STAGE_REQUIRES = {
     STAGE_INGEST: (STAGE_GENERATE, STAGE_RENDER),
     STAGE_CANONICAL: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
     STAGE_EQUIVALENCE: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
-    STAGE_HISTORY: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
-    STAGE_MI: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_HISTORY),
-    STAGE_RISK: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_HISTORY),
-    STAGE_AGENT: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_HISTORY),
-    STAGE_REGIME: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
+    STAGE_ASSEMBLE: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
+    STAGE_HISTORY: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_ASSEMBLE),
+    STAGE_MI: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_ASSEMBLE,
+               STAGE_HISTORY),
+    STAGE_RISK: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_ASSEMBLE,
+                 STAGE_HISTORY),
+    STAGE_AGENT: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_ASSEMBLE,
+                  STAGE_HISTORY),
+    STAGE_REGIME: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_ASSEMBLE),
 }
 
 
@@ -292,6 +306,11 @@ def _finish(result: CaseResult, measure_memory: bool) -> CaseResult:
         result.peak_memory_mb = round(peak / (1024 * 1024), 2)
     for stage in result.stages:
         result.timings[stage.stage] = stage.duration_seconds
+    # OBSERVED, not declared: a module appears here only because something
+    # recorded evidence that it ran during THIS case.
+    observed = P.observed_modules()
+    result.production_modules = sorted(observed)
+    result.production_module_evidence = dict(observed)
     run_dir = Path(result.run_dir)
     (run_dir / "assertion_results.json").write_text(
         json.dumps([a.to_dict() for s in result.stages for a in s.assertions],
@@ -306,40 +325,101 @@ def _finish(result: CaseResult, measure_memory: bool) -> CaseResult:
 # Stages
 # --------------------------------------------------------------------------- #
 def _stage_generate(case, run_dir: Path, result: CaseResult, scale: str):
-    started = time.monotonic()
-    loan_count = _scaled_loan_count(case, scale)
-    try:
-        history = generate_history(case, loan_count=loan_count)
-    except ReconciliationError as exc:
-        result.stages.append(StageResult(
-            stage=STAGE_GENERATE, ok=False,
-            failure_class=FailureClass.SIMULATION_DEFECT, message=str(exc),
-            duration_seconds=time.monotonic() - started))
-        return None, None
+    """Generate every funded source this case delivers.
 
-    truth = build_expected_truth(case, history)
+    A single-source case generates exactly one history and its truth IS the
+    case truth, unchanged. A multi-source case generates one history per
+    source, from that source's own seed stream, and the SPV-level truth is the
+    INDEPENDENT SUM of the per-source truths — never a re-run of the generator
+    over a merged book, and never anything read back from the platform.
+    """
+    started = time.monotonic()
+    total_loans = _scaled_loan_count(case, scale)
+    sources = case.funded_sources()
+
+    histories: Dict[str, Any] = {}
+    truths: Dict[str, Any] = {}
+    for source in sources:
+        source_case = case.source_case(source)
+        count = max(1, int(round(total_loans * source.share)))
+        try:
+            histories[source.portfolio_id] = generate_history(
+                source_case, loan_count=count)
+        except ReconciliationError as exc:
+            result.stages.append(StageResult(
+                stage=STAGE_GENERATE, ok=False,
+                failure_class=FailureClass.SIMULATION_DEFECT,
+                message=f"{source.portfolio_id}: {exc}",
+                duration_seconds=time.monotonic() - started))
+            return None, None
+        truths[source.portfolio_id] = build_expected_truth(
+            source_case, histories[source.portfolio_id])
+
+    if case.is_multi_source:
+        truth = combine_truths(case, truths)
+    else:
+        truth = truths[sources[0].portfolio_id]
     truth["scale"] = scale
-    truth["opening_loan_count_used"] = loan_count
+    truth["opening_loan_count_used"] = total_loans
     write_expected_truth(truth, run_dir / "expected_truth" / "expected_truth.json")
 
-    assertions = [
-        A_canonical.check(STAGE_GENERATE, "history has the declared periods",
-                          len(history.periods) == case.months,
-                          expected=case.months, actual=len(history.periods),
-                          failure_class=FailureClass.SIMULATION_DEFECT),
-        A_canonical.check(STAGE_GENERATE, "every period reconciles",
-                          all(p.reconciles() for p in history.periods),
-                          failure_class=FailureClass.SIMULATION_DEFECT),
-        A_canonical.check(STAGE_GENERATE, "loan identifiers are stable",
-                          _identifiers_are_stable(history),
-                          detail="A loan must keep its identity across the "
-                                 "history or nothing can be reconciled.",
-                          failure_class=FailureClass.SIMULATION_DEFECT),
-    ]
+    assertions: List[Assertion] = []
+    for pid, history in histories.items():
+        tag = f"{pid}: " if case.is_multi_source else ""
+        assertions += [
+            A_canonical.check(STAGE_GENERATE, f"{tag}history has the declared periods",
+                              len(history.periods) == case.months,
+                              expected=case.months, actual=len(history.periods),
+                              failure_class=FailureClass.SIMULATION_DEFECT),
+            A_canonical.check(STAGE_GENERATE, f"{tag}every period reconciles",
+                              all(p.reconciles() for p in history.periods),
+                              failure_class=FailureClass.SIMULATION_DEFECT),
+            A_canonical.check(STAGE_GENERATE, f"{tag}loan identifiers are stable",
+                              _identifiers_are_stable(history),
+                              detail="A loan must keep its identity across the "
+                                     "history or nothing can be reconciled.",
+                              failure_class=FailureClass.SIMULATION_DEFECT),
+        ]
+    if case.is_multi_source:
+        assertions += _assert_sources_are_distinct(case, histories)
+
     result.stages.append(_stage(STAGE_GENERATE, started, assertions=assertions,
-                                artefacts={"periods": len(history.periods),
-                                           "opening_loans": loan_count}))
-    return history, truth
+                                artefacts={"periods": case.months,
+                                           "opening_loans": total_loans,
+                                           "sources": list(histories)}))
+    return histories, truth
+
+
+def _assert_sources_are_distinct(case, histories: Dict[str, Any]) -> List[Assertion]:
+    """Two funded populations must be genuinely two populations."""
+    out: List[Assertion] = []
+    ids: Dict[str, set] = {
+        pid: {loan.loan_id for period in h.periods for loan in period.loans}
+        for pid, h in histories.items()}
+    overlap: Dict[str, list] = {}
+    seen: Dict[str, str] = {}
+    for pid, loan_ids in ids.items():
+        for loan_id in loan_ids:
+            if loan_id in seen:
+                overlap.setdefault(f"{seen[loan_id]}|{pid}", []).append(loan_id)
+            seen[loan_id] = pid
+    out.append(A_canonical.check(
+        STAGE_GENERATE, "loan identifiers are distinct across sources",
+        not overlap, actual={k: v[:5] for k, v in overlap.items()},
+        detail="Two sources sharing a loan identifier would make the "
+               "assembler's composite key the only thing preventing a "
+               "collision, which is not what this case is testing.",
+        failure_class=FailureClass.SIMULATION_DEFECT))
+
+    dates = {pid: [p.reporting_date for p in h.periods]
+             for pid, h in histories.items()}
+    aligned = len({tuple(v) for v in dates.values()}) == 1
+    out.append(A_canonical.check(
+        STAGE_GENERATE, "every source reports on the same month-ends", aligned,
+        actual=dates, detail="Assembly of misaligned reporting dates would "
+                             "consolidate different points in time.",
+        failure_class=FailureClass.SIMULATION_DEFECT))
+    return out
 
 
 def _scaled_loan_count(case: CaseManifest, scale: str) -> int:
@@ -359,32 +439,43 @@ def _identifiers_are_stable(history) -> bool:
     return True
 
 
-def _stage_render(case, run_dir: Path, result: CaseResult, history):
-    """Render every declared dialect for every reporting period."""
+def _stage_render(case, run_dir: Path, result: CaseResult, histories):
+    """Render every declared dialect for every period of every funded source.
+
+    Returns ``{dialect: {portfolio_id: {reporting_date: path}}}``. A separately
+    delivered population is a separately delivered FILE — that is what makes
+    the assembly step real rather than a partition of one export.
+    """
     started = time.monotonic()
     root = run_dir / "generated_sources"
-    sources: Dict[str, Dict[str, Path]] = {d: {} for d in case.dialects}
-    for index, snapshot in enumerate(history.periods):
-        rows = canonical_frame_rows(case, history, index)
-        # A declared ``switch_format`` is handled INSIDE the renderer: the
-        # dialect keeps its vocabulary and only its container changes, so the
-        # equivalence comparison still lines the periods up.
-        for dialect in case.dialects:
-            path = render(dialect, rows, case, period_index=index,
-                          reporting_date=snapshot.reporting_date,
-                          out_dir=root / dialect / snapshot.reporting_date,
-                          evolution=case.schema_evolution)
-            sources[dialect][snapshot.reporting_date] = path
+    sources: Dict[str, Dict[str, Dict[str, Path]]] = {
+        d: {pid: {} for pid in histories} for d in case.dialects}
+    for pid, history in histories.items():
+        source_case = next(case.source_case(s) for s in case.funded_sources()
+                           if s.portfolio_id == pid)
+        for index, snapshot in enumerate(history.periods):
+            rows = canonical_frame_rows(source_case, history, index)
+            # A declared ``switch_format`` is handled INSIDE the renderer: the
+            # dialect keeps its vocabulary and only its container changes, so
+            # the equivalence comparison still lines the periods up.
+            for dialect in case.dialects:
+                path = render(dialect, rows, source_case, period_index=index,
+                              reporting_date=snapshot.reporting_date,
+                              out_dir=root / dialect / pid / snapshot.reporting_date,
+                              evolution=case.schema_evolution)
+                sources[dialect][pid][snapshot.reporting_date] = path
 
-    expected = len(case.dialects) * len(history.periods)
-    produced = sum(len(v) for v in sources.values())
+    expected = len(case.dialects) * sum(len(h.periods) for h in histories.values())
+    produced = sum(len(by_date) for by_pid in sources.values()
+                   for by_date in by_pid.values())
     assertions = [A_canonical.check(
-        STAGE_RENDER, "every dialect rendered every period", produced == expected,
-        expected=expected, actual=produced,
+        STAGE_RENDER, "every dialect rendered every period of every source",
+        produced == expected, expected=expected, actual=produced,
         failure_class=FailureClass.SIMULATION_DEFECT)]
     result.stages.append(_stage(STAGE_RENDER, started, assertions=assertions,
                                 artefacts={"files": produced,
-                                           "dialects": list(case.dialects)}))
+                                           "dialects": list(case.dialects),
+                                           "sources": list(histories)}))
     return sources
 
 
@@ -393,28 +484,33 @@ def _stage_ingest(case, run_dir: Path, result: CaseResult,
     """Run the REAL funded ingestion path for every rendered source."""
     started = time.monotonic()
     config = client_config(case)
-    work: List[tuple] = [(d, date, path)
-                         for d, by_date in sources.items()
+    by_pid = {s.portfolio_id: case.source_case(s) for s in case.funded_sources()}
+    work: List[tuple] = [(d, pid, date, path)
+                         for d, per_pid in sources.items()
+                         for pid, by_date in sorted(per_pid.items())
                          for date, path in sorted(by_date.items())]
 
     def _run_one(item):
-        dialect, date, path = item
-        out_dir = run_dir / "canonical_outputs" / dialect / date / "out"
-        val_dir = run_dir / "canonical_outputs" / dialect / date / "validation"
-        return dialect, date, P.run_mi_gates(path, case, reporting_date=date,
-                                             out_dir=out_dir, validation_dir=val_dir,
-                                             master_config=config)
+        dialect, pid, date, path = item
+        base = run_dir / "canonical_outputs" / dialect / pid / date
+        # Each source is ingested with ITS OWN provenance — that is what makes
+        # direct/acquired real on the tape rather than a label added later.
+        return dialect, pid, date, P.run_mi_gates(
+            path, by_pid[pid], reporting_date=date, out_dir=base / "out",
+            validation_dir=base / "validation", master_config=config)
 
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
         outcomes = list(pool.map(_run_one, work))
 
-    canonicals: Dict[str, Dict[str, Path]] = {}
+    canonicals: Dict[str, Dict[str, Dict[str, Path]]] = {}
     failures: List[Dict[str, Any]] = []
-    for dialect, date, gate in outcomes:
+    for dialect, pid, date, gate in outcomes:
         if gate.ok and gate.canonical_path is not None:
-            canonicals.setdefault(dialect, {})[date] = gate.canonical_path
+            canonicals.setdefault(dialect, {}).setdefault(pid, {})[date] = \
+                gate.canonical_path
         else:
-            failures.append({"dialect": dialect, "reporting_date": date,
+            failures.append({"dialect": dialect, "portfolio_id": pid,
+                             "reporting_date": date,
                              "returncode": gate.returncode,
                              "canonical_validation_failed":
                                  gate.canonical_validation_failed,
@@ -434,7 +530,8 @@ def _stage_ingest(case, run_dir: Path, result: CaseResult,
     result.stages.append(_stage(
         STAGE_INGEST, started,
         artefacts={"runs": len(work),
-                   "gates": outcomes[0][2].gate_lines if outcomes else []}))
+                   "sources": sorted({pid for _d, pid, _dt, _g in outcomes}),
+                   "gates": outcomes[0][3].gate_lines if outcomes else []}))
     return canonicals
 
 
@@ -452,22 +549,40 @@ def _classify_ingest_failure(case, failures: List[Dict[str, Any]]) -> str:
     return FailureClass.PRODUCTION_DEFECT
 
 
+def _source_truths(case, truth) -> Dict[str, Any]:
+    """``{portfolio_id: truth}`` — the per-source truth each canonical is checked against.
+
+    A per-source canonical carries ONE delivery, so it must be checked against
+    that delivery's own expected figures. The SPV-level combined truth is what
+    the ASSEMBLED view is checked against, in the assembly stage.
+    """
+    if case.is_multi_source:
+        return dict(truth["by_source"])
+    return {case.portfolio_id: truth}
+
+
 def _stage_canonical(case, run_dir: Path, result: CaseResult,
-                     canonicals: Dict[str, Dict[str, Path]], truth):
+                     canonicals: Dict[str, Dict[str, Dict[str, Path]]], truth):
     started = time.monotonic()
-    reference = canonicals.get(REFERENCE_DIALECT) or next(iter(canonicals.values()), {})
+    per_pid = (canonicals.get(REFERENCE_DIALECT)
+               or next(iter(canonicals.values()), {}))
+    truths = _source_truths(case, truth)
     assertions: List[Assertion] = []
-    for period in truth["periods"]:
-        path = reference.get(period["reporting_date"])
-        if path is None:
-            continue
-        frame = A_canonical.load_canonical(path)
-        assertions += A_canonical.assert_canonical_truth(frame, period, case)
+    for pid, by_date in sorted(per_pid.items()):
+        source_case = next((case.source_case(s) for s in case.funded_sources()
+                            if s.portfolio_id == pid), case)
+        for period in truths[pid]["periods"]:
+            path = by_date.get(period["reporting_date"])
+            if path is None:
+                continue
+            frame = A_canonical.load_canonical(path)
+            assertions += A_canonical.assert_canonical_truth(
+                frame, period, source_case)
     result.stages.append(_stage(STAGE_CANONICAL, started, assertions=assertions))
 
 
 def _stage_equivalence(case, run_dir: Path, result: CaseResult,
-                       canonicals: Dict[str, Dict[str, Path]], truth):
+                       canonicals: Dict[str, Dict[str, Dict[str, Path]]], truth):
     started = time.monotonic()
     assertions: List[Assertion] = []
     reference = canonicals.get(REFERENCE_DIALECT)
@@ -478,24 +593,25 @@ def _stage_equivalence(case, run_dir: Path, result: CaseResult,
             duration_seconds=time.monotonic() - started))
         return
 
-    for period in truth["periods"]:
-        date = period["reporting_date"]
-        ref_path = reference.get(date)
-        if ref_path is None:
-            continue
-        ref_frame = A_canonical.load_canonical(ref_path)
-        lineage: Dict[str, Dict[str, Any]] = {}
-        for dialect, by_date in canonicals.items():
-            path = by_date.get(date)
-            if path is None:
-                continue
-            lineage[dialect] = _read_json(path.parent / "field_lineage.json")
-            if dialect == REFERENCE_DIALECT:
-                continue
-            assertions += A_canonical.assert_dialect_equivalence(
-                ref_frame, REFERENCE_DIALECT, A_canonical.load_canonical(path),
-                dialect, date=date)
-        assertions += A_canonical.assert_source_lineage_distinct(lineage, date)
+    # Equivalence is a property of ONE delivery rendered three ways, so it is
+    # compared per source: mixing two deliveries into one comparison would
+    # compare different books, not different dialects.
+    for pid in sorted(reference):
+        for date in sorted(reference[pid]):
+            ref_path = reference[pid][date]
+            ref_frame = A_canonical.load_canonical(ref_path)
+            lineage: Dict[str, Dict[str, Any]] = {}
+            for dialect, per_pid in canonicals.items():
+                path = per_pid.get(pid, {}).get(date)
+                if path is None:
+                    continue
+                lineage[dialect] = _read_json(path.parent / "field_lineage.json")
+                if dialect == REFERENCE_DIALECT:
+                    continue
+                assertions += A_canonical.assert_dialect_equivalence(
+                    ref_frame, REFERENCE_DIALECT,
+                    A_canonical.load_canonical(path), dialect, date=date)
+            assertions += A_canonical.assert_source_lineage_distinct(lineage, date)
     result.stages.append(_stage(STAGE_EQUIVALENCE, started, assertions=assertions))
 
 
@@ -504,6 +620,61 @@ def _read_json(path: Path) -> Dict[str, Any]:
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+
+
+def _stage_assemble(case, run_dir: Path, result: CaseResult,
+                    canonicals: Dict[str, Dict[str, Dict[str, Path]]], truth):
+    """Consolidate each period's per-source canonicals into the SPV view.
+
+    Runs the PRODUCTION Assembler Agent, which runs
+    ``engine/platform_assembler.py``. Returns ``{dialect: {date: path}}`` — the
+    single canonical every downstream stage then reads, so MI, risk, the Agent
+    and the regime all answer from the assembled SPV rather than from one of
+    its parts.
+
+    For a single-source case the stage is a genuine no-op and says so: there is
+    nothing to consolidate, and running the assembler over one input would
+    prove nothing while pretending to.
+    """
+    started = time.monotonic()
+    if not case.is_multi_source:
+        flat = {d: dict(next(iter(per_pid.values())))
+                for d, per_pid in canonicals.items() if per_pid}
+        result.stages.append(StageResult(
+            stage=STAGE_ASSEMBLE, ok=True, skipped=True,
+            duration_seconds=time.monotonic() - started,
+            skip_reason="single-source case: there is nothing to consolidate, "
+                        "so engine/platform_assembler.py is correctly not run"))
+        return flat
+
+    out_root = run_dir / "platform_assembly"
+    assembled: Dict[str, Dict[str, Path]] = {}
+    manifests: Dict[str, Any] = {}
+    for dialect, per_pid in canonicals.items():
+        for date in truth["reporting_dates"]:
+            inputs = [per_pid[pid][date] for pid in sorted(per_pid)
+                      if date in per_pid.get(pid, {})]
+            if len(inputs) != len(per_pid):
+                continue
+            outcome = P.assemble_spv_canonical(
+                inputs, case, reporting_date=date,
+                out_dir=out_root / dialect / date)
+            assembled.setdefault(dialect, {})[date] = outcome["canonical"]
+            if dialect == REFERENCE_DIALECT:
+                manifests[date] = outcome["manifest"]
+
+    (out_root / "assembler_manifests.json").write_text(
+        json.dumps(manifests, indent=2, default=str) + "\n", encoding="utf-8")
+
+    assertions = A_platform.assert_assembly(
+        case, truth, assembled.get(REFERENCE_DIALECT, {}), manifests)
+    result.stages.append(_stage(
+        STAGE_ASSEMBLE, started, assertions=assertions,
+        artefacts={"periods_assembled": len(assembled.get(REFERENCE_DIALECT, {})),
+                   "sources": sorted(next(iter(canonicals.values()), {})),
+                   "assembler_run_ids": [m.get("assembler_run_id")
+                                         for m in manifests.values()]}))
+    return assembled
 
 
 def _stage_history(case, run_dir: Path, result: CaseResult,
@@ -568,6 +739,9 @@ def _stage_risk(case, run_dir: Path, result: CaseResult, store, truth):
     assertions = A_risk.assert_risk_state(evaluation, case)
     assertions += A_risk.assert_movement_disclosed(
         evaluation, periods=len(truth["reporting_dates"]))
+    if case.is_multi_source:
+        assertions += A_risk.assert_provenance_scoped_evaluation(
+            store, case, truth)
     result.stages.append(_stage(
         STAGE_RISK, started, assertions=assertions,
         artefacts={"overall_status": (evaluation.get("summary") or {})
@@ -607,6 +781,10 @@ def _stage_agent(case, run_dir: Path, result: CaseResult, store, truth,
                     "dataset_label": getattr(governed.snapshot, "dataset_label", None),
                     "content_hash": getattr(governed.snapshot, "content_hash", None)},
             })
+        if case.is_multi_source:
+            # The point of a multi-source SPV: total, direct-only and
+            # acquired-only must reconcile and must not leak into each other.
+            assertions += A_agent.assert_provenance_scopes(case, truth)
     (out_dir / "transcript.json").write_text(
         json.dumps(transcript, indent=2, default=str) + "\n", encoding="utf-8")
     result.stages.append(_stage(STAGE_AGENT, started, assertions=assertions,
@@ -670,10 +848,21 @@ def _stage_regime(case, run_dir: Path, result: CaseResult, canonicals, truth):
 
 
 def _source_for(run_dir: Path, case, date: str) -> Optional[Path]:
-    folder = run_dir / "generated_sources" / REFERENCE_DIALECT / date
+    """The input the regulatory run starts from for this reporting date.
+
+    A single-source case submits its own delivered file. A multi-source SPV
+    submits the ASSEMBLED platform canonical — the regulatory tape for an SPV
+    is the whole SPV, not whichever delivery happened to be listed first.
+    """
+    if case.is_multi_source:
+        assembled = (run_dir / "platform_assembly" / REFERENCE_DIALECT / date
+                     / P.PLATFORM_CANONICAL_NAME)
+        return assembled if assembled.exists() else None
+    folder = (run_dir / "generated_sources" / REFERENCE_DIALECT
+              / case.portfolio_id / date)
     if not folder.exists():
         return None
-    files = sorted(folder.iterdir())
+    files = sorted(p for p in folder.iterdir() if p.is_file())
     return files[0] if files else None
 
 

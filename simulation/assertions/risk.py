@@ -199,6 +199,64 @@ def _tests_by_limit(case) -> Dict[str, List[str]]:
     return out
 
 
+def assert_provenance_scoped_evaluation(store, case, truth: Dict[str, Any]
+                                        ) -> List[Assertion]:
+    """The governed limit engine must still evaluate on a scoped SPV.
+
+    The frame is narrowed by the PRODUCTION scope resolver
+    (``trakt_core.portfolio.resolve_scope`` + ``mi_agent.portfolio_scope
+    .apply_scope``), not by the harness filtering a column, so this checks the
+    combination a client actually asks for: "how does the acquired book look
+    against our limits".
+    """
+    from mi_agent.concentration_tests.evaluation import evaluate_active_tests
+    from mi_agent.portfolio_scope import apply_scope
+    from trakt_core.portfolio import build_registry, resolve_scope
+
+    out: List[Assertion] = []
+    dates = truth["reporting_dates"]
+    current = dates[-1]
+    config, lib = build_active_configuration(case, effective_date=dates[0])
+    frame = _frame(store, case, current)
+    # ``build_registry`` takes distinct PROVENANCE RECORDS, not a frame.
+    columns = [c for c in ("source_portfolio_id", "source_portfolio_type",
+                           "source_portfolio_label") if c in frame.columns]
+    records = frame[columns].drop_duplicates().to_dict("records")
+    registry = build_registry(records, client_id=case.client_id)
+
+    total_rows = len(frame)
+    scoped_rows = 0
+    for scope_id in sorted(set(truth["source_portfolio_types"].values())):
+        scope = resolve_scope(registry, scope_id)
+        subset = apply_scope(frame, scope)
+        scoped_rows += len(subset)
+        out.append(check(
+            STAGE_RISK, f"{scope_id!r}: the governed resolver narrowed the book",
+            0 < len(subset) < total_rows,
+            expected=f"0 < rows < {total_rows}", actual=len(subset),
+            detail="A scope that returns the whole book has failed open.",
+            failure_class=_DEFECT))
+        evaluation = evaluate_active_tests(subset, None, config, lib,
+                                           reporting_date=current)
+        tests = evaluation.get("tests") or []
+        unavailable = [t["testId"] for t in tests
+                       if t["status"] in ("unavailable", "insufficient_data")]
+        out.append(check(
+            STAGE_RISK, f"{scope_id!r}: every limit still resolved its fields",
+            not unavailable, actual=unavailable,
+            detail="A limit that becomes unavailable once the book is scoped "
+                   "would mean provenance filtering broke the field roles.",
+            failure_class=_DEFECT))
+
+    out.append(check(
+        STAGE_RISK, "the provenance scopes partition the SPV exactly",
+        scoped_rows == total_rows, expected=total_rows, actual=scoped_rows,
+        detail="Every loan belongs to exactly one delivery: the scopes must "
+               "cover the book once, with no overlap and no gap.",
+        failure_class=_DEFECT))
+    return out
+
+
 def assert_movement_disclosed(evaluation: Dict[str, Any],
                               periods: int = 2) -> List[Assertion]:
     """A limit's movement against the prior period must be reported.
@@ -233,5 +291,6 @@ def assert_movement_disclosed(evaluation: Dict[str, Any],
         failure_class=_DEFECT)]
 
 
-__all__ = ["assert_movement_disclosed", "assert_risk_state",
+__all__ = ["assert_movement_disclosed",
+           "assert_provenance_scoped_evaluation", "assert_risk_state",
            "build_active_configuration", "evaluate"]

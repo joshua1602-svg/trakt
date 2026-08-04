@@ -129,13 +129,17 @@ def assert_reconciliation(store, case, truth: Dict[str, Any]) -> List[Assertion]
         previous = stored
 
         # Scope: the funding structure must not drift across the history.
+        # For a multi-source SPV the registered snapshot is the ASSEMBLED view,
+        # so every delivered source must be present — a snapshot carrying only
+        # one of them would be a silently under-reported SPV.
         if "source_portfolio_id" in frame.columns:
             ids = set(frame["source_portfolio_id"].dropna().astype(str))
+            expected = {s.portfolio_id for s in case.funded_sources()}
             out.append(check(
                 STAGE_HISTORY,
                 f"{period['reporting_date']}: SPV / portfolio scope intact",
-                ids == {case.portfolio_id}, expected={case.portfolio_id},
-                actual=ids, failure_class=_DEFECT))
+                ids == expected, expected=expected, actual=ids,
+                failure_class=_DEFECT))
     return out
 
 

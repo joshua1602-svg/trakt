@@ -136,8 +136,16 @@ def governed_environment(env: Dict[str, str]):
         data_source.reset_cache()
 
 
-def ask(case, question: str, *, as_of: Optional[str] = None):
-    """One governed MI question, through the production capability."""
+def ask(case, question: str, *, as_of: Optional[str] = None,
+        lens: Optional[str] = None):
+    """One governed MI question, through the production capability.
+
+    ``lens`` is the governed provenance selection — ``"total"``, ``"direct"``,
+    ``"acquired"`` or an exact source portfolio id — passed on the production
+    ``source_portfolio_lens`` input, so a provenance-scoped question is scoped
+    by the platform's own resolver rather than by the harness filtering
+    afterwards.
+    """
     from trakt_core.context import ACTOR_SERVICE, CHANNEL_INTERNAL, ExecutionContext
 
     from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
@@ -146,7 +154,57 @@ def ask(case, question: str, *, as_of: Optional[str] = None):
         tenant_id=case.client_id, actor_id="simulation-harness",
         actor_type=ACTOR_SERVICE, channel=CHANNEL_INTERNAL)
     return execute_governed_mi_query(
-        MiQueryRequest(question=question, as_of_date=as_of), context)
+        MiQueryRequest(question=question, as_of_date=as_of,
+                       source_portfolio_lens=lens), context)
+
+
+def assert_provenance_scopes(case, truth: Dict[str, Any]) -> List[Assertion]:
+    """Total, direct-only and acquired-only, through the governed lens.
+
+    The same question is asked three times with three governed provenance
+    lenses. The properties checked are arithmetic and cannot be satisfied by a
+    lens that silently fails open: the parts must sum to the whole, and no part
+    may equal the whole.
+    """
+    from . import platform as A_platform
+
+    final = truth["periods"][-1]
+    date = final["reporting_date"]
+    question = "What is the total current balance?"
+
+    answers: Dict[str, Dict[str, Any]] = {}
+    out: List[Assertion] = []
+    for lens in ("total", *sorted(set(truth["source_portfolio_types"].values()))):
+        # No ``as_of``: the suite's own questions resolve the latest governed
+        # cut the same way, and pinning a date here routes the question to a
+        # temporal answer whose artefacts carry no headline figure.
+        # ``.result`` — not ``.to_dict()`` — is where the artefacts live; the
+        # envelope wraps them.
+        payload = ask(case, question, lens=lens).result or {}
+        figures = numeric_evidence(payload)
+        rows = _row_count(payload)
+        out.append(check(
+            STAGE_AGENT, f"lens {lens!r}: the governed capability answered",
+            bool(figures), actual=figures[:5],
+            detail="A provenance lens that cannot answer at all is a governed "
+                   "refusal, not a scoped answer.",
+            failure_class=_FAIL))
+        if figures:
+            answers[lens] = {"balance": max(figures), "count": rows}
+
+    out += A_platform.assert_scope_isolation(answers, truth)
+    return out
+
+
+def _row_count(payload: Dict[str, Any]) -> Optional[int]:
+    """The loan count the governed answer reports, if it reports one."""
+    for art in _artifacts(payload):
+        for kpi in (art.get("kpis") or []):
+            field = str(kpi.get("canonicalField") or kpi.get("field") or "")
+            if "count" in field.lower() and kpi.get("rawValue") is not None:
+                return int(kpi["rawValue"])
+    scope = payload.get("scope") or {}
+    return scope.get("rowCount")
 
 
 # --------------------------------------------------------------------------- #
@@ -353,6 +411,13 @@ def _assert_expectation(spec: Dict[str, Any], payload: Dict[str, Any],
         return out
 
     if kind in ("largest_region", "region_breakdown"):
+        if "largest_concentrations" not in final:
+            # See simulation.reference_truth.combine_truths: a combined SPV
+            # truth carries no largest-group figure, because it is not
+            # derivable from the per-source truths without asking the platform.
+            return [check(STAGE_AGENT,
+                          f"{qid}: regional ranking (not combinable)", True,
+                          detail="Skipped for a multi-source SPV.")]
         expected = final["largest_concentrations"]["region"]
         ranked = ranked_groups(payload)
         out = [check(STAGE_AGENT, f"{qid}: a ranked breakdown is returned",

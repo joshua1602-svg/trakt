@@ -492,6 +492,12 @@ python -m simulation.runner run-all --profile standard # the whole catalogue
 python -m simulation.runner reproduce --case bridge_maturity_wall_v1 --seed 41204
 ```
 
+One case models a single SPV fed by two separately delivered funded
+populations — directly originated and acquired — which is what exercises
+`engine/platform_assembler.py` through the production Assembler Agent. Run
+summaries report the production modules **observed** to execute, each with the
+evidence that proves it, rather than a declared list.
+
 Bridge runs under `--portfolio-type cre` and asset finance under
 `--portfolio-type equipment`; both use canonical fields the registry already
 carried, so no new asset-class architecture was introduced. See
