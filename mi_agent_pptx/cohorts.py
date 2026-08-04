@@ -31,11 +31,16 @@ Three things it deliberately refuses to do:
   cohort series.** Where the scope spans more than one portfolio type, the
   cohorts are reported per type, because a ten-year book and a two-year book
   averaged together describe neither.
-* **It does not call anything "retention".** The governed service re-selects the
-  cohort by origination vintage in every period rather than freezing the loans
-  present at formation, so a cohort can gain balance when a later period boards
-  a loan of that vintage. Retention asserts a closed pool that can only shrink;
-  the ratio is reported as a change against the cohort's first observed period.
+* **It does not plot a cohort whose loan count RISES.** The static-pool contract
+  is that a loan belongs to one vintage for life, the pool is fixed at formation,
+  and the surviving count can hold or fall but never rise. The governed service
+  implements membership by re-filtering each reporting period on origination
+  vintage rather than by freezing a loan-id set, so on a book where a later
+  period boards a loan of an earlier vintage the count CAN rise — proven with
+  loan identifiers in ``test_cohort_static_pool.py``. Such a cohort is not a
+  static pool, so it is omitted with a recorded reason and a publication gate
+  blocks any deck that plots one. Nothing here re-derives membership: the deck
+  either presents the governed series as a static pool or declines to.
 """
 
 from __future__ import annotations
@@ -198,18 +203,46 @@ class CohortSeries:
             return None
         return pts[index].metrics.get(metric)
 
-    def change_since_first(self, metric: str) -> Optional[float]:
-        """Latest as a percentage of the cohort's own FIRST observed period.
+    @property
+    def violates_static_pool(self) -> bool:
+        """True when the surviving count RISES between live periods.
 
-        Deliberately not called retention. Retention asserts a closed pool that
-        can only shrink, and the governed service does not guarantee one: it
-        re-selects the cohort by origination vintage in every period, so a loan
-        boarded later with an older origination date joins the cohort and the
-        ratio can exceed 100%. Reporting that as "balance retained 237%" would
-        be an obviously false statement of an analytic the reader trusts.
+        The static-pool contract permits a count to hold or fall. A rise means
+        the governed series is not describing a fixed pool for this cohort, and
+        every downstream measure — retention, exits, seasoning — would then be
+        computed over a moving population. Detected, never corrected: correcting
+        it here would be a second interpretation of the methodology.
+        """
+        counts = [p.loan_count for p in self.live]
+        return any(b > a for a, b in zip(counts, counts[1:]))
 
-        What the ratio IS: two figures the service produced, divided — the same
-        class of presentation arithmetic as a share of book.
+    @property
+    def formation_count(self) -> Optional[int]:
+        pts = self.live
+        return pts[0].loan_count if pts else None
+
+    @property
+    def surviving_count(self) -> Optional[int]:
+        pts = self.live
+        return pts[-1].loan_count if pts else None
+
+    @property
+    def exits(self) -> Optional[int]:
+        """Loans in the pool at formation that are no longer in it.
+
+        Meaningful only for a pool that never gained a member, which is why a
+        cohort failing :attr:`violates_static_pool` is never plotted.
+        """
+        if self.formation_count is None or self.surviving_count is None:
+            return None
+        return max(0, self.formation_count - self.surviving_count)
+
+    def retention(self, metric: str) -> Optional[float]:
+        """Latest as a percentage of the cohort's value at formation.
+
+        Legitimate here because the only cohorts reaching a slide are those the
+        governed series shows as never gaining a member, so the denominator is
+        the pool the numerator is a subset of.
         """
         first, last = self.value(metric, 0), self.value(metric, -1)
         if not first or last is None:
@@ -264,13 +297,35 @@ def select_cohorts(formation: Formation,
     return chosen, [r.vintage for r in material[limit:]]
 
 
-def progression_is_meaningful(series: Sequence[CohortSeries]) -> bool:
-    """True only when at least one cohort has two or more live periods.
+def plottable(series: Sequence[CohortSeries]) -> List[CohortSeries]:
+    """The cohorts a seasoning slide may draw.
 
-    One period is a formation snapshot, not seasoning, and joining a single point
-    into a line is the misleading trend the sufficiency rules exist to prevent.
+    Two conditions, both necessary: at least two live periods (one period is a
+    formation snapshot, and joining a single point into a line is the misleading
+    trend the sufficiency rules exist to prevent), and a surviving count that
+    never rises (otherwise it is not a static pool).
     """
-    return any(s.available and len(s.live) >= 2 for s in series)
+    return [s for s in series
+            if s.available and len(s.live) >= 2 and not s.violates_static_pool]
+
+
+def rejected(series: Sequence[CohortSeries]) -> List[Tuple[str, str]]:
+    """``[(vintage, reason)]`` for cohorts the slide declined, for disclosure."""
+    out: List[Tuple[str, str]] = []
+    for s in series:
+        if not s.available:
+            out.append((s.vintage, s.reason or "no governed series"))
+        elif s.violates_static_pool:
+            out.append((s.vintage,
+                        "surviving loan count rises between reporting periods, "
+                        "so this is not a fixed pool"))
+        elif len(s.live) < 2:
+            out.append((s.vintage, "only one reporting period holds this cohort"))
+    return out
+
+
+def progression_is_meaningful(series: Sequence[CohortSeries]) -> bool:
+    return bool(plottable(series))
 
 
 def formation_is_meaningful(formation: Formation) -> bool:

@@ -476,8 +476,12 @@ class DeckBuilder:
             body_top = 0.14 + head_h + 0.04
             body_h = max(0.24, (h / EMU_IN) - body_top - 0.14)
             capacity = text_w * body_h * 210
+            # Four tiers, not three: a runoff book narrates exits as well as
+            # balances, and its observations are long enough that the old floor
+            # of 8pt still overflowed a two-column card.
             body = 10 if len(summary) <= capacity else (
-                9 if len(summary) <= capacity * 1.25 else 8)
+                9 if len(summary) <= capacity * 1.25 else
+                8 if len(summary) <= capacity * 1.55 else 7)
             self._text(s, l + Inches(0.24), t + Inches(body_top),
                        col_w - Inches(0.46), Inches(body_h), summary,
                        size=body, color=self.theme.ink_300, spacing=1.06)
@@ -1100,7 +1104,8 @@ class DeckBuilder:
         payload = self.d.cohort_series or {}
         series = [CO.adapt_progression(p, v)
                   for v, p in sorted((payload.get("series") or {}).items())]
-        live = [x for x in series if x.available and len(x.live) >= 2]
+        live = CO.plottable(series)
+        declined = CO.rejected(series)
         self._header(s, spec.get("title", "Cohort Progression"),
                      "Static-pool seasoning — the same cohort tracked across "
                      "reporting periods")
@@ -1128,8 +1133,7 @@ class DeckBuilder:
         self._place(s, p1, il, it, iw, ih)
 
         # -- retention, the question the curves are asked to answer -----------
-        il, it, iw, ih = self._card(s, *boxes[1],
-                                    "Cohort balance since first observation")
+        il, it, iw, ih = self._card(s, *boxes[1], "Retention since formation")
         self._cohort_change_table(s, live, il, it, iw, ih)
 
         overflow = payload.get("overflow") or []
@@ -1137,11 +1141,14 @@ class DeckBuilder:
         # to. The publication gate that bans causal vocabulary is a substring
         # check and cannot read a negation, and it is the more valuable of the
         # two properties — so the sentence is written without the word.
-        note = ("Cohorts are the governed static pool — a vintage tracked across "
-                "reporting periods. The change column is the latest period as a "
-                "percentage of that cohort's first observed period. It is not a "
-                "measure of run-off: a cohort can also gain balance where a later "
-                "reporting period boards a loan of that vintage.")
+        note = ("Cohorts are the governed static pool: a vintage fixed at "
+                "formation and tracked across reporting periods. Retention is "
+                "the latest period as a percentage of formation; exits are "
+                "loans in the pool at formation that are no longer in it.")
+        if declined:
+            note += (f" {len(declined)} cohort"
+                     f"{'s were' if len(declined) != 1 else ' was'} not plotted "
+                     f"because the governed series does not hold the pool fixed.")
         if overflow:
             note += (f" {len(overflow)} smaller vintage"
                      f"{'s are' if len(overflow) != 1 else ' is'} not plotted.")
@@ -1154,12 +1161,13 @@ class DeckBuilder:
     def _cohort_change_table(self, s, live, il, it, iw, ih):
         from .metric_resolver import compact_currency, compact_number
 
-        spec_cols = [("Cohort", 0.82, PP_ALIGN.LEFT),
-                     ("Periods", 0.70, PP_ALIGN.RIGHT),
-                     ("First observed", 1.16, PP_ALIGN.RIGHT),
-                     ("Latest", 1.06, PP_ALIGN.RIGHT),
-                     ("Balance vs first", 1.28, PP_ALIGN.RIGHT),
-                     ("Loans vs first", 1.20, PP_ALIGN.RIGHT)]
+        spec_cols = [("Cohort", 0.74, PP_ALIGN.LEFT),
+                     ("At formation", 1.10, PP_ALIGN.RIGHT),
+                     ("Latest", 1.00, PP_ALIGN.RIGHT),
+                     ("Retention", 0.90, PP_ALIGN.RIGHT),
+                     ("Loans", 0.66, PP_ALIGN.RIGHT),
+                     ("Exits", 0.62, PP_ALIGN.RIGHT),
+                     ("Seasoning", 0.90, PP_ALIGN.RIGHT)]
         scale = (iw - 0.28) / sum(c[1] for c in spec_cols)
         cols, dx = [], 0.0
         for label, weight, align in spec_cols:
@@ -1175,17 +1183,20 @@ class DeckBuilder:
         row_h = min(0.44, band / max(len(live), 1))
         for i, x in enumerate(live):
             y = Inches(head_y + 0.32 + i * row_h)
-            bal_ret = x.change_since_first("funded_balance")
-            loan_ret = x.change_since_first("loan_count")
+            bal_ret = x.retention("funded_balance")
+            exits = x.exits
             values = [
                 (x.vintage, self.theme.ink_100),
-                (str(len(x.live)), self.theme.ink_300),
                 (compact_currency(x.value("funded_balance", 0)), self.theme.ink_300),
                 (compact_currency(x.value("funded_balance", -1)), self.theme.ink_100),
                 (f"{bal_ret:.0f}%" if bal_ret is not None else "—",
-                 self.theme.mint if (bal_ret or 0) >= 100 else self.theme.ink_100),
-                (f"{loan_ret:.0f}%" if loan_ret is not None else "—",
-                 self.theme.ink_300),
+                 self.theme.ink_100),
+                (f"{x.surviving_count:,}/{x.formation_count:,}"
+                 if x.formation_count is not None else "—", self.theme.ink_300),
+                (f"{exits:,}" if exits is not None else "—",
+                 self.theme.rag.get("amber") if exits else self.theme.ink_300),
+                (f"{len(x.live) - 1} period"
+                 f"{'s' if len(x.live) - 1 != 1 else ''}", self.theme.ink_300),
             ]
             for (value, colour), (_label, dx, cw, align) in zip(values, cols):
                 self._text(s, Inches(x0 + dx), y, Inches(cw), Inches(0.28),

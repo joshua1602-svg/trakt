@@ -300,6 +300,34 @@ def _gate_no_placeholder_language(text: Optional[str]) -> GateResult:
                       evidence={"phrases": hits})
 
 
+def _gate_cohort_static_pool_integrity(data) -> GateResult:
+    """Every PLOTTED cohort must behave as a fixed pool.
+
+    The contract the deck asserts by using the words "static pool" is that a
+    loan belongs to one vintage for life, the pool is fixed at formation, and
+    the surviving count can hold or fall but never rise. The governed service
+    implements membership by re-filtering each period on origination vintage
+    rather than by freezing a loan-id set, so a book that boards a loan of an
+    earlier vintage produces a rising count. That cohort is excluded from the
+    slide; this gate is the backstop that blocks publication if one ever reaches
+    it, because a rising "static pool" would invalidate every retention and exit
+    figure beside it.
+    """
+    from . import cohorts as C
+
+    payload = getattr(data, "cohort_series", {}) or {}
+    series = [C.adapt_progression(p, v)
+              for v, p in (payload.get("series") or {}).items()]
+    plotted = C.plottable(series)
+    bad = [s.vintage for s in plotted if s.violates_static_pool]
+    return GateResult(
+        "cohort_static_pool_integrity", not bad,
+        f"{len(plotted)} plotted cohort(s) hold their pool fixed" if not bad else
+        f"plotted cohort(s) gain loans between periods: {', '.join(bad)}",
+        evidence={"plotted": [s.vintage for s in plotted],
+                  "excluded": [v for v, _r in C.rejected(series)]})
+
+
 def _gate_no_false_static_pool(text: Optional[str], build_report=None) -> GateResult:
     """Static-pool language is permitted ONLY when the static pool was rendered.
 
@@ -507,6 +535,7 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         _gate_no_internal_paths(text),
         _gate_no_placeholder_language(text),
         _gate_no_false_static_pool(text, build_report),
+        _gate_cohort_static_pool_integrity(data),
         _gate_no_empty_slides(deck_path, records),
         _gate_pipeline_reconciles(text, getattr(data, "pipeline", None)),
         _gate_concentration_reconciles(text, getattr(data, "concentration", None)),

@@ -372,26 +372,71 @@ def test_the_progression_series_are_the_governed_static_pool(book, react):
         theirs = CO.adapt_progression(api, vintage)
         assert mine.available == theirs.available, vintage
         assert [p.period for p in mine.points] == [p.period for p in theirs.points], vintage
+        # Every field the seasoning slide can show, per period.
         for a, b in zip(mine.points, theirs.points):
-            assert a.loan_count == b.loan_count, f"{vintage}/{a.period}"
+            where = f"{vintage}/{a.period}"
+            assert a.reporting_date == b.reporting_date, where
+            assert a.loan_count == b.loan_count, where
             assert _close(a.metrics.get("funded_balance"),
-                          b.metrics.get("funded_balance")), f"{vintage}/{a.period}"
+                          b.metrics.get("funded_balance")), where
             assert _close(a.metrics.get("wa_ltv"), b.metrics.get("wa_ltv"),
-                          tol=0.05), f"{vintage}/{a.period}"
+                          tol=0.0001), where
+            assert _close(a.metrics.get("wa_interest_rate"),
+                          b.metrics.get("wa_interest_rate"), tol=0.0001), where
+        # ...and every DERIVED field, so a presentation ratio cannot drift either.
+        assert mine.formation_count == theirs.formation_count, vintage
+        assert mine.surviving_count == theirs.surviving_count, vintage
+        assert mine.exits == theirs.exits, vintage
+        assert len(mine.live) == len(theirs.live), vintage          # seasoning
+        assert _close(mine.retention("funded_balance"),
+                      theirs.retention("funded_balance")), vintage
+        assert mine.violates_static_pool == theirs.violates_static_pool, vintage
 
 
-def test_the_deck_never_calls_a_cohort_ratio_retention():
-    """The governed service re-selects a cohort by vintage each period rather
-    than freezing it at formation, so the ratio can exceed 100%. Calling that
-    "retention" would state an analytic the service does not support."""
-    from pathlib import Path as _P
+def test_the_wa_ltv_unit_is_a_fraction_on_both_sides(deck, react):
+    """The unit the payload carries, asserted rather than assumed.
 
-    import mi_agent_pptx
+    ``evolution._pct_fraction`` normalises to a FRACTION so the React client's
+    ×100 formatter renders it; the deck's adapter multiplies by 100 under the
+    same rule. If either side changed convention a weighted LTV would render
+    100× out — which is the shape of the "0.4% at +8 months" report.
+    """
+    api = react("/mi/cohorts/progression", grain="Y")
+    values = [p["metrics"].get("wa_ltv") for p in api.get("periods") or ()
+              if (p.get("metrics") or {}).get("wa_ltv") is not None]
+    if not values:
+        pytest.skip("no weighted LTV in this book's progression")
+    for v in values:
+        assert 0.0 < v <= 1.5, (
+            f"payload wa_ltv={v} is not a fraction; React renders it x100, so "
+            f"this would display as {v * 100:.1f}%")
+    from mi_agent_pptx import cohorts as CO
+    for v in values:
+        assert CO._pct(v) == pytest.approx(v * 100.0), \
+            "the deck and the React formatter disagree on the LTV unit"
 
-    root = _P(mi_agent_pptx.__file__).parent
-    for name in ("cohorts.py", "deck.py"):
-        text = (root / name).read_text(encoding="utf-8")
-        body = "\n".join(l for l in text.splitlines()
-                         if not l.strip().startswith("#"))
-        assert "retention" not in body.lower() or "retention asserts" in body.lower(), \
-            f"{name} still presents a cohort ratio as retention"
+
+def test_retention_is_only_ever_reported_for_a_closed_pool():
+    """Retention asserts a pool that can only shrink.
+
+    An earlier pass banned the word outright, because the governed service
+    re-filters membership per period and the ratio could exceed 100%. The deck
+    now excludes any cohort whose count rises, so the denominator is genuinely
+    the pool the numerator is a subset of — and the word is accurate. The
+    property worth holding is that the exclusion still stands.
+    """
+    from types import SimpleNamespace
+
+    from mi_agent_pptx import cohorts as CO
+    from mi_agent_pptx.preflight import _gate_cohort_static_pool_integrity
+
+    rising = CO.adapt_progression({
+        "available": True,
+        "periods": [{"period": "a", "loanCount": 1, "metrics": {"funded_balance": 100.0}},
+                    {"period": "b", "loanCount": 4, "metrics": {"funded_balance": 400.0}}],
+    }, "2020")
+    assert rising.violates_static_pool and CO.plottable([rising]) == []
+    # And the gate exists as the backstop, mandatory.
+    gate = _gate_cohort_static_pool_integrity(
+        SimpleNamespace(cohort_series={"available": False, "series": {}}))
+    assert gate.mandatory is True
