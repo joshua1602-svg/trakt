@@ -480,6 +480,16 @@ def compute_pipeline_drivers(output_root, client_id: str,
     from mi_agent.concentration_tests import forward as forward_mod
     out = forward_mod.compute_drivers_for_test(config, lib, test_id, df,
                                                pipeline_df, row)
+    # Additive: the SAME driver contributions aggregated by broker, region and
+    # their intersection, carrying no case identifiers. Channels that must not
+    # transport loan-level data (Teams, and any future notification surface)
+    # read this instead of the per-case list; the per-case list is unchanged.
+    expected_frame, _meta = forward_mod.build_state_frame(
+        df, pipeline_df, forward_mod.STATE_EXPECTED)
+    test = next((t for t in config.tests if t.test_id == test_id), None)
+    if test is not None:
+        out["contributors"] = forward_mod.driver_contributors(
+            test, lib, expected_frame, row)
     out["reportingDate"] = reporting_date
     out["forecast"] = {k: forecast_meta.get(k) for k in
                        ("methodology", "basis", "observationWindowStart",

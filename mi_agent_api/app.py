@@ -1762,3 +1762,12 @@ def query(req: QueryRequest, request: Request) -> Any:
 from .copilot_actions import router as _copilot_router  # noqa: E402
 
 app.include_router(_copilot_router)
+
+# The Teams bot messaging endpoint — registration only, no portfolio data.
+# Mounted only when the capability is switched on, so a deployment that is not
+# running proactive notifications does not expose the route at all.
+from . import teams_bot as _teams_bot  # noqa: E402
+
+if _teams_bot.enabled():
+    app.include_router(_teams_bot.router)
+    logger.info("Teams bot messaging endpoint mounted at /v1/teams/bot/messages")

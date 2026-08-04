@@ -72,6 +72,44 @@ def _log_startup() -> None:
 _log_startup()
 
 
+#: How often the proactive-notification delivery worker runs. Every five
+#: minutes: an approved update is not urgent to the minute, and a longer
+#: interval would make a transient Teams failure look like a lost message to
+#: whoever is watching. Overridable per deployment.
+_NOTIFY_SCHEDULE = os.environ.get("TRAKT_TEAMS_DELIVERY_SCHEDULE",
+                                  "0 */5 * * * *")
+
+
+@app.timer_trigger(schedule=_NOTIFY_SCHEDULE, arg_name="timer",
+                   run_on_startup=False, use_monitor=True)
+def deliver_teams_notifications(timer: func.TimerRequest) -> None:
+    """Drain the notification outbox for the tenant this deployment serves.
+
+    Deliberately separate from ingestion. Approval writes durable intent and
+    returns; this turns intent into Teams messages, retries transient failures
+    on its own schedule, and cannot delay or fail a publication.
+
+    Runs as a SINGLE worker: blob writes are last-writer-wins, so two workers
+    racing for one outbox item would both believe they hold it. The send-time
+    idempotency check makes that harmless rather than duplicating a message,
+    but single-instance is the supported configuration.
+    """
+    tenant = (os.environ.get("TRAKT_TEAMS_TRAKT_TENANT") or "").strip()
+    if not tenant:
+        return                       # nothing configured; nothing to deliver
+    try:
+        from trakt_notifications.config import enabled
+        if not enabled():
+            return
+        from trakt_notifications.delivery import run_once
+        report = run_once(tenant)
+    except Exception:  # noqa: BLE001 - a delivery pass must not kill the app
+        logging.exception("TEAMS NOTIFICATION DELIVERY FAILED tenant=%s", tenant)
+        return
+    if report.attempted or report.errors:
+        logging.info("teams delivery: %s", report.to_dict())
+
+
 @app.event_grid_trigger(arg_name="event")
 def on_raw_blob_event(event: func.EventGridEvent) -> None:
     """Event Grid entrypoint. Wraps dispatch so any uncaught exception is logged

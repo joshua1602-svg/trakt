@@ -1,0 +1,54 @@
+# Teams proactive notification DELIVERY settings.
+#
+# This file controls delivery, not analytical truth. Every materiality
+# threshold, concentration limit and risk rule stays where it already lives:
+#
+#   config/mi/insights.yaml            insight materiality
+#   the governed concentration-test configuration
+#   the governed risk rules
+#
+# Duplicating any of those here would create a second definition of "material"
+# that could quietly diverge from the one the dashboard, the deck and Copilot
+# all use. Nothing in this file may become a threshold.
+
+teams_notifications:
+  # Master switch. Off by default: a deployment must opt in deliberately.
+  # TRAKT_TEAMS_NOTIFICATIONS in the environment overrides this without a
+  # redeploy, which is the switch to reach for in an incident.
+  enabled: false
+
+  # Only "personal" (1:1 chat) is implemented. Any other value disables
+  # delivery rather than silently falling back.
+  delivery_scope: personal
+
+  # The two message types. Both default on: an approved update is meant to
+  # produce exactly two notification decisions, and switching one off is a
+  # deliberate reduction of that contract.
+  update_message_enabled: true
+  risk_message_enabled: true
+
+  # Action-language ceiling:
+  #   observation      "Broker A is the largest projected contributor."
+  #   consideration    "Consider reviewing completion timing for Broker A's
+  #                     South West pipeline."
+  #   approved_action  only reachable where an explicit client action rule
+  #                    defines the wording; never produced by default.
+  recommendation_level: consideration
+
+  # Card limits. Teams is a notification surface, not the dashboard.
+  maximum_risk_items: 3
+  maximum_update_items: 5
+
+  # Named pilot recipients. Each entry is a SELECTOR, not a destination: a
+  # delivery still requires a captured Teams conversation reference and an
+  # operator-approved portfolio mapping. An empty list sends to nobody.
+  #
+  # recipients:
+  #   - entra_object_id: 00000000-0000-0000-0000-000000000000
+  #     microsoft_tenant_id: 11111111-1111-1111-1111-111111111111
+  #     portfolio_contexts: [total]
+  recipients: []
+
+  # Delivery mechanics for transient Teams failures.
+  max_attempts: 5
+  retry_backoff_seconds: [30, 120, 600, 1800]
