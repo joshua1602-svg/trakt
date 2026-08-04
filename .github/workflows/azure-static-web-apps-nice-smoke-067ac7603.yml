@@ -16,7 +16,18 @@ jobs:
     name: Build and Deploy Job
 
     env:
-      VITE_AGENT_API_URL: https://trakt-mi-api.azurewebsites.net
+      # The API is reached SAME-ORIGIN through the Static Web App's linked
+      # backend, not on its own hostname. That is what lets Static Web Apps
+      # perform the Entra sign-in and forward the verified principal to the App
+      # Service as X-MS-CLIENT-PRINCIPAL, which mi_agent_api/auth.py requires.
+      #
+      # An absolute cross-origin URL here (what this was) means the browser
+      # sends no cookie and no token, so the API receives an anonymous request
+      # and there is nothing for Easy Auth to validate.
+      #
+      # SWA forwards linked-backend traffic with the path intact, so the App
+      # Service receives /api/mi/... — mi_agent_api/gateway.py strips the prefix.
+      VITE_AGENT_API_URL: /api
       # Vite inlines VITE_* at BUILD time, so these have to be here. Setting
       # them on the API App Service afterwards cannot change a bundle that has
       # already been compiled — a build without them contains no path to the

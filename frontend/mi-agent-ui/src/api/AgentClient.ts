@@ -15,6 +15,8 @@ import type {
   CohortFormation,
   CohortProgression,
   CohortProgressionQuery,
+  CohortStaticPool,
+  CohortVintageQuery,
   DeckGenerationJob,
   DeckGenerationRequest,
   DeckIndex,

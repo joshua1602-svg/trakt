@@ -67,15 +67,42 @@ domain, `digifinsolutions.co.uk`, in the app's config file.)*
 ### 5. Turn the lock on, on the reports side
 - Open the **`trakt-mi-api`** app → **Configuration** (Application settings) → add:
   - `MI_AGENT_AUTH_ENABLED` = `true`
-  - `MI_AGENT_CORS_ORIGINS` = your website's address (e.g. `https://<your-website-address>`)
   - `MI_AGENT_CLIENT_ID` = a short label for this client, e.g. `ERE`
 - Save and restart the app.
 
-### 6. Point the website at the connected service
-- The website needs to send report questions to `/api`. This is one line in the
-  deployment settings (`VITE_AGENT_API_URL` = `/api`). **Tell me when you reach
-  this step and I'll make that change in the code for you** (it only takes effect
-  after step 4, so timing matters — that's why I've held it).
+`MI_AGENT_CORS_ORIGINS` and `MI_AGENT_ALLOWED_ORIGIN` are **no longer needed**:
+the browser now calls the reports service same-origin through the website, so no
+cross-origin call is made. Leaving them set is harmless.
+
+### 5b. Close the side door (important)
+Linking the backend does **not** stop the reports service being reachable
+directly at `https://trakt-mi-api.azurewebsites.net`. The service trusts the
+identity the platform passes it — which is correct behind the website, but means
+anyone who can reach the service directly could send that identity header
+themselves and be treated as an operator.
+
+Do **one** of these on the `trakt-mi-api` app:
+
+- **Authentication** → add the Microsoft identity provider and set unauthenticated
+  requests to **HTTP 401** (not "allow"). Easy Auth then strips any identity
+  header a caller sent and injects only one it verified itself; or
+- **Networking** → **Access restrictions** → deny public access, allowing only
+  the Static Web App.
+
+Check it worked — from any machine, this must **not** return data:
+```
+curl -s -o /dev/null -w "%{http_code}\n" https://trakt-mi-api.azurewebsites.net/me
+```
+`401` or `403` is correct. `200` means the service is still answering strangers.
+
+### 6. Point the website at the connected service — **already done in code**
+- The website now sends report questions to `/api` (same origin), so the sign-in
+  identity is passed through to the reports service. This is set in
+  `.github/workflows/azure-static-web-apps-nice-smoke-067ac7603.yml`
+  (`VITE_AGENT_API_URL: /api`) and takes effect on the next deploy of the site.
+- **It only works once step 4 is done.** Until the backend is linked, `/api/*`
+  has nothing behind it and every report call returns 404. Do step 4 first, then
+  redeploy the site.
 
 > **Note (fixed).** The reports service now answers on **both** `/api/mi/…` and
 > `/mi/…`, so this step no longer depends on getting the two sides to agree. It
@@ -89,12 +116,20 @@ domain, `digifinsolutions.co.uk`, in the app's config file.)*
 > otherwise the browser blocks the call (and the sign-in identity is not passed
 > through, so you would be asked to sign in again).
 
-### 7. Put only yourself on the list
-- Go to **Enterprise applications** → open **`trakt-mi-agent`** → **Users and
-  groups** → **Add user** → add **your own** `@digifinsolutions.co.uk` account and
-  give it the **operator** role. (It's your own tenant, so no invitation is
-  needed — you're already in the directory.)
+### 7. Put only yourself on the list — **in the website, not in Entra**
+- Go to your **Static Web App** → **Role management** → **Invite**.
+- Invite **your own** `@digifinsolutions.co.uk` account and give it the role
+  **`operator`** (type it exactly). Open the generated invitation link once,
+  signed in as that account, to accept it.
 - That's it. No one else is added. Nothing is sent to the client.
+
+> **Important — this changed.** An earlier version of this guide said to assign
+> the role under **Enterprise applications → Users and groups**. That assigns an
+> *Entra app role*, which appears in the Entra token but **not** in the identity
+> Static Web Apps forwards to the reports service. The reports service checks the
+> role in the forwarded identity, so assigning it in Entra alone means you sign in
+> successfully and are then refused with "No MI access role assigned" (HTTP 403).
+> Roles must be granted in the Static Web App's own **Role management**.
 
 ---
 
@@ -111,9 +146,10 @@ swap your domain for your tenant's ID in the config).
 
 ## Later — when the client signs (NOT now)
 A 2-minute step, done by you when you're ready:
-1. **Enterprise applications** → `trakt-mi-agent` → **Users and groups** → invite
-   each of their people — the `@equityreleaseeurope.com` staff **and** their NED at
-   `@becquerelventures.com` — and give each the **client** role.
+1. **Static Web App** → **Role management** → **Invite** each of their people —
+   the `@equityreleaseeurope.com` staff **and** their NED at
+   `@becquerelventures.com` — and give each the role **`client`**. (Not
+   Enterprise applications — see the note in step 7.)
 2. They receive a Microsoft invitation and can sign in. Client users see the
    reports; only you (operator) have full access.
 
@@ -135,6 +171,17 @@ website reachable by the client with the lock off.)
   the cross-site rules; stopped the health check from revealing a server file
   path; hides internal error details from users; adds a `/me` "who am I" check.
 - `frontend/mi-agent-ui/staticwebapp.config.json` — the website's own rules:
-  sign-in with Microsoft, only client/operator roles allowed, login/logout,
-  security headers. Your domain is already set here.
-- Tested in `mi_agent_api/tests/test_auth.py`; the rest of the app is unaffected.
+  sign-in with Microsoft (Entra), the whole site requires a signed-in user, and
+  `/api/*` (the reports service) additionally requires the `client` or
+  `operator` role. Unused sign-in providers are closed off. Your domain is set in
+  `openIdIssuer`.
+
+  > **Correction.** An earlier version of this guide said this file already
+  > contained those rules. It did not — the file had only the security headers
+  > and the single-page-app fallback, and no auth block had ever been committed.
+  > The rules above are now actually in it.
+
+- Tested in `mi_agent_api/tests/test_auth.py` (the identity parser) and
+  `mi_agent_api/tests/test_linked_backend_auth.py` (the end-to-end contract: no
+  anonymous access to any report route, the forwarded identity is honoured under
+  `/api`, and the website config and the site build agree on the topology).
