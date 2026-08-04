@@ -191,6 +191,48 @@ def validate_deck_file(deck_path: Path) -> Optional[str]:
     return None
 
 
+#: Sidecar the generator writes beside the deck, carrying the publication
+#: verdict and the governed artefact context.
+PREFLIGHT_SUFFIX = ".preflight.json"
+
+
+def _read_preflight(deck_path: Path) -> Dict[str, Any]:
+    """The generator's preflight sidecar, or ``{}`` when it is absent."""
+    path = Path(str(deck_path) + PREFLIGHT_SUFFIX)
+    try:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001 — an unreadable sidecar is "absent"
+        logger.warning("Investor PPTX: could not read preflight %s: %s", path, exc)
+    return {}
+
+
+def _artefact_context(sidecar: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The governed context fields that travel with the artefact.
+
+    Extends the existing metadata; nothing here replaces a field that was
+    already recorded.
+    """
+    if not sidecar:
+        return {}
+    ctx = sidecar.get("portfolio_context") or {}
+    insights = sidecar.get("insights") or {}
+    out: Dict[str, Any] = {
+        "portfolio_context": ctx or None,
+        "report_scope": ctx.get("report_scope"),
+        "portfolio_ids": ctx.get("portfolio_ids"),
+        "portfolio_types": ctx.get("portfolio_types"),
+        "reporting_dates": ctx.get("reporting_dates"),
+        "template_version": sidecar.get("template_version"),
+        "insight_version": insights.get("insight_version"),
+        "source_runs": sidecar.get("source_runs"),
+        "input_snapshots": sidecar.get("input_snapshots"),
+        "omitted_slides": sidecar.get("omitted_slides"),
+        "slide_count": len(sidecar.get("slides") or []) or None,
+    }
+    return {k: v for k, v in out.items() if v not in (None, {}, [])}
+
+
 def _generator_version() -> str:
     try:
         from mi_agent_pptx import __version__ as ver
@@ -204,7 +246,8 @@ def build_deck_pointer(deck_path: Path, *, client_id: str,
                        period_uri: Optional[str] = None,
                        as_of_date: Optional[str] = None,
                        orchestration_run_id: Optional[str] = None,
-                       source_run_id: Optional[str] = None) -> Dict[str, Any]:
+                       source_run_id: Optional[str] = None,
+                       context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """The durable ``latest_investor_pack.json`` payload.
 
     Carries everything a consumer needs to identify and verify the deck without
@@ -212,11 +255,29 @@ def build_deck_pointer(deck_path: Path, *, client_id: str,
     originating orchestration/source run, the governed relative key, checksum,
     size, content type and generator version. No credentials, no account names.
     """
+    ctx = (context or {}).get("portfolio_context") or {}
+    insights = (context or {}).get("insights") or {}
+    # Governed scope travels WITH the deck: without it a total-portfolio pack and
+    # a single-book pack for the same client and period are indistinguishable to
+    # every downstream consumer.
+    scope_fields = {k: v for k, v in {
+        "report_scope": ctx.get("report_scope"),
+        "scope_label": ctx.get("scope_label"),
+        "portfolio_ids": ctx.get("portfolio_ids"),
+        "portfolio_types": ctx.get("portfolio_types"),
+        "reporting_dates": ctx.get("reporting_dates"),
+        "template_version": (context or {}).get("template_version"),
+        "insight_version": insights.get("insight_version"),
+        "source_runs": (context or {}).get("source_runs"),
+        "input_snapshots": (context or {}).get("input_snapshots"),
+    }.items() if v not in (None, {}, [])}
+
     return {
         "deck_name": DECK_NAME_DEFAULT,
         "blob_name": latest_uri,
         "period_blob_name": period_uri,
         "client_id": client_id,
+        **scope_fields,
         # Normalised YYYY-MM period key — the same value the dated deck path uses,
         # so a pointer and its dated copy can never disagree.
         "reporting_period": period,
@@ -258,6 +319,7 @@ def persist_investor_deck(
     source_run_id: Optional[str] = None,
     force: bool = False,
     log: Optional[logging.Logger] = None,
+    context: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Publish a generated deck to durable storage so the MI API can serve it.
 
@@ -332,7 +394,8 @@ def persist_investor_deck(
             deck_path, client_id=client, period=key or (period or None),
             latest_uri=latest_uri, period_uri=period_uri,
             as_of_date=period or None,
-            orchestration_run_id=orchestration_run_id, source_run_id=source_run_id)
+            orchestration_run_id=orchestration_run_id, source_run_id=source_run_id,
+            context=context)
         storage.write_text(layout.deck_latest_pointer_uri(client),
                            json.dumps(pointer, indent=2))
         published["checksum"] = pointer["checksum"]
@@ -356,6 +419,10 @@ def generate_investor_pptx(
     deck_config: Optional[str] = None,
     mandatory: bool = False,
     source_run_id: Optional[str] = None,
+    portfolio_context: Optional[str] = None,
+    client_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    output_root: Optional[str] = None,
     log: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
     """Generate the investor PPTX for a completed run and update the manifest.
@@ -363,6 +430,18 @@ def generate_investor_pptx(
     Returns the artifact record written to the manifest. Never raises unless
     *mandatory* is set and generation fails (in which case the caller is
     expected to fail the run).
+
+    ``portfolio_context`` is the governed scope the pack reports on. The pipeline
+    leaves it unset (total portfolio); the on-demand capability passes the scope
+    the user is looking at, so the two channels reach the generator through this
+    one entry point rather than each assembling their own argv.
+
+    ``client_id`` / ``tenant_id`` / ``output_root`` are likewise optional and
+    unset by the pipeline, which runs inside its own run directory and lets the
+    generator infer them from ``run_state.json`` and the ambient environment. The
+    on-demand capability generates from an ARBITRARY historical run directory, so
+    it states them rather than depending on what the API process happens to have
+    configured.
     """
     log = log or logger
     run_dir = Path(run_dir)
@@ -379,6 +458,14 @@ def generate_investor_pptx(
     ]
     if as_of_date:
         argv += ["--as-of-date", str(as_of_date)]
+    if portfolio_context:
+        argv += ["--portfolio-context", str(portfolio_context)]
+    if client_id:
+        argv += ["--client-id", str(client_id)]
+    if tenant_id:
+        argv += ["--tenant-id", str(tenant_id)]
+    if output_root:
+        argv += ["--output-root", str(output_root)]
 
     log.info("Starting Investor PPTX generation...")
     try:
@@ -389,6 +476,12 @@ def generate_investor_pptx(
         if not output.exists():
             raise RuntimeError(
                 f"generator returned rc={rc} but no deck was written to {output}")
+        sidecar = _read_preflight(output)
+        preflight = (sidecar.get("preflight") or {}) if sidecar else {}
+        # Absent sidecar (an older generator) is treated as publishable, so this
+        # stage stays backwards compatible with a generator that has no gates.
+        publishable = bool(preflight.get("publishable", True))
+
         artifact = {
             "type": "pptx",
             "status": "available",
@@ -403,12 +496,28 @@ def generate_investor_pptx(
             "client_id": client_name or None,
             "source_run_id": source_run_id,
         }
+        artifact.update(_artefact_context(sidecar))
+
+        if not publishable:
+            # Generate but do NOT publish: the deck stays in the run directory so
+            # an operator can see what failed, and the reason travels with the
+            # artefact. A misleading pack that never leaves the run is contained.
+            artifact["status"] = "generated_not_published"
+            artifact["publication_blocked"] = True
+            artifact["preflight"] = preflight
+            log.warning("Investor PPTX NOT published — preflight gates failed: %s",
+                        ", ".join(preflight.get("failed_gates") or []) or "unknown")
+            _update_manifest(run_dir, artifact)
+            log.info("Investor PPTX generated (publication withheld):\n%s", output)
+            return artifact
+
+        artifact["preflight"] = preflight
         # Durable publish (guarded): upload the deck so the MI API can serve it.
         # A publish failure never fails the run — it is recorded on the artifact.
         published = persist_investor_deck(
             output, client_id=client_name, period=as_of_date,
             orchestration_run_id=run_dir.name, source_run_id=source_run_id,
-            log=log)
+            log=log, context=sidecar)
         if published:
             artifact["published"] = published
         _update_manifest(run_dir, artifact)

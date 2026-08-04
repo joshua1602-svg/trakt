@@ -208,5 +208,16 @@ export function withCache(
       resource(`geoExposure|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getGeoExposure(portfolioId, portfolioContext, signal)),
     deckDownloadUrl: (portfolioId, period) => client.deckDownloadUrl(portfolioId, period),
+    // Deliberately uncached, both of them: generation is a command, and its job
+    // state is the one thing in this client that is expected to change between
+    // two identical calls.
+    generateDeck: client.generateDeck
+      ? (request, signal) => client.generateDeck!(request, signal)
+      : null,
+    getDeckGeneration: (jobId, signal) => {
+      const poll = client.getDeckGeneration?.bind(client);
+      return poll ? poll(jobId, signal)
+                  : Promise.reject(new Error("deck generation is not supported"));
+    },
   };
 }

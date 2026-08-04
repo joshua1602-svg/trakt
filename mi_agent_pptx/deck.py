@@ -30,6 +30,21 @@ SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
 EMU_IN = 914400
 
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December")
+
+
+def _pretty_date(value: Any) -> str:
+    """``2026-06-30`` -> ``30 June 2026``, for a client-facing page."""
+    text = str(value or "").strip()
+    parts = text.split("-")
+    if len(parts) == 3 and len(parts[0]) == 4:
+        try:
+            return f"{int(parts[2])} {_MONTHS[int(parts[1]) - 1]} {parts[0]}"
+        except (ValueError, IndexError):
+            return text
+    return text
+
 
 @dataclass
 class DeckContext:
@@ -58,6 +73,10 @@ class DeckBuilder:
         self.work.mkdir(parents=True, exist_ok=True)
         self.appendix: List[str] = list(data.notes)
         self.records: List[Dict[str, Any]] = []
+        #: Slides this portfolio did not justify, with reasons (rendered in the
+        #: appendix so an omission is never silent).
+        self.omissions: List[Any] = []
+        self.facts: Dict[str, Any] = {}
 
     # ------------------------------------------------------------- pptx scaffold
     def _rgb(self, hx):
@@ -121,10 +140,30 @@ class DeckBuilder:
             self._text(slide, Inches(0.57), Inches(1.0), Inches(12.4), Inches(0.5),
                        strap, size=12, color=self.theme.peri, italic=True)
 
+    def scope_footnote(self) -> str:
+        """The one-line scope + date stamp every slide carries.
+
+        A slide read on its own — screenshotted, pasted into a memo — must still
+        say which book it describes and as at when.
+        """
+        p = self.d.portfolio
+        date = self.ctx.as_of_date or self.d.reporting_date
+        if p is None:
+            return f"Funded as at {date}" if date else ""
+        label = f"{p.scope_label} portfolio"
+        if p.has_mixed_reporting_dates:
+            return f"{label} · mixed reporting dates (see cover)"
+        return f"{label} · funded as at {date}" if date else label
+
     def _footer(self, slide):
         self._page += 1
-        self._text(slide, Inches(0.55), Inches(7.08), Inches(10), Inches(0.3),
+        self._text(slide, Inches(0.55), Inches(7.08), Inches(6.6), Inches(0.3),
                    self.ctx.footer, size=8, color=self.theme.ink_500)
+        stamp = self.scope_footnote()
+        if stamp:
+            self._text(slide, Inches(7.25), Inches(7.08), Inches(4.95), Inches(0.3),
+                       stamp, size=8, color=self.theme.ink_400,
+                       align=PP_ALIGN.RIGHT)
         self._text(slide, Inches(12.3), Inches(7.08), Inches(0.8), Inches(0.3),
                    str(self._page), size=8, color=self.theme.ink_500,
                    align=PP_ALIGN.RIGHT)
@@ -157,9 +196,21 @@ class DeckBuilder:
         self._text(slide, l + pad, t + Inches(0.14), iw, Inches(0.3),
                    str(tile.get("label", "")).upper(), size=8.5,
                    color=self.theme.ink_400, bold=True)
-        val = tile.get("value") if avail else "—"
-        self._text(slide, l + pad, t + Inches(0.44), iw, Inches(0.55), str(val),
-                   size=20, bold=True,
+        val = str(tile.get("value") if avail else "—")
+        # A KPI value may be a long label (an area name), not just a number. Step
+        # the size down so it fits the tile instead of being clipped — a value the
+        # reader cannot see is worse than a smaller one.
+        width_in = int(iw) / EMU_IN
+        size = 20
+        for limit, candidate in ((width_in * 2.6, 20), (width_in * 3.4, 15),
+                                 (width_in * 4.6, 12)):
+            if len(val) <= limit:
+                size = candidate
+                break
+        else:
+            size = 10
+        self._text(slide, l + pad, t + Inches(0.44), iw, Inches(0.58), val,
+                   size=size, bold=True,
                    color=self.theme.ink_100 if avail else self.theme.ink_500)
         y = t + Inches(1.02)
         delta, intent = tile.get("delta"), tile.get("deltaIntent")
@@ -185,13 +236,38 @@ class DeckBuilder:
             t = Emu(int(top0) + r * (int(tile_h) + int(gy)))
             self._tile(slide, l, t, tile_w, tile_h, tile)
 
-    def _chart_boxes(self, n):
-        top = Inches(1.62)
-        h = Inches(4.95)
-        if n <= 1:
-            return [(Inches(0.55), top, Inches(12.25), h)]
-        return [(Inches(0.55), top, Inches(6.0), h),
-                (Inches(6.78), top, Inches(6.0), h)]
+    #: THE content band. Every tile row and every chart panel is laid out across
+    #: these two edges, so a KPI strip and the charts beneath it cannot drift
+    #: apart — which is exactly what happened when tiles used a 3.0in pitch and
+    #: charts a 6.78in origin: the last tile ended at 12.47in and the right chart
+    #: at 12.78in, a third of an inch of visible misalignment.
+    CONTENT_L = 0.55
+    CONTENT_R = 12.78
+    COLUMN_GAP = 0.28
+
+    def _grid(self, n: int, *, gap: Optional[float] = None):
+        """``[(left_in, width_in)]`` for *n* equal columns across the band."""
+        gap = self.COLUMN_GAP if gap is None else gap
+        span = self.CONTENT_R - self.CONTENT_L
+        w = (span - gap * max(n - 1, 0)) / max(n, 1)
+        return [(self.CONTENT_L + i * (w + gap), w) for i in range(n)]
+
+    def _chart_boxes(self, n, *, top: float = 1.62, height: float = 4.95):
+        return [(Inches(l), Inches(top), Inches(w), Inches(height))
+                for l, w in self._grid(min(max(n, 1), 3))]
+
+    def _strip(self, tiles, *, top: float = 1.58, height: float = 1.45):
+        """A KPI row on the same grid the charts use.
+
+        Returns parallel sequences so a caller can ``zip`` them with its tiles;
+        the columns are the grid's, never a per-slide constant.
+        """
+        cols = self._grid(len(tiles))
+        return ([Inches(l) for l, _w in cols],
+                [Inches(top)] * len(tiles),
+                [Inches(w) for _l, w in cols],
+                [Inches(height)] * len(tiles),
+                list(tiles))
 
     def _barlist_card(self, slide, box, title, rows, value_key, *, currency=True,
                       cid="bl", label_key="label"):
@@ -214,6 +290,12 @@ class DeckBuilder:
                              "placeholder": placeholder})
 
     def slide_cover(self, spec):
+        """Cover — states, unambiguously, what this report is a report ABOUT.
+
+        Scope, constituent books and every reporting date are rendered from the
+        governed portfolio context, never from an operator-typed name, so a deck
+        covering one book can never be mistaken for a total-portfolio deck.
+        """
         s = self._slide()
         # Full-height left accent rail (replaces the old overlapping corner panel).
         rail = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0),
@@ -222,34 +304,91 @@ class DeckBuilder:
         rail.fill.fore_color.rgb = self._rgb(self.theme.peri)
         rail.line.fill.background()
         rail.shadow.inherit = False
-        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(3.02),
+        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(2.92),
                                  Inches(2.2), Inches(0.07))
         bar.fill.solid()
         bar.fill.fore_color.rgb = self._rgb(self.theme.peri)
         bar.line.fill.background()
         bar.shadow.inherit = False
-        self._text(s, Inches(0.9), Inches(0.7), Inches(6), Inches(0.4),
+        self._text(s, Inches(0.9), Inches(0.62), Inches(6), Inches(0.4),
                    "TRAKT · MI AGENT", size=12, color=self.theme.peri, bold=True)
-        self._text(s, Inches(0.86), Inches(1.7), Inches(11.5), Inches(1.4),
-                   self.ctx.client_name, size=42, bold=True)
-        self._text(s, Inches(0.92), Inches(3.25), Inches(11), Inches(0.6),
-                   self.ctx.deck_name, size=19, color=self.theme.peri)
-        fb = (self.d.forecast.get("forecastBridge") or {})
+        self._text(s, Inches(0.86), Inches(1.42), Inches(11.5), Inches(1.1),
+                   self._entity_name(), size=38, bold=True)
+        self._text(s, Inches(0.92), Inches(3.12), Inches(11), Inches(0.5),
+                   self.ctx.deck_name, size=18, color=self.theme.peri)
         strap = self._cover_strapline()
-        self._text(s, Inches(0.92), Inches(3.95), Inches(10.5), Inches(0.7),
-                   strap, size=13, color=self.theme.ink_300, italic=True, spacing=1.15)
-        self._text(s, Inches(0.92), Inches(5.7), Inches(6), Inches(0.4),
-                   f"Data cut-off   {self.ctx.as_of_date or 'n/a'}", size=12.5)
-        self._text(s, Inches(0.92), Inches(6.12), Inches(8), Inches(0.4),
-                   f"Generated automatically by {self.ctx.generated_by}", size=11,
+        self._text(s, Inches(0.92), Inches(3.7), Inches(10.5), Inches(0.6),
+                   strap, size=12.5, color=self.theme.ink_300, italic=True,
+                   spacing=1.12)
+        self._cover_scope_block(s)
+        self._text(s, Inches(0.92), Inches(6.72), Inches(8), Inches(0.35),
+                   f"Generated automatically by {self.ctx.generated_by}", size=10,
                    color=self.theme.ink_400)
-        self._record("cover", self.ctx.client_name, strap)
+        self._record("cover", self._entity_name(), strap)
+
+    def _entity_name(self):
+        """The reporting entity — the operator-supplied client name."""
+        return self.ctx.client_name
+
+    def _cover_scope_block(self, s):
+        """Reporting scope + constituent books + every reporting date."""
+        p = self.d.portfolio
+        left, top = Inches(0.92), Inches(4.42)
+        self._text(s, left, top, Inches(5.6), Inches(0.3), "REPORTING SCOPE",
+                   size=9, color=self.theme.peri, bold=True)
+        if p is None:
+            self._text(s, left, top + Inches(0.3), Inches(6), Inches(0.4),
+                       "Scope unavailable — no governed portfolio context resolved.",
+                       size=11.5, color=self.theme.ink_300)
+            return
+        self._text(s, left, top + Inches(0.28), Inches(5.6), Inches(0.4),
+                   f"{p.scope_label} portfolio", size=15, bold=True)
+        # Constituent books, each with its type.
+        y = top + Inches(0.68)
+        for book in p.portfolios[:5]:
+            self._text(s, left, y, Inches(5.6), Inches(0.3),
+                       f"·  {book.label}  —  {book.type_label}", size=10.5,
+                       color=self.theme.ink_300)
+            y = Emu(int(y) + int(Inches(0.245)))
+        if len(p.portfolios) > 5:
+            self._text(s, left, y, Inches(5.6), Inches(0.3),
+                       f"·  and {len(p.portfolios) - 5} further book(s)", size=10.5,
+                       color=self.theme.ink_400)
+
+        # Reporting dates — per type when they differ, else one line.
+        rleft = Inches(7.1)
+        self._text(s, rleft, top, Inches(5.3), Inches(0.3), "REPORTING DATES",
+                   size=9, color=self.theme.peri, bold=True)
+        ry = top + Inches(0.28)
+        dates = p.type_reporting_dates
+        if dates:
+            for ptype, date in sorted(dates.items()):
+                from .deck_context import type_label
+                self._text(s, rleft, ry, Inches(5.3), Inches(0.32),
+                           f"{type_label(ptype)}:  {date}", size=11.5,
+                           color=self.theme.ink_100)
+                ry = Emu(int(ry) + int(Inches(0.3)))
+        else:
+            self._text(s, rleft, ry, Inches(5.3), Inches(0.32),
+                       f"Funded portfolio:  {self.ctx.as_of_date or 'n/a'}",
+                       size=11.5)
+            ry = Emu(int(ry) + int(Inches(0.3)))
+        if p.has_mixed_reporting_dates:
+            self._text(s, rleft, Emu(int(ry) + int(Inches(0.06))), Inches(5.3),
+                       Inches(0.5),
+                       "⚠  Constituent books are reported as at different dates; "
+                       "the total combines them.",
+                       size=9.5, color=self.theme.amber, italic=True)
 
     def _cover_strapline(self):
+        p = self.d.portfolio
         kpis = {k.get("id"): k for k in self.d.funded.get("kpis", [])}
         bal = kpis.get("balance", {}).get("value")
         loans = kpis.get("loans", {}).get("value")
         ltv = kpis.get("wa_current_ltv", {}).get("value")
+        if bal and p is not None and p.is_mixed:
+            return (f"Funded book of {bal} across {loans} loans, reported as a total "
+                    f"and split by portfolio type.")
         if bal:
             return (f"Funded book of {bal} across {loans} loans at {ltv} weighted "
                     f"current LTV.")
@@ -270,31 +409,486 @@ class DeckBuilder:
         self._record("executive_summary", spec.get("title", "Executive Summary"),
                      "Funded KPIs (dashboard-aligned).")
 
-    def slide_strat(self, spec):
+    # ------------------------------------------------- investor narrative
+    def slide_exec_insights(self, spec):
+        """Executive Summary — *what changed, and why*.
+
+        Deterministic observations from :mod:`mi_agent_pptx.insights`. Every
+        sentence is a template over a governed figure; nothing is generated.
+        """
         s = self._slide()
-        self._header(s, spec.get("title", "Funded Stratifications"),
-                     "Balance by dimension", accent=self.theme.peri)
+        brief = self.d.insights or {}
+        items = brief.get("insights") or []
+        self._header(s, spec.get("title", "Executive Summary"),
+                     "Governed observations for the period")
+        if not items:
+            self._placeholder_body(s, "No governed observations for this run.")
+            self._footer(s)
+            return self._record(spec.get("id", "executive_summary"),
+                                spec.get("title"), "", placeholder=True)
+
+        # Severity accent per observation — a caveat must not read as an aside.
+        accent_for = {"concern": self.theme.rose, "attention": self.theme.amber}
+        items = items[:8]
+        top = 1.58
+        # The card grid must FIT. Previously the row height was fixed, so a
+        # seventh observation was laid out below the bottom of the slide and the
+        # reader simply never saw it. Height is now derived from the available
+        # band and the number of rows, so the grid always fits by construction.
+        two_col = len(items) > 4
+        col_w = Inches(6.0) if two_col else Inches(12.25)
+        per_col = -(-len(items) // 2) if two_col else len(items)
+        gap = 0.12
+        band = 6.92 - top                      # bottom of the content area
+        # Cards grow into the available band rather than sitting at a fixed
+        # height: with two observations a 0.92in card clipped a long summary
+        # while leaving most of the slide empty.
+        row_h = max(0.62, min(1.62 if two_col else 1.55,
+                              (band - gap * (per_col - 1)) / max(per_col, 1)))
+        for i, ins in enumerate(items):
+            col, row = (i // per_col, i % per_col) if two_col else (0, i)
+            l = Inches(0.55) if col == 0 else Inches(6.78)
+            t = Inches(top + row * (row_h + gap))
+            h = Inches(row_h)
+            accent = accent_for.get(getattr(ins, "severity", "info"), self.theme.peri)
+            self._panel(s, l, t, col_w, h, fill=self.theme.bg_panel_alt,
+                        line=self.theme.line_soft)
+            chip = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, l, t, Inches(0.045), h)
+            chip.fill.solid()
+            chip.fill.fore_color.rgb = self._rgb(accent)
+            chip.line.fill.background()
+            chip.shadow.inherit = False
+            # The headline's box is sized to the lines it actually needs, and the
+            # body starts below it. At a fixed 0.42in a two-line headline ran
+            # straight into the summary beneath — which happens as soon as a
+            # movement names two contributors, so it is not an edge case.
+            headline = str(getattr(ins, "headline", ""))
+            text_w = (col_w - Inches(0.46)) / EMU_IN
+            per_line = max(16, int(text_w * 72 / (12.5 * 0.52)))
+            head_lines = min(3, max(1, -(-len(headline) // per_line)))
+            head_h = 0.26 + 0.24 * head_lines
+            self._text(s, l + Inches(0.24), t + Inches(0.14),
+                       col_w - Inches(0.46), Inches(head_h),
+                       headline, size=12.5, bold=True)
+            # Body size steps down when a summary is long, so a detailed
+            # observation is never clipped by a fixed card height.
+            summary = str(getattr(ins, "summary", ""))
+            body_top = 0.14 + head_h + 0.04
+            body_h = max(0.24, (h / EMU_IN) - body_top - 0.14)
+            capacity = text_w * body_h * 210
+            # Four tiers, not three: a runoff book narrates exits as well as
+            # balances, and its observations are long enough that the old floor
+            # of 8pt still overflowed a two-column card.
+            body = 10 if len(summary) <= capacity else (
+                9 if len(summary) <= capacity * 1.25 else
+                8 if len(summary) <= capacity * 1.55 else 7)
+            self._text(s, l + Inches(0.24), t + Inches(body_top),
+                       col_w - Inches(0.46), Inches(body_h), summary,
+                       size=body, color=self.theme.ink_300, spacing=1.06)
+        self._footer(s)
+        self._record(spec.get("id", "executive_summary"), spec.get("title"),
+                     f"{len(items)} governed observations.")
+
+    def slide_portfolio_composition(self, spec):
+        """Portfolio Composition — *what do I own today, and how is it divided?*
+
+        The anchor slide, and the second page an investor sees. It used to be a
+        label column beside one value column per type — functionally complete and
+        visually a spreadsheet. The measures are unchanged; the hierarchy is not:
+        a summary strip, then the split itself as a proportional bar, then one
+        card per portfolio type leading on the three figures that decide whether
+        the reader keeps reading (balance, share, movement) with the rest beneath.
+
+        Every portfolio type comes from the governed registry, so this renders a
+        single book, a direct/acquired pair, or more than two types without any
+        of them being named here.
+        """
+        s = self._slide()
+        p = self.d.portfolio
+        self._header(s, spec.get("title", "Portfolio Composition"),
+                     "Funded book by portfolio type")
+        if p is None:
+            self._placeholder_body(s, "No governed portfolio context resolved.")
+            self._footer(s)
+            return self._record(spec.get("id", "portfolio_composition"),
+                                spec.get("title"), "", placeholder=True)
+        from .metric_resolver import compact_currency, compact_number
+
+        total_bal = p.total_balance or 0.0
+        slices = list(p.type_slices)
+
+        # -- 1. summary strip -------------------------------------------------
+        tiles = [
+            {"label": "Total funded portfolio", "value": compact_currency(total_bal)},
+            {"label": "Loans", "value": compact_number(p.loan_count or 0)},
+            {"label": "Constituent books", "value": compact_number(p.portfolio_count),
+             "hint": f"{len(slices) or 1} portfolio type"
+                     f"{'s' if (len(slices) or 1) != 1 else ''}"},
+            {"label": "Reporting date",
+             "value": _pretty_date(self.d.reporting_date) or "—",
+             "hint": ("dates differ by book" if p.has_mixed_reporting_dates
+                      else "aligned across books")},
+        ]
+        for l, t, w, h, tile in zip(*self._strip(tiles, top=1.56, height=1.10)):
+            self._tile(s, l, t, w, h, tile)
+
+        if not slices:
+            self._text(s, Inches(self.CONTENT_L), Inches(3.1),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.5),
+                       "Single-portfolio book — no type split applies.", size=12,
+                       color=self.theme.ink_400, italic=True)
+            self._footer(s)
+            return self._record(spec.get("id", "portfolio_composition"),
+                                spec.get("title"), "Single portfolio.")
+
+        # -- 2. the split, as one proportional bar ----------------------------
+        self._composition_bar(s, slices, total_bal, top=2.90)
+
+        # -- 3. one card per portfolio type -----------------------------------
+        # Cards, not columns: with more than two types a shared-row table forces
+        # every measure into a sliver, while cards simply get narrower and keep
+        # their internal hierarchy.
+        lead = [
+            ("Balance", lambda sl: compact_currency(sl.balance)),
+            ("Share", lambda sl: (f"{(sl.balance or 0) / total_bal * 100:.1f}%"
+                                  if total_bal else "—")),
+            ("Movement", lambda sl: self._signed_currency(sl.balance_movement)),
+        ]
+        rest = [
+            ("Loans", lambda sl: compact_number(sl.loan_count or 0)),
+            ("Average balance", lambda sl: compact_currency(sl.avg_balance)),
+            ("WA current LTV", lambda sl: self._pct_display(sl, "wa_current_ltv")),
+            ("WA interest rate", lambda sl: self._pct_display(sl, "wa_rate")),
+            ("WA borrower age", lambda sl: self._pct_display(sl, "wa_age")),
+            ("Loan movement", lambda sl: (f"{int(sl.loan_movement):+,}"
+                                          if sl.loan_movement is not None else "—")),
+            ("Reporting date", lambda sl: _pretty_date(sl.reporting_date) or "—"),
+        ]
+        top = 3.66
+        height = 2.94
+        for (l, w), sl in zip(self._grid(len(slices)), slices):
+            self._type_card(s, sl, lead, rest, Inches(l), Inches(top),
+                            Inches(w), Inches(height))
+        self._footer(s)
+        self._record(spec.get("id", "portfolio_composition"), spec.get("title"),
+                     f"{len(slices)} portfolio type(s).")
+
+    def _composition_bar(self, s, slices, total, *, top: float):
+        """The split as ONE proportional bar.
+
+        A restrained institutional visual rather than a donut: segment length is
+        the only encoding, it reads left to right like the numbers beneath it,
+        and it degrades to a single full-width segment for a one-type book.
+        """
+        left = self.CONTENT_L
+        width = self.CONTENT_R - self.CONTENT_L
+        colours = [self.theme.peri, self.theme.mint, self.theme.ink_400,
+                   self.theme.rag.get("amber", self.theme.ink_300)]
+        x = left
+        for i, sl in enumerate(slices):
+            share = ((sl.balance or 0.0) / total) if total else (1.0 / len(slices))
+            seg = max(width * share, 0.06)     # a sliver must still be visible
+            bar = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x),
+                                     Inches(top), Inches(seg), Inches(0.30))
+            bar.fill.solid()
+            bar.fill.fore_color.rgb = self._rgb(colours[i % len(colours)])
+            bar.line.fill.background()
+            bar.shadow.inherit = False
+            # The label only goes INSIDE a segment wide enough to hold it;
+            # otherwise the legend row beneath carries it.
+            if seg >= 1.5:
+                self._text(s, Inches(x + 0.12), Inches(top + 0.02),
+                           Inches(seg - 0.24), Inches(0.26),
+                           f"{sl.label} · {share * 100:.1f}%", size=9.5,
+                           bold=True, color=self.theme.navy)
+            x += seg
+        # A legend row ONLY for the segments too narrow to carry their own
+        # label. Listing every type again under a bar that already names them
+        # spends a line of the slide saying the same thing twice.
+        unlabelled = [(i, sl) for i, sl in enumerate(slices)
+                      if width * (((sl.balance or 0.0) / total) if total else 1.0) < 1.5]
+        lx = left
+        for i, sl in unlabelled:
+            dot = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(lx), Inches(top + 0.40),
+                                     Inches(0.10), Inches(0.10))
+            dot.fill.solid()
+            dot.fill.fore_color.rgb = self._rgb(colours[i % len(colours)])
+            dot.line.fill.background()
+            dot.shadow.inherit = False
+            label = f"{sl.label} — {(((sl.balance or 0) / total * 100) if total else 0):.1f}%"
+            self._text(s, Inches(lx + 0.18), Inches(top + 0.34), Inches(3.2),
+                       Inches(0.24), label, size=9, color=self.theme.ink_400)
+            lx += 3.4
+
+    def _type_card(self, s, sl, lead, rest, l, t, w, h):
+        """One portfolio type: three headline measures, then the rest."""
+        self._panel(s, l, t, w, h, fill=self.theme.bg_panel, line=self.theme.line)
+        self._text(s, l + Inches(0.20), t + Inches(0.16), w - Inches(0.4),
+                   Inches(0.30), sl.label.upper(), size=9.5, bold=True,
+                   color=self.theme.peri)
+
+        inner = (w / EMU_IN) - 0.40
+        for i, (label, fn) in enumerate(lead):
+            cw = inner / len(lead)
+            lx = l + Inches(0.20 + i * cw)
+            self._text(s, lx, t + Inches(0.56), Inches(cw - 0.08), Inches(0.24),
+                       label.upper(), size=8, color=self.theme.ink_500, bold=True)
+            self._text(s, lx, t + Inches(0.80), Inches(cw - 0.08), Inches(0.42),
+                       str(self._cell(fn, sl)), size=15 if len(lead) <= 3 else 13,
+                       bold=True)
+
+        band = (h / EMU_IN) - 1.44
+        row_h = min(0.30, band / max(len(rest), 1))
+        size = 10 if row_h >= 0.27 else 9
+        for i, (label, fn) in enumerate(rest):
+            y = t + Inches(1.36 + i * row_h)
+            self._text(s, l + Inches(0.20), y, Inches(inner * 0.58), Inches(0.26),
+                       label, size=size, color=self.theme.ink_400)
+            self._text(s, l + Inches(0.20 + inner * 0.56), y,
+                       Inches(inner * 0.44), Inches(0.26),
+                       str(self._cell(fn, sl)), size=size, bold=True,
+                       align=PP_ALIGN.RIGHT)
+
+    @staticmethod
+    def _cell(fn, sl):
+        try:
+            return fn(sl)
+        except Exception:  # noqa: BLE001 — one cell must not break the slide
+            return "—"
+
+    def _pct_display(self, sl, kpi_id):
+        """A weighted-average percentage as the governed snapshot formatted it."""
+        return sl.display(kpi_id) or "—"
+
+    @staticmethod
+    def _signed_currency(value):
+        """A movement with an explicit sign — ``+£851K`` / ``-£296K``."""
+        from .metric_resolver import compact_currency
+        if value is None:
+            return "—"
+        text = compact_currency(value)
+        return f"+{text}" if float(value) > 0 else text
+
+    def slide_portfolio_comparison(self, spec):
+        """Direct vs Acquired — *why did the total move?*
+
+        Movement attribution plus the mix differences that a blended total hides.
+        """
+        s = self._slide()
+        p = self.d.portfolio
+        self._header(s, spec.get("title", "Direct vs Acquired"),
+                     "Period movement attribution and portfolio differences")
+        if p is None or len(p.type_slices) < 2:
+            self._placeholder_body(s, "Only one portfolio type is in scope.")
+            self._footer(s)
+            return self._record(spec.get("id", "portfolio_comparison"),
+                                spec.get("title"), "", placeholder=True)
+        from .metric_resolver import compact_currency
+
+        slices = list(p.type_slices)
+        # Left: movement attribution waterfall (total = Σ type movements).
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.58), Inches(6.0),
+                                    Inches(4.98), "What moved the total")
+        movers = [(sl, sl.balance_movement) for sl in slices
+                  if sl.balance_movement is not None]
+        path = self.work / "cmp_attrib.png"
+        if movers:
+            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            steps = [("Opening", float(opening), "base")]
+            for sl, v in movers:
+                steps.append((sl.label.replace(" portfolio", "").replace(
+                    " originations", ""), float(v), "add"))
+            steps.append(("Closing", float(p.total_balance or 0), "total"))
+            render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        else:
+            render_placeholder_png(path, "", "No prior reporting period to "
+                                   "attribute movement against", theme=self.theme,
+                                   width_in=iw, height_in=ih)
+        self._place(s, path, il, it, iw, ih)
+
+        # Right: side-by-side differences on identical governed measures.
+        il, it, iw, ih = self._card(s, Inches(6.78), Inches(1.58), Inches(6.02),
+                                    Inches(4.98), "How the books differ")
+        cols = ["Measure"] + [sl.label for sl in slices]
+        measures = [
+            ("Funded balance", lambda sl: compact_currency(sl.balance)),
+            ("Loans", lambda sl: f"{int(sl.loan_count or 0):,}"),
+            ("Average balance", lambda sl: compact_currency(sl.avg_balance)),
+            ("WA current LTV", lambda sl: self._pct_display(sl, "wa_current_ltv")),
+            ("WA interest rate", lambda sl: self._pct_display(sl, "wa_rate")),
+            ("WA borrower age", lambda sl: self._pct_display(sl, "wa_age")),
+            ("Period movement", lambda sl: self._signed_currency(sl.balance_movement)),
+            ("Loan movement", lambda sl: (f"{int(sl.loan_movement):+,}"
+                                          if sl.loan_movement is not None else "—")),
+        ]
+        trows = []
+        for label, fn in measures:
+            row = [label]
+            for sl in slices:
+                try:
+                    row.append(str(fn(sl)))
+                except Exception:  # noqa: BLE001
+                    row.append("—")
+            trows.append(row)
+        tpath = self.work / "cmp_table.png"
+        R.draw_table(tpath, cols, trows, iw, ih, theme=self.theme)
+        self._place(s, tpath, il, it, iw, ih)
+        self._footer(s)
+        self._record(spec.get("id", "portfolio_comparison"), spec.get("title"),
+                     "Movement attribution by portfolio type.")
+
+    def slide_movement_drivers(self, spec):
+        """Portfolio Movement and Drivers — *why did funded AuM change?*
+
+        Two governed views side by side: the movement by portfolio type (who
+        moved it) and the movement by a chosen dimension (where it moved). Both
+        reconcile exactly to the headline, because both come from governed
+        decompositions whose parts sum to the whole by construction.
+        """
+        from . import movement as MV
+        from .metric_resolver import compact_currency
+
+        s = self._slide()
+        p = self.d.portfolio
+        bridges = self.d.movement or {}
+        primary = next((bridges[k] for k in ("region", "broker", "ltv", "ticket")
+                        if k in bridges and bridges[k].available), None)
+        self._header(s, spec.get("title", "Portfolio Movement and Drivers"),
+                     self._movement_window(primary), accent=self.theme.peri)
+
+        # Left: movement by portfolio type (the attribution that matters most).
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.02),
+                                    Inches(3.62), "Movement by portfolio type")
+        movers = [(sl, sl.balance_movement) for sl in (p.type_slices if p else ())
+                  if sl.balance_movement is not None]
+        path = self.work / "mv_type.png"
+        if movers:
+            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            steps = [("Opening", float(opening), "base")]
+            for sl, v in movers:
+                steps.append((sl.label.replace(" portfolio", "")
+                              .replace(" originations", ""), float(v), "add"))
+            steps.append(("Closing", float(p.total_balance or 0), "total"))
+            render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        elif primary is not None:
+            steps = [("Opening", float(primary.opening or 0), "base"),
+                     ("Net change", float(primary.total_delta or 0), "add"),
+                     ("Closing", float(primary.closing or 0), "total")]
+            render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        self._place(s, path, il, it, iw, ih)
+
+        # Right: movement by the leading governed dimension.
+        if primary is not None:
+            il, it, iw, ih = self._card(s, Inches(6.78), Inches(1.62), Inches(6.02),
+                                        Inches(3.62), f"Movement by {primary.label.lower()}")
+            rows = [{"category": c.category, "delta": c.delta, "is_other": c.is_other}
+                    for c in sorted(primary.contributors,
+                                    key=lambda c: -abs(c.delta))[:7]]
+            dpath = self.work / "mv_dim.png"
+            R.draw_diverging(dpath, rows, iw, ih, theme=self.theme)
+            self._place(s, dpath, il, it, iw, ih)
+
+        # Deterministic takeaways across the governed dimensions.
+        lines: List[str] = []
+        if p is not None and len(p.type_slices) > 1 and movers:
+            ups = [(sl, v) for sl, v in movers if v > 0]
+            downs = [(sl, v) for sl, v in movers if v < 0]
+            if ups and downs:
+                lines.append(
+                    f"{ups[0][0].label} added {compact_currency(abs(ups[0][1]))}, "
+                    f"partly offset by a {compact_currency(abs(downs[0][1]))} "
+                    f"reduction in the {downs[0][0].label.lower()}.")
+        for key in ("region", "broker", "ticket", "ltv"):
+            b = bridges.get(key)
+            if b is not None and b.available:
+                head = MV.headline(b)
+                if head:
+                    lines.append(head)
+            if len(lines) >= 3:
+                break
+        self._takeaway_strip(s, lines[:3], top=5.42)
+        self._footer(s)
+        self._record(spec.get("id", "movement_drivers"), spec.get("title"),
+                     "Governed movement attribution.")
+
+    def _movement_window(self, bridge) -> str:
+        """The period a movement was measured over — never left implicit."""
+        if bridge is None or not getattr(bridge, "available", False):
+            return "Period movement attribution"
+        if bridge.start_date and bridge.end_date:
+            return (f"Movement from {_pretty_date(bridge.start_date)} to "
+                    f"{_pretty_date(bridge.end_date)}")
+        if bridge.start_period and bridge.end_period:
+            return f"Movement from {bridge.start_period} to {bridge.end_period}"
+        return "Period movement attribution"
+
+    def _takeaway_strip(self, slide, lines, *, top: float, width: float = 12.25):
+        """The slide's conclusions — the sentence an investor actually keeps."""
+        lines = [l for l in lines if l]
+        if not lines:
+            return
+        self._panel(slide, Inches(0.55), Inches(top), Inches(width),
+                    Inches(0.34 + 0.26 * len(lines)),
+                    fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+        for i, line in enumerate(lines):
+            self._text(slide, Inches(0.78), Inches(top + 0.14 + i * 0.26),
+                       Inches(width - 0.46), Inches(0.26), f"·  {line}",
+                       size=10, color=self.theme.ink_300)
+
+    def slide_strat(self, spec):
+        """Stratifications — composition, PLUS what changed.
+
+        The composition view is legitimate investor content and is kept. What it
+        could not answer is whether the shape of the book is moving, so where a
+        comparable prior period exists the slide pairs each dimension with its
+        governed marginal change and states the movement in words.
+        """
+        from . import movement as MV
+
+        s = self._slide()
         strats = self.d.funded.get("stratifications", [])
-        # up to two per slide (config may split); here show the first two.
         keys = spec.get("keys")
         if keys:
             strats = [st for st in strats if st.get("key") in keys]
         strats = strats[:2]
-        boxes = self._chart_boxes(len(strats) or 1)
+
+        bridges = self.d.movement or {}
+        moved = [bridges[st.get("key")] for st in strats
+                 if bridges.get(st.get("key")) is not None
+                 and bridges[st.get("key")].available]
+        window = self._movement_window(moved[0]) if moved else "Balance by dimension"
+        self._header(s, spec.get("title", "Funded Stratifications"),
+                     ("Composition and period movement" if moved
+                      else "Balance by dimension"), accent=self.theme.peri)
+
+        has_takeaways = bool(moved)
+        chart_h = 3.62 if has_takeaways else 4.95
         ph = True
+        if len(strats) == 1:
+            boxes = [(Inches(0.55), Inches(1.62), Inches(12.25), Inches(chart_h))]
+        else:
+            boxes = [(Inches(0.55), Inches(1.62), Inches(6.02), Inches(chart_h)),
+                     (Inches(6.78), Inches(1.62), Inches(6.02), Inches(chart_h))]
+
         for st, box in zip(strats, boxes):
+            key = st.get("key")
             rows = st.get("bars", [])
-            ok = self._barlist_card(s, box, st.get("label", st.get("key", "")), rows,
-                                    "balance", cid=f"strat_{st.get('key')}")
+            ok = self._barlist_card(s, box, st.get("label", key or ""), rows,
+                                    "balance", cid=f"strat_{key}")
             ph = ph and not ok
+
+        # A single marginal-change panel beneath, for the dimension that moved
+        # most — one clear change view rather than a grid of small ones.
+        lines: List[str] = []
+        if moved:
+            for b in moved:
+                lines.extend(MV.takeaways(b, limit=1))
+            self._takeaway_strip(s, lines[:3], top=5.42)
         if not strats:
-            il, it, iw, ih = self._card(s, *boxes[0], "Stratifications")
-            path = self.work / "strat_none.png"
-            render_placeholder_png(path, "", "No funded stratifications for this run",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-            self._place(s, path, il, it, iw, ih)
+            self._placeholder_body(s, "No funded stratifications for this run.")
         self._footer(s)
-        self._record(spec.get("id", "strat"), spec.get("title"), "", placeholder=ph)
+        self._record(spec.get("id", "strat"), spec.get("title"),
+                     window if moved else "", placeholder=ph)
 
     def slide_geo(self, spec):
         s = self._slide()
@@ -375,43 +969,238 @@ class DeckBuilder:
         self._record("funded_evolution", spec.get("title"), "", placeholder=ph)
 
     def slide_cohorts(self, spec):
+        """Vintage Formation — *how much business entered each vintage?*
+
+        The governed cohort table (``cohorts.cohort_analysis``, the same service
+        behind the React Cohorts composition table), presented as formation
+        rather than as a bare cross-section. Where the scope spans more than one
+        portfolio type this reports them separately, because a ten-year acquired
+        book and a two-year direct book averaged into one vintage series
+        describe neither.
+        """
+        from . import cohorts as CO
+        from .metric_resolver import compact_currency, compact_number
+
         s = self._slide()
-        self._header(s, spec.get("title", "Vintage Cohorts"),
-                     "Static-pool profile compared across origination vintages")
-        rows = sorted(self.d.cohorts.get("cohorts", []), key=lambda r: str(r.get("cohort")))
-        x = [str(r.get("cohort")) for r in rows]
-        boxes = self._chart_boxes(2)
-        # Left: funded balance & book share by vintage. Right: WA LTV & WA rate.
-        def _rate(v):
-            if v is None:
-                return None
-            return v * 100 if v <= 1.5 else v
+        formation = CO.adapt_formation(self.d.cohorts)
+        basis = "Origination vintage" if (formation.cohort_basis or "").find(
+            "origination") >= 0 else "Cohort"
+        self._header(s, spec.get("title", "Vintage Formation"),
+                     f"{basis} composition of the funded book"
+                     + (f" · {formation.span}" if formation.span else ""))
+        if not CO.formation_is_meaningful(formation):
+            self._placeholder_body(
+                s, formation.reason or "No governed cohort composition for this book.")
+            self._footer(s)
+            return self._record("cohorts", spec.get("title"), "", placeholder=True)
+
+        rows = [r for r in formation.rows if r.vintage != "Unknown"]
+        # -- summary strip ----------------------------------------------------
+        oldest, newest = rows[0], rows[-1]
+        tiles = [
+            {"label": "Vintages", "value": compact_number(len(rows))},
+            {"label": "Oldest vintage", "value": oldest.vintage,
+             "hint": compact_currency(oldest.balance)},
+            {"label": "Newest vintage", "value": newest.vintage,
+             "hint": compact_currency(newest.balance)},
+            {"label": "Largest vintage",
+             "value": max(rows, key=lambda r: r.balance or 0).vintage,
+             "hint": compact_currency(max(r.balance or 0 for r in rows))},
+        ]
+        for l, t, w, h, tile in zip(*self._strip(tiles, top=1.58, height=1.16)):
+            self._tile(s, l, t, w, h, tile)
+
+        # -- balance by vintage, then the governed per-vintage measures -------
+        boxes = self._chart_boxes(2, top=3.02, height=3.26)
         il, it, iw, ih = self._card(s, *boxes[0], "Funded balance by vintage")
         p1 = self.work / "cohort_balance.png"
-        if rows:
-            R.draw_lines(p1, x, [{"name": "Funded balance",
-                                  "values": [r.get("balance") for r in rows]}],
-                         iw, ih, theme=self.theme, currency=True, area=True)
-        else:
-            render_placeholder_png(p1, "", "No cohort composition for this run",
-                                   theme=self.theme, width_in=iw, height_in=ih)
+        R.draw_barlist(p1, [{"label": r.vintage, "balance": r.balance}
+                            for r in sorted(rows, key=lambda r: -(r.balance or 0))],
+                       "balance", iw, ih, theme=self.theme)
         self._place(s, p1, il, it, iw, ih)
 
-        il, it, iw, ih = self._card(s, *boxes[1], "WA current LTV & WA rate by vintage")
-        p2 = self.work / "cohort_metrics.png"
-        if rows:
-            R.draw_lines(p2, x, [
-                {"name": "WA current LTV", "values": [_rate(r.get("waLtv")) for r in rows],
-                 "color": "#7c9cf0"},
-                {"name": "WA rate", "values": [_rate(r.get("waRate")) for r in rows],
-                 "color": "#5ec6b8"}],
-                iw, ih, theme=self.theme, currency=False, percent=True)
-        else:
-            render_placeholder_png(p2, "", "No cohort composition for this run",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-        self._place(s, p2, il, it, iw, ih)
+        il, it, iw, ih = self._card(s, *boxes[1], "Vintage measures")
+        self._vintage_table(s, rows, formation, il, it, iw, ih)
         self._footer(s)
-        self._record("cohorts", spec.get("title"), "", placeholder=not rows)
+        self._record("cohorts", spec.get("title"),
+                     f"{len(rows)} governed vintages.")
+
+    def _vintage_table(self, s, rows, formation, il, it, iw, ih):
+        """The governed per-vintage measures, as native text.
+
+        Only columns the service reported in ``metricsAvailable`` are drawn: a
+        tape without an interest rate must lose the rate column, not gain a
+        column of dashes.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        # Columns are declared with RELATIVE weights and laid out across the card
+        # that exists, so a tape carrying every optional measure cannot push the
+        # last column past the panel edge — which a fixed offset table did.
+        have = set(formation.metrics_available)
+        spec_cols = [("Vintage", 1.05, PP_ALIGN.LEFT, lambda r: r.vintage)]
+        if "balance" in have:
+            spec_cols += [
+                ("Balance", 1.15, PP_ALIGN.RIGHT,
+                 lambda r: compact_currency(r.balance)),
+                ("Share", 0.72, PP_ALIGN.RIGHT,
+                 lambda r: f"{r.share_pct:.1f}%" if r.share_pct is not None else "—")]
+        if "loanCount" in have:
+            spec_cols.append(("Loans", 0.72, PP_ALIGN.RIGHT,
+                              lambda r: compact_number(r.loan_count)))
+        if "balance" in have and "loanCount" in have:
+            spec_cols.append(("Avg", 0.80, PP_ALIGN.RIGHT,
+                              lambda r: compact_currency(r.average_balance)))
+        if "waLtv" in have:
+            spec_cols.append(("WA LTV", 0.80, PP_ALIGN.RIGHT,
+                              lambda r: f"{r.wa_ltv:.1f}%" if r.wa_ltv is not None else "—"))
+        if "waRate" in have:
+            spec_cols.append(("WA rate", 0.82, PP_ALIGN.RIGHT,
+                              lambda r: f"{r.wa_rate:.1f}%" if r.wa_rate is not None else "—"))
+        if "waMonthsOnBook" in have:
+            spec_cols.append(("Months", 0.72, PP_ALIGN.RIGHT,
+                              lambda r: compact_number(r.wa_months_on_book)))
+
+        x0 = (il / EMU_IN) + 0.14
+        scale = (iw - 0.28) / sum(c[1] for c in spec_cols)   # iw is the WIDTH
+        cols, dx = [], 0.0
+        for label, weight, align, fn in spec_cols:
+            cols.append((label, dx, weight * scale, align, fn))
+            dx += weight * scale
+        band = ih - 0.46                      # ih is already INCHES from _card
+        shown = rows[: max(1, int(band / 0.26))]
+        row_h = min(0.34, band / max(len(shown), 1))
+        head_y = (it / EMU_IN) + 0.16
+        for label, dx, cw, align, _fn in cols:
+            self._text(s, Inches(x0 + dx), Inches(head_y), Inches(cw), Inches(0.24),
+                       label, size=8.5, color=self.theme.ink_400, bold=True,
+                       align=align)
+        size = 9.5 if len(shown) <= 8 else 8.5
+        for i, r in enumerate(shown):
+            y = Inches(head_y + 0.30 + i * row_h)
+            for label, dx, cw, align, fn in cols:
+                self._text(s, Inches(x0 + dx), y, Inches(cw), Inches(0.26),
+                           str(fn(r)), size=size, align=align,
+                           color=self.theme.ink_100 if label == "Vintage"
+                           else self.theme.ink_300)
+        if len(shown) < len(rows):
+            self._text(s, Inches(x0), Inches(head_y + 0.30 + len(shown) * row_h),
+                       Inches(5.4), Inches(0.24),
+                       f"{len(rows) - len(shown)} further vintages not shown.",
+                       size=8, color=self.theme.ink_500)
+
+    def slide_cohort_progression(self, spec):
+        """Cohort Progression — *how have cohorts seasoned since they formed?*
+
+        The governed static pool (``evolution.funded_cohort_progression``), one
+        call per cohort, plotted on a SEASONING axis: periods since formation,
+        not calendar dates, so a 2019 vintage and a 2024 vintage can be compared
+        at the same age.
+        """
+        from . import cohorts as CO
+        from .metric_resolver import compact_currency
+
+        s = self._slide()
+        payload = self.d.cohort_series or {}
+        series = [CO.adapt_progression(p, v)
+                  for v, p in sorted((payload.get("series") or {}).items())]
+        live = CO.plottable(series)
+        declined = CO.rejected(series)
+        self._header(s, spec.get("title", "Cohort Progression"),
+                     "Static-pool seasoning — the same cohort tracked across "
+                     "reporting periods")
+        if not live:
+            reason = next((x.reason for x in series if x.reason), None)
+            self._placeholder_body(
+                s, "Static-pool seasoning needs at least two reporting periods "
+                   "in which a cohort holds loans." + (f" {reason}." if reason else ""))
+            self._footer(s)
+            return self._record("cohort_progression", spec.get("title"), "",
+                                placeholder=True)
+
+        # -- balance curves, indexed to formation ----------------------------
+        boxes = self._chart_boxes(2, top=1.62, height=3.62)
+        il, it, iw, ih = self._card(s, *boxes[0],
+                                    "Funded balance by reporting periods since formation")
+        p1 = self.work / "cohort_prog_balance.png"
+        longest = max(len(x.live) for x in live)
+        R.draw_lines(p1, [str(i) for i in range(longest)],
+                     [{"name": x.vintage,
+                       "values": [x.value("funded_balance", i) if i < len(x.live)
+                                  else None for i in range(longest)]}
+                      for x in live],
+                     iw, ih, theme=self.theme, currency=True)
+        self._place(s, p1, il, it, iw, ih)
+
+        # -- retention, the question the curves are asked to answer -----------
+        il, it, iw, ih = self._card(s, *boxes[1], "Retention since formation")
+        self._cohort_change_table(s, live, il, it, iw, ih)
+
+        overflow = payload.get("overflow") or []
+        # Deliberately avoids naming what a balance movement WOULD be attributed
+        # to. The publication gate that bans causal vocabulary is a substring
+        # check and cannot read a negation, and it is the more valuable of the
+        # two properties — so the sentence is written without the word.
+        note = ("Cohorts are the governed static pool: a vintage fixed at "
+                "formation and tracked across reporting periods. Retention is "
+                "the latest period as a percentage of formation; exits are "
+                "loans in the pool at formation that are no longer in it.")
+        if declined:
+            note += (f" {len(declined)} cohort"
+                     f"{'s were' if len(declined) != 1 else ' was'} not plotted "
+                     f"because the governed series does not hold the pool fixed.")
+        if overflow:
+            note += (f" {len(overflow)} smaller vintage"
+                     f"{'s are' if len(overflow) != 1 else ' is'} not plotted.")
+        self._text(s, Inches(0.57), Inches(5.46), Inches(12.2), Inches(0.5), note,
+                   size=9, color=self.theme.ink_500, spacing=1.06)
+        self._footer(s)
+        self._record("cohort_progression", spec.get("title"),
+                     f"{len(live)} governed cohort series.")
+
+    def _cohort_change_table(self, s, live, il, it, iw, ih):
+        from .metric_resolver import compact_currency, compact_number
+
+        spec_cols = [("Cohort", 0.74, PP_ALIGN.LEFT),
+                     ("At formation", 1.10, PP_ALIGN.RIGHT),
+                     ("Latest", 1.00, PP_ALIGN.RIGHT),
+                     ("Retention", 0.90, PP_ALIGN.RIGHT),
+                     ("Loans", 0.66, PP_ALIGN.RIGHT),
+                     ("Exits", 0.62, PP_ALIGN.RIGHT),
+                     ("Seasoning", 0.90, PP_ALIGN.RIGHT)]
+        scale = (iw - 0.28) / sum(c[1] for c in spec_cols)
+        cols, dx = [], 0.0
+        for label, weight, align in spec_cols:
+            cols.append((label, dx, weight * scale, align))
+            dx += weight * scale
+        x0 = (il / EMU_IN) + 0.14
+        head_y = (it / EMU_IN) + 0.16
+        for label, dx, cw, align in cols:
+            self._text(s, Inches(x0 + dx), Inches(head_y), Inches(cw), Inches(0.24),
+                       label, size=8.5, color=self.theme.ink_400, bold=True,
+                       align=align)
+        band = ih - 0.52                      # ih is already INCHES from _card
+        row_h = min(0.44, band / max(len(live), 1))
+        for i, x in enumerate(live):
+            y = Inches(head_y + 0.32 + i * row_h)
+            bal_ret = x.retention("funded_balance")
+            exits = x.exits
+            values = [
+                (x.vintage, self.theme.ink_100),
+                (compact_currency(x.value("funded_balance", 0)), self.theme.ink_300),
+                (compact_currency(x.value("funded_balance", -1)), self.theme.ink_100),
+                (f"{bal_ret:.0f}%" if bal_ret is not None else "—",
+                 self.theme.ink_100),
+                (f"{x.surviving_count:,}/{x.formation_count:,}"
+                 if x.formation_count is not None else "—", self.theme.ink_300),
+                (f"{exits:,}" if exits is not None else "—",
+                 self.theme.rag.get("amber") if exits else self.theme.ink_300),
+                (f"{len(x.live) - 1} period"
+                 f"{'s' if len(x.live) - 1 != 1 else ''}", self.theme.ink_300),
+            ]
+            for (value, colour), (_label, dx, cw, align) in zip(values, cols):
+                self._text(s, Inches(x0 + dx), y, Inches(cw), Inches(0.28),
+                           value, size=10, color=colour, align=align)
 
     def slide_pipeline(self, spec):
         s = self._slide()
@@ -447,13 +1236,12 @@ class DeckBuilder:
              "value": compact_currency(p.get("weightedExpectedFundedAmount")),
              "hint": "probability-weighted"},
         ]
-        tw = Inches(2.92)
-        for i, tile in enumerate(tiles):
-            l = Emu(int(Inches(0.55)) + i * int(Inches(3.0)))
-            self._tile(s, l, Inches(1.6), tw, Inches(1.45), tile)
+        # Tiles and charts share ONE grid, so the strip and the panels beneath
+        # it line up at both outer edges.
+        for l, t, w, h, tile in zip(*self._strip(tiles, top=1.60, height=1.45)):
+            self._tile(s, l, t, w, h, tile)
         # two BarLists: stage + broker
-        box1 = (Inches(0.55), Inches(3.28), Inches(6.0), Inches(3.35))
-        box2 = (Inches(6.78), Inches(3.28), Inches(6.0), Inches(3.35))
+        box1, box2 = self._chart_boxes(2, top=3.28, height=3.35)
         self._barlist_card(s, box1, "Pipeline amount by stage",
                            self._stage_rows(p.get("stageBreakdown", [])), "pipelineAmount",
                            cid="pipe_stage")
@@ -563,42 +1351,60 @@ class DeckBuilder:
         self._record("origination_flow", spec.get("title"), "", placeholder=single)
 
     def slide_multidim(self, spec):
-        """Three multi-dimension funded views: LTV×Age bubble (left half) + two
-        LTV heatmaps (borrower type, region) stacked on the right half."""
+        """Funded balance across paired dimensions — one visual grammar.
+
+        LTV × borrower age used to be a bubble matrix while LTV × borrower type
+        and LTV × region were heatmaps, though all three answer the same
+        question: how much balance sits in each cell of a two-way band cross-tab.
+        Bubble AREA encodes the value but bubble POSITION encodes nothing, so a
+        reader compares circles by eye where a heatmap lets them read the number.
+        All three are now heatmaps on one colour scale methodology.
+
+        The underlying cross-tabs are unchanged — the bubble was already drawing
+        the same matrix, via its ``points`` projection.
+        """
         s = self._slide()
         self._header(s, spec.get("title", "Multi-Dimensional Risk Analytics"),
                      "Funded balance across paired dimensions", accent=self.theme.peri)
         md = self.d.multidim or {}
-        # Left half — bubble.
-        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.4),
-                                    Inches(4.95), "Balance by LTV × Borrower Age")
-        bub = md.get("ltv_age")
-        p0 = self.work / "md_bubble.png"
-        if bub and bub.get("points"):
-            R.draw_bubble(p0, bub["points"], bub["xLabels"], bub["yLabels"], iw, ih,
-                          theme=self.theme)
+        # Only panels that actually resolved are drawn, and the layout adapts to
+        # how many there are. Rendering an empty card labelled "not available"
+        # tells an investor nothing; the composition guard omits the slide when
+        # none resolve.
+        panels = [(key, title) for key, title in
+                  (("ltv_age", "Balance by LTV × Borrower Age"),
+                   ("ltv_borrower_type", "Balance by LTV × Borrower Type"),
+                   ("ltv_region", "Balance by LTV × Region"))
+                  if (md.get(key) or {}).get("matrix")]
+        if not panels:
+            self._placeholder_body(s, "No paired funded dimensions resolved.")
+            self._footer(s)
+            return self._record("multidim", spec.get("title"), "", placeholder=True)
+
+        # Region carries the longest labels, so it takes the full width when it
+        # would otherwise share a row with another matrix.
+        if len(panels) == 3:
+            wide = [p for p in panels if p[0] == "ltv_region"]
+            narrow = [p for p in panels if p[0] != "ltv_region"]
+            boxes = [(Inches(l), Inches(1.62), Inches(w), Inches(2.42))
+                     for l, w in self._grid(2)]
+            boxes += [(Inches(self.CONTENT_L), Inches(4.20),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(2.38))]
+            ordered = narrow + wide
         else:
-            render_placeholder_png(p0, "", "LTV × age not available on this tape",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-        self._place(s, p0, il, it, iw, ih)
-        # Right half — two stacked heatmaps.
-        rboxes = [(Inches(7.15), Inches(1.62), Inches(5.65), Inches(2.42)),
-                  (Inches(7.15), Inches(4.15), Inches(5.65), Inches(2.42))]
-        specs = [("ltv_borrower_type", "Balance by LTV × Borrower Type"),
-                 ("ltv_region", "Balance by LTV × Region")]
-        for box, (key, title) in zip(rboxes, specs):
+            boxes = self._chart_boxes(len(panels))
+            ordered = panels
+
+        for box, (key, title) in zip(boxes, ordered):
             il, it, iw, ih = self._card(s, *box, title)
-            hm = md.get(key)
+            hm = md[key]
             path = self.work / f"md_{key}.png"
-            if hm and hm.get("matrix"):
-                R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"], iw, ih,
-                               theme=self.theme)
-            else:
-                render_placeholder_png(path, "", "Not available on this tape",
-                                       theme=self.theme, width_in=iw, height_in=ih)
+            R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
+                           iw, ih, theme=self.theme)
             self._place(s, path, il, it, iw, ih)
         self._footer(s)
-        self._record("multidim", spec.get("title"), "", placeholder=not md)
+        self._record("multidim", spec.get("title"),
+                     f"{len(panels)} paired dimensions.", placeholder=False)
 
     def slide_funnel(self, spec):
         s = self._slide()
@@ -638,10 +1444,10 @@ class DeckBuilder:
             return self._record("forecast_bridge", spec.get("title"), "", placeholder=True)
         # Clarify the forecast is the CURRENT book's expected completions only.
         rd = self.d.reporting_date or "the reporting date"
-        self._text(s, Inches(0.57), Inches(1.16), Inches(12.4), Inches(0.4),
+        self._text(s, Inches(0.57), Inches(1.54), Inches(12.4), Inches(0.30),
                    f"Expected completions from the current book only (pipeline as of "
                    f"{rd}), weighted by historical stage conversion — not future new business.",
-                   size=11, color=self.theme.ink_400, italic=True)
+                   size=10, color=self.theme.ink_400, italic=True)
         # Full-width waterfall: split the weighted-pipeline block across expected
         # completion months (byCompletionMonth), Funded → +months → Forecast.
         funded = float(fb.get("fundedBalance") or 0)
@@ -660,7 +1466,7 @@ class DeckBuilder:
             steps.append(("+ Weighted Pipeline",
                           float(fb.get("weightedExpectedFundedAmount") or 0), "add"))
         steps.append(("Forecast Funded", float(fb.get("forecastFundedBalance") or 0), "total"))
-        box = (Inches(0.55), Inches(1.95), Inches(12.25), Inches(4.6))
+        box = (Inches(0.55), Inches(1.92), Inches(12.25), Inches(4.64))
         il, it, iw, ih = self._card(s, *box,
                                     "Funded + weighted pipeline (by expected completion month) → Forecast")
         path = self.work / "bridge.png"
@@ -775,62 +1581,490 @@ class DeckBuilder:
         self._footer(s)
         self._record("risk", spec.get("title"), "", placeholder=False)
 
-    def slide_methodology(self, spec):
+    def slide_watchlist(self, spec):
+        """Portfolio Health and Watch Items — *what needs attention next?*
+
+        At most five watch items and three observations, ranked by governed
+        severity. No management actions are proposed: recommending what to do
+        about a breach is a decision, and nothing in the evidence authorises the
+        deck to make it.
+        """
         s = self._slide()
-        self._header(s, spec.get("title", "Methodology & Notes"), "")
-        lines = [
-            f"Client:  {self.ctx.client_name}",
-            f"Reporting date:  {self.d.reporting_date or 'n/a'}",
-            f"Run:  {self.d.client_id}/{self.d.run_id}",
-            "Data source:  MI Agent API computations (identical to the React dashboard).",
-            "Funded KPIs / stratifications:  /mi/snapshot (compute_funded_snapshot).",
-            "Pipeline & forecast:  /mi/forecast/snapshot (pipeline snapshot + forecast bridge).",
-            "Evolution / cohorts / geography / risk:  /mi/evolution/*, /mi/cohorts, /mi/geo, /mi/risk-limits.",
-            "Forecast method:  funded + Σ(weighted pipeline); scale-up via run-rate extrapolation.",
-        ]
-        if self.d.source_files:
-            lines.append("Pipeline source:  " + ", ".join(self.d.source_files[:4]))
-        self._bullets(s, lines, size=12.5)
+        wl = self.d.watchlist or {}
+        watch = wl.get("watch") or []
+        observations = wl.get("observations") or []
+        self._header(s, spec.get("title", "Portfolio Health and Watch Items"),
+                     "Governed items requiring attention before the next period",
+                     accent=self.theme.amber if watch else self.theme.peri)
+
+        colour = {"concern": self.theme.rag["red"],
+                  "attention": self.theme.rag["amber"]}
+        # ONE band, shared by both columns, so the watch stack and the
+        # observations panel start and finish on the same two lines whatever the
+        # item count. A fixed 0.86in pitch left the stack ending above the panel
+        # beside it for every count except five.
+        BAND_TOP, BAND_BOTTOM = 1.62, 6.52
+        band = BAND_BOTTOM - BAND_TOP
+        top = BAND_TOP
+        # The two columns are sized to what there is to say. With no watch items
+        # a narrow left column left roughly 60% of the slide empty, which reads
+        # as a rendering failure rather than as a clean bill of health.
+        left_w = 7.7 if watch else 6.02
+        obs_l = 8.5 if watch else 6.78
+        obs_w = (self.CONTENT_R - 8.5) if watch else 6.02
+        if watch:
+            items = watch[:5]
+            pitch = band / len(items)
+            row_h = min(1.30, pitch - 0.10)
+            for i, item in enumerate(items):
+                t = Inches(top + i * pitch)
+                accent = colour.get(item.severity, self.theme.ink_400)
+                self._panel(s, Inches(0.55), t, Inches(left_w), Inches(row_h),
+                            fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+                chip = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.55), t,
+                                          Inches(0.05), Inches(row_h))
+                chip.fill.solid()
+                chip.fill.fore_color.rgb = self._rgb(accent)
+                chip.line.fill.background()
+                chip.shadow.inherit = False
+                # A taller row (few items) gets a larger headline and more room
+                # for the body, rather than the same 0.76in card with white space
+                # underneath it.
+                head_pt = 12.5 if row_h >= 1.0 else 11
+                self._text(s, Inches(0.78), t + Inches(0.10), Inches(left_w - 0.5),
+                           Inches(0.30), item.headline, size=head_pt, bold=True)
+                self._text(s, Inches(0.78), t + Inches(0.10 + 0.32),
+                           Inches(left_w - 0.5), Inches(max(0.28, row_h - 0.52)),
+                           item.summary, size=9.5 if row_h >= 1.0 else 8.5,
+                           color=self.theme.ink_400, spacing=1.06)
+        else:
+            # An empty list is a finding, and must be stated rather than leaving
+            # the reader to wonder whether the check ran at all.
+            self._panel(s, Inches(0.55), Inches(BAND_TOP), Inches(left_w),
+                        Inches(band),
+                        fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+            self._text(s, Inches(0.85), Inches(1.94), Inches(left_w - 0.6),
+                       Inches(0.72),
+                       "No material watch items identified for this period.",
+                       size=15, bold=True, color=self.theme.rag["green"])
+            self._text(s, Inches(0.85), Inches(2.56), Inches(left_w - 0.6),
+                       Inches(0.6),
+                       "Every governed check ran and none cleared its "
+                       "materiality threshold.", size=10,
+                       color=self.theme.ink_300)
+            self._text(s, Inches(0.85), Inches(3.16), Inches(left_w - 0.6),
+                       Inches(0.28), "CHECKS PERFORMED", size=8.5,
+                       color=self.theme.peri, bold=True)
+            # Naming the checks is what separates "all clear" from "nothing ran".
+            for i, line in enumerate((
+                    "Concentration limits — current, expected and stress",
+                    "Reporting-date consistency across constituent books",
+                    "Portfolio-type balance movement",
+                    "Composition shift by region, channel, LTV and ticket band",
+                    "Weighted-average LTV movement",
+                    "Reporting-dimension coverage")):
+                self._text(s, Inches(0.95), Inches(3.48 + i * 0.34),
+                           Inches(left_w - 0.7), Inches(0.3), f"·  {line}",
+                           size=9.5, color=self.theme.ink_400)
+
+        # Observations column.
+        self._panel(s, Inches(obs_l), Inches(BAND_TOP), Inches(obs_w), Inches(band),
+                    fill=self.theme.bg_panel, line=self.theme.line)
+        self._text(s, Inches(obs_l + 0.22), Inches(1.78), Inches(obs_w - 0.4),
+                   Inches(0.3), "OBSERVATIONS", size=9, bold=True,
+                   color=self.theme.peri)
+        # Observations are distributed down the SAME band rather than stacked at
+        # the top of it, so a single observation does not sit above four inches
+        # of empty panel.
+        shown_obs = observations[:3]
+        obs_pitch = (band - 0.60) / max(len(shown_obs), 1)
+        y = BAND_TOP + 0.52
+        for item in shown_obs:
+            self._text(s, Inches(obs_l + 0.22), Inches(y), Inches(obs_w - 0.4),
+                       Inches(0.46), item.headline, size=10, bold=True)
+            self._text(s, Inches(obs_l + 0.22), Inches(y + 0.5), Inches(obs_w - 0.4),
+                       Inches(min(1.30, obs_pitch - 0.60)), item.summary[:220],
+                       size=9 if obs_pitch >= 1.3 else 8.5,
+                       color=self.theme.ink_400, spacing=1.06)
+            y += obs_pitch
+        if not observations:
+            self._text(s, Inches(obs_l + 0.22), Inches(BAND_TOP + 0.52),
+                       Inches(obs_w - 0.4),
+                       Inches(0.3), "None recorded.", size=10,
+                       color=self.theme.ink_400)
         self._footer(s)
-        self._record("methodology", spec.get("title"), "")
+        self._record(spec.get("id", "watchlist"), spec.get("title"),
+                     f"{len(watch)} watch item(s).")
+
+    def slide_concentration(self, spec):
+        """Concentration Tests and Headroom — *am I within my limits?*
+
+        Three states, kept visually and verbally distinct: CURRENT funded (the
+        only actual), EXPECTED forecast, and the ALL-PIPELINE-CONVERTS stress.
+        Presenting the stress as an expectation would misstate the risk, so it
+        is labelled a stress everywhere it appears.
+        """
+        from . import concentration as C
+
+        s = self._slide()
+        env = self.d.concentration or {}
+        rows = C.adapt_tests(env)
+        self._header(s, spec.get("title", "Concentration Tests and Headroom"),
+                     "Utilisation of contractual limits — current, expected and stress",
+                     accent=self.theme.peri)
+        if not rows:
+            self._placeholder_body(s, "No governed concentration tests configured.")
+            self._footer(s)
+            return self._record(spec.get("id", "concentration"), spec.get("title"),
+                                "", placeholder=True)
+
+        summary = C.summarise(env, rows)
+        top = C.select_tests(rows)
+        forward = C.forward_states_available(env)
+
+        # -- summary strip --------------------------------------------------
+        tiles = [
+            ("TESTS", str(summary["tests"]), self.theme.ink_400),
+            ("IN BREACH", str(summary["breaches"]),
+             self.theme.rag["red"] if summary["breaches"] else self.theme.rag["green"]),
+            ("WARNING", str(summary["warnings"]),
+             self.theme.rag["amber"] if summary["warnings"] else self.theme.ink_400),
+            ("FORECAST BREACH", str(summary["expected_breaches"]) if forward else "—",
+             self.theme.rag["amber"] if summary["expected_breaches"] else self.theme.ink_400),
+            ("STRESS BREACH", str(summary["stress_breaches"]) if forward else "—",
+             self.theme.ink_400),
+        ]
+        tw = Inches(2.35)
+        for i, (label, value, colour) in enumerate(tiles):
+            l = Emu(int(Inches(0.55)) + i * int(Inches(2.45)))
+            self._panel(s, l, Inches(1.56), tw, Inches(0.92),
+                        fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+            self._text(s, l + Inches(0.18), Inches(1.66), tw - Inches(0.3),
+                       Inches(0.28), label, size=8, color=self.theme.ink_400,
+                       bold=True)
+            self._text(s, l + Inches(0.18), Inches(1.92), tw - Inches(0.3),
+                       Inches(0.42), value, size=19, bold=True, color=colour)
+
+        # -- utilisation bars ------------------------------------------------
+        bars = [{"label": r["label"], "utilisation": r["utilisation"] or 0,
+                 "status": r["status"],
+                 "expectedUtilisation": r["expected_utilisation"] if forward else None,
+                 "stressUtilisation": r["stress_utilisation"] if forward else None}
+                for r in top]
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(2.66), Inches(6.5),
+                                    Inches(3.62), "Utilisation of limit")
+        path = self.work / "conc_util.png"
+        R.draw_utilisation_tests(path, bars, iw, ih, theme=self.theme)
+        self._place(s, path, il, it, iw, ih)
+
+        # -- the numbers behind the bars -------------------------------------
+        # Rendered as NATIVE PowerPoint text, not a chart image: a covenant table
+        # is the page an investor reads closely, copies figures out of and zooms
+        # into, and an image is none of those things.
+        self._panel(s, Inches(7.28), Inches(2.66), Inches(5.52), Inches(3.62),
+                    fill=self.theme.bg_panel, line=self.theme.line)
+        self._text(s, Inches(7.5), Inches(2.82), Inches(5.1), Inches(0.34),
+                   "Current position against limit", size=12.5, bold=True)
+        # Column offsets carry an explicit WIDTH so the rightmost column always
+        # ends inside the panel. Deriving the width from whether dx was zero
+        # pushed the fifth column 0.2in off the slide once the Expected column
+        # appeared, which only happens when forward states exist.
+        if forward:
+            cols = [("Test", 0.0, 2.00, PP_ALIGN.LEFT),
+                    ("Current", 2.06, 0.70, PP_ALIGN.RIGHT),
+                    ("Limit", 2.82, 0.66, PP_ALIGN.RIGHT),
+                    ("Headroom", 3.54, 0.76, PP_ALIGN.RIGHT),
+                    ("Expected", 4.38, 0.72, PP_ALIGN.RIGHT)]
+        else:
+            cols = [("Test", 0.0, 2.20, PP_ALIGN.LEFT),
+                    ("Current", 2.35, 0.85, PP_ALIGN.RIGHT),
+                    ("Limit", 3.30, 0.80, PP_ALIGN.RIGHT),
+                    ("Headroom", 4.20, 0.90, PP_ALIGN.RIGHT)]
+        # Pitch derives from how many tests there ARE, so one test does not sit
+        # in a sliver at the top of an empty card and five do not collide. When
+        # tests overflow the slide, the last line of the band is reserved for
+        # saying so — the note belongs to this table, and putting it below the
+        # panel would run it into the takeaway.
+        rest = C.overflow(rows)
+        band = (6.20 - 3.62) - (0.30 if rest else 0.0)
+        row_h = min(0.80, band / max(len(top), 1))
+        value_pt = 10 if len(top) > 2 else 11
+        # With few tests the rows would otherwise sit in the top fifth of the
+        # card above a large blank, which reads as a rendering fault rather than
+        # as a short list. They are given a detail line and centred in the band.
+        detail = row_h >= 0.72
+        row_span = row_h + (0.22 if detail else 0.0)
+        top_y = 3.62 + max(0.0, (band - len(top) * row_span) / 2)
+        # The column header travels WITH the rows. Pinned at a constant it would
+        # be orphaned at the top of the card whenever a short list is centred.
+        for label, dx, cw, align in cols:
+            self._text(s, Inches(7.5 + dx), Inches(top_y - 0.32), Inches(cw),
+                       Inches(0.26), label, size=8.5, color=self.theme.ink_400,
+                       bold=True, align=align)
+        for i, r in enumerate(top):
+            y = Inches(top_y + i * row_span)
+            status_colour = self.theme.rag.get(
+                {"breach": "red", "warning": "amber"}.get(r["status"], "green"),
+                self.theme.ink_300)
+            values = [
+                (self._fit_label(r["label"], cols[0][2]), self.theme.ink_100),
+                (C.format_measure(r["value"], r["unit"]), status_colour),
+                (C.format_measure(r["limit"], r["unit"]), self.theme.ink_300),
+                (f"{r['headroom']:.1f}" if r["headroom"] is not None else "—",
+                 self.theme.ink_300),
+            ]
+            if forward:
+                values.append((C.format_measure(r["expected_value"], r["unit"])
+                               if r["expected_value"] is not None else "—",
+                               self.theme.peri))
+            for i, ((value, colour), (_label, dx, cw, align)) in enumerate(
+                    zip(values, cols)):
+                self._text(s, Inches(7.5 + dx), y, Inches(cw), Inches(0.3),
+                           str(value), size=9.5 if i == 0 else value_pt,
+                           color=colour, align=align,
+                           bold=(align == PP_ALIGN.RIGHT and colour is status_colour))
+            # A test that passes today but is forecast to cross says BOTH, and
+            # says which is which — "PASS · breaches 2026-07" reads as a
+            # contradiction rather than as a forward-looking warning.
+            status_line = r["status"].upper()
+            if r.get("expected_breach") and r.get("breach_horizon"):
+                status_line += f" now · forecast breach {r['breach_horizon']}"
+            elif r.get("expected_breach"):
+                status_line += " now · forecast breach"
+            elif r.get("stress_breach"):
+                status_line += " now · breaches under stress only"
+            self._text(s, Inches(7.5), Emu(int(y) + int(Inches(0.28))),
+                       Inches(5.0), Inches(0.22), status_line,
+                       size=7.5, color=status_colour)
+            if detail:
+                # Only where the evaluator produced them. A deployment that
+                # evaluates neither forward state gets the current position
+                # restated in words, not two invented ones.
+                bits = []
+                if forward and r["expected_value"] is not None:
+                    bits.append(
+                        f"Expected {C.format_measure(r['expected_value'], r['unit'])}"
+                        + (f" ({r['expected_utilisation']:.0f}% of limit)"
+                           if r["expected_utilisation"] is not None else ""))
+                if forward and r["stress_value"] is not None:
+                    bits.append(
+                        "under the all-pipeline-converts stress "
+                        f"{C.format_measure(r['stress_value'], r['unit'])}")
+                if not bits and r["headroom"] is not None:
+                    bits.append(
+                        f"{C.format_measure(abs(r['headroom']), r['unit'])} "
+                        + ("of headroom remaining" if r["headroom"] >= 0
+                           else "beyond the limit"))
+                if bits:
+                    self._text(s, Inches(7.5), Emu(int(y) + int(Inches(0.50))),
+                               Inches(5.1), Inches(0.22), " · ".join(bits),
+                               size=7.5, color=self.theme.ink_500)
+
+        if rest:
+            # Never assert the hidden tests are within limit. They are ranked
+            # BELOW the shown ones, which on a book with five breaches does not
+            # mean they pass — and "N further tests within limit" would then be
+            # a false statement on the one slide that must not make one.
+            adverse = sum(1 for r in rest
+                          if r.get("status") in (C.STATUS_BREACH, C.STATUS_WARNING))
+            note = (f"{len(rest)} further test{'s' if len(rest) != 1 else ''} "
+                    f"ranked below these")
+            note += (f", of which {adverse} in breach or warning." if adverse
+                     else f"; nearest is {self._fit_label(rest[0]['label'], 2.2, 8)}.")
+            self._text(s, Inches(7.5), Inches(3.62 + len(top) * row_h + 0.04),
+                       Inches(5.1), Inches(0.24), note,
+                       size=8, color=(self.theme.rag.get("amber") if adverse
+                                      else self.theme.ink_500))
+
+        # -- deterministic takeaway + source disclosure -----------------------
+        takeaway = self._concentration_takeaway(summary, top, forward)
+        # The conclusion can run to several clauses when many states are in
+        # play, so it gets the full content width and steps down rather than
+        # clipping — this is the sentence the reader keeps.
+        self._text(s, Inches(0.57), Inches(6.38), Inches(12.2), Inches(0.44),
+                   takeaway, size=10 if len(takeaway) < 190 else 9,
+                   color=self.theme.ink_300, italic=True, spacing=1.06)
+        disclosure = C.source_disclosure(env)
+        if disclosure:
+            self._text(s, Inches(0.57), Inches(6.86), Inches(9.4), Inches(0.26),
+                       disclosure, size=8, color=self.theme.ink_500)
+        self._footer(s)
+        self._record(spec.get("id", "concentration"), spec.get("title"),
+                     f"{summary['tests']} governed tests.")
+
+    @staticmethod
+    def _fit_label(text: str, width_in: float, size_pt: float = 9.5) -> str:
+        """Trim a label to one line at *width_in*, so it cannot wrap into the
+        status line beneath it."""
+        capacity = max(6, int(width_in * 72 / (size_pt * 0.55)))
+        text = str(text)
+        return text if len(text) <= capacity else text[: capacity - 1].rstrip() + "…"
+
+    def _concentration_takeaway(self, summary, rows, forward) -> str:
+        """One deterministic sentence over the governed evidence.
+
+        Composed from what the configuration actually produced: it never assumes
+        a direction, a scenario is available, or that any particular state
+        exists. Where a state was not evaluated it is simply not mentioned,
+        rather than being reported as "none".
+        """
+        from . import concentration as C
+        parts: List[str] = []
+        if summary["breaches"]:
+            worst = next((r for r in rows if r["status"] == C.STATUS_BREACH), None)
+            lead = (f"{summary['breaches']} test"
+                    f"{'s are' if summary['breaches'] != 1 else ' is'} in breach "
+                    f"at the reporting date")
+            if worst:
+                lead += f", led by {worst['label']}"
+            parts.append(lead + ".")
+        else:
+            lead = "All current tests remain within limit."
+            # "Nothing is in breach" is a weak conclusion on its own. Where the
+            # evaluator identified the tightest test, name it and its position:
+            # an investor's next question is always how much room is left.
+            # Only when nothing at all is adverse. With a test in warning range
+            # the warning clause below is the answer, and naming the closest as
+            # well would say the same thing twice.
+            closest = summary.get("closest") if not summary["warnings"] else None
+            if closest and closest.get("utilisation") is not None:
+                lead += (f" The closest is {closest['label']} at "
+                         f"{C.format_measure(closest['value'], closest['unit'])} "
+                         f"against a "
+                         f"{C.format_measure(closest['limit'], closest['unit'])} "
+                         f"limit, {closest['utilisation']:.0f}% utilised.")
+            parts.append(lead)
+        if summary["warnings"]:
+            parts.append(f"{summary['warnings']} test"
+                         f"{'s are' if summary['warnings'] != 1 else ' is'} in "
+                         f"warning range.")
+        if forward and summary["expected_breaches"]:
+            horizon = next((r.get("breach_horizon") for r in rows
+                            if r.get("expected_breach") and r.get("breach_horizon")),
+                           None)
+            parts.append(
+                f"{summary['expected_breaches']} "
+                f"{'is' if summary['expected_breaches'] == 1 else 'are'} expected "
+                f"to breach on the governed forecast"
+                + (f", crossing around {horizon}" if horizon else "") + ".")
+        if forward and summary["stress_breaches"]:
+            only_stress = summary.get("stress_only_breaches",
+                                      summary["stress_breaches"])
+            if only_stress > 0:
+                further = "further " if summary["expected_breaches"] else ""
+                parts.append(
+                    f"{only_stress} {further}test"
+                    f"{'s' if only_stress != 1 else ''} breach"
+                    f"{'' if only_stress != 1 else 'es'} only under the "
+                    f"all-pipeline-converts stress, which is a stress rather "
+                    f"than the expected outcome.")
+        if not forward:
+            parts.append("Forward-looking states were not evaluated for this "
+                         "book, so only the current position is shown.")
+        return " ".join(parts)
+
+    def slide_methodology(self, spec):
+        """Kept as an alias of the investor-safe Data and Methodology page.
+
+        The former version of this slide listed endpoint paths, internal compute
+        function names and resolved source filenames. Those are implementation
+        details, not methodology, and had no place in a client-facing pack — the
+        single page below states the basis of preparation in business language.
+        """
+        return self.slide_appendix(spec)
 
     def slide_appendix(self, spec):
+        """Data and Methodology — investor-safe.
+
+        The previous version of this page printed the generator's own
+        diagnostics: discovery roots (absolute filesystem paths), resolved
+        source filenames and internal compute-function names. None of that
+        belongs in a client-facing document. This page states the same facts in
+        business language — what the report covers, as at when, what was
+        excluded and why — and never where the bytes live.
+        """
         s = self._slide()
-        self._header(s, spec.get("title", "Appendix — Data Coverage"), "")
+        self._header(s, spec.get("title", "Data and Methodology"),
+                     "Scope, source dates, coverage and basis of preparation")
+        p = self.d.portfolio
         d = self.d.diagnostics or {}
-        ts = d.get("timeSeries", {})
-        pretty = {"funded_evolution": "Funded evolution",
-                  "pipeline_evolution": "Pipeline evolution",
-                  "funnel": "Origination funnel",
-                  "forecast_projection": "Forecast projection", "risk": "Risk limits"}
 
-        def _fmt(v, dash="not resolved"):
-            return str(v) if v not in (None, "") else dash
+        left = []
+        left.append("REPORTING SCOPE")
+        if p is not None:
+            left.append(f"   {p.scope_label} portfolio")
+            for book in p.portfolios[:4]:
+                left.append(f"   ·  {book.label} — {book.type_label}")
+            if len(p.portfolios) > 4:
+                left.append(f"   ·  and {len(p.portfolios) - 4} further book(s)")
+        else:
+            left.append("   Scope unavailable for this run.")
 
-        lines = ["RESOLVED SOURCES",
-                 f"   Funded current source:  {_fmt(d.get('fundedCurrentSource'))}",
-                 f"   Pipeline current source:  {_fmt(d.get('pipelineCurrentSource'))}",
-                 "HISTORICAL DISCOVERY",
-                 f"   Funded history root:  {_fmt(d.get('fundedHistoryRoot'))}",
-                 f"      dated funded cuts found:  {d.get('fundedCutsFound', 0)}",
-                 f"   Pipeline history root:  {_fmt(d.get('pipelineHistoryRoot'))}",
-                 f"      dated pipeline snapshots found:  {d.get('pipelineSnapshotsFound', 0)}",
-                 "TIME-SERIES SLIDE COVERAGE"]
-        for key, label in pretty.items():
-            info = ts.get(key, {})
-            if info.get("placeholder"):
-                lines.append(f"   {label}:  placeholder — {info.get('reason') or 'insufficient history'}")
-            else:
-                extra = f" ({info['periods']} periods)" if info.get("periods") else ""
-                lines.append(f"   {label}:  rendered{extra}")
-        extra_notes = [n for n in self.appendix
-                       if "placeholder" not in n.lower() and "render" not in n.lower()]
-        if extra_notes:
-            lines.append("NOTES")
-            lines += [f"   •  {n}" for n in extra_notes[:6]]
-        self._bullets(s, lines, size=10.5)
+        left.append("")
+        left.append("SOURCE REPORTING DATES")
+        if p is not None and p.type_reporting_dates:
+            from .deck_context import type_label
+            for ptype, date in sorted(p.type_reporting_dates.items()):
+                left.append(f"   {type_label(ptype)} funded data as at {_pretty_date(date)}.")
+        elif self.d.reporting_date:
+            left.append(f"   Funded portfolio data as at {_pretty_date(self.d.reporting_date)}.")
+        pipe_date = (self.d.pipeline or {}).get("pipelineAsOfDate")
+        if pipe_date:
+            left.append(f"   Pipeline data as at {_pretty_date(pipe_date)}.")
+        if p is not None and p.has_mixed_reporting_dates:
+            left.append("   Constituent books are reported as at different dates;")
+            left.append("   the total combines them.")
+
+        right = ["BASIS OF PREPARATION",
+                 "   Figures are produced by the governed MI calculations and are",
+                 "   identical to the management dashboard for the same portfolio",
+                 "   and reporting date.",
+                 "   Commentary is generated deterministically from those figures.",
+                 "   No language model is used in its production."]
+        conc = self.d.concentration or {}
+        if conc.get("tests"):
+            from . import concentration as C
+            disclosure = C.source_disclosure(conc)
+            if disclosure:
+                right.append(f"   Concentration limits: {disclosure.lower()}.")
+        right.append("")
+        right.append("COVERAGE")
+        cuts = d.get("fundedCutsFound") or 0
+        if cuts:
+            right.append(f"   {cuts} funded reporting period(s) available.")
+        snaps = d.get("pipelineSnapshotsFound") or 0
+        right.append(f"   {snaps} weekly pipeline extract(s) available."
+                     if snaps else "   No weekly pipeline extracts available.")
+
+        if self.omissions:
+            right.append("")
+            right.append("SECTIONS NOT INCLUDED")
+            for o in self.omissions[:6]:
+                right.append(f"   {o.title}: {o.reason}.")
+            if len(self.omissions) > 6:
+                right.append(f"   and {len(self.omissions) - 6} further section(s).")
+
+        self._column_text(s, left, Inches(0.6), Inches(6.0))
+        self._column_text(s, right, Inches(6.95), Inches(5.85))
         self._footer(s)
-        self._record("appendix", spec.get("title"), "")
+        self._record(spec.get("id", "appendix"), spec.get("title"), "")
+
+    def _column_text(self, slide, lines, left, width):
+        """A column of the methodology page; section headings pick up the accent."""
+        box = slide.shapes.add_textbox(left, Inches(1.6), width, Inches(5.3))
+        tf = box.text_frame
+        tf.word_wrap = True
+        for i, line in enumerate(lines):
+            para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            run = para.add_run()
+            run.text = line
+            heading = bool(line) and line == line.upper() and not line.startswith(" ")
+            run.font.size = Pt(9 if heading else 10)
+            run.font.bold = heading
+            run.font.name = self.theme.font_sans
+            run.font.color.rgb = self._rgb(
+                self.theme.peri if heading else self.theme.ink_300)
+            para.space_after = Pt(5 if heading else 2)
 
     # ------------------------------------------------------------------ helpers
     def _placeholder_body(self, slide, msg):
@@ -855,18 +2089,40 @@ class DeckBuilder:
     # ------------------------------------------------------------------- build
     _DISPATCH = {
         "cover": "slide_cover", "kpi_summary": "slide_kpi_summary",
+        "exec_insights": "slide_exec_insights",
+        "portfolio_composition": "slide_portfolio_composition",
+        "portfolio_comparison": "slide_portfolio_comparison",
+        "movement_drivers": "slide_movement_drivers",
+        "watchlist": "slide_watchlist",
         "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
+        "cohort_progression": "slide_cohort_progression",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",
         "funnel": "slide_funnel", "origination_flow": "slide_origination_flow",
         "forecast_bridge": "slide_forecast_bridge",
         "forecast_projection": "slide_forecast_projection",
         "forecast_evolution": "slide_forecast_evolution", "risk": "slide_risk",
+        "concentration": "slide_concentration",
         "methodology": "slide_methodology", "appendix": "slide_appendix",
     }
 
     def build(self, slides: List[Dict[str, Any]], output: str | Path) -> Dict[str, Any]:
-        for spec in slides:
+        """Render the slides this portfolio justifies, and record the rest.
+
+        Composition runs BEFORE any rendering, so a slide that would have had
+        nothing to show never reaches the deck — an investor pack contains no
+        "no data available" pages. Everything dropped is carried into the
+        appendix with its reason, because a silent omission is indistinguishable
+        from a book that had nothing to report.
+        """
+        from .composition import build_facts, select_slides
+
+        facts = build_facts(self.d)
+        selected, omissions = select_slides(slides, self.d, facts)
+        self.omissions = list(omissions)
+        self.facts = dict(facts)
+
+        for spec in selected:
             handler = getattr(self, self._DISPATCH.get(spec.get("type"), ""), None)
             if handler is None:
                 continue
@@ -875,4 +2131,21 @@ class DeckBuilder:
         out.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(str(out))
         return {"output": str(out), "slides": self.records,
-                "coverage_notes": self.appendix}
+                "coverage_notes": self.appendix,
+                "omitted_slides": [o.to_dict() for o in self.omissions],
+                "facts": self.facts,
+                "portfolio_context": (self.d.portfolio.to_dict()
+                                      if self.d.portfolio else None),
+                "insights": self._insight_records()}
+
+    def _insight_records(self) -> Dict[str, Any]:
+        """The executive summary in a serialisable form, for the run manifest."""
+        brief = self.d.insights or {}
+        return {
+            "insight_version": brief.get("insight_version"),
+            "status": brief.get("status"),
+            "count": brief.get("count", 0),
+            "headlines": [str(getattr(i, "headline", ""))
+                          for i in (brief.get("insights") or [])],
+            "omitted": [o.to_dict() for o in (brief.get("omitted") or [])],
+        }
