@@ -125,7 +125,13 @@ class MessageItem:
     unavailable: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items() if v is not None or k == "text"}
+        out = {k: v for k, v in asdict(self).items()
+               if v is not None or k == "text"}
+        # ``unavailable`` is the exception a reader cares about, so it is
+        # carried only when true rather than on every item as noise.
+        if not self.unavailable:
+            out.pop("unavailable", None)
+        return out
 
 
 @dataclass
@@ -134,6 +140,10 @@ class NotificationMessage:
 
     message_type: str
     headline: str
+    #: The one-sentence position the card leads with, above the bullets. Kept
+    #: separate from ``headline`` because the headline is what a reader sees in
+    #: a notification list and must stay short enough to survive truncation.
+    summary: Optional[str] = None
     severity: str = SEVERITY_INFO
     items: List[MessageItem] = field(default_factory=list)
     deep_link: Optional[str] = None
@@ -161,6 +171,7 @@ class NotificationMessage:
             "sequence": self.sequence,
             "severity": self.severity,
             "headline": self.headline,
+            "summary": self.summary,
             "items": [i.to_dict() for i in self.items],
             "deep_link": self.deep_link,
             "deep_link_label": self.deep_link_label,
