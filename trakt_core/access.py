@@ -233,8 +233,29 @@ _CACHE: Dict[str, Tuple[Optional[int], AccessDirectory]] = {}
 _CACHE_LOCK = threading.Lock()
 
 
+#: The repo-root-anchored location, independent of the working directory.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_ANCHORED_DEFAULT = _REPO_ROOT / DEFAULT_ACCESS_CONFIG
+
+
 def _config_path(path: Optional[str | Path] = None) -> Path:
-    return Path(path or os.environ.get(ACCESS_CONFIG_ENV) or DEFAULT_ACCESS_CONFIG)
+    """Where to read the directory from.
+
+    An explicit argument or ``TRAKT_ACCESS_CONFIG`` wins. Otherwise prefer the
+    path anchored to the repository root over the working-directory-relative
+    one that ``tenancy`` uses: a missing file here denies *everyone*, so
+    resolving it must not depend on which directory the process happened to
+    start in. The relative form is still honoured when it exists, so a
+    deployment that overlays its own config in the working directory keeps
+    working.
+    """
+    explicit = path or os.environ.get(ACCESS_CONFIG_ENV)
+    if explicit:
+        return Path(explicit)
+    relative = Path(DEFAULT_ACCESS_CONFIG)
+    if relative.exists():
+        return relative
+    return _ANCHORED_DEFAULT
 
 
 def load_access_directory(path: Optional[str | Path] = None, *,
