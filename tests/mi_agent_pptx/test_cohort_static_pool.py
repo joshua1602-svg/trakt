@@ -245,3 +245,105 @@ def test_the_ltv_unit_is_inferred_from_the_period_not_the_cohort(tmp_path):
     assert _pct_fraction(cohort, "current_loan_to_value") == pytest.approx(0.0175)
     assert _pct_fraction(cohort, "current_loan_to_value",
                          period) == pytest.approx(1.75)
+
+
+# --------------------------------------------------------------------------- #
+# The remaining named regression cases.
+# --------------------------------------------------------------------------- #
+
+def test_a_corrected_later_upload_replaces_that_period_only(tmp_path):
+    """Contract item 9: a correction to a LATER period changes that period's
+    observation and leaves the formation rule alone."""
+    root = tmp_path / "root"
+    _write(root, "mi_2026_05", "2026-05-31",
+           [_loan(u, 100_000.0, "2026-05-31", "2020-03-01") for u in "ABC"])
+    _write(root, "mi_2026_06", "2026-06-30",
+           [_loan(u, 100_000.0, "2026-06-30", "2020-03-01") for u in "AB"])
+    before = _progression(root)
+
+    # The June upload is corrected: B was reported redeemed in error.
+    _write(root, "mi_2026_06", "2026-06-30",
+           [_loan(u, 100_000.0, "2026-06-30", "2020-03-01") for u in "ABC"])
+    after = _progression(root)
+
+    assert after["formationDate"] == before["formationDate"]
+    assert after["formationLoanIds"] == before["formationLoanIds"] == ["A", "B", "C"]
+    assert before["periods"][-1]["survivingLoanIds"] == ["A", "B"]
+    assert after["periods"][-1]["survivingLoanIds"] == ["A", "B", "C"]
+    assert after["periods"][-1]["exitsCount"] == 0
+
+
+def test_a_corrected_formation_snapshot_reforms_the_pool(tmp_path):
+    """Contract item 9, second half: correcting the FORMATION cut re-forms it,
+    because the formation cut is derived from the frames rather than stored."""
+    root = tmp_path / "root"
+    _write(root, "mi_2026_05", "2026-05-31",
+           [_loan(u, 100_000.0, "2026-05-31", "2020-03-01") for u in "AB"])
+    _write(root, "mi_2026_06", "2026-06-30",
+           [_loan(u, 100_000.0, "2026-06-30", "2020-03-01") for u in "ABC"])
+    assert _progression(root)["formationLoanIds"] == ["A", "B"]
+
+    # C was in the book at formation and had been omitted in error.
+    _write(root, "mi_2026_05", "2026-05-31",
+           [_loan(u, 100_000.0, "2026-05-31", "2020-03-01") for u in "ABC"])
+    reformed = _progression(root)
+    assert reformed["formationLoanIds"] == ["A", "B", "C"]
+    assert reformed["periods"][-1]["survivingLoanCount"] == 3
+
+
+def test_a_backdated_upload_before_formation_re_forms_at_the_earlier_cut(tmp_path):
+    root = tmp_path / "root"
+    _write(root, "mi_2026_06", "2026-06-30",
+           [_loan(u, 100_000.0, "2026-06-30", "2020-03-01") for u in "AB"])
+    assert _progression(root)["formationDate"] == "2026-06-30"
+
+    _write(root, "mi_2026_05", "2026-05-31",
+           [_loan(u, 100_000.0, "2026-05-31", "2020-03-01") for u in "ABC"])
+    later = _progression(root)
+    assert later["formationDate"] == "2026-05-31"
+    assert later["formationLoanCount"] == 3
+    assert later["periods"][-1]["exitsCount"] == 1          # C is gone by June
+
+
+def test_duplicate_formation_identifiers_are_flagged_not_hidden(tmp_path):
+    root = tmp_path / "root"
+    _write(root, "mi_2026_05", "2026-05-31",
+           [_loan("A", 100_000.0, "2026-05-31", "2020-03-01"),
+            _loan("A", 100_000.0, "2026-05-31", "2020-03-01"),
+            _loan("B", 100_000.0, "2026-05-31", "2020-03-01")])
+    _write(root, "mi_2026_06", "2026-06-30",
+           [_loan("A", 100_000.0, "2026-06-30", "2020-03-01")])
+    payload = _progression(root)
+    assert payload["dataQuality"].get("duplicate_formation_ids") == 1
+    assert payload["formationLoanIds"] == ["A", "B"]
+
+
+def test_a_tape_without_a_loan_identifier_declines_to_form_a_pool(tmp_path):
+    """No identifier means no fixed membership, so the service says so rather
+    than returning a series that only looks like a static pool."""
+    import pandas as pd
+
+    root = tmp_path / "root"
+    for run_id, cut in (("mi_2026_05", "2026-05-31"), ("mi_2026_06", "2026-06-30")):
+        rows = [_loan("X", 100_000.0, cut, "2020-03-01")]
+        frame = pd.DataFrame(rows).drop(columns=["unique_identifier"])
+        central = root / "acme" / run_id / "central"
+        central.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(central / CENTRAL, index=False)
+        dated = root / cut
+        dated.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(dated / "platform_canonical_typed.csv", index=False)
+
+    payload = _progression(root)
+    assert payload["available"] is False
+    assert "loan identifier" in (payload["reason"] or "")
+
+
+def test_no_prior_period_forms_but_does_not_season(tmp_path):
+    root = tmp_path / "root"
+    _write(root, "mi_2026_06", "2026-06-30",
+           [_loan(u, 100_000.0, "2026-06-30", "2020-03-01") for u in "AB"])
+    payload = _progression(root)
+    assert payload["formationLoanCount"] == 2
+    assert payload["singlePeriod"] is True
+    assert CO.plottable([CO.adapt_progression(payload, "2020")]) == []
