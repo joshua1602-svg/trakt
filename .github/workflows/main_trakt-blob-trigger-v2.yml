@@ -70,6 +70,15 @@ jobs:
         #   occ_intake.py:30-31        from operations_control.engine import OpsEngine
         # Both imports are INSIDE functions, so the host starts and the trigger
         # registers without them — the omission only surfaces on the first blob.
+        #
+        # trakt_notifications/ and trakt_core/ are the SAME shape of omission for
+        # the Teams delivery worker:
+        #   function_app.py            from trakt_notifications.delivery import run_once
+        #   trakt_notifications/sources.py -> mi_agent_api.insight_engine -> trakt_core.perf
+        # The first hop is lazy AND inside `except Exception`, so without them the
+        # timer registers, fires every five minutes, logs a failure and delivers
+        # nothing — which reads as "no notifications yet" rather than as a broken
+        # deployment. verify_package.py now probes this chain too.
         run: |
           zip -r deploy.zip \
             function_app.py \
@@ -82,6 +91,8 @@ jobs:
             mi_agent_api/ \
             mi_agent_pptx/ \
             analytics_lib/ \
+            trakt_notifications/ \
+            trakt_core/ \
             config/ \
             -x "*.pyc" "*/__pycache__/*" "*/tests/*" "*/test_*"
 
@@ -110,6 +121,7 @@ jobs:
         run: |
           set -euo pipefail
           python deploy/trakt-function-app/tests/test_verify_flex_workflow.py
+          python deploy/trakt-function-app/tests/test_verify_package.py
           bash deploy/trakt-function-app/tests/test_verify_flex_app.sh
 
       - name: Login to Azure
