@@ -5,7 +5,7 @@
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/digifinsolutions.co.uk/v2.0",
+          "openIdIssuer": "https://login.microsoftonline.com/b82f67da-60de-45df-866c-9bb675176a85/v2.0",
           "clientIdSettingName": "AAD_CLIENT_ID",
           "clientSecretSettingName": "AAD_CLIENT_SECRET"
         }
