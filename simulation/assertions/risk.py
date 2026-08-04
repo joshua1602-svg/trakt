@@ -199,11 +199,27 @@ def _tests_by_limit(case) -> Dict[str, List[str]]:
     return out
 
 
-def assert_movement_disclosed(evaluation: Dict[str, Any]) -> List[Assertion]:
-    """A limit's movement against the prior period must be reported."""
+def assert_movement_disclosed(evaluation: Dict[str, Any],
+                              periods: int = 2) -> List[Assertion]:
+    """A limit's movement against the prior period must be reported.
+
+    ``periods`` is how many reporting periods the run actually integrated. A
+    single-snapshot run — the large-scale ingestion benchmark is one — has no
+    prior period BY CONSTRUCTION, and demanding one there would report a
+    property of the run shape as a platform defect. With two or more periods a
+    missing prior comparison is still a genuine finding.
+    """
     tests = evaluation.get("tests") or []
     with_prior = [t for t in tests if t.get("priorAvailable")]
     if not with_prior:
+        if periods < 2:
+            return [check(
+                STAGE_RISK, "no prior-period comparison is claimed",
+                not with_prior, expected="no direction of travel",
+                detail="This run integrated a single reporting period, so "
+                       "there is no prior cut to compare against and the "
+                       "evaluation correctly claims no movement.",
+                failure_class=_DEFECT)]
         return [check(STAGE_RISK, "a prior period was available for comparison",
                       False, detail="Without a prior period the risk answer "
                                     "cannot state a direction of travel.",

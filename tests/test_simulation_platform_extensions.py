@@ -391,5 +391,60 @@ class TestRecordedLimitations(unittest.TestCase):
         self.assertNotIn("spv_id", registry["fields"])
 
 
+# --------------------------------------------------------------------------- #
+# 8. The verifier must survive the scale it exists to verify
+# --------------------------------------------------------------------------- #
+class TestArtefactCheckIsMemoryBounded(unittest.TestCase):
+    """Regression: the well-formedness check must stream, not build a DOM.
+
+    A 100 000-loan Annex 2 submission is a 2.6 GB XML. The check used to call
+    ``ElementTree.parse``, whose DOM was several times that — the performance
+    profile was OOM-killed by its own assertion rather than by the platform.
+    """
+
+    def _sample_xml(self, directory, elements: int = 60_000):
+        path = Path(directory) / "sample.xml"
+        with path.open("w", encoding="utf-8") as handle:
+            handle.write("<Doc>")
+            for index in range(elements):
+                handle.write(f"<Ln><Id>L{index:08d}</Id><Bal>{index}.00</Bal></Ln>")
+            handle.write("</Doc>")
+        return path
+
+    def test_streaming_uses_a_fraction_of_the_dom_footprint(self):
+        import tempfile
+        import tracemalloc
+        from xml.etree import ElementTree
+
+        from simulation.assertions.regime import _is_well_formed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._sample_xml(tmp)
+
+            tracemalloc.start()
+            self.assertTrue(_is_well_formed(path))
+            streamed = tracemalloc.get_traced_memory()[1]
+            tracemalloc.stop()
+
+            tracemalloc.start()
+            ElementTree.parse(str(path))
+            dom = tracemalloc.get_traced_memory()[1]
+            tracemalloc.stop()
+
+        self.assertLess(streamed, dom / 10,
+                        f"streaming peak {streamed} is not bounded well below "
+                        f"the DOM peak {dom}")
+
+    def test_a_malformed_artefact_is_still_reported_as_malformed(self):
+        import tempfile
+
+        from simulation.assertions.regime import _is_well_formed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "bad.xml"
+            bad.write_text("<Doc><Ln><Id>1</Id></Doc>", encoding="utf-8")
+            self.assertFalse(_is_well_formed(bad))
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

@@ -555,6 +555,17 @@ class CaseResult:
     production_modules: List[str] = field(default_factory=list)
     timings: Dict[str, float] = field(default_factory=dict)
     peak_memory_mb: Optional[float] = None
+    #: Names this RUN, not the case. Equal to ``case_id`` unless one profile
+    #: runs the same case more than once (the performance profile runs one case
+    #: at two scales), in which case it disambiguates the evidence directory and
+    #: every per-run key in the profile summary.
+    run_label: str = ""
+    scale: str = ""
+    #: The stages this run was asked to cover. A narrowed run must never read
+    #: as a run that verified everything.
+    selected_stages: List[str] = field(default_factory=list)
+    #: True when a run budget expired and the remaining stages were skipped.
+    timed_out: bool = False
 
     # -- outcome ----------------------------------------------------------- #
     @property
@@ -586,13 +597,16 @@ class CaseResult:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "case_id": self.case_id, "seed": self.seed,
+            "case_id": self.case_id, "run_label": self.run_label or self.case_id,
+            "scale": self.scale, "seed": self.seed,
             "asset_class": self.asset_class,
             "simulation_version": self.simulation_version,
             "expectation": self.expectation,
             "expected_failure_class": self.expected_failure_class,
             "observed_failure_class": self.observed_failure_class,
             "ok": self.ok, "run_dir": self.run_dir,
+            "selected_stages": list(self.selected_stages),
+            "timed_out": self.timed_out,
             "manifest_hash": self.manifest_hash,
             "assertions": self.assertion_counts(),
             "production_modules": sorted(set(self.production_modules)),

@@ -182,6 +182,8 @@ python -m simulation.runner run      --case bridge_maturity_wall_v1
 python -m simulation.runner run-all  --profile smoke
 python -m simulation.runner run-all  --profile standard
 python -m simulation.runner run-all  --profile performance
+python -m simulation.runner run-all  --profile performance --timeout 1800
+python -m simulation.runner run-all  --profile performance --stages regime
 python -m simulation.runner reproduce --case bridge_maturity_wall_v1 --seed 41204
 ```
 
@@ -211,11 +213,57 @@ per-case timings and the exact `reproduce` command for each case.
 |---|---|---|---|---|---|
 | `smoke` | one per asset family (3) | 3 | clean CSV only | small (~110 loans) | ordinary CI |
 | `standard` | the whole catalogue (20) | 6 | all three | small | the full regression sweep |
-| `performance` | one standard-scale case per family + one large | 6 | clean CSV only | standard (~5k) / large (~100k) | timing and memory, run deliberately |
+| `performance` | 4 runs: one per family at standard scale, then the equity-release case AGAIN at large scale | 6, and **1** for the large run | clean CSV only | standard (5 000 loans) / large (100 000 loans) | timing and memory, run deliberately |
 
-`performance` is excluded from the ordinary unit-test suite: the repository has
-no timing-threshold convention, so the profile MEASURES and reports rather than
-asserting a wall-clock bound that would flap on shared CI hardware.
+The performance schedule is explicit (`manifests.PERFORMANCE_RUNS`) rather than
+inferred from case ids. The large run repeats one of the standard runs at a
+bigger row count on purpose: holding the economics constant and changing only
+the scale is what makes the two timings comparable. Its evidence lands in
+`<case_id>__large/` so the two runs do not overwrite each other.
+
+**The large run is deliberately narrow** — one asset class, one 100 000-loan
+funded snapshot, one dialect, stopping at risk. The first full-width run
+measured why:
+
+| Stage | 100 000 loans × 6 periods | Share |
+|---|---|---|
+| regime (Gate 4 + Gate 5 XML) | 3 108 s | 61.6% |
+| generate | 651 s | 12.9% |
+| history_integration | 597 s | 11.8% |
+| agent | 235 s | 4.6% |
+| ingest | 177 s | 3.5% |
+| everything else | 277 s | 5.6% |
+
+Regime and Agent are 66% of the run and measure neither funded ingestion nor
+canonical throughput. Gate 5 is also run **twice** there — once for the artefact
+and once to prove the artefact reproduces — producing two 2.6 GB Annex 2
+submissions. Narrowing to a single snapshot took the benchmark from **5 045 s /
+1 704 MB to 884 s / 759 MB** while still covering ingestion, canonical
+transformation, validation, snapshot integration, MI and risk at full row count.
+
+Regime and Agent throughput at scale are a **separate** diagnostic, asked for
+explicitly and measured on their own:
+
+```bash
+python -m simulation.runner run-all --profile performance --stages regime
+python -m simulation.runner run-all --profile performance --stages agent
+```
+
+### Bounded execution
+
+Long runs are observable and interruptible, never open-ended:
+
+| Control | Behaviour |
+|---|---|
+| live progress | every stage prints on start and on finish with its elapsed time and assertion count |
+| `--timeout <seconds>` | wall-clock budget for the whole profile, checked **between** stages (never mid-stage — a half-written canonical is not evidence) |
+| `PARTIAL_PERFORMANCE` | on expiry the run stops cleanly, keeps every completed timing and artefact, lists what was truncated and what was never started, and exits **2** (`0` complete, `1` real failure) |
+| `--stages a,b,c` | restricts the run; prerequisites are added automatically, and excluded stages are recorded as skipped **with the reason**, so a narrowed run never reads as a run that verified everything |
+
+`performance` is excluded from the ordinary unit-test suite and from the smoke
+and standard profiles: the repository has no timing-threshold convention, so the
+profile MEASURES and reports rather than asserting a wall-clock bound that would
+flap on shared CI hardware.
 
 ---
 

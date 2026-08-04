@@ -15,7 +15,9 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -39,6 +41,7 @@ from simulation.models import (  # noqa: E402
     EXPECT_FAILURE,
     OPEN_STATUSES,
     POSITIVE_MOVEMENTS,
+    STAGES,
     CaseManifest,
     FailureClass,
     SchemaEvolution,
@@ -98,6 +101,162 @@ class TestCatalogue(unittest.TestCase):
         self.assertEqual(len(M.cases_for_profile(M.PROFILE_STANDARD)),
                          len(M.all_cases()))
         self.assertTrue(M.cases_for_profile(M.PROFILE_PERFORMANCE))
+
+    def test_the_performance_profile_measures_two_scales_of_one_case(self):
+        """Regression: the large case must not be deduplicated away.
+
+        The schedule ran the large case's id through ``dict.fromkeys``
+        alongside the standard-scale ids, so the case it shares an id with
+        silently ran ONCE, at large scale only, and the profile never produced
+        a comparable standard-scale timing for it.
+        """
+        from simulation import runner as R
+
+        selected = M.cases_for_profile(M.PROFILE_PERFORMANCE)
+        specs = R._profile_specs(M.PROFILE_PERFORMANCE, selected, None)
+        self.assertEqual(len(selected), len(specs))
+        self.assertEqual(len(selected), len(M.STANDARD_SCALE_CASES) + 1)
+        # Every family at standard scale, and exactly one large run.
+        standard = {c.asset_class for c, s in zip(selected, specs)
+                    if s["scale"] == "standard"}
+        self.assertEqual(standard, set(ASSET_CLASSES))
+        large = [c.case_id for c, s in zip(selected, specs)
+                 if s["scale"] == "large"]
+        self.assertEqual(large, [M.LARGE_SCALE_CASE])
+        # ...and the large run measures the SAME economics, so the two timings
+        # differ only by row count.
+        self.assertIn(M.LARGE_SCALE_CASE, M.STANDARD_SCALE_CASES)
+
+    def test_a_repeated_case_gets_a_distinct_run_label(self):
+        """Two runs of one case must not collide in the evidence or summary.
+
+        Timings, peak memory, seeds and reproduce commands are keyed by run
+        label rather than case id precisely because the performance profile
+        runs one case twice; keying by case id drops one measurement silently.
+        """
+        from simulation import runner as R
+
+        selected = M.cases_for_profile(M.PROFILE_PERFORMANCE)
+        specs = R._profile_specs(M.PROFILE_PERFORMANCE, selected, None)
+        seen: dict = {}
+        labels = []
+        for case, spec in zip(selected, specs):
+            seen[case.case_id] = seen.get(case.case_id, 0) + 1
+            labels.append(case.case_id if seen[case.case_id] == 1
+                          else f"{case.case_id}__{spec['scale']}")
+        self.assertEqual(len(set(labels)), len(labels), labels)
+        self.assertIn(f"{M.LARGE_SCALE_CASE}__large", labels)
+
+    def test_the_large_run_is_a_narrow_ingestion_benchmark(self):
+        """The 100 000-loan run measures the funded path, not everything.
+
+        Measured at that scale, regime projection and XML delivery took 62% of
+        the run (and built two 2.6 GB submissions, because the artefact is also
+        re-generated to prove it reproduces), and the governed MI Agent took a
+        further 4%. None of that measures funded ingestion, so the large run
+        covers one asset class, one reporting period, one dialect, and stops
+        at risk. The expensive stages are asked for explicitly with --stages.
+        """
+        from simulation import runner as R
+
+        large = [s for s in M.PERFORMANCE_RUNS if s["scale"] == "large"]
+        self.assertEqual(len(large), 1)
+        spec = large[0]
+        self.assertEqual(spec["months"], 1)
+        stages = set(spec["stages"])
+        for cheap in ("generate", "render", "ingest", "canonical",
+                      "history_integration", "mi", "risk"):
+            self.assertIn(cheap, stages)
+        for expensive in ("agent", "regime"):
+            self.assertNotIn(expensive, stages)
+        # One dialect, and the declared months actually reach the manifest.
+        case = M.get_case(spec["case_id"])
+        shaped = R._profile_manifest(M.PROFILE_PERFORMANCE, case, spec)
+        self.assertEqual(shaped.months, 1)
+        self.assertEqual(len(shaped.dialects), 1)
+
+    def test_an_explicit_stage_request_overrides_the_narrow_default(self):
+        """Regime throughput at scale must still be measurable when asked for."""
+        from simulation import runner as R
+
+        selected = M.cases_for_profile(M.PROFILE_PERFORMANCE)
+        specs = R._profile_specs(M.PROFILE_PERFORMANCE, selected, ["regime"])
+        self.assertTrue(all(s["stages"] == ("regime",) for s in specs), specs)
+
+    def test_the_performance_profile_is_not_in_smoke_or_standard(self):
+        """A benchmark must never run inside an ordinary regression sweep."""
+        for profile in (M.PROFILE_SMOKE, M.PROFILE_STANDARD):
+            for case in M.cases_for_profile(profile):
+                self.assertIn(profile, case.profiles, case.case_id)
+        self.assertNotIn(M.PROFILE_PERFORMANCE,
+                         {p for c in M.cases_for_profile(M.PROFILE_SMOKE)
+                          for p in c.profiles if p == M.PROFILE_PERFORMANCE})
+
+
+class TestBoundedExecution(unittest.TestCase):
+    """A long run must be observable, interruptible and honest about it."""
+
+    def test_a_stage_selection_pulls_in_its_prerequisites(self):
+        from simulation import runner as R
+
+        self.assertEqual(R._selected_stages(["mi"]),
+                         ["generate", "render", "ingest",
+                          "history_integration", "mi"])
+        self.assertEqual(R._selected_stages(["regime"]),
+                         ["generate", "render", "ingest", "regime"])
+        self.assertEqual(R._selected_stages(None), list(STAGES))
+
+    def test_an_unknown_stage_is_refused_rather_than_ignored(self):
+        from simulation import runner as R
+
+        with self.assertRaises(ValueError):
+            R._selected_stages(["not_a_stage"])
+
+    def test_an_expired_budget_skips_the_remaining_stages_with_a_reason(self):
+        """A run out of time stops cleanly; it never reports as complete."""
+        import tempfile
+        from simulation import runner as R
+
+        case = replace(M.get_case("bridge_clean_short_duration_v1"), months=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            # A deadline already in the past: nothing may start.
+            result = R.run_case(case, run_root=Path(tmp), scale="small",
+                                deadline=time.monotonic() - 1.0)
+            # Evidence for what DID happen is still written, before teardown.
+            self.assertTrue((Path(result.run_dir) / "run_summary.json").exists())
+        self.assertTrue(result.timed_out)
+        skipped = {s.stage: s.skip_reason for s in result.stages if s.skipped}
+        self.assertEqual(set(skipped), set(STAGES))
+        self.assertTrue(all("timeout" in reason for reason in skipped.values()))
+
+    def test_a_missing_prior_period_is_only_excused_for_a_single_snapshot(self):
+        """Narrowing the benchmark must not silence a real finding.
+
+        The 100 000-loan benchmark integrates ONE reporting period, so it has
+        no prior cut by construction. With two or more periods, a missing
+        prior comparison is still reported as a defect.
+        """
+        from simulation.assertions.risk import assert_movement_disclosed
+
+        evaluation = {"tests": [{"testId": "t1", "priorAvailable": False,
+                                 "priorValue": None, "currentValue": 1.0}]}
+        single = assert_movement_disclosed(evaluation, periods=1)
+        self.assertTrue(all(a.passed for a in single), [a.name for a in single])
+        many = assert_movement_disclosed(evaluation, periods=6)
+        self.assertFalse(any(a.passed for a in many), [a.name for a in many])
+
+    def test_an_unselected_stage_is_recorded_as_unselected_not_as_passed(self):
+        import tempfile
+        from simulation import runner as R
+
+        case = replace(M.get_case("bridge_clean_short_duration_v1"), months=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = R.run_case(case, run_root=Path(tmp), scale="small",
+                                stages=["generate"],
+                                deadline=time.monotonic() - 1.0)
+        reasons = {s.stage: s.skip_reason for s in result.stages if s.skipped}
+        self.assertEqual(reasons.get("agent"), "not selected for this run")
+        self.assertEqual(result.selected_stages, ["generate"])
 
     def test_manifest_round_trips(self):
         for case in M.all_cases():

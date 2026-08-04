@@ -451,6 +451,27 @@ STANDARD_SCALE_CASES = ("equity_release_seasoned_rollup_v1",
                         "asset_finance_clean_sme_equipment_v1")
 LARGE_SCALE_CASE = "equity_release_seasoned_rollup_v1"
 
+#: The performance schedule, in order. Each entry is an explicit run spec, not
+#: an id whose scale is inferred elsewhere.
+#:
+#: The large run is deliberately one of the standard cases run AGAIN at a bigger
+#: row count: holding the economics constant and changing only the scale is what
+#: makes the two timings comparable.
+#:
+#: It is also deliberately NARROW. Measured at 100 000 loans, regime projection
+#: and XML delivery took 3 108s of a 5 045s run (62%) — and the framework runs
+#: Gate 4/5 twice there, once for the artefact and once to prove the artefact
+#: reproduces, producing two 2.6 GB submissions. The governed MI Agent added a
+#: further 235s. None of that measures the funded ingestion path, so the large
+#: run covers one asset class, one reporting period, one dialect, and stops at
+#: risk. Regime and Agent throughput at scale is a separate diagnostic, asked
+#: for explicitly with ``--stages``.
+PERFORMANCE_RUNS = tuple(
+    [{"case_id": cid, "scale": "standard"} for cid in STANDARD_SCALE_CASES]
+    + [{"case_id": LARGE_SCALE_CASE, "scale": "large", "months": 1,
+        "stages": ("generate", "render", "ingest", "canonical",
+                   "history_integration", "mi", "risk")}])
+
 
 # --------------------------------------------------------------------------- #
 # Access + validation
@@ -471,8 +492,7 @@ def cases_for_profile(profile: str) -> List[CaseManifest]:
     if profile not in PROFILES:
         raise ValueError(f"unknown profile {profile!r}; known: {PROFILES}")
     if profile == PROFILE_PERFORMANCE:
-        return [get_case(cid) for cid in
-                dict.fromkeys(STANDARD_SCALE_CASES + (LARGE_SCALE_CASE,))]
+        return [get_case(spec["case_id"]) for spec in PERFORMANCE_RUNS]
     return [c for c in CATALOGUE if profile in c.profiles]
 
 
@@ -574,7 +594,8 @@ def read_manifest(path: Path) -> CaseManifest:
 
 
 __all__ = [
-    "ALL_DIALECTS", "CATALOGUE", "LARGE_SCALE_CASE", "ManifestError",
+    "ALL_DIALECTS", "CATALOGUE", "LARGE_SCALE_CASE", "PERFORMANCE_RUNS",
+    "ManifestError",
     "PROFILES", "PROFILE_GUARD", "PROFILE_PERFORMANCE", "PROFILE_SMOKE",
     "PROFILE_STANDARD", "STANDARD_SCALE_CASES", "all_cases", "cases_for_profile",
     "get_case", "read_manifest", "validate_catalogue", "validate_manifest",

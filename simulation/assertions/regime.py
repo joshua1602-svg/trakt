@@ -207,7 +207,6 @@ def assert_artefact(case, gate_run, xml_path: Optional[Path]) -> List[Assertion]
                          bool(xml_path and xml_path.exists()),
                          actual=str(xml_path), failure_class=_FAIL))
         if xml_path and xml_path.exists():
-            text = xml_path.read_text(encoding="utf-8", errors="replace")
             out.append(check(STAGE_REGIME, f"{regime}: artefact is well-formed XML",
                              _is_well_formed(xml_path), failure_class=_FAIL))
             out.append(check(STAGE_REGIME, f"{regime}: artefact passed XSD validation",
@@ -215,9 +214,13 @@ def assert_artefact(case, gate_run, xml_path: Optional[Path]) -> List[Assertion]
                              actual=[ln.strip() for ln in gate_run.stdout.splitlines()
                                      if "XSD" in ln or "XML generation" in ln],
                              failure_class=_FAIL))
+            # Measured from the filesystem, never by reading the artefact in.
+            # A 100 000-loan Annex 2 submission is multiple gigabytes, and an
+            # assertion that has to load the whole thing to say "not empty" is
+            # a verifier that cannot verify the scale it exists to test.
+            size = xml_path.stat().st_size
             out.append(check(STAGE_REGIME, f"{regime}: artefact is not empty",
-                             len(text) > 500, actual=len(text),
-                             failure_class=_FAIL))
+                             size > 500, actual=size, failure_class=_FAIL))
         return out
 
     if status == ARTEFACT_AWAITING_CONFIG:
@@ -243,10 +246,31 @@ def assert_artefact(case, gate_run, xml_path: Optional[Path]) -> List[Assertion]
 
 
 def _is_well_formed(path: Path) -> bool:
+    """Parse the artefact incrementally, discarding each element as it closes.
+
+    ``ElementTree.parse`` builds the whole document in memory. A regulatory
+    submission for a large book is gigabytes of XML, and the resulting DOM is
+    several times that — enough to be OOM-killed, which is a failure of the
+    CHECK rather than of the artefact. ``iterparse`` plus clearing gives the
+    same well-formedness answer in constant memory.
+    """
     try:
         from xml.etree import ElementTree
 
-        ElementTree.parse(str(path))
+        root = None
+        with path.open("rb") as handle:
+            for event, element in ElementTree.iterparse(
+                    handle, events=("start", "end")):
+                if event == "start":
+                    if root is None:
+                        root = element
+                    continue
+                element.clear()
+                if root is not None and element is not root:
+                    # Drop the completed siblings the root has accumulated.
+                    # The parser keeps its own reference to whatever is still
+                    # open, so this only discards what is already parsed.
+                    root.clear()
         return True
     except Exception:  # noqa: BLE001 - a malformed artefact is the finding
         return False

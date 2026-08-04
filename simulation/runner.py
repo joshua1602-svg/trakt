@@ -6,7 +6,7 @@
     python -m simulation.runner run-all   --profile smoke
     python -m simulation.runner run-all   --profile standard
     python -m simulation.runner run-all   --profile performance
-    python -m simulation.runner reproduce --case bridge_maturity_wall_v1 --seed 41827
+    python -m simulation.runner reproduce --case bridge_maturity_wall_v1 --seed 41204
 
 Every run writes a structured evidence directory::
 
@@ -51,6 +51,7 @@ from .models import (
     EXPECT_FAILURE,
     REGIME_APPLICABLE,
     SCALES,
+    STAGES,
     STAGE_AGENT,
     STAGE_CANONICAL,
     STAGE_EQUIVALENCE,
@@ -102,9 +103,34 @@ def _stage(name: str, started: float, *, ok: bool = True,
 
 def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
              jobs: int = 4, keep_sources: bool = True,
-             measure_memory: bool = False) -> CaseResult:
-    """Generate, render, ingest, integrate and verify one case end to end."""
-    run_dir = Path(run_root) / case.case_id
+             measure_memory: bool = False,
+             run_label: Optional[str] = None,
+             stages: Optional[Sequence[str]] = None,
+             deadline: Optional[float] = None,
+             progress: bool = False) -> CaseResult:
+    """Generate, render, ingest, integrate and verify one case end to end.
+
+    ``run_label`` names the evidence directory. It defaults to the case id and
+    is only overridden when one case is run more than once in a single profile
+    — the performance profile runs its large case at two scales — so that the
+    two runs do not overwrite each other's evidence.
+
+    ``stages`` restricts the run to a subset of :data:`STAGES`. The earlier
+    stages a selected stage depends on always run: asking for ``mi`` without
+    ``ingest`` is not a smaller measurement, it is a broken one. Stages that
+    are excluded are recorded as skipped WITH the reason, so a narrowed run
+    never reads as a run that verified everything.
+
+    ``deadline`` is a ``time.monotonic()`` value. It is checked BETWEEN stages,
+    never mid-stage: a half-written canonical is not evidence. On expiry the
+    case stops cleanly, every completed stage keeps its timing and its
+    artefacts, and the remaining stages are recorded as skipped ``timeout``.
+
+    ``progress`` prints each stage as it starts and finishes, with its elapsed
+    time, so a long run is observable while it runs rather than only after it.
+    """
+    label = run_label or case.case_id
+    run_dir = Path(run_root) / label
     if run_dir.exists():
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True)
@@ -114,7 +140,8 @@ def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
         simulation_version=case.simulation_version, expectation=case.expectation,
         expected_failure_class=case.expected_failure_class,
         run_dir=str(run_dir), manifest_hash=case.content_hash(),
-        production_modules=list(P.PRODUCTION_MODULES))
+        production_modules=list(P.PRODUCTION_MODULES),
+        run_label=label, scale=scale)
     M.write_manifest(case, run_dir / "manifest.json")
     if measure_memory:
         tracemalloc.start()
@@ -127,24 +154,66 @@ def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
     def _stopped() -> bool:
         return result.observed_failure_class is not None
 
+    selected = _selected_stages(stages)
+    result.selected_stages = list(selected)
+    tracker = _Progress(label, enabled=progress)
+
+    def _gate(stage: str, ready: bool = True) -> bool:
+        """May ``stage`` run? Records WHY NOT whenever it may not.
+
+        Every stage that does not run leaves a skip record with its reason, so
+        the evidence distinguishes "verified" from "not selected", "out of
+        time" and "the stage before it produced nothing to verify".
+        """
+        if _stopped():
+            return False
+        if stage not in selected:
+            reason = "not selected for this run"
+        elif deadline is not None and time.monotonic() >= deadline:
+            result.timed_out = True
+            reason = "timeout: the run budget expired before this stage"
+        elif not ready:
+            reason = "an earlier stage produced no input for this stage"
+        else:
+            tracker.start(stage)
+            return True
+        result.stages.append(StageResult(stage=stage, ok=True, skipped=True,
+                                         skip_reason=reason))
+        return False
+
     try:
-        history, truth = _stage_generate(case, run_dir, result, scale)
-        if _stopped():
-            return _finish(result, measure_memory)
-        sources = _stage_render(case, run_dir, result, history)
-        if _stopped():
-            return _finish(result, measure_memory)
-        canonicals = _stage_ingest(case, run_dir, result, sources, jobs)
-        if _stopped():
-            return _finish(result, measure_memory)
-        _stage_canonical(case, run_dir, result, canonicals, truth)
-        _stage_equivalence(case, run_dir, result, canonicals, truth)
-        store = _stage_history(case, run_dir, result, canonicals, truth)
-        if store is not None:
+        history = truth = sources = canonicals = None
+        store = None
+        if _gate(STAGE_GENERATE):
+            history, truth = _stage_generate(case, run_dir, result, scale)
+            tracker.done(result)
+        if _gate(STAGE_RENDER, history is not None):
+            sources = _stage_render(case, run_dir, result, history)
+            tracker.done(result)
+        if _gate(STAGE_INGEST, bool(sources)):
+            canonicals = _stage_ingest(case, run_dir, result, sources, jobs)
+            tracker.done(result)
+        if _gate(STAGE_CANONICAL, bool(canonicals)):
+            _stage_canonical(case, run_dir, result, canonicals, truth)
+            tracker.done(result)
+        if _gate(STAGE_EQUIVALENCE, bool(canonicals)):
+            _stage_equivalence(case, run_dir, result, canonicals, truth)
+            tracker.done(result)
+        if _gate(STAGE_HISTORY, bool(canonicals)):
+            store = _stage_history(case, run_dir, result, canonicals, truth)
+            tracker.done(result)
+        if _gate(STAGE_MI, store is not None):
             _stage_mi(case, run_dir, result, store, truth)
+            tracker.done(result)
+        if _gate(STAGE_RISK, store is not None):
             _stage_risk(case, run_dir, result, store, truth)
+            tracker.done(result)
+        if _gate(STAGE_AGENT, store is not None):
             _stage_agent(case, run_dir, result, store, truth, canonicals)
-        _stage_regime(case, run_dir, result, canonicals, truth)
+            tracker.done(result)
+        if _gate(STAGE_REGIME, bool(canonicals)):
+            _stage_regime(case, run_dir, result, canonicals, truth)
+            tracker.done(result)
     except Exception as exc:  # noqa: BLE001 - an escape is itself a finding
         import traceback
         # An unhandled exception is NEVER a valid outcome, so it is recorded in
@@ -159,6 +228,61 @@ def run_case(case: CaseManifest, *, run_root: Path, scale: str = "small",
     if not keep_sources:
         shutil.rmtree(run_dir / "generated_sources", ignore_errors=True)
     return _finish(result, measure_memory)
+
+
+#: Every stage a selected stage needs before it can mean anything. Measuring
+#: ``mi`` without ``ingest`` is not a cheaper measurement, it is a broken one.
+STAGE_REQUIRES = {
+    STAGE_RENDER: (STAGE_GENERATE,),
+    STAGE_INGEST: (STAGE_GENERATE, STAGE_RENDER),
+    STAGE_CANONICAL: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
+    STAGE_EQUIVALENCE: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
+    STAGE_HISTORY: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
+    STAGE_MI: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_HISTORY),
+    STAGE_RISK: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_HISTORY),
+    STAGE_AGENT: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST, STAGE_HISTORY),
+    STAGE_REGIME: (STAGE_GENERATE, STAGE_RENDER, STAGE_INGEST),
+}
+
+
+def _selected_stages(stages: Optional[Sequence[str]]) -> List[str]:
+    """Resolve a stage selection, closing it over its prerequisites."""
+    if not stages:
+        return list(STAGES)
+    unknown = sorted(set(stages) - set(STAGES))
+    if unknown:
+        raise ValueError(f"unknown stage(s) {unknown}; known: {list(STAGES)}")
+    wanted = set(stages)
+    for stage in list(wanted):
+        wanted.update(STAGE_REQUIRES.get(stage, ()))
+    return [s for s in STAGES if s in wanted]
+
+
+class _Progress:
+    """Live per-stage progress, printed as it happens rather than at the end."""
+
+    def __init__(self, label: str, *, enabled: bool):
+        self.label = label
+        self.enabled = enabled
+        self.stage: Optional[str] = None
+        self.started = 0.0
+
+    def start(self, stage: str) -> None:
+        self.stage, self.started = stage, time.monotonic()
+        if self.enabled:
+            print(f"    {self.label} :: {stage} ...", flush=True)
+
+    def done(self, result: CaseResult) -> None:
+        if not self.enabled or self.stage is None:
+            return
+        elapsed = time.monotonic() - self.started
+        last = result.stages[-1] if result.stages else None
+        mark = "skip" if (last and last.skipped) else (
+            "ok" if (last and last.ok) else "FAIL")
+        counts = len(last.assertions) if last else 0
+        print(f"    {self.label} :: {self.stage:22s} {mark:5s} "
+              f"{elapsed:8.2f}s  {counts} assertions", flush=True)
+        self.stage = None
 
 
 def _finish(result: CaseResult, measure_memory: bool) -> CaseResult:
@@ -442,7 +566,8 @@ def _stage_risk(case, run_dir: Path, result: CaseResult, store, truth):
     (run_dir / "risk_results" / "evaluation.json").write_text(
         json.dumps(evaluation, indent=2, default=str) + "\n", encoding="utf-8")
     assertions = A_risk.assert_risk_state(evaluation, case)
-    assertions += A_risk.assert_movement_disclosed(evaluation)
+    assertions += A_risk.assert_movement_disclosed(
+        evaluation, periods=len(truth["reporting_dates"]))
     result.stages.append(_stage(
         STAGE_RISK, started, assertions=assertions,
         artefacts={"overall_status": (evaluation.get("summary") or {})
@@ -556,19 +681,58 @@ def _source_for(run_dir: Path, case, date: str) -> Optional[Path]:
 # Profiles
 # --------------------------------------------------------------------------- #
 def run_profile(profile: str, *, run_root: Path, jobs: int = 4,
-                cases: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+                cases: Optional[Sequence[str]] = None,
+                timeout: Optional[float] = None,
+                stages: Optional[Sequence[str]] = None,
+                progress: bool = True) -> Dict[str, Any]:
+    """Run a profile, optionally under a wall-clock budget.
+
+    ``timeout`` is the budget for the WHOLE profile, in seconds. It is enforced
+    between stages, so a run that runs out of time stops cleanly with every
+    completed stage's timings and evidence persisted, and reports
+    ``PARTIAL_PERFORMANCE`` rather than hanging or discarding what it measured.
+    """
     selected = ([M.get_case(c) for c in cases] if cases
                 else M.cases_for_profile(profile))
+    specs = _profile_specs(profile, selected, stages)
     started = time.monotonic()
+    deadline = (started + float(timeout)) if timeout else None
     results: List[CaseResult] = []
-    for case in selected:
-        scale, run_case_manifest = _profile_shape(profile, case)
-        print(f"  [{profile}] {case.case_id} ({scale})", flush=True)
-        results.append(run_case(run_case_manifest, run_root=run_root, scale=scale,
-                                jobs=jobs,
-                                measure_memory=(profile == M.PROFILE_PERFORMANCE)))
+    not_run: List[Dict[str, Any]] = []
+    seen: Dict[str, int] = {}
+    for case, spec in zip(selected, specs):
+        run_case_manifest = _profile_manifest(profile, case, spec)
+        scale = spec["scale"]
+        # The same case may legitimately appear twice in one profile at two
+        # scales; the second run gets a scale-suffixed evidence directory.
+        seen[case.case_id] = seen.get(case.case_id, 0) + 1
+        label = (case.case_id if seen[case.case_id] == 1
+                 else f"{case.case_id}__{scale}")
+        if deadline is not None and time.monotonic() >= deadline:
+            # Not started at all: recorded as not run, never as passed.
+            not_run.append({"run_label": label, "case_id": case.case_id,
+                            "scale": scale, "reason": "timeout"})
+            print(f"  [{profile}] {label} NOT RUN (budget expired)", flush=True)
+            continue
+        print(f"  [{profile}] {case.case_id} ({scale}) "
+              f"stages={','.join(spec['stages']) if spec.get('stages') else 'all'}",
+              flush=True)
+        results.append(run_case(
+            run_case_manifest, run_root=run_root, scale=scale, jobs=jobs,
+            run_label=label, stages=spec.get("stages"), deadline=deadline,
+            progress=progress,
+            measure_memory=(profile == M.PROFILE_PERFORMANCE)))
     summary = _summarise(profile, results, time.monotonic() - started, run_root,
                          list(selected))
+    summary["not_run"] = not_run
+    summary["timeout_seconds"] = timeout
+    partial = bool(not_run) or any(r.timed_out for r in results)
+    summary["status"] = "PARTIAL_PERFORMANCE" if partial else "COMPLETE"
+    if partial:
+        print(f"  [{profile}] PARTIAL_PERFORMANCE: budget of {timeout}s expired; "
+              f"{len(not_run)} run(s) not started, "
+              f"{sum(1 for r in results if r.timed_out)} truncated. "
+              f"All completed timings and evidence are persisted.", flush=True)
     Path(run_root).mkdir(parents=True, exist_ok=True)
     (Path(run_root) / f"run_summary_{profile}.json").write_text(
         json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
@@ -604,15 +768,38 @@ def _coverage(results: List[CaseResult], cases: List[CaseManifest]) -> Dict[str,
     }
 
 
-def _profile_shape(profile: str, case: CaseManifest):
-    """The scale and manifest shape a profile runs a case at."""
+def _profile_manifest(profile: str, case: CaseManifest,
+                      spec: Dict[str, Any]) -> CaseManifest:
+    """The manifest shape a profile runs a case at."""
     if profile == M.PROFILE_SMOKE:
         # Fast enough for ordinary CI: three periods, one dialect, small scale.
-        return "small", replace(case, months=3, dialects=(REFERENCE_DIALECT,))
+        return replace(case, months=3, dialects=(REFERENCE_DIALECT,))
     if profile == M.PROFILE_PERFORMANCE:
-        scale = "large" if case.case_id == M.LARGE_SCALE_CASE else "standard"
-        return scale, replace(case, dialects=(REFERENCE_DIALECT,))
-    return "small", case
+        # One dialect: the profile measures the pathway, not the renderers.
+        return replace(case, dialects=(REFERENCE_DIALECT,),
+                       months=int(spec.get("months") or case.months))
+    return case
+
+
+def _profile_specs(profile: str, selected: List[CaseManifest],
+                   stages: Optional[Sequence[str]]) -> List[Dict[str, Any]]:
+    """The run spec for each selected case, positionally.
+
+    Only the performance profile varies scale or narrows stages, and it does so
+    from the explicit ``PERFORMANCE_RUNS`` schedule rather than by inferring
+    anything from a case id. An explicit ``--case`` selection falls back to the
+    standard scale so a hand-picked performance run still measures something
+    meaningful. An explicit ``--stages`` always wins: that is how the expensive
+    regime and Agent measurements are asked for at scale.
+    """
+    override = tuple(stages) if stages else None
+    if profile != M.PROFILE_PERFORMANCE:
+        return [{"scale": "small", "stages": override} for _ in selected]
+    scheduled = list(M.PERFORMANCE_RUNS)
+    if [s["case_id"] for s in scheduled] == [c.case_id for c in selected]:
+        return [{"scale": s["scale"], "months": s.get("months"),
+                 "stages": override or s.get("stages")} for s in scheduled]
+    return [{"scale": "standard", "stages": override} for _ in selected]
 
 
 def _summarise(profile: str, results: List[CaseResult], elapsed: float,
@@ -649,17 +836,30 @@ def _summarise(profile: str, results: List[CaseResult], elapsed: float,
         "stages_passed": stages_passed,
         "stages_skipped": stages_skipped,
         "elapsed_seconds": round(elapsed, 2),
+        # Keyed by RUN LABEL, not case id: one profile may run the same case
+        # twice at two scales, and keying by case id would silently drop one of
+        # the two measurements.
         "reproducibility": {
-            "seeds": {r.case_id: r.seed for r in results},
-            "manifest_hashes": {r.case_id: r.manifest_hash for r in results},
+            "seeds": {r.run_label: r.seed for r in results},
+            "manifest_hashes": {r.run_label: r.manifest_hash for r in results},
             "reproduce": {
-                r.case_id: (f"python -m simulation.runner reproduce --case "
-                            f"{r.case_id} --seed {r.seed}") for r in results},
+                r.run_label: (f"python -m simulation.runner reproduce --case "
+                              f"{r.case_id} --seed {r.seed}"
+                              + (f" --scale {r.scale}" if r.scale != "small"
+                                 else "")) for r in results},
         },
         "production_modules": sorted({m for r in results
                                       for m in r.production_modules}),
-        "timings": {r.case_id: r.timings for r in results},
-        "peak_memory_mb": {r.case_id: r.peak_memory_mb for r in results
+        "scales": {r.run_label: r.scale for r in results},
+        "stages_selected": {r.run_label: list(r.selected_stages) for r in results},
+        "timed_out": [r.run_label for r in results if r.timed_out],
+        "skip_reasons": {
+            r.run_label: {s.stage: s.skip_reason for s in r.stages if s.skipped}
+            for r in results if any(s.skipped for s in r.stages)},
+        "timings": {r.run_label: r.timings for r in results},
+        "elapsed_seconds_by_run": {r.run_label: round(sum(r.timings.values()), 2)
+                                   for r in results},
+        "peak_memory_mb": {r.run_label: r.peak_memory_mb for r in results
                            if r.peak_memory_mb is not None},
         "run_root": str(run_root),
         "cases": [r.to_dict() for r in results],
@@ -710,6 +910,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     every.add_argument("--run-root", default=str(DEFAULT_RUN_ROOT))
     every.add_argument("--case", action="append", dest="cases",
                        help="restrict the profile to specific case ids")
+    every.add_argument("--timeout", type=float, default=None,
+                       help="wall-clock budget for the whole profile, in "
+                            "seconds. Enforced between stages: the run stops "
+                            "cleanly and reports PARTIAL_PERFORMANCE with every "
+                            "completed timing and artefact kept.")
+    every.add_argument("--stages", default=None,
+                       help="comma-separated stages to run (prerequisites are "
+                            f"added automatically). Known: {','.join(STAGES)}. "
+                            "This is how the expensive regime and agent stages "
+                            "are asked for at large scale.")
+    every.add_argument("--quiet", action="store_true",
+                       help="suppress live per-stage progress")
 
     repro = sub.add_parser("reproduce",
                            help="re-run a case at an explicit seed")
@@ -750,16 +962,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         case = M.get_case(args.case)
         if args.command == "reproduce":
             case = replace(case, seed=int(args.seed))
+        # A non-default scale gets its own evidence directory, so measuring
+        # one case at two scales never overwrites the other's evidence.
+        label = (case.case_id if args.scale == "small"
+                 else f"{case.case_id}__{args.scale}")
         result = run_case(case, run_root=Path(args.run_root), scale=args.scale,
-                          jobs=args.jobs)
+                          jobs=args.jobs, run_label=label)
         _print_case_result(result)
         return 0 if result.ok else 1
 
+    stage_filter = ([s.strip() for s in args.stages.split(",") if s.strip()]
+                    if getattr(args, "stages", None) else None)
     summary = run_profile(args.profile, run_root=Path(args.run_root),
-                          jobs=args.jobs, cases=getattr(args, "cases", None))
+                          jobs=args.jobs, cases=getattr(args, "cases", None),
+                          timeout=getattr(args, "timeout", None),
+                          stages=stage_filter,
+                          progress=not getattr(args, "quiet", False))
     print(json.dumps({k: v for k, v in summary.items() if k != "cases"},
                      indent=2, default=str))
-    return 0 if not summary["unexpected_failures"] else 1
+    if summary["unexpected_failures"]:
+        return 1
+    # A partial run is not a pass and must not be reported as one, but it is
+    # also not a failure of the platform: exit 2 says "measured, incompletely".
+    return 2 if summary["status"] == "PARTIAL_PERFORMANCE" else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
