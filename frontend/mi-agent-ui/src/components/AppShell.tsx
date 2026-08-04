@@ -8,6 +8,7 @@ import { PipelineSnapshotPanel } from "@/components/PipelineSnapshotPanel";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { ForecastView } from "@/components/ForecastView";
 import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPanel";
+import { CohortsPanel } from "@/components/CohortsPanel";
 import { EvolutionPanel } from "@/components/EvolutionPanel";
 import { RiskLimitsWorkspace } from "@/components/risk/RiskLimitsWorkspace";
 import { GeographyPanel } from "@/components/GeographyPanel";
@@ -422,9 +423,12 @@ export function AppShell() {
                         tabs={["funded"]} client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
                     </KeepMounted>
+                    {/* Vintages, not the running book: EvolutionPanel here made
+                        Cohorts a second copy of the Evolution tab. KeepMounted
+                        is main's tab-retention behaviour and is preserved. */}
                     <KeepMounted active={fundedTab === "cohorts"} testId="funded-cohorts-pane">
-                      <EvolutionPanel key={`evo-cohorts-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
-                        tabs={["cohorts"]} client={client} portfolioId={workspacePortfolioId}
+                      <CohortsPanel key={`cohorts-${ws.dataVersion}-${ws.selectedContextId}`}
+                        client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
                     </KeepMounted>
                   </div>

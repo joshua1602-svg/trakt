@@ -34,6 +34,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getConcentrationDrivers: vi.fn(async () => ({}) as any),
     getForecastExtrapolation: vi.fn(async () => mockForecastExtrapolation("client_001")),
     getCohortProgression: vi.fn(),
+    getCohortVintages: () => Promise.resolve({ dataset: "cohort_formation", portfolioId: "p", cohortBasis: "origination_date", grain: "M", available: true, vintages: [] }) as never,
     getMe: vi.fn(async () => ({ authenticated: true, isOperator: true })),
     getDecks: vi.fn(async () => ({ available: false, latest: null, decks: [], client_id: "client_001" })),
     deckDownloadUrl: vi.fn(() => null),

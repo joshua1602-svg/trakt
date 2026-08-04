@@ -80,3 +80,76 @@ export interface CohortProgressionQuery {
   vintage?: string;
   grain?: CohortGrain;
 }
+
+/**
+ * Vintage FORMATION — what entered the book in each origination period, each
+ * loan counted once in its own vintage.
+ *
+ * Deliberately not the book outstanding at a reporting date: that is portfolio
+ * evolution (`domain/evolution`), and a book of 33 October plus 40 November
+ * loans reads 33 and 40 here, 33 then 73 there.
+ */
+export interface CohortVintage {
+  vintage: string;
+  originalLoanCount: number;
+  originalBalance: number;
+  firstSeen?: string | null;
+  /** Balance-weighted, as a FRACTION (0.395 == 39.5%) per the unit contract. */
+  waOriginalLtv?: number | null;
+  waEntryLtv?: number | null;
+  waRate?: number | null;
+}
+
+export interface CohortFormation {
+  dataset: "cohort_formation";
+  portfolioId: string;
+  cohortBasis: string;
+  grain: string;
+  available: boolean;
+  reason?: string | null;
+  vintages: CohortVintage[];
+  totalLoanCount?: number;
+  /** Loans a later snapshot restated into a different vintage. The first
+   *  assignment stands; these are surfaced rather than silently applied. */
+  lateCorrections?: { loanId: string; assigned: string; restatedTo: string;
+                      seenIn?: string | null }[];
+  lineage?: Record<string, unknown>;
+}
+
+/** One reporting period of a fixed static pool. The count can fall through
+ *  exits; it can never rise. */
+export interface StaticPoolPeriod {
+  period: string;
+  reportingDate?: string | null;
+  monthsSinceEntry?: number | null;
+  survivingLoanCount: number;
+  currentBalance: number;
+  loanRetention?: number | null;
+  balanceRetention?: number | null;
+  exitsInPeriod: number;
+  cumulativeExits: number;
+  waLtv?: number | null;
+  waRate?: number | null;
+}
+
+export interface CohortStaticPool {
+  dataset: "cohort_static_pool";
+  portfolioId: string;
+  cohortBasis: string;
+  vintage: string;
+  grain: string;
+  available: boolean;
+  reason?: string | null;
+  originalLoanCount?: number | null;
+  originalBalance?: number | null;
+  periods: StaticPoolPeriod[];
+  singlePeriod?: boolean;
+  lineage?: Record<string, unknown>;
+}
+
+export interface CohortVintageQuery {
+  portfolioContext?: string;
+  /** Omit for formation; supply to follow one vintage's static pool. */
+  vintage?: string;
+  grain?: "M" | "Q" | "Y";
+}

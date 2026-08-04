@@ -150,8 +150,12 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
             "metrics": {
                 "funded_balance": _bal_sum(df),
                 "loan_count": int(len(df)),
-                "wa_ltv": _weighted_avg(df, "current_loan_to_value"),
-                "wa_interest_rate": _weighted_avg(df, "current_interest_rate"),
+                # Fractions, per the contract on _pct_fraction. This route used
+                # the raw weighted average, so it emitted whatever the tape
+                # stored while the cohort routes emitted fractions — the same
+                # metric key carrying two conventions.
+                "wa_ltv": _pct_fraction(df, "current_loan_to_value"),
+                "wa_interest_rate": _pct_fraction(df, "current_interest_rate"),
                 "avg_borrower_age": _simple_avg(df, "youngest_borrower_age"),
             },
             "reconciliation": _reconciliation(df, "funded", run_id, required),

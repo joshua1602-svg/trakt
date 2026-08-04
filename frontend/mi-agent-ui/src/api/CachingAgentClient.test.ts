@@ -39,6 +39,7 @@ function fakeClient(response: AgentResponse): { client: AgentClient; ask: Return
     getConcentrationDrivers: vi.fn(),
     getForecastExtrapolation: vi.fn(),
     getCohortProgression: vi.fn(),
+    getCohortVintages: () => Promise.resolve({ dataset: "cohort_formation", portfolioId: "p", cohortBasis: "origination_date", grain: "M", available: true, vintages: [] }) as never,
     getMe: vi.fn(),
     getDecks: vi.fn(),
     deckDownloadUrl: vi.fn(() => null),

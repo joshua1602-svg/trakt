@@ -17,6 +17,15 @@ jobs:
 
     env:
       VITE_AGENT_API_URL: https://trakt-mi-api.azurewebsites.net
+      # Vite inlines VITE_* at BUILD time, so these have to be here. Setting
+      # them on the API App Service afterwards cannot change a bundle that has
+      # already been compiled — a build without them contains no path to the
+      # feature at all. The API's own TRAKT_MI_ENHANCED_HOVERS /
+      # TRAKT_MI_WEEKLY_BRIEF are separate and set on the App Service; the two
+      # sides are deliberately independent, and a mismatch degrades to the
+      # existing tooltip rather than erroring.
+      VITE_MI_ENHANCED_HOVERS: "true"
+      VITE_MI_WEEKLY_BRIEF: "true"
     
     steps:
       - uses: actions/checkout@v3
