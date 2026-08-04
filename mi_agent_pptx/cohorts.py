@@ -166,11 +166,21 @@ def adapt_formation(payload: Optional[Dict[str, Any]], *, label: str = "Total",
 
 @dataclass(frozen=True)
 class CohortPoint:
-    """One reporting period of one cohort's static-pool series."""
+    """One reporting period of one cohort's static-pool series.
+
+    Every field is the governed payload's own. Nothing here is derived: exits and
+    retention used to be computed in the deck from counts, which meant two
+    channels could disagree about the same cohort by rounding differently.
+    """
 
     period: str
     reporting_date: Optional[str]
     loan_count: int
+    surviving_ids: Tuple[str, ...] = ()
+    exits_count: Optional[int] = None
+    loan_retention: Optional[float] = None
+    balance_retention: Optional[float] = None
+    seasoning: Optional[int] = None
     metrics: Dict[str, Optional[float]] = field(default_factory=dict)
 
 
@@ -184,6 +194,14 @@ class CohortSeries:
     metrics_available: Tuple[str, ...]
     available: bool
     reason: Optional[str] = None
+    #: The governed static-pool contract, verbatim.
+    methodology_version: Optional[str] = None
+    membership_rule: Optional[str] = None
+    formation_date: Optional[str] = None
+    formation_ids: Tuple[str, ...] = ()
+    formation_loan_count: Optional[int] = None
+    formation_balance: Optional[float] = None
+    data_quality: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def live(self) -> Tuple[CohortPoint, ...]:
@@ -218,6 +236,9 @@ class CohortSeries:
 
     @property
     def formation_count(self) -> Optional[int]:
+        """The service's formation count, not the first plotted point's."""
+        if self.formation_loan_count is not None:
+            return self.formation_loan_count
         pts = self.live
         return pts[0].loan_count if pts else None
 
@@ -233,6 +254,9 @@ class CohortSeries:
         Meaningful only for a pool that never gained a member, which is why a
         cohort failing :attr:`violates_static_pool` is never plotted.
         """
+        pts = self.live
+        if pts and pts[-1].exits_count is not None:
+            return pts[-1].exits_count           # the service's own figure
         if self.formation_count is None or self.surviving_count is None:
             return None
         return max(0, self.formation_count - self.surviving_count)
@@ -244,6 +268,12 @@ class CohortSeries:
         governed series shows as never gaining a member, so the denominator is
         the pool the numerator is a subset of.
         """
+        pts = self.live
+        if pts:
+            governed = {"funded_balance": pts[-1].balance_retention,
+                        "loan_count": pts[-1].loan_retention}.get(metric)
+            if governed is not None:
+                return governed              # the service's own figure
         first, last = self.value(metric, 0), self.value(metric, -1)
         if not first or last is None:
             return None
@@ -265,6 +295,11 @@ def adapt_progression(payload: Optional[Dict[str, Any]], vintage: str) -> Cohort
         CohortPoint(period=str(p.get("period") or ""),
                     reporting_date=p.get("reporting_date"),
                     loan_count=int(p.get("loanCount") or 0),
+                    surviving_ids=tuple(p.get("survivingLoanIds") or ()),
+                    exits_count=p.get("exitsCount"),
+                    loan_retention=_f(p.get("loanRetention")),
+                    balance_retention=_f(p.get("balanceRetention")),
+                    seasoning=p.get("seasoningPeriods"),
                     metrics={k: _pct(v) if k in ("wa_ltv", "wa_interest_rate",
                                                  "nneg_headroom_pct") else _f(v)
                              for k, v in (p.get("metrics") or {}).items()})
@@ -272,7 +307,14 @@ def adapt_progression(payload: Optional[Dict[str, Any]], vintage: str) -> Cohort
     return CohortSeries(
         vintage=vintage, lens=str(payload.get("lens") or "Total"), points=points,
         metrics_available=tuple(payload.get("metricsAvailable") or ()),
-        available=bool(payload.get("available")), reason=payload.get("reason"))
+        available=bool(payload.get("available")), reason=payload.get("reason"),
+        methodology_version=payload.get("methodologyVersion"),
+        membership_rule=payload.get("membershipRule"),
+        formation_date=payload.get("formationDate"),
+        formation_ids=tuple(payload.get("formationLoanIds") or ()),
+        formation_loan_count=payload.get("formationLoanCount"),
+        formation_balance=_f(payload.get("formationBalance")),
+        data_quality=dict(payload.get("dataQuality") or {}))
 
 
 # --------------------------------------------------------------------------- #

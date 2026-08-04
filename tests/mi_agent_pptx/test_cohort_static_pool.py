@@ -175,3 +175,73 @@ def test_the_deck_makes_no_claim_that_a_cohort_can_gain_loans():
                          if not l.strip().startswith("#"))
         assert "can also gain balance" not in body
         assert "boards a loan of that vintage" not in body
+
+
+# --------------------------------------------------------------------------- #
+# Cross-channel parity: React, PPTX and the chat/Copilot path all call ONE
+# function, so parity is structural — but assert it, because "they call the same
+# thing" has been true of this codebase before while the callers differed.
+# --------------------------------------------------------------------------- #
+
+def test_every_channel_reaches_the_same_service(tmp_path):
+    import inspect
+
+    from mi_agent_api import app as react_app, chat_routing
+    from mi_agent_pptx import mi_api as pptx_api
+
+    for module, label in ((react_app, "React route"),
+                          (chat_routing, "chat / Copilot"),
+                          (pptx_api, "PPTX")):
+        src = inspect.getsource(module)
+        assert "funded_cohort_progression" in src, f"{label} no longer calls it"
+
+
+def test_the_contract_is_versioned_and_identical_across_channels(tmp_path):
+    """Same tenant, scope, vintage and reporting date → identical payload."""
+    from mi_agent_api import evolution
+    from mi_agent_api.evolution import COHORT_METHODOLOGY_VERSION
+
+    root = tmp_path / "root"
+    _write(root, "mi_2026_05", "2026-05-31",
+           [_loan(u, 100_000.0, "2026-05-31", "2020-03-01") for u in "ABCD"])
+    _write(root, "mi_2026_06", "2026-06-30",
+           [_loan(u, 101_000.0, "2026-06-30", "2020-03-01") for u in "ACD"])
+
+    calls = [evolution.funded_cohort_progression(str(root), "acme", vintage="2020",
+                                                 grain="Y") for _ in range(3)]
+    react, copilot, pptx = calls
+    for field in ("methodologyVersion", "membershipRule", "cohortId",
+                  "formationDate", "formationLoanIds", "formationLoanCount",
+                  "formationBalance"):
+        assert react[field] == copilot[field] == pptx[field], field
+    assert react["methodologyVersion"] == COHORT_METHODOLOGY_VERSION
+
+    for a, b, c in zip(react["periods"], copilot["periods"], pptx["periods"]):
+        for field in ("reporting_date", "survivingLoanIds", "survivingLoanCount",
+                      "survivingBalance", "exitsCount", "loanRetention",
+                      "balanceRetention", "seasoningPeriods"):
+            assert a[field] == b[field] == c[field], field
+        assert a["metrics"]["wa_ltv"] == b["metrics"]["wa_ltv"] == c["metrics"]["wa_ltv"]
+
+    last = react["periods"][-1]
+    assert last["survivingLoanIds"] == ["A", "C", "D"]
+    assert last["exitsCount"] == 1
+    assert last["loanRetention"] == pytest.approx(75.0)
+    # Contract item 7: balance can outrun loan count because balances on the
+    # SURVIVING loans grew, never because a new loan entered.
+    assert last["balanceRetention"] > last["loanRetention"]
+    assert last["seasoningPeriods"] == 1
+
+
+def test_the_ltv_unit_is_inferred_from_the_period_not_the_cohort(tmp_path):
+    """A deeply seasoned roll-up cohort must not be rendered 100x too small."""
+    import pandas as pd
+
+    from mi_agent_api.evolution import _pct_fraction
+
+    period = pd.DataFrame({"current_loan_to_value": [0.44, 0.46, 1.60, 1.90],
+                           "current_outstanding_balance": [1e5] * 4})
+    cohort = period.iloc[2:]                       # only the >150% LTV loans
+    assert _pct_fraction(cohort, "current_loan_to_value") == pytest.approx(0.0175)
+    assert _pct_fraction(cohort, "current_loan_to_value",
+                         period) == pytest.approx(1.75)

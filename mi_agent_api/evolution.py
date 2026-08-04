@@ -377,14 +377,27 @@ _ORIG_DATE = "origination_date"
 _VINTAGE = "vintage_year"
 
 
-def _pct_fraction(df, col: str) -> Optional[float]:
+def _pct_fraction(df, col: str, scale_from=None) -> Optional[float]:
     """Balance-weighted average of a percent column, normalised to a FRACTION so
     the UI's ×100 formatter renders it correctly (the tape stores LTV as a
-    fraction but the interest rate in points)."""
+    fraction but the interest rate in points).
+
+    ``scale_from`` is the frame the storage unit is inferred from, and should be
+    the WHOLE reporting period rather than the subset being averaged. The unit is
+    a property of the tape, not of whichever loans a cohort happens to contain,
+    and ``percent_storage_scale`` is a heuristic over the values: a deeply
+    seasoned roll-up cohort whose fractional LTVs mostly exceed 1.5 was
+    classified as points and divided by 100, so a true 175% LTV rendered as
+    1.75%. Inferring from the full period makes a subset unable to re-decide the
+    unit, which is what produced a 100x discontinuity inside a single series.
+    """
     wavg = _weighted_avg(df, col)
     if wavg is None:
         return None
-    if col in df.columns and percent_storage_scale(df[col]) == PERCENT_POINTS:
+    basis = scale_from if scale_from is not None and col in getattr(
+        scale_from, "columns", ()) else df
+    if col in getattr(basis, "columns", ()) and \
+            percent_storage_scale(basis[col]) == PERCENT_POINTS:
         return round(wavg / 100.0, 6)
     return wavg
 
@@ -538,8 +551,9 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
         metrics: Dict[str, Any] = {
             "funded_balance": _bal_sum(d),
             "loan_count": int(len(d)),
-            "wa_ltv": _pct_fraction(d, "current_loan_to_value"),
-            "wa_interest_rate": _pct_fraction(d, "current_interest_rate"),
+            # The unit comes from the WHOLE period, never from the cohort subset.
+            "wa_ltv": _pct_fraction(d, "current_loan_to_value", fr["df"]),
+            "wa_interest_rate": _pct_fraction(d, "current_interest_rate", fr["df"]),
             "avg_borrower_age": _simple_avg(d, "youngest_borrower_age"),
         }
         metrics.update(_nneg_metrics(d))
