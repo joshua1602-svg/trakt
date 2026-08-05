@@ -12,6 +12,31 @@ second Annex 2 implementation.**
 > `config/delivery/annex2_field_xsd_path_map.yaml` still records
 > `production_ready: 0/107` and `do_not_generate_production_xml: true`.
 
+## Current Annex 2 status
+
+| Property | State |
+|---|---|
+| Projector | **deterministic** |
+| Delivery normaliser | **deterministic** |
+| XML builder | **deterministic** |
+| Delivery-rule defaults | **explicit and declared** (46 rules) |
+| Builder ND insertion | **zero** |
+| Builder fabrication | **zero** |
+| Latent fabrication anywhere in the delivery path | **zero** |
+| Instrumentation | **complete** — every ND and every value transform attributed |
+| Benchmark | **reproduced byte-identically** (`a21f8a4c…d685d`, 7 runs) |
+| Production collateral mapping | **corrected** — no demo overlay required |
+
+**Remaining work is operational governance (Phase 3), not XML correctness.**
+The delivery tail produces a schema-valid submission in which every value comes
+from client data or a declared rule. What it still lacks is *governance*: it is
+not invoked by the production route, its warnings are not surfaced to an
+operator, and its artefacts are not staged behind approval. Those are the
+Phase 3 questions. Two builder functions in the non-performing branch still hold
+reporting policy and are recorded in
+[`annex2_fabrication_audit.md`](annex2_fabrication_audit.md) §5; neither fires on
+this benchmark.
+
 ---
 
 ## Phase status
@@ -264,26 +289,6 @@ contributes nothing of its own.
 * **It does not surface builder ND counts as operator warnings.** They are
   reported in the instrumentation JSON; wiring them to an operator surface
   belongs with the governed stages in Phase 3.
-* **It does not touch the RREL12 `geography_map` in the delivery rules.**
-  Found while completing Phase 2, so recording it rather than leaving it
-  implicit. `config/regime/annex2_delivery_rules.yaml` declares a
-  `transform.geography_map` for RREL12 mapping ten region *names*
-  (`London`, `Scotland`, …) to the classification year `"2026"`. A NUTS
-  classification year is not derivable from a region name, so in substance this
-  is the same shape as the builder fabrication just removed — with one material
-  difference: it is **declared, readable, reviewable configuration**, which is
-  the direction Phase 2 is moving things toward, not away from.
-
-  **It is inert on this benchmark, verified rather than assumed:** every
-  projected RREL12 value is already `2021` (11,035 of 11,035) and every
-  delivered value is `2021`, so the map never fires and contributes nothing to
-  the 121,355 recorded coercions.
-
-  It is left alone deliberately. Deciding what an unmappable region name
-  *should* produce — `ND1`, a refusal, or a genuine per-region classification
-  year — is a regulatory decision with no measured behaviour to preserve, and
-  Phase 2's scope was explicitly the builder-side path. It belongs with the
-  Phase 4 enum-truth consolidation.
 * **It does not regenerate the committed demo fixture.**
   `demo-video/public/fixtures/demo_manifest.json` still records `"fields": 105`
   from the `0ed7b4c` run. That number is correct *for that run*. A live run now
@@ -292,6 +297,88 @@ contributes nothing of its own.
   reading `fields` would show 107 without the split beside it — an overstatement
   of coverage — so the fixture and its consumer should be updated together, and
   that is React work this phase was scoped out of.
+
+## Phase 2b — the last fabrication, and a repository-wide audit (complete)
+
+Phase 2 removed the builder-side fabrication and recorded a second one it had
+been scoped out of. Phase 2b removes that one too and then goes looking for
+others. **Output-neutral: the benchmark SHA-256 is unchanged.**
+
+### The RREL12 `geography_map` is gone
+
+`config/regime/annex2_delivery_rules.yaml` declared a `transform.geography_map`
+for RREL12 mapping ten region *names* (`London`, `Scotland`, …) onto the literal
+classification year `"2026"`. Three things settled it:
+
+1. **It has no authoritative basis.** The workbook says only "Enter the year of
+   the NUTS3 classification used … e.g. 2013 for NUTS3 2013". A region name
+   cannot imply a vintage — `West Midlands` is equally consistent with NUTS3
+   2013, 2016 or 2021. The authoritative source is client configuration
+   (`nuts_classification_year`), which Gate 2 writes into
+   `geographic_region_classification`.
+2. **It contradicted the stage that populates the field.**
+   `canonical_transform.py` states the governing policy outright — *"Never
+   writes a readable label or a region code into the classification year"* — and
+   `regime_projector.py` carries an explicit semantic guard excluding
+   classification-year fields from the UK `GBZZZ` override. The delivery rule
+   was doing the mirror image of what both upstream stages refuse to do.
+3. **It defeated its own guard.** Transforms run *before* validators, so the map
+   converted a region label into `"2026"` and handed it to a regex whose entire
+   purpose was to reject region labels. The value arrived looking valid.
+
+The repository already named this defect: `test_annex2_path_map_promotion.py`
+and `test_annex2_path_acceptance_gate.py` both block `RREL12 -> "2026"` from
+being imported into the XSD path map, by name.
+
+**It had never executed.** All 11,035 projected RREL12 values are `2021`; zero
+RREL12 coercions were recorded.
+
+The rule now carries **no transform at all**. The regex guard is retained, so:
+
+| Input | Before | After |
+|---|---|---|
+| `2021`, `2013` | accepted | accepted |
+| `ND1` (permitted) | accepted | accepted |
+| blank (optional) | passes through | passes through |
+| `West Midlands` | **silently became `"2026"`** | **governed `pattern` error, run fails** |
+| `GBZZZ`, `TLG31` | pattern error | pattern error |
+
+An unrepresentable value now fails the run deterministically instead of being
+substituted. `geography_map` remains declared by **RREL11 only**, where it is
+what it claims to be: a region *label* → region *code* translation.
+
+### Repository-wide fabrication audit
+
+Every value-changing mechanism reachable by the Annex 2 delivery path, and the
+equivalent patterns elsewhere, were enumerated and classified. Full findings and
+justifications live in
+[`annex2_fabrication_audit.md`](annex2_fabrication_audit.md).
+
+Summary: **no fabrication remains anywhere in the Annex 2 delivery path.** Two
+findings outside it are recorded there — a numeric-zero fallback in the Annex 12
+projector (a different regime) and an untested preview-guardrail policy, both
+pre-existing on `main`.
+
+### Every value transformation is now declared
+
+Across 70 rules the complete set of value-changing mechanisms is:
+
+| Mechanism | Rules | Category |
+|---|---|---|
+| `transform.enum_map` | 23 | declared enum translation (strict — unknown value errors) |
+| `transform.geography_map` | 1 | declared enum translation (RREL11 label → code) |
+| `transform.boolean` | 5 | declared formatting |
+| `precision` | 11 | declared formatting/precision |
+| `default_value` + `default_allowed` | 46 | declared delivery-rule default |
+| `derive` | 3 | declared derivation from other canonical fields |
+| `validators` | 25 | validation only — changes no value |
+
+`derive` is a fourth category beyond the three the delivery tail was expected to
+have. It is legitimate but worth naming: it computes `months_between_dates` from
+two real dates, or selects the first non-blank of named fields. It returns `""`
+rather than a substitute when its inputs are absent, so an absent input stays
+absent. The `generator` mechanism (securitisation-ID composition) exists in code
+but **no rule declares it**; it too refuses rather than invents.
 
 ## Remaining work
 

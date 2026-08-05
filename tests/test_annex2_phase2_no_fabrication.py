@@ -109,8 +109,8 @@ class TestRrel12IsNeverFabricated(unittest.TestCase):
 
         Gate 4b applies its own declared transforms. A Gate 5 report asserting
         "no value anywhere was fabricated" would be a claim it has no standing
-        to make — see the RREL12 `geography_map` recorded in
-        docs/annex2_delivery_migration.md.
+        to make, however true it happens to be today — Gate 5 cannot see what
+        Gate 4b did.
         """
         note = BUILD._INSTR.to_dict()["fabricated_values"]["note"]
         self.assertIn("BUILDER", note)
@@ -421,30 +421,81 @@ class TestFieldProvenanceIsReported(unittest.TestCase):
         self.assertIn("fieldsFromProjectedSource", source)
         self.assertIn("fieldsFromDeliveryRule", source)
 
-    def test_the_rrel12_geography_map_is_recorded_as_outstanding(self):
-        """A known latent issue must stay visible until it is decided.
+    def test_the_rrel12_geography_map_is_gone(self):
+        """The last latent fabrication in the Annex 2 delivery path.
 
-        The RREL12 rule maps region NAMES to the classification year "2026".
-        A classification year is not derivable from a region name, so this is
-        the same shape as the builder fabrication Phase 2 removed — but it is
-        declared configuration, it is inert on the benchmark (every projected
-        RREL12 value is already 2021), and choosing the right behaviour is a
-        regulatory decision Phase 2 was scoped out of.
+        The RREL12 rule carried a ``geography_map`` copied from RREL11 — the
+        same ten UK region names, with the target changed from the region code
+        ``GBZZZ`` to the literal year ``"2026"``. A region name cannot
+        determine a NUTS vintage, so this invented a classification year the
+        client never reported. Worse, transforms run BEFORE validators, so it
+        also defeated the very regex guard declared beside it.
 
-        This test does not require the map to exist or to be removed. It
-        requires that, as long as it exists, the migration document still says
-        so — so the next phase inherits the finding rather than rediscovering it.
+        No workbook, XSD or ESMA basis exists for it, and
+        ``canonical_transform.py`` — the stage that POPULATES this field —
+        documents the opposite policy outright.
         """
         rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
-        geo = ((rules["field_rules"]["RREL12"].get("transform") or {})
-               .get("geography_map") or {})
-        doc = (_REPO / "docs" / "annex2_delivery_migration.md").read_text(
-            encoding="utf-8")
-        if geo:
-            self.assertIn("geography_map", doc,
-                          "the RREL12 geography_map is still declared but the "
-                          "migration document no longer records it")
-            self.assertIn("RREL12", doc)
+        rule = rules["field_rules"]["RREL12"]
+        transform = rule.get("transform") or {}
+        self.assertNotIn("geography_map", transform,
+                         "the RREL12 region-name -> year map is a fabrication")
+        self.assertEqual(transform, {},
+                         "RREL12 must carry no value transform at all")
+
+    def test_no_rule_maps_a_region_name_to_a_year(self):
+        """The defect class, not just the one instance.
+
+        Any rule translating a readable region label into a bare year is
+        inventing a classification vintage from something that cannot imply one.
+        """
+        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+        offenders = []
+        for code, rule in (rules.get("field_rules") or {}).items():
+            if not isinstance(rule, dict):
+                continue
+            geo = (rule.get("transform") or {}).get("geography_map") or {}
+            for key, value in geo.items():
+                if re.fullmatch(r"(19|20)\d{2}", str(value).strip()) and \
+                        not re.fullmatch(r"(19|20)\d{2}", str(key).strip()):
+                    offenders.append(f"{code}: {key!r} -> {value!r}")
+        self.assertEqual(offenders, [],
+                         "a non-year key maps to a year; a classification year "
+                         "cannot be derived from a region name")
+
+    def test_the_semantic_guard_survived_the_removal(self):
+        """Removing the map must not remove the protection it defeated.
+
+        Deleting the transform without keeping the regex would be strictly
+        worse than the fabrication: a region label would reach Gate 5 unchecked
+        instead of being caught at Gate 4b.
+        """
+        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+        pattern = (rules["field_rules"]["RREL12"].get("validators") or {}).get("regex")
+        self.assertTrue(pattern, "the RREL12 year guard must remain declared")
+        for good in ("2021", "2013", "ND1"):
+            self.assertTrue(re.fullmatch(pattern, good), good)
+        for bad in ("West Midlands", "London", "GBZZZ", "TLG31", "20211"):
+            self.assertIsNone(re.fullmatch(pattern, bad), bad)
+
+    def test_an_unmappable_rrel12_value_fails_rather_than_becoming_a_year(self):
+        """Behavioural: the governed failure, end to end through Gate 4b."""
+        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+        only = {"defaults": rules.get("defaults", {}),
+                "field_rules": {"RREL12": rules["field_rules"]["RREL12"]}}
+        frame = pd.DataFrame({"RREL12": ["2021", "West Midlands", "ND1", ""]})
+        out, issues, summary = NORM.normalize_delivery(frame, only)
+
+        self.assertEqual(list(out["RREL12"]), ["2021", "West Midlands", "ND1", ""],
+                         "no value may be substituted, not even the invalid one")
+        errors = [i for i in issues if i.field == "RREL12" and i.severity == "error"]
+        self.assertEqual([i.row_index for i in errors], [1])
+        self.assertEqual(errors[0].issue_type, "pattern")
+        self.assertEqual(summary["preflight"]["status"], "FAIL",
+                         "an unrepresentable value must fail the run")
+        self.assertEqual(
+            summary["delivery_instrumentation"]["coercions"]["count"], 0,
+            "nothing was invented")
 
     def test_the_production_rules_declare_exactly_two_defaulted_codes(self):
         """Pins the benchmark's 105 + 2. A third would change the headline."""

@@ -425,8 +425,16 @@ class TestAnnex2Coercion:
                 raise RuntimeError("build failed")
         assert builder._coerce_record_value_for_branch is original
 
-    def test_rrel12_non_year_values_are_recorded_as_coercions(self, tmp_path):
-        """The builder rewrites a non-year RREL12 to a year; that must be disclosed."""
+    def test_rrel12_non_year_values_are_refused_not_rewritten(self, tmp_path):
+        """A non-year RREL12 is rejected at Gate 4b; nothing is rewritten.
+
+        This previously asserted the builder produced ``"2026"`` and disclosed
+        it as a coercion. Both halves of that are gone: the builder no longer
+        substitutes a year, and the delivery rule no longer maps region names
+        onto one, so the value now fails the declared regex guard and the run
+        stops. The test used to pass only because it skipped when normalisation
+        failed — the skip is now the expected outcome, so it is asserted.
+        """
         import csv
 
         rows = list(csv.reader(CI_FIXTURE.open(newline="")))
@@ -443,14 +451,17 @@ class TestAnnex2Coercion:
         agent = AnnexDeliveryAgent(store=DeliveryRunStore(tmp_path / "store"))
         result = DeliveryResult.from_dict(agent.prepare(_ctx(), _request(mutated)).result)
 
-        if result.status == DeliveryStatus.NORMALISATION_FAILED:
-            pytest.skip("the Gate 4b rules reject this value before the builder sees it")
+        # The governed outcome: refused at Gate 4b, before any XML is built.
+        assert result.status == DeliveryStatus.NORMALISATION_FAILED, (
+            f"a non-year RREL12 must fail delivery normalisation, got "
+            f"{result.status}")
 
-        coercions = {c["field_code"]: c for c in result.transformation_evidence["coercions"]}
-        assert "RREL12" in coercions, "an intercepted coercion must be disclosed"
-        assert coercions["RREL12"]["generated_value"] == "2026"
-        assert "NOT-A-YEAR" in coercions["RREL12"]["original_value_sample"]
-        assert coercions["RREL12"]["detection"] == "intercepted"
+        # And it must never have been turned into a year anywhere.
+        coercions = {c["field_code"]: c
+                     for c in (result.transformation_evidence or {}).get("coercions", ())}
+        assert coercions.get("RREL12", {}).get("generated_value") != "2026", (
+            "the RREL12 -> '2026' fabrication is gone from both the builder "
+            "and config/regime/annex2_delivery_rules.yaml")
 
     def test_instrumentation_leaves_the_builder_unpatched(self, prepared):
         """The observers must be removed once a build finishes."""

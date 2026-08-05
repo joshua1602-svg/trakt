@@ -396,20 +396,30 @@ field_rules:
     nd_allowed: [ND1]
     # Semantic guard: RREL12 is a classification YEAR. Reject region labels
     # ("West Midlands"), NUTS/ITL codes ("TLG31") and region codes ("GBZZZ").
+    #
+    # There is deliberately NO transform here. This rule used to carry a
+    # geography_map copied from RREL11 above — the same ten UK region names,
+    # with the target changed from the region code GBZZZ to the literal year
+    # "2026". A region name cannot determine which NUTS vintage was used:
+    # "West Midlands" is equally consistent with NUTS3 2013, 2016 or 2021. The
+    # map therefore invented a classification year the client never reported,
+    # and because transforms run BEFORE validators it also defeated the regex
+    # guard directly above it — an invalid value was made to look valid.
+    #
+    # No workbook, XSD or ESMA basis exists for it. The workbook says only
+    # "Enter the year of the NUTS3 classification used ... e.g. 2013 for NUTS3
+    # 2013". The authoritative source is client configuration
+    # (`nuts_classification_year`), which Gate 2 writes into
+    # `geographic_region_classification`; canonical_transform.py states the
+    # governing policy outright — "Never writes a readable label or a region
+    # code into the classification year". This rule now agrees with it.
+    #
+    # With no transform, a region label reaches the regex below and Gate 4b
+    # raises a governed pattern error, failing the run deterministically
+    # instead of substituting a value. A genuinely unavailable year uses ND1
+    # (permitted above). Blank and ND values never reach this stage at all.
     validators:
       regex: "^(ND[0-9]|(19|20)[0-9]{2})$"
-    transform:
-      geography_map:
-        East Midlands: "2026"
-        East of England: "2026"
-        London: "2026"
-        North West: "2026"
-        Scotland: "2026"
-        South East: "2026"
-        South West: "2026"
-        Wales: "2026"
-        West Midlands: "2026"
-        Yorkshire and The Humber: "2026"
 
   RREL83:
     esma_code: RREL83
