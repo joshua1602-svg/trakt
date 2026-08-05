@@ -1,0 +1,2 @@
+configuration_file,test_id,dimension,category,limit_value,needs_review,resolved_status,match_outcome,resolved_parameters,dimension_reaches_metric_parameters,previous_state,new_state,could_change_metric_or_rag
+config/clients/client_001/risk_limits_extracted.yaml,joint_borrower_limit_borrower_structure,borrower_structure,joint_borrower_limit,,True,pending_confirmation,ambiguous,{},False,dimension unresolvable -> metric unavailable,dimension resolvable via same-named field role,False

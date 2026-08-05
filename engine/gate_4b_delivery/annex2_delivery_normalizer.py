@@ -204,6 +204,103 @@ def _build_outputs(input_csv: Path, output_dir: Path) -> Dict[str, Path]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Phase 1 delivery instrumentation — OBSERVE ONLY.
+#
+# Separates the two kinds of ND this stage sees, which the report previously
+# conflated into a single "delivery ready" outcome:
+#
+#   * present_in_input  — the projected CSV already carried an ND code. That is
+#     upstream truth (registry/projector), not a delivery decision.
+#   * applied_by_rules  — this normaliser substituted an ND because a DECLARED
+#     rule in annex2_delivery_rules.yaml said to (``default_allowed`` +
+#     ``default_value``). Governed and auditable, but still a value the client
+#     did not supply.
+#
+# Coercions are recorded whenever a declared transform CHANGES a value, with
+# the rule that caused it. Counts are exact; individual records are capped.
+#
+# Nothing here alters a value: removing every ``record_*`` call would leave the
+# delivery-ready CSV byte-identical.
+# --------------------------------------------------------------------------- #
+INSTRUMENTATION_SCHEMA_VERSION = 1
+
+#: Hard cap on individually recorded coercions. Counts remain exact above it.
+COERCION_RECORD_CAP = 5000
+
+
+class _DeliveryInstrumentation:
+    """ND provenance and coercion records for one normalisation run."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.in_input_by_code: Dict[str, int] = defaultdict(int)
+        self.in_input_by_field: Dict[str, int] = defaultdict(int)
+        self.by_rule_by_code: Dict[str, int] = defaultdict(int)
+        self.by_rule_by_field: Dict[str, int] = defaultdict(int)
+        self.coercions: List[Dict[str, Any]] = []
+        self.coercion_count = 0
+        self.coercions_truncated = False
+
+    def scan_input_nd(self, df: "pd.DataFrame") -> None:
+        """Count every ND code already present in the projected input."""
+        for column in df.columns:
+            values = df[column].astype(str).str.strip().str.upper()
+            matched = values[values.str.fullmatch(r"ND[1-5]", na=False)]
+            if matched.empty:
+                continue
+            self.in_input_by_field[str(column)] += int(len(matched))
+            for code, count in matched.value_counts().items():
+                self.in_input_by_code[str(code)] += int(count)
+
+    def record_nd_from_rule(self, *, nd_code: str, field: str) -> None:
+        self.by_rule_by_code[nd_code] += 1
+        self.by_rule_by_field[field] += 1
+
+    def record_coercion(self, *, field_code: str, original_value: str,
+                        resulting_value: str, reason: str,
+                        row_identifier: Optional[str] = None) -> None:
+        self.coercion_count += 1
+        if len(self.coercions) < COERCION_RECORD_CAP:
+            self.coercions.append({
+                "field_code": field_code,
+                "row_identifier": row_identifier,
+                "original_value": original_value,
+                "resulting_value": resulting_value,
+                "reason": reason,
+            })
+        else:
+            self.coercions_truncated = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """The report. Zero is stated explicitly — an absent entry is not zero."""
+        return {
+            "schema_version": INSTRUMENTATION_SCHEMA_VERSION,
+            "stage": "gate_4b_delivery_normalisation",
+            "nd_present_in_input": {
+                "total": int(sum(self.in_input_by_code.values())),
+                "by_code": {k: int(v) for k, v in sorted(self.in_input_by_code.items())},
+                "by_field": {k: int(v) for k, v in sorted(self.in_input_by_field.items())},
+            },
+            "nd_applied_by_rules": {
+                "total": int(sum(self.by_rule_by_code.values())),
+                "by_code": {k: int(v) for k, v in sorted(self.by_rule_by_code.items())},
+                "by_field": {k: int(v) for k, v in sorted(self.by_rule_by_field.items())},
+            },
+            "coercions": {
+                "count": int(self.coercion_count),
+                "records": list(self.coercions),
+                "truncated": bool(self.coercions_truncated),
+                "record_cap": COERCION_RECORD_CAP,
+            },
+        }
+
+
+_INSTR = _DeliveryInstrumentation()
+
+
 def _normalize_field(
     df: pd.DataFrame,
     out_df: pd.DataFrame,
@@ -231,6 +328,10 @@ def _normalize_field(
 
     if current == "" and rule.get("default_allowed") and "default_value" in rule:
         current = to_str(rule.get("default_value"))
+        if current and ND_PATTERN.fullmatch(current.upper()):
+            # A DECLARED rule supplied this ND — governed, but still a value
+            # the client did not provide.
+            _INSTR.record_nd_from_rule(nd_code=current.upper(), field=field)
 
     generator = rule.get("generator") if isinstance(rule.get("generator"), dict) else None
     if current == "" and generator and generator.get("type") == "securitisation_id":
@@ -323,14 +424,55 @@ def _normalize_field(
             return Issue("error", "precision", field, row_idx, err, raw, current)
         current = cur_num or ""
 
+    # A declared transform CHANGED a supplied value. Recorded so the delivery
+    # report can show what the rules did to the client's data, distinct from
+    # the builder's own coercion (see xml_builder_annex2._INSTR).
+    if raw and current != raw:
+        _INSTR.record_coercion(
+            field_code=field, original_value=raw, resulting_value=current,
+            row_identifier=_row_identifier(df, row_idx),
+            reason=_transform_reason(rule))
     out_df.at[row_idx, field] = current
     return None
+
+
+#: Columns that identify an exposure, best first. RREL3 is the new underlying
+#: exposure identifier; RREL2 the original.
+_ROW_ID_FIELDS = ("RREL3", "RREL2")
+
+
+def _row_identifier(df: pd.DataFrame, row_idx: int) -> Optional[str]:
+    """The exposure a record belongs to, or ``None`` — never invented."""
+    for field in _ROW_ID_FIELDS:
+        if field in df.columns:
+            value = to_str(df.at[row_idx, field])
+            if value:
+                return value
+    return None
+
+
+def _transform_reason(rule: Dict[str, Any]) -> str:
+    """Which declared rule caused a value to change."""
+    transforms = rule.get("transform") if isinstance(rule.get("transform"), dict) else {}
+    applied = sorted(str(k) for k in transforms)
+    if applied:
+        return ("annex2_delivery_rules.yaml field_rules transform: "
+                + ", ".join(applied))
+    if "precision" in rule:
+        return "annex2_delivery_rules.yaml field_rules precision"
+    return "annex2_delivery_rules.yaml field_rules normalisation"
 
 
 def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.DataFrame, List[Issue], Dict[str, Any]]:
     fields_cfg = rules.get("field_rules") if isinstance(rules.get("field_rules"), dict) else {}
     default_year = str((rules.get("defaults") or {}).get("reporting_year", "1900"))
 
+    _INSTR.reset()
+    # ND already present in the projected input, across EVERY column — not just
+    # the 68 rule-governed ones. The normaliser passes unlisted columns through
+    # verbatim, so counting only rule-governed fields would under-report
+    # upstream ND and silently attribute the difference to nothing.
+    _INSTR.scan_input_nd(df)
     out_df = df.copy()
     issues: List[Issue] = []
     seq_counter: Dict[str, int] = defaultdict(int)
@@ -358,6 +500,9 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
             "status": "PASS" if not errors else "FAIL",
             "blocking_errors": int(len(errors)),
         },
+        # Phase 1: what this stage did to values, stated explicitly. A run with
+        # no coercions records a count of zero rather than omitting the key.
+        "delivery_instrumentation": _INSTR.to_dict(),
     }
     return out_df, issues, summary
 

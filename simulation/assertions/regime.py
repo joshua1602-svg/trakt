@@ -39,9 +39,11 @@ from . import check, compare
 
 _FAIL = FailureClass.REGULATORY_ARTEFACT_FAILURE
 
-#: The phrase Gate 5 uses when a regime has no committed delivery template. The
-#: framework asserts this exact governed refusal rather than a crash.
-NOT_CONFIGURED_MARKER = "is not configured"
+#: The governed Gate 5 refusal for a regime whose delivery has not been built.
+#: Deliberately "NOT IMPLEMENTED", not "not configured": for Annex 3/4/8/9 there
+#: is no authored, XSD-validated delivery template in this repository at all —
+#: it is an unbuilt capability, not an unset deployment path.
+NOT_CONFIGURED_MARKER = "is NOT IMPLEMENTED"
 
 #: ND sentinels the regime layer is ALLOWED to insert.
 ND_SENTINELS = ("ND1", "ND2", "ND3", "ND4", "ND5", "ND6", "ND7")

@@ -14,9 +14,11 @@ Design notes specific to the Annex 2 workbook:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -106,6 +108,86 @@ def _is_iso_year(value: str) -> bool:
     return bool(re.match(r"^\d{4}$", _safe_str(value)))
 
 
+# --------------------------------------------------------------------------- #
+# Phase 1 delivery instrumentation — OBSERVE ONLY.
+#
+# Records what this builder does to values that did not come from the delivery-
+# ready input: ND codes it inserts itself, and value coercions it applies. It
+# changes no value, no node, no ordering and no XSD outcome; removing every
+# ``_INSTR`` call would leave the emitted XML byte-identical.
+#
+# The distinction this exists to make visible:
+#   * ND already present in the projected input        (upstream truth)
+#   * ND applied by a DECLARED delivery rule           (governed, auditable)
+#   * ND injected inside this builder                  (silent until now)
+#   * value coercion                                   (fabrication risk)
+# --------------------------------------------------------------------------- #
+INSTRUMENTATION_SCHEMA_VERSION = 1
+
+#: Hard cap on individually recorded coercions. Counts stay exact above it.
+COERCION_RECORD_CAP = 5000
+
+
+class _DeliveryInstrumentation:
+    """Counts and exemplars for builder-side ND injection and coercion."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.nd_by_code: Dict[str, int] = defaultdict(int)
+        self.nd_by_field: Dict[str, int] = defaultdict(int)
+        self.nd_by_branch: Dict[str, int] = defaultdict(int)
+        self.coercions: List[Dict[str, Any]] = []
+        self.coercion_count = 0
+        self.coercions_truncated = False
+
+    def record_nd(self, *, nd_code: str, field_code: str, branch: str) -> None:
+        self.nd_by_code[nd_code] += 1
+        self.nd_by_field[field_code] += 1
+        self.nd_by_branch[branch] += 1
+
+    def record_coercion(self, *, field_code: str, original_value: str,
+                        resulting_value: str, reason: str,
+                        row_identifier: Optional[str] = None) -> None:
+        self.coercion_count += 1
+        if len(self.coercions) < COERCION_RECORD_CAP:
+            self.coercions.append({
+                "field_code": field_code,
+                "row_identifier": row_identifier,
+                "original_value": original_value,
+                "resulting_value": resulting_value,
+                "reason": reason,
+            })
+        else:
+            self.coercions_truncated = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """The report. Zero is stated explicitly — an absent entry is not zero."""
+        return {
+            "schema_version": INSTRUMENTATION_SCHEMA_VERSION,
+            "stage": "gate_5_xml_builder",
+            "nd_injected_by_builder": {
+                "total": int(sum(self.nd_by_code.values())),
+                "by_code": {k: int(v) for k, v in sorted(self.nd_by_code.items())},
+                "by_field": {k: int(v) for k, v in sorted(self.nd_by_field.items())},
+                "by_branch": {k: int(v) for k, v in sorted(self.nd_by_branch.items())},
+            },
+            "coercions": {
+                "count": int(self.coercion_count),
+                "records": list(self.coercions),
+                "truncated": bool(self.coercions_truncated),
+                "record_cap": COERCION_RECORD_CAP,
+            },
+        }
+
+
+_INSTR = _DeliveryInstrumentation()
+
+#: Set per record so a coercion can name the exposure it happened on.
+_CURRENT_ROW_ID: Optional[str] = None
+
+
 def _coerce_record_value_for_branch(code: str, value: str) -> str:
     """
     Small branch-aware coercions for known Annex2 mapping edge cases.
@@ -114,6 +196,15 @@ def _coerce_record_value_for_branch(code: str, value: str) -> str:
     """
     v = _safe_str(value)
     if code == "RREL12" and v and not _is_iso_year(v):
+        # OBSERVED, not changed. Phase 2 will make this route to the NoData
+        # branch as the docstring above already specifies; Phase 1 only makes
+        # the substitution visible.
+        _INSTR.record_coercion(
+            field_code=code, original_value=v, resulting_value="2026",
+            row_identifier=_CURRENT_ROW_ID,
+            reason="RREL12 maps to a Yr branch; a non-ISO-year literal is "
+                   "replaced with a hardcoded year by "
+                   "_coerce_record_value_for_branch")
         return "2026"
     return v
 
@@ -485,6 +576,8 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
             incm_nd = _get_or_create_singleton(incm_val, "NoDataOptn", ns, order_index, (*scndry_path, "IncmVal"))
             nd_leaf = _get_or_create_singleton(incm_nd, "NoData", ns, order_index, (*scndry_path, "IncmVal", "NoDataOptn"))
             nd_leaf.text = "ND5"
+            _INSTR.record_nd(nd_code="ND5", field_code="RREL20",
+                             branch="ScndryOblgrIncm/IncmVal")
 
         vrfctn = _get_or_create_singleton(scndry, "Vrfctn", ns, order_index, scndry_path)
         vrfctn_has_code = vrfctn.find(f"{{{ns}}}Cd") is not None
@@ -493,6 +586,8 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
             vrfctn_nd = _get_or_create_singleton(vrfctn, "NoDataOptn", ns, order_index, (*scndry_path, "Vrfctn"))
             nd_leaf = _get_or_create_singleton(vrfctn_nd, "NoData", ns, order_index, (*scndry_path, "Vrfctn", "NoDataOptn"))
             nd_leaf.text = "ND5"
+            _INSTR.record_nd(nd_code="ND5", field_code="RREL21",
+                             branch="ScndryOblgrIncm/Vrfctn")
 
 
 def _ensure_hstrcl_colltn_nd_defaults(non_prfrmg_data_node: etree._Element, record_node: etree._Element, ns: str, order_index: Dict[Tuple[str, ...], List[str]]) -> None:
@@ -515,6 +610,8 @@ def _ensure_hstrcl_colltn_nd_defaults(non_prfrmg_data_node: etree._Element, reco
             nd = _get_or_create_singleton(nd_opt, "NoData", ns, order_index, (*month_path, "NoDataOptn"))
             if not _safe_str(nd.text):
                 nd.text = "ND5"
+                _INSTR.record_nd(nd_code="ND5", field_code=f"{block}/{month_name}",
+                                 branch="NonPrfrmgLn/HstrclColltn")
 
 
 def _ensure_nprf_nonprfrmgdata_defaults(
@@ -546,6 +643,9 @@ def _ensure_nprf_nonprfrmgdata_defaults(
 
 
 def build_annex2_tree(df: pd.DataFrame, code_order: List[str], specs_by_code: Dict[str, List[MappingSpec]], ns: str, currency: str, xsd_path: Optional[str]) -> etree._Element:
+    # Phase 1: a fresh instrumentation record per build, so repeated in-process
+    # builds report their own counts rather than an accumulating total.
+    _INSTR.reset()
     if df.empty:
         raise ValueError("Input projected CSV is empty")
 
@@ -610,6 +710,12 @@ def build_annex2_tree(df: pd.DataFrame, code_order: List[str], specs_by_code: Di
                 nprf_fallback_codes.append(code)
 
     for _, row in df.iterrows():
+        # Name the exposure a coercion happened on, where the tape carries an
+        # identifier. RREL3 is the new underlying-exposure identifier, RREL2
+        # the original. Falls back to None rather than inventing one.
+        global _CURRENT_ROW_ID
+        _CURRENT_ROW_ID = (_safe_str(row.get("RREL3"))
+                           or _safe_str(row.get("RREL2")) or None)
         record_node = create_new_record_node(root, record_root_path, ns, order_index)
         for code in record_codes:
             apply_record_code(record_node, row, code, specs_by_code, record_root_path, ns, order_index, currency)
@@ -677,6 +783,19 @@ def main() -> None:
     tree = etree.ElementTree(root)
     tree.write(args.output, pretty_print=True, xml_declaration=True, encoding="UTF-8")
     print(f"Generated: {args.output}")
+
+    # Phase 1 instrumentation sidecar. Written AFTER the XML so it cannot
+    # influence what was emitted — those bytes are already on disk.
+    instrumentation = _INSTR.to_dict()
+    instrumentation["input"] = str(args.input)
+    instrumentation["output"] = str(args.output)
+    instr_path = Path(args.output).with_name(
+        Path(args.output).stem + "_delivery_instrumentation.json")
+    instr_path.write_text(json.dumps(instrumentation, indent=2, sort_keys=True) + "\n",
+                          encoding="utf-8")
+    print(f"Builder-injected ND values: {instrumentation['nd_injected_by_builder']['total']}")
+    print(f"Value coercions: {instrumentation['coercions']['count']}")
+    print(f"Instrumentation: {instr_path}")
 
     if args.xsd:
         schema = etree.XMLSchema(etree.parse(args.xsd))

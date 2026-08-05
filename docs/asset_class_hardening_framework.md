@@ -63,11 +63,17 @@ here is exercised by the framework; nothing is re-implemented.
      `--template`, so it fell through to a default file that does not exist and
      died inside a subprocess with a Jinja `TemplateNotFound`. Every regime
      except Annex 2 was therefore un-deliverable *and* reported as a crash.
-     Now a missing template is a governed Gate 5 refusal naming the regime.
+     Gate 5 now refuses with a governed message stating the delivery is **NOT
+     IMPLEMENTED** for that regime — an unbuilt capability, not an unset
+     deployment path.
    * `config/system/enum_mapping.yaml` mapped `collateral_type` onto codes
      (`R1`/`R2`/`C1`/`C2`) that are not members of the `CollTp` enumeration in
-     `DRAFT1auth.099.001.04_1.3.0.xsd`, so every Annex 2 submission carrying a
-     mapped collateral type failed XSD validation at Gate 5.
+     `DRAFT1auth.099.001.04_1.3.0.xsd`. This was load-bearing, not dead: the
+     projector's synonym resolver discards a synonym whose TARGET is absent
+     from the regime table, so real-data values reached Gate 5 unmapped and the
+     XSD rejected them. The demo platform carried a per-run overlay to work
+     around it; production configuration no longer needs one. See
+     [annex2_delivery_migration.md](annex2_delivery_migration.md).
    * `engine/provenance.stamp_dataframe` blanked every *optional* provenance
      field whose portfolio-level value was absent, destroying loan-level
      `seller_name` — so a vendor concentration silently resolved to the
@@ -351,3 +357,7 @@ reported for a single-source one.
 | `tests/test_simulation_platform_extensions.py` | the governed-library extensions, the three defect fixes, the KPI evidence enhancement, and the recorded limitations |
 | `tests/test_simulation_regression_fixtures.py` | the pinned economics still reproduce byte-for-byte from their committed manifests |
 | `tests/test_simulation_multi_source.py` | the multi-source SPV: manifest rules, independent truth combination, one end-to-end assembled run, and the observed-module reporting rule |
+| `tests/test_annex2_collateral_enum_mapping.py` | every RREC5 target is a `CollateralType7Code` member, validated against the XSD itself |
+| `tests/test_annex2_collateral_projection.py` | production config alone resolves the real-data collateral value, with no demo overlay |
+| `tests/test_annex2_phase1_instrumentation.py` | Phase 1 delivery instrumentation: output-neutral, categories separated, zero stated explicitly |
+| `tests/test_concentration_dimension_fallback.py` | no committed configuration is affected by the dimension fallback |

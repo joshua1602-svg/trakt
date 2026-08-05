@@ -225,7 +225,13 @@ class TestRegulatoryDeliveryRefusesCleanly(unittest.TestCase):
     Gate 5 previously invoked the generic builder with no ``--template``, so it
     fell through to a default file that does not exist and died inside a
     subprocess with a Jinja ``TemplateNotFound`` — a crash where a governed
-    'this regime's delivery is not configured' refusal belongs.
+    a governed refusal belongs.
+
+    The refusal must say the delivery is NOT IMPLEMENTED, not merely "not
+    configured": for every regime except Annex 2 there is no authored,
+    XSD-validated delivery template in this repository, so telling an operator
+    to supply a path would invite an unvalidated artefact to be mistaken for a
+    submission.
     """
 
     def test_the_orchestrator_exposes_a_template_option(self):
@@ -233,11 +239,21 @@ class TestRegulatoryDeliveryRefusesCleanly(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("--regime-xml-template", source)
 
-    def test_the_refusal_names_the_missing_configuration(self):
+    def test_the_refusal_says_the_capability_is_unbuilt(self):
         source = (_REPO / "engine" / "orchestrator" / "trakt_run.py").read_text(
             encoding="utf-8")
-        self.assertIn("is not configured", source)
-        self.assertIn("--regime-xml-template <path>", source)
+        self.assertIn("is NOT IMPLEMENTED", source)
+        self.assertIn("authored and", source)
+        self.assertIn("UNVALIDATED artefact", source)
+
+    def test_the_refusal_does_not_present_this_as_a_deployment_setting(self):
+        """The previous wording invited exactly the wrong conclusion."""
+        source = (_REPO / "engine" / "orchestrator" / "trakt_run.py").read_text(
+            encoding="utf-8")
+        refusal = source[source.index("[Gate 5] Regulatory delivery for"):]
+        refusal = refusal[:refusal.index('")') + 2]
+        self.assertNotIn("is not configured", refusal)
+        self.assertIn("not a missing", refusal)
 
     def test_the_framework_asserts_that_exact_refusal(self):
         from simulation.assertions.regime import NOT_CONFIGURED_MARKER

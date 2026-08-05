@@ -739,23 +739,27 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
             "--currency", args.currency,
         ])
     else:
-        # The generic builder renders a Jinja template. Only Annex 2 has a
-        # committed delivery template in this repository, so for every other
-        # regime the template is DEPLOYMENT CONFIGURATION supplied through
-        # --regime-xml-template. Without one, refuse here with an explicit,
-        # actionable reason: previously this call fell through to the builder's
-        # own default ("esma_template.xml", which does not exist) and died
-        # inside a subprocess with a Jinja TemplateNotFound, which reads as a
-        # crash rather than as "this regime's delivery is not configured yet".
+        # Annex 2 is the ONLY regime whose delivery capability has been built
+        # and validated in this repository (dedicated builder + XSD validation).
+        # For every other regime there is no implemented, validated delivery
+        # template — not merely an unset deployment path — so refuse here and
+        # say so. Previously this call fell through to the generic builder's
+        # own default ("esma_template.xml", which exists nowhere in the tree)
+        # and died inside a subprocess with a Jinja TemplateNotFound, which
+        # reads as a crash rather than as a governed "not built yet".
         template = getattr(args, "regime_xml_template", None)
         if not template:
             raise RuntimeError(
-                f"[Gate 5] Regulatory delivery for {regime} is not configured: "
-                f"no XML template is committed for this regime and none was "
-                f"supplied. The Gate 4 projection at {projected} is complete and "
-                f"valid; supply --regime-xml-template <path> to produce the "
-                f"artefact. Annex 2 is the only regime with a committed "
-                f"delivery template (xml_builder_annex2 + XSD validation)."
+                f"[Gate 5] Regulatory delivery for {regime} is NOT IMPLEMENTED: "
+                f"no delivery template for this regime has been authored and "
+                f"validated in this repository, and no XSD validation exists "
+                f"for it. This is an unbuilt capability, not a missing "
+                f"deployment setting — supplying --regime-xml-template would "
+                f"render an UNVALIDATED artefact and must not be treated as "
+                f"producing a submission. The Gate 4 projection at {projected} "
+                f"is complete and is the supported output for {regime} today. "
+                f"Annex 2 is the only regime with a built and XSD-validated "
+                f"delivery path (xml_builder_annex2 + DRAFT1auth.099.001.04)."
             )
         if not Path(template).exists():
             raise RuntimeError(
