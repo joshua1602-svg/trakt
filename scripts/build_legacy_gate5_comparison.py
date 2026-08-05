@@ -52,7 +52,14 @@ COULD_UPGRADE = "could_upgrade_path_map_after_review"
 DISCARD = "discard_legacy_assumption"
 
 # Codes the legacy builder force-injects / coerces (unsafe silent fill).
-_VALUE_COERCION_CODES = {"RREL12"}   # _coerce_record_value_for_branch -> "2026"
+#
+# RESOLVED by Phase 2: ``_coerce_record_value_for_branch`` no longer substitutes
+# "2026" for a non-ISO-year RREL12 value — it routes to the NoData branch, and
+# the builder fabricates nothing. The code is kept here because this script's
+# purpose is to reconcile the LEGACY state that the path map was built against,
+# and removing it would erase the finding rather than record that it was acted
+# on. See docs/annex2_delivery_migration.md.
+_VALUE_COERCION_CODES = {"RREL12"}   # legacy: _coerce_record_value_for_branch -> "2026"
 
 
 def _raw_legacy_element_path(specs, valid):
@@ -123,7 +130,8 @@ def main():
             status = DEFAULT_RISK
             action = "RETIRE coercion: legacy fabricates a value (e.g. RREL12 -> '2026'); never fabricate"
             risk = "high"
-            note = "legacy _coerce_record_value_for_branch injects a fabricated value"
+            note = ("legacy _coerce_record_value_for_branch injected a fabricated "
+                    "value; DONE in Phase 2 — it now routes to the NoData branch")
         elif rg == "RREC" and leg_valid and not under_coll:
             status = CONFLICTS
             action = ("DISCARD legacy placement: collateral code mapped outside Coll via a "

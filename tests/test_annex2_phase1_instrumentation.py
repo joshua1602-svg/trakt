@@ -117,22 +117,30 @@ class TestInstrumentationSchema(unittest.TestCase):
 
 
 class TestBuilderCoercionIsObservedNotHidden(unittest.TestCase):
-    """The RREL12 substitution is still applied — and now visible.
+    """What Phase 1 made visible, Phase 2 removed.
 
-    Phase 1 deliberately does NOT remove the coercion; that is Phase 2. What it
-    must not do is leave it silent.
+    Phase 1's job was to record the RREL12 substitution, not to remove it —
+    these tests asserted the ``"2026"`` result was still produced *and*
+    reported. Phase 2 removed the substitution, so the value assertion moved
+    with it. The reporting requirement did not weaken: the event is still
+    recorded, with the same attribution, under ``routed_to_nodata``.
+
+    The full Phase 2 contract is pinned in
+    ``tests/test_annex2_phase2_no_fabrication.py``.
     """
 
     def test_a_non_year_rrel12_value_is_recorded(self):
         BUILD._INSTR.reset()
         result = BUILD._coerce_record_value_for_branch("RREL12", "not-a-year")
-        self.assertEqual(result, "2026", "Phase 1 must not change behaviour")
+        self.assertEqual(result, "", "Phase 2 routes to NoData rather than "
+                                     "substituting a fabricated year")
         report = BUILD._INSTR.to_dict()
-        self.assertEqual(report["coercions"]["count"], 1)
-        record = report["coercions"]["records"][0]
+        # It is no longer a coercion, because nothing was coerced into anything.
+        self.assertEqual(report["coercions"]["count"], 0)
+        self.assertEqual(report["routed_to_nodata"]["count"], 1)
+        record = report["routed_to_nodata"]["records"][0]
         self.assertEqual(record["field_code"], "RREL12")
         self.assertEqual(record["original_value"], "not-a-year")
-        self.assertEqual(record["resulting_value"], "2026")
         self.assertIn("RREL12", record["reason"])
         BUILD._INSTR.reset()
 

@@ -500,6 +500,62 @@ field_rules:
         SCRG: SCRG
         OTHR: OTHR
 
+  # ------------------------------------------------------------------ #
+  # Secondary obligor income (RREL20 / RREL21)
+  #
+  # XSD basis: SecondaryIncome2 declares ScndryOblgrIncm with no minOccurs, so
+  # it defaults to 1 — the element and both children (IncmVal, Vrfctn) are
+  # MANDATORY in the submission and cannot be omitted.
+  # Workbook basis: both codes are Optional priority with "ND1-4 allowed; ND5
+  # allowed" (config/regime/annex2_field_universe.yaml).
+  #
+  # ND5 = "Not applicable" (config/system/standards_library.yaml). That is the
+  # correct code here: where a loan has a single obligor there IS no secondary
+  # obligor, so the field does not apply. This differs deliberately from the
+  # sibling RREL19 above, which uses ND1 ("not available") because primary
+  # income IS applicable and merely missing.
+  #
+  # Before Phase 2 these values were written by xml_builder_annex2.py itself.
+  # Declaring them here makes the regulatory answer readable, reviewable and
+  # governed by the same mechanism as the other 43 ND defaults, instead of a
+  # hardcoded line in a builder.
+  RREL20:
+    esma_code: RREL20
+    workbook_semantic: ScndryOblgrIncm/IncmVal
+    projected_source_field: secondary_income
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
+    default_allowed: true
+    default_value: ND5
+  #
+  # RREL21 is a workbook {LIST} field (SCRT/SCNF/VRFD/NVRF/SCRG/OTHR). Today no
+  # projection carries secondary_income_verification, so every record takes the
+  # ND5 default — but a rule that leaves an enumerated field unconstrained is
+  # the same latent defect Phase 2 removed elsewhere, one source column away
+  # from firing. The enum_map below is the IDENTITY over the workbook's own six
+  # codes, exactly as the sibling RREL19 does: it constrains without inventing
+  # a translation from a source vocabulary that does not yet exist.
+  RREL21:
+    esma_code: RREL21
+    workbook_semantic: ScndryOblgrIncm/Vrfctn
+    projected_source_field: secondary_income_verification
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: [ND1, ND2, ND3, ND4, ND5]
+    default_allowed: true
+    default_value: ND5
+    validators:
+      regex: ^[A-Z0-9_]{1,12}$
+    transform:
+      enum_map:
+        SCRT: SCRT
+        SCNF: SCNF
+        VRFD: VRFD
+        NVRF: NVRF
+        SCRG: SCRG
+        OTHR: OTHR
+
   RREL22:
     esma_code: RREL22
     workbook_semantic: SpclSchme/Val

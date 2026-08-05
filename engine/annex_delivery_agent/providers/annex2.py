@@ -679,8 +679,9 @@ _LEI_PROBE_ROWS = 200
 
 _COERCION_REASONS = {
     "RREL12": ("The Annex 2 schema maps this field to a four-digit year. A value "
-               "that is not a year cannot be placed in that branch, so the builder "
-               "substitutes a year (builder rule: _coerce_record_value_for_branch)."),
+               "that is not a year cannot be placed in that branch, so it is "
+               "reported as no-data rather than replaced with a substitute year "
+               "(builder rule: _coerce_record_value_for_branch)."),
 }
 
 
@@ -705,11 +706,12 @@ def _load_mapping_specs_cached(builder: Any, workbook: str, sheet: str,
 
 def _fill_reason(path: Tuple[str, ...]) -> str:
     """Name the builder rule responsible for an automatic no-data insertion."""
+    # ``ScndryOblgrIncm`` used to be named here. Since Phase 2 the builder does
+    # not fill it: RREL20/RREL21 are declared in
+    # ``config/regime/annex2_delivery_rules.yaml``, so the path is sourced from
+    # the prepared data and never reaches this attribution — and a run that
+    # somehow lacked them would be refused by the builder, not filled.
     joined = "/".join(path)
-    if "ScndryOblgrIncm" in joined:
-        return ("the schema requires a secondary-obligor income branch on every "
-                "record and the prepared data carried no value for it "
-                "(builder rule: _ensure_scndry_oblgr_incm_defaults)")
     if "HstrclColltn" in joined:
         return ("the schema requires a 36-month historical collection series under "
                 "non-performing data and the prepared data carried none "

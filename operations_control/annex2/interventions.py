@@ -46,9 +46,33 @@ def _csv_nd_count(delivery_csv: Path) -> int:
     return total
 
 
+def _csv_nd_count_for(delivery_csv: Path, fields: tuple) -> int:
+    """ND cells the delivery CSV itself supplies for the named fields.
+
+    Phase 2: RREL20/RREL21 are declared in
+    ``config/regime/annex2_delivery_rules.yaml`` and populated by Gate 4b, so
+    the ND nodes under ``ScndryOblgrIncm`` in the XML are now SOURCED, not
+    builder-inserted. Counting XML nodes alone can no longer tell the two
+    apart — this is what distinguishes them.
+    """
+    import pandas as pd
+    total = 0
+    for chunk in pd.read_csv(delivery_csv, dtype=str,
+                             usecols=lambda c: c in fields, chunksize=20000):
+        for field in fields:
+            if field in chunk.columns:
+                total += int(chunk[field].fillna("").str.fullmatch(r"ND[1-5]").sum())
+    return total
+
+
 def _rrel12_coercion_count(delivery_csv: Path) -> int:
-    """Rows whose RREL12 value is not a 4-digit year — the builder coerces
-    those to a constant year (documented behaviour)."""
+    """Rows whose RREL12 value is not a 4-digit year.
+
+    Phase 2: the builder no longer coerces these to a constant year — it routes
+    them to the NoData branch. The count is still worth reporting, because a
+    value that cannot enter its typed branch is an operator-visible event; only
+    the treatment changed.
+    """
     import pandas as pd
     total = 0
     for chunk in pd.read_csv(delivery_csv, dtype=str, usecols=lambda c: c == "RREL12",
@@ -105,6 +129,7 @@ def _scan_xml(xml_path: Path) -> Dict[str, int]:
 def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
     """Produce the intervention evidence document."""
     csv_nd = _csv_nd_count(delivery_csv)
+    sourced_scndry_nd = _csv_nd_count_for(delivery_csv, ("RREL20", "RREL21"))
     coerced_rrel12 = _rrel12_coercion_count(delivery_csv)
     x = _scan_xml(xml_path)
     injected_nd = max(0, x["nodata_total"] - csv_nd)
@@ -121,10 +146,14 @@ def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
             reason="the schema requires the historical collection blocks; "
                    "the builder fills them with permitted no-data values",
             severity="warning", review_required=True))
-    if x["nodata_scndry_incm"]:
+    # Only the PORTION the delivery data did not supply is a builder
+    # intervention. Since Phase 2 the rules supply all of it, so this reports
+    # nothing — which is the correct answer, not a missing check.
+    scndry_unsourced = max(0, x["nodata_scndry_incm"] - sourced_scndry_nd)
+    if scndry_unsourced:
         interventions.append(Intervention(
             code="RREL20/RREL21", intervention_type="nd_insertion",
-            count=x["nodata_scndry_incm"],
+            count=scndry_unsourced,
             example_source_state="secondary income not present in the "
                                  "delivery data",
             generated_treatment="ND5 'no data' for secondary income and its "
@@ -143,12 +172,14 @@ def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
             severity="warning", review_required=True))
     if coerced_rrel12:
         interventions.append(Intervention(
-            code="RREL12", intervention_type="value_coercion",
+            code="RREL12", intervention_type="nodata_routing",
             count=coerced_rrel12,
             example_source_state="geography classification year not a "
                                  "4-digit year",
-            generated_treatment="replaced with a fixed year by the generator",
-            reason="documented generator behaviour for non-year values",
+            generated_treatment="reported as no-data; the value is NOT "
+                                "replaced with a substitute year",
+            reason="the schema branch accepts a 4-digit year only, so a value "
+                   "that is not one cannot be placed there",
             severity="warning", review_required=True))
     if x["ccy_attributes"]:
         interventions.append(Intervention(

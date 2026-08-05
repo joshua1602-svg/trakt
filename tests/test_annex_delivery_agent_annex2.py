@@ -293,9 +293,15 @@ class TestAnnex2Evidence:
         assert recon["attributed_as_automatic"] == recon["difference_added_by_builder"]
 
     def test_builder_inserted_nd5_is_disclosed_with_its_rule(self, prepared):
+        """Whatever the builder inserts must be disclosed with its rule.
+
+        Since Phase 2 the honest answer for this route is *nothing*: the
+        reconciliation below proves every no-data node in the report came from
+        the prepared data. The disclosure contract is unchanged and still
+        applies to anything that does appear.
+        """
         _, _, result = prepared
         fills = result.transformation_evidence["automatic_fills"]
-        assert fills, "the Gate 5 builder inserts ND5 defaults; they must be disclosed"
         for fill in fills:
             assert fill["generated_value"] == "ND5"
             assert fill["records_affected"] > 0
@@ -303,11 +309,27 @@ class TestAnnex2Evidence:
             assert fill["review_required"] is True
             assert fill["detection"] in ("structural", "intercepted", "reconciled")
 
-    def test_secondary_obligor_income_default_is_named(self, prepared):
+    def test_every_no_data_node_is_attributed_to_the_prepared_data(self, prepared):
+        """Phase 2: the builder adds no no-data node of its own.
+
+        This is the assertion that replaced "ScndryOblgrIncm must appear in the
+        automatic fills". RREL20/RREL21 are now declared in
+        ``config/regime/annex2_delivery_rules.yaml`` and arrive as data, so the
+        builder inserts nothing and the reconciliation closes at zero.
+        """
         _, _, result = prepared
+        recon = result.transformation_evidence["nd_reconciliation"]
+        assert recon["no_data_values_in_report"] == recon["no_data_values_in_prepared_data"]
+        assert recon["difference_added_by_builder"] == 0
+        assert recon["attributed_as_automatic"] == 0
+        assert recon["unattributed"] == 0
+        assert recon["per_field_in_prepared_data"]["RREL20"] > 0
+        assert recon["per_field_in_prepared_data"]["RREL21"] > 0
+
         paths = {f["xml_path"] for f in result.transformation_evidence["automatic_fills"]}
-        assert any("ScndryOblgrIncm" in p for p in paths), (
-            "_ensure_scndry_oblgr_incm_defaults inserts ND5 on every record")
+        assert not any("ScndryOblgrIncm" in p for p in paths), (
+            "the secondary-obligor income branch is sourced from the prepared "
+            "data now; the builder must not be credited with filling it")
 
     def test_omitted_fields_are_disclosed(self, prepared):
         _, _, result = prepared
@@ -335,7 +357,12 @@ class TestAnnex2Evidence:
         lines = result.transformation_evidence["operator_warnings"]
         assert lines
         assert all(not line.startswith("_") for line in lines)
-        assert any("were filled automatically" in line for line in lines)
+        # No internal identifier may leak into operator-facing text. Before
+        # Phase 2 this route always produced a "filled automatically" line; it
+        # now produces none, because nothing is filled automatically. What must
+        # hold is that every line reads as prose.
+        assert all(re.search(r"[a-z] [a-z]", line) for line in lines)
+        assert any("prepared data" in line for line in lines)
 
     def test_evidence_is_persisted(self, prepared):
         import json
@@ -382,7 +409,8 @@ class TestAnnex2Coercion:
                     collector.as_evidence(reason_for={"RREL12": "year branch"})}
         assert set(evidence) == {"RREL12"}, "only the changed value is recorded"
         assert evidence["RREL12"].records_affected == 1
-        assert evidence["RREL12"].generated_value == "2026"
+        # Phase 2: the value is routed to no-data, not rewritten to "2026".
+        assert evidence["RREL12"].generated_value == ""
         assert "NOT-A-YEAR" in evidence["RREL12"].original_value_sample
 
     def test_observer_is_removed_even_when_the_build_raises(self):
@@ -455,7 +483,12 @@ class TestAnnex2Publication:
         package = published.publication["package"]
         assert package["schema"].endswith("DRAFT1auth.099.001.04_1.3.0.xsd")
         assert package["validation_report"]["valid"] is True
-        assert package["automatic_value_evidence"]["automatic_fill_count"] > 0
+        # The evidence block travels with the package whether or not anything
+        # was filled. Since Phase 2 nothing is, and the package says so rather
+        # than omitting the key.
+        assert package["automatic_value_evidence"]["automatic_fill_count"] == 0
+        assert package["automatic_value_evidence"]["nd_reconciliation"][
+            "difference_added_by_builder"] == 0
         assert package["operator_approval"]["decided_by"] == "ERE-operator"
         assert Path(published.publication["receipt"]["artefact"]).is_file()
 

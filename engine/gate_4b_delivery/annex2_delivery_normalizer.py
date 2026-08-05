@@ -436,6 +436,39 @@ def _normalize_field(
     return None
 
 
+def _add_defaulted_columns(df: "pd.DataFrame", out_df: "pd.DataFrame",
+                           fields_cfg: Dict[str, Any]) -> List[str]:
+    """Create columns for absent fields whose rule authorises a default.
+
+    A field the projection legitimately does not carry may still be REQUIRED in
+    the submission — an XSD-mandatory element whose data does not apply to this
+    book. RREL20/RREL21 (secondary obligor income) are the case in point: no
+    canonical source exists, the XSD mandates the element, and the correct
+    answer is ND5 ("not applicable").
+
+    Creating the column here, once, lets the ORDINARY declared-default path in
+    :func:`_normalize_field` fill every row — so a rule-supplied ND is recorded
+    as ``nd_applied_by_rules`` exactly like every other one, with no special
+    case anywhere.
+
+    Entirely rule-driven: no field is named. A field with no
+    ``default_allowed`` default stays absent, exactly as before. Columns are
+    appended in rule-declaration order, so the header is deterministic. Gate 5
+    orders the XML from ``esma_code_order.yaml``, never from CSV column order.
+    """
+    added: List[str] = []
+    for field, rule in fields_cfg.items():
+        if not isinstance(rule, dict) or field in out_df.columns:
+            continue
+        if bool(rule.get("enforce_presence", rule.get("mandatory", False))):
+            continue        # a required projected source must still be missing
+        if rule.get("default_allowed") and to_str(rule.get("default_value")):
+            df[field] = ""
+            out_df[field] = ""
+            added.append(field)
+    return added
+
+
 #: Columns that identify an exposure, best first. RREL3 is the new underlying
 #: exposure identifier; RREL2 the original.
 _ROW_ID_FIELDS = ("RREL3", "RREL2")
@@ -469,11 +502,17 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
 
     _INSTR.reset()
     # ND already present in the projected input, across EVERY column — not just
-    # the 68 rule-governed ones. The normaliser passes unlisted columns through
+    # the rule-governed ones. The normaliser passes unlisted columns through
     # verbatim, so counting only rule-governed fields would under-report
     # upstream ND and silently attribute the difference to nothing.
     _INSTR.scan_input_nd(df)
     out_df = df.copy()
+    # Rule-authorised defaults for fields the projection did not carry. This
+    # adds a column to the working frame as well as the output one, so the
+    # ordinary per-row path can read it back — on a PRIVATE copy, so a caller's
+    # frame is never mutated behind its back.
+    df = df.copy()
+    defaulted_columns = _add_defaulted_columns(df, out_df, fields_cfg)
     issues: List[Issue] = []
     seq_counter: Dict[str, int] = defaultdict(int)
 
@@ -502,6 +541,17 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
         },
         # Phase 1: what this stage did to values, stated explicitly. A run with
         # no coercions records a count of zero rather than omitting the key.
+        "columns_created_from_declared_defaults": list(defaulted_columns),
+        # Phase 2: a bare field count cannot distinguish a field carrying client
+        # data from one carrying a governed "not applicable". Split it, so a
+        # headline number can never imply more coverage than was delivered.
+        "field_provenance": {
+            "populated_from_projected_source": int(len(out_df.columns)
+                                                   - len(defaulted_columns)),
+            "populated_by_declared_delivery_rule": int(len(defaulted_columns)),
+            "represented_in_submission": int(len(out_df.columns)),
+            "declared_rule_fields": sorted(defaulted_columns),
+        },
         "delivery_instrumentation": _INSTR.to_dict(),
     }
     return out_df, issues, summary

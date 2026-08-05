@@ -34,8 +34,9 @@ here is exercised by the framework; nothing is re-implemented.
 | Risk monitor (store-backed) | `mi_agent/risk_monitor/monitor.py` | concentration / migration / trajectory over the snapshot store. |
 | Governed limit library | `config/risk/concentration_test_library.yaml` + `mi_agent/concentration_tests/` | Declares *what a test is* (field roles, evaluator, parameter schema). Client thresholds arrive as an operator-approved `ActiveConfiguration`. |
 | Limit evaluation | `mi_agent/concentration_tests/evaluation.py::evaluate_active_tests` | `pass` / `warning` / `breach` / `unavailable`, fail-closed. |
-| Regime projection | `engine/gate_4_projection/regime_projector.py` | Canonical → ESMA Annex 2/3/4/8/9. ND codes inserted **only** here. |
-| Regulatory artefact | `engine/gate_5_delivery/xml_builder_annex2.py`, `xml_builder.py` | XML + XSD validation for Annex 2; generic builder for the other annexes. |
+| Regime projection | `engine/gate_4_projection/regime_projector.py` | Canonical → ESMA Annex 2/3/4/8/9. |
+| Delivery normalisation | `engine/gate_4b_delivery/annex2_delivery_normalizer.py` | Applies `config/regime/annex2_delivery_rules.yaml`. **Every ND code the delivery route applies is decided here or is already in the projected input** — since Phase 2, the builder injects none for RREL20/RREL21. |
+| Regulatory artefact | `engine/gate_5_delivery/xml_builder_annex2.py`, `xml_builder.py` | XML + XSD validation for Annex 2; generic builder for the other annexes. Invents no value: an unplaceable value routes to NoData where the mapping permits one, otherwise the run fails. |
 
 ### Findings that shaped the design
 
@@ -82,6 +83,13 @@ here is exercised by the framework; nothing is re-implemented.
    * Gate 1 reported `OK  0 fields mapped` for a source whose every header was
      unmapped, and the run continued to produce an empty canonical and exit 0.
      A zero-mapping source is now refused as an unsupported schema.
+
+   A fifth was found later, by the Annex 2 delivery instrumentation rather than
+   by a simulation case: `xml_builder_annex2.py` replaced a non-ISO-year RREL12
+   value with the hardcoded string `"2026"`. It never fired on any run measured
+   here — every RREL12 value is `2021` — so it was a latent fabrication rather
+   than an active corruption. It is removed, and the builder now invents no
+   value at all. See [annex2_delivery_migration.md](annex2_delivery_migration.md).
 5. **The MI semantics registry did not reach the new asset classes.** Ten
    canonical fields the registry already carried — `charge_type`,
    `collateral_type`, `seller_name`, `nace_industry_code`, `manufacturer`,
@@ -360,4 +368,5 @@ reported for a single-source one.
 | `tests/test_annex2_collateral_enum_mapping.py` | every RREC5 target is a `CollateralType7Code` member, validated against the XSD itself |
 | `tests/test_annex2_collateral_projection.py` | production config alone resolves the real-data collateral value, with no demo overlay |
 | `tests/test_annex2_phase1_instrumentation.py` | Phase 1 delivery instrumentation: output-neutral, categories separated, zero stated explicitly |
+| `tests/test_annex2_phase2_no_fabrication.py` | Phase 2: the builder invents nothing, the RREL20/RREL21 ND answer is declared configuration, and the 105 + 2 = 107 field split is reported rather than collapsed into one number |
 | `tests/test_concentration_dimension_fallback.py` | no committed configuration is affected by the dimension fallback |

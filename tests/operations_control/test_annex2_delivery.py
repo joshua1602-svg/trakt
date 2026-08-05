@@ -229,10 +229,16 @@ class TestPopulationReconciliation:
         assert doc["universe_count"] == 107
         assert doc["blocking_count"] == 0
         rows = {r["annex2_code"]: r for r in doc["rows"]}
-        # RREL20/21: optional, ND-permitted, builder-covered — NOT blockers.
+        # RREL20/21: optional and ND-permitted, so not blockers. Since Phase 2
+        # they are RULE-governed rather than builder-covered — declared in
+        # annex2_delivery_rules.yaml with default_value: ND5 — and the
+        # classifier must attribute them to the rule, not to the builder.
         for code in ("RREL20", "RREL21"):
             assert rows[code]["blocking"] is False
-            assert "builder" in rows[code]["population_mechanism"]
+            mechanism = rows[code]["population_mechanism"]
+            assert "builder" not in mechanism, (
+                f"{code} is no longer populated by the builder: {mechanism}")
+            assert "no-data" in mechanism, mechanism
         # Unruled-but-registry-mapped codes do not block (rule count is not
         # a completeness measure).
         unruled = [r for r in doc["rows"]
@@ -295,20 +301,27 @@ class TestRealComponentsMiniGolden:
         norm, xml = real_outcome
         assert xml is not None and xml.ok
         iv = json.loads(Path(xml.artefacts["interventions"]).read_text())
-        # The builder's documented ND scaffolding must be visible as evidence.
-        types = {i["intervention_type"] for i in iv["interventions"]}
-        assert "nd_insertion" in types
-        # On this PRF fixture the builder injects the secondary-income ND5
-        # pair (RREL20/RREL21) for every record: 2 x 36 = 72 instances.
+        # Phase 2: the builder injects NOTHING on this PRF fixture. The
+        # secondary-income ND5 pair used to be counted here (2 x 36 = 72); it
+        # is now supplied by the declared delivery rules and arrives in the
+        # delivery CSV, so attributing it to the builder would be false.
         sec = [i for i in iv["interventions"] if i["code"] == "RREL20/RREL21"]
-        assert sec and sec[0]["count"] == 2 * 36
-        assert iv["nodata_injected_by_builder"] == 2 * 36
+        assert sec == [], (
+            "RREL20/RREL21 come from annex2_delivery_rules.yaml now; the "
+            "builder must not be credited with inserting them")
+        assert iv["nodata_injected_by_builder"] == 0
         # Currency attributes stamped by the builder are informational evidence.
         ccy = [i for i in iv["interventions"] if i["code"] == "Amt@Ccy"]
         assert ccy and ccy[0]["severity"] == "info"
-        assert iv["review_required_instances"] > 0
-        assert "Review is required" in iv["summary_sentence"]
-        assert "automatic values require review" in xml.summary.lower()
+        # Nothing requires review because nothing was inserted. The operator is
+        # told that positively rather than by the absence of a warning.
+        assert iv["review_required_instances"] == 0
+        assert "No automatic values were inserted" in iv["summary_sentence"]
+        assert "passed schema validation" in xml.summary
+        assert "require review" not in xml.summary.lower()
+        # The reconciliation still has to close: every ND node in the XML is
+        # accounted for by the delivery CSV.
+        assert iv["nodata_in_xml"] == iv["nodata_in_delivery_csv"]
 
     def test_wrong_xsd_fails_closed(self, tmp_path, real_outcome):
         from operations_control.annex2.stages import Annex2Stages

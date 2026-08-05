@@ -119,7 +119,11 @@ def _is_iso_year(value: str) -> bool:
 # The distinction this exists to make visible:
 #   * ND already present in the projected input        (upstream truth)
 #   * ND applied by a DECLARED delivery rule           (governed, auditable)
-#   * ND injected inside this builder                  (silent until now)
+#   * ND injected inside this builder                  (Phase 2: only the
+#                                                       non-performing
+#                                                       historical block
+#                                                       remains)
+#   * value routed to NoData, never invented           (Phase 2)
 #   * value coercion                                   (fabrication risk)
 # --------------------------------------------------------------------------- #
 INSTRUMENTATION_SCHEMA_VERSION = 1
@@ -141,6 +145,31 @@ class _DeliveryInstrumentation:
         self.coercions: List[Dict[str, Any]] = []
         self.coercion_count = 0
         self.coercions_truncated = False
+        self.routed: List[Dict[str, Any]] = []
+        self.routed_count = 0
+        self.routed_truncated = False
+
+    def record_routed_to_nodata(self, *, field_code: str, original_value: str,
+                                reason: str,
+                                row_identifier: Optional[str] = None) -> None:
+        """A value that could not enter its typed branch and was NOT invented.
+
+        Phase 2 replaced fabrication with routing. This is deliberately a
+        SEPARATE channel from ``record_coercion``: a coercion changes a value,
+        a routing declines to.
+        """
+        self.routed_count += 1
+        if len(self.routed) < COERCION_RECORD_CAP:
+            self.routed.append({
+                "field_code": field_code,
+                "row_identifier": row_identifier,
+                "original_value": original_value,
+                "resulting_value": "",
+                "routed_to": "NoData branch (or refused if none is mapped)",
+                "reason": reason,
+            })
+        else:
+            self.routed_truncated = True
 
     def record_nd(self, *, nd_code: str, field_code: str, branch: str) -> None:
         self.nd_by_code[nd_code] += 1
@@ -179,6 +208,25 @@ class _DeliveryInstrumentation:
                 "truncated": bool(self.coercions_truncated),
                 "record_cap": COERCION_RECORD_CAP,
             },
+            # Phase 2: values that could not enter their typed branch and were
+            # routed to NoData (or refused) INSTEAD of being fabricated. Stated
+            # explicitly at zero, like every other category.
+            "routed_to_nodata": {
+                "count": int(self.routed_count),
+                "records": list(self.routed),
+                "truncated": bool(self.routed_truncated),
+                "record_cap": COERCION_RECORD_CAP,
+            },
+            "fabricated_values": {
+                "count": 0,
+                "note": "Phase 2 removed the BUILDER's only fabrication path "
+                        "(RREL12 -> hardcoded '2026'). The builder invents no "
+                        "value; a value it cannot place is routed to NoData "
+                        "where the mapping permits, otherwise the run fails. "
+                        "This statement covers Gate 5 only — it does not "
+                        "certify the declared Gate 4b transforms, which are "
+                        "reported separately by the normaliser.",
+            },
         }
 
 
@@ -189,23 +237,32 @@ _CURRENT_ROW_ID: Optional[str] = None
 
 
 def _coerce_record_value_for_branch(code: str, value: str) -> str:
-    """
-    Small branch-aware coercions for known Annex2 mapping edge cases.
+    """Branch-aware handling for known Annex 2 mapping edge cases.
 
-    - RREL12 maps to a Yr branch. Non-year literals should route to NoData branch.
+    RREL12 (Geographic Region Classification) maps to a ``Yr`` branch, which
+    accepts an ISO year only. A non-year literal cannot go there.
+
+    Phase 2 removed the fabrication that used to live here: an invalid value was
+    silently replaced with the hardcoded string ``"2026"``, inventing a NUTS
+    classification year that appeared in the submission as though the client had
+    reported it. It is now routed to the NoData branch — which is what this
+    function's own docstring specified all along — and if the mapping offers no
+    NoData branch, the builder raises rather than inventing a value.
+
+    Returning ``""`` hands the value to :func:`select_specs_for_value`, which
+    picks the NoData branch for an empty value where the workbook provides one
+    and otherwise leaves the field unmapped; ``apply_record_code`` then raises
+    for a mandatory field with no valid branch. Fabrication is never an option.
     """
     v = _safe_str(value)
     if code == "RREL12" and v and not _is_iso_year(v):
-        # OBSERVED, not changed. Phase 2 will make this route to the NoData
-        # branch as the docstring above already specifies; Phase 1 only makes
-        # the substitution visible.
-        _INSTR.record_coercion(
-            field_code=code, original_value=v, resulting_value="2026",
+        _INSTR.record_routed_to_nodata(
+            field_code=code, original_value=v,
             row_identifier=_CURRENT_ROW_ID,
-            reason="RREL12 maps to a Yr branch; a non-ISO-year literal is "
-                   "replaced with a hardcoded year by "
-                   "_coerce_record_value_for_branch")
-        return "2026"
+            reason="RREL12 maps to a Yr branch that accepts an ISO year only; "
+                   "a non-year value is routed to the NoData branch where the "
+                   "mapping permits one, never replaced with a fabricated year")
+        return ""
     return v
 
 
@@ -557,8 +614,23 @@ def _path_tuple_from_record_node(record_node: etree._Element, node: etree._Eleme
 
 
 def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, order_index: Dict[Tuple[str, ...], List[str]]) -> None:
-    """
-    Ensure FinDtls includes required ScndryOblgrIncm branch with NoData defaults.
+    """Ensure the XSD-mandatory ``ScndryOblgrIncm`` node SHAPE exists.
+
+    ``ScndryOblgrIncm`` is declared in ``SecondaryIncome2`` with no
+    ``minOccurs``, so it defaults to 1 — the element cannot be omitted, and
+    neither can its ``IncmVal`` / ``Vrfctn`` children.
+
+    Phase 2 removed the POLICY decision that used to live here. This function
+    previously wrote ``ND5`` into both children itself, which meant the
+    regulatory answer "there is no secondary obligor, so this is not
+    applicable" was a hardcoded line in an XML builder rather than a governed
+    rule anyone could read or approve. That answer now comes from
+    ``config/regime/annex2_delivery_rules.yaml`` (RREL20 / RREL21,
+    ``default_value: ND5``), is applied by Gate 4b, and arrives here as data
+    like every other field.
+
+    What remains is shape only: if the delivery-ready input genuinely supplied
+    neither a value nor a NoData branch, this raises rather than inventing one.
     """
     fin_nodes = record_node.findall(f".//{{{ns}}}FinDtls")
     for fin in fin_nodes:
@@ -573,21 +645,26 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
         incm_has_value = incm_val.find(f"{{{ns}}}Val") is not None
         incm_nd = incm_val.find(f"{{{ns}}}NoDataOptn")
         if not incm_has_value and incm_nd is None:
-            incm_nd = _get_or_create_singleton(incm_val, "NoDataOptn", ns, order_index, (*scndry_path, "IncmVal"))
-            nd_leaf = _get_or_create_singleton(incm_nd, "NoData", ns, order_index, (*scndry_path, "IncmVal", "NoDataOptn"))
-            nd_leaf.text = "ND5"
-            _INSTR.record_nd(nd_code="ND5", field_code="RREL20",
-                             branch="ScndryOblgrIncm/IncmVal")
+            raise ValueError(
+                "[Gate 5] RREL20 (secondary obligor income) reached the builder "
+                "with neither a value nor a NoData branch. The XSD requires "
+                "ScndryOblgrIncm/IncmVal, and the builder no longer invents an "
+                "ND code for it. Declare RREL20 in "
+                "config/regime/annex2_delivery_rules.yaml with "
+                "default_allowed: true and default_value: ND5 (not applicable "
+                "where there is no secondary obligor).")
 
         vrfctn = _get_or_create_singleton(scndry, "Vrfctn", ns, order_index, scndry_path)
         vrfctn_has_code = vrfctn.find(f"{{{ns}}}Cd") is not None
         vrfctn_nd = vrfctn.find(f"{{{ns}}}NoDataOptn")
         if not vrfctn_has_code and vrfctn_nd is None:
-            vrfctn_nd = _get_or_create_singleton(vrfctn, "NoDataOptn", ns, order_index, (*scndry_path, "Vrfctn"))
-            nd_leaf = _get_or_create_singleton(vrfctn_nd, "NoData", ns, order_index, (*scndry_path, "Vrfctn", "NoDataOptn"))
-            nd_leaf.text = "ND5"
-            _INSTR.record_nd(nd_code="ND5", field_code="RREL21",
-                             branch="ScndryOblgrIncm/Vrfctn")
+            raise ValueError(
+                "[Gate 5] RREL21 (secondary obligor income verification) "
+                "reached the builder with neither a value nor a NoData branch. "
+                "The XSD requires ScndryOblgrIncm/Vrfctn, and the builder no "
+                "longer invents an ND code for it. Declare RREL21 in "
+                "config/regime/annex2_delivery_rules.yaml with "
+                "default_allowed: true and default_value: ND5.")
 
 
 def _ensure_hstrcl_colltn_nd_defaults(non_prfrmg_data_node: etree._Element, record_node: etree._Element, ns: str, order_index: Dict[Tuple[str, ...], List[str]]) -> None:
