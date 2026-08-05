@@ -179,6 +179,24 @@ class _DeliveryInstrumentation:
     def record_coercion(self, *, field_code: str, original_value: str,
                         resulting_value: str, reason: str,
                         row_identifier: Optional[str] = None) -> None:
+        """RETAINED OBSERVABILITY CHANNEL — deliberately has no caller.
+
+        This is **not** dead code. Phase 2 removed the builder's only value
+        coercion (RREL12 -> a fabricated year), so the expected Annex 2 builder
+        coercion count is **zero**, and the benchmark records zero.
+
+        The channel is kept, executable and tested, for one reason: if a future
+        change ever makes this builder alter a value, that must be *surfaced*
+        rather than happen silently. Deleting the mechanism and hard-coding a
+        zero would make the claim unfalsifiable — ``to_dict`` reports the
+        **actually observed** count, so a zero means "nothing was recorded",
+        not "nothing can be recorded".
+
+        Adding a caller is a policy change, not a refactor: any new coercion
+        needs its own regulatory justification and belongs in declared
+        configuration first. See ``record_routed_to_nodata`` for the mechanism
+        that replaced the removed fabrication.
+        """
         self.coercion_count += 1
         if len(self.coercions) < COERCION_RECORD_CAP:
             self.coercions.append({
@@ -621,13 +639,18 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
     neither can its ``IncmVal`` / ``Vrfctn`` children.
 
     Phase 2 removed the POLICY decision that used to live here. This function
-    previously wrote ``ND5`` into both children itself, which meant the
-    regulatory answer "there is no secondary obligor, so this is not
-    applicable" was a hardcoded line in an XML builder rather than a governed
-    rule anyone could read or approve. That answer now comes from
-    ``config/regime/annex2_delivery_rules.yaml`` (RREL20 / RREL21,
-    ``default_value: ND5``), is applied by Gate 4b, and arrives here as data
-    like every other field.
+    previously wrote ``ND5`` into both children itself, which made a regulatory
+    judgement a hardcoded line in an XML builder rather than a governed rule
+    anyone could read or approve. Whichever no-data code is correct now comes
+    from ``config/regime/annex2_delivery_rules.yaml`` (RREL20 / RREL21), is
+    applied by Gate 4b, and arrives here as data like every other field.
+
+    The builder holds no opinion on which code that is, and must not acquire
+    one: the choice turns on whether borrower income is part of the product's
+    underwriting methodology, which is a product question, not an XML question.
+    Note that equity-release loans commonly have JOINT BORROWERS — a secondary
+    obligor usually exists — so the code must never be justified by the absence
+    of one.
 
     What remains is shape only: if the delivery-ready input genuinely supplied
     neither a value nor a NoData branch, this raises rather than inventing one.
@@ -651,8 +674,10 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
                 "ScndryOblgrIncm/IncmVal, and the builder no longer invents an "
                 "ND code for it. Declare RREL20 in "
                 "config/regime/annex2_delivery_rules.yaml with "
-                "default_allowed: true and default_value: ND5 (not applicable "
-                "where there is no secondary obligor).")
+                "default_allowed: true and a default_value your product "
+                "rationale supports (ND1 = not collected because the "
+                "underwriting criteria did not require it; ND5 = not "
+                "applicable to this product).")
 
         vrfctn = _get_or_create_singleton(scndry, "Vrfctn", ns, order_index, scndry_path)
         vrfctn_has_code = vrfctn.find(f"{{{ns}}}Cd") is not None

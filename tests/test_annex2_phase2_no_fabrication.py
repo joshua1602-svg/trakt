@@ -585,5 +585,78 @@ class TestPhase2IsDeterministicAndOutputNeutral(unittest.TestCase):
             BUILD._INSTR.reset()
 
 
+# --------------------------------------------------------------------------- #
+# 6. The coercion channel is retained on purpose, not left behind
+# --------------------------------------------------------------------------- #
+class TestBuilderCoercionChannelIsRetainedDeliberately(unittest.TestCase):
+    """`record_coercion` has no production caller — by design, not by accident.
+
+    Phase 2 removed the builder's only value coercion, so the expected count is
+    zero. The mechanism stays so that a future builder coercion is *surfaced*
+    rather than silent, and so the reported zero is an observation rather than
+    a hard-coded literal.
+
+    Without this class the method looks exactly like dead code and a future
+    tidy-up would delete it, taking the falsifiability of "zero" with it.
+    """
+
+    def setUp(self):
+        BUILD._INSTR.reset()
+
+    def tearDown(self):
+        BUILD._INSTR.reset()
+
+    def test_the_channel_still_records_an_event(self):
+        instr = BUILD._DeliveryInstrumentation()
+        instr.record_coercion(field_code="ZZZ99", original_value="a",
+                              resulting_value="b", row_identifier="EXP-1",
+                              reason="retention check")
+        report = instr.to_dict()
+        self.assertEqual(report["coercions"]["count"], 1)
+        self.assertEqual(report["coercions"]["records"][0]["original_value"], "a")
+
+    def test_the_reported_zero_is_observed_not_hard_coded(self):
+        """If the count were a literal, recording could not move it."""
+        instr = BUILD._DeliveryInstrumentation()
+        self.assertEqual(instr.to_dict()["coercions"]["count"], 0)
+        instr.record_coercion(field_code="ZZZ99", original_value="a",
+                              resulting_value="b", reason="retention check")
+        self.assertEqual(instr.to_dict()["coercions"]["count"], 1)
+        instr.reset()
+        self.assertEqual(instr.to_dict()["coercions"]["count"], 0)
+
+    def test_the_report_states_zero_explicitly_rather_than_omitting_it(self):
+        report = BUILD._DeliveryInstrumentation().to_dict()
+        self.assertIn("coercions", report)
+        self.assertEqual(report["coercions"]["count"], 0)
+        self.assertEqual(report["coercions"]["records"], [])
+        self.assertIs(report["coercions"]["truncated"], False)
+
+    def test_no_production_caller_exists_and_that_is_intentional(self):
+        """Guards both directions: it must stay uncalled AND stay documented.
+
+        A new production caller would be a policy change — the builder would be
+        altering a value again — so it must not appear silently.
+        """
+        source = _BUILDER.read_text(encoding="utf-8")
+        body = source[source.index("def record_coercion"):]
+        body = body[:body.index("\n    def ")]
+        self.assertIn("RETAINED OBSERVABILITY CHANNEL", body,
+                      "the retention rationale must stay next to the method")
+        # Only the definition and the docstring's own reference — no call site.
+        calls = re.findall(r"_INSTR\.record_coercion\(|self\.record_coercion\(",
+                           source)
+        self.assertEqual(calls, [],
+                         "a production caller appeared; a builder coercion is a "
+                         "policy change and needs its own justification")
+
+    def test_the_channel_is_exercised_by_the_test_suite(self):
+        """It must remain executable, not merely present."""
+        phase1 = (_REPO / "tests" / "test_annex2_phase1_instrumentation.py").read_text(
+            encoding="utf-8")
+        self.assertIn("record_coercion", phase1,
+                      "the retained channel must stay under test")
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

@@ -519,11 +519,43 @@ field_rules:
   # Workbook basis: both codes are Optional priority with "ND1-4 allowed; ND5
   # allowed" (config/regime/annex2_field_universe.yaml).
   #
-  # ND5 = "Not applicable" (config/system/standards_library.yaml). That is the
-  # correct code here: where a loan has a single obligor there IS no secondary
-  # obligor, so the field does not apply. This differs deliberately from the
-  # sibling RREL19 above, which uses ND1 ("not available") because primary
-  # income IS applicable and merely missing.
+  # !! THE ND CODE BELOW IS UNDER REVIEW AND IS NOT YET AUTHORITATIVE. !!
+  #
+  # These rules currently declare ND5. That value was inherited from the Gate 5
+  # builder, which hard-coded it before Phase 2 moved the decision here; Phase 2
+  # preserved the value to keep the benchmark byte-identical, NOT because ND5
+  # had been established as correct. It has since been reviewed and the
+  # evidence points to ND1. Do not treat the benchmark as evidence of
+  # correctness.
+  #
+  # An earlier version of this comment justified ND5 on the basis that a
+  # single-obligor loan has no secondary obligor. **That reasoning was wrong.**
+  # Equity-release loans commonly have JOINT BORROWERS, so a secondary obligor
+  # frequently does exist. The real product fact is different: borrower income
+  # — primary and secondary alike — is generally not part of equity-release
+  # underwriting, which is driven by age, property value and LTV.
+  #
+  # Why that points to ND1 rather than ND5:
+  #   * ND1 = "Data not collected as not required by the lending or
+  #     underwriting criteria" (config/system/standards_library.yaml). That is
+  #     a verbatim description of the equity-release position.
+  #   * ND5 = "Not applicable" — the datum does not exist for this product.
+  #   * RREL16 (Primary Income) carries the SAME workbook wording ("...income
+  #     used to underwrite the underlying exposure...") and ESMA sets
+  #     nd5_allowed: FALSE for it. The standard-setter has therefore already
+  #     rejected the reading that "income was not used in underwriting" makes
+  #     an income field not-applicable.
+  #   * config/asset/product_defaults_ERM.yaml already applies ND1 uniformly to
+  #     the whole income family (RREL16/17/18/19 and RREL20/21), and reserves
+  #     ND5 for features the product genuinely lacks (maturity_date "No fixed
+  #     term", scheduled_principal_payment_frequency "No payments").
+  #
+  # Changing these to ND1 alters 22,070 XML nodes and therefore the benchmark
+  # SHA-256, so it requires explicit sign-off and a re-baselined benchmark. It
+  # is deliberately NOT done as part of merge preparation. Until it is decided,
+  # this file and product_defaults_ERM.yaml disagree (ND5 here, ND1 there); the
+  # delivery path uses the value below, and the disagreement is asserted by
+  # tests/test_annex2_secondary_income_applicability.py so it cannot go quiet.
   #
   # Before Phase 2 these values were written by xml_builder_annex2.py itself.
   # Declaring them here makes the regulatory answer readable, reviewable and
