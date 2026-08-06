@@ -1,0 +1,51 @@
+{
+  "asset_class": "bridge",
+  "asset_subtype": "residential_bridge",
+  "case_id": "bridge_unsupported_schema_guard_v1",
+  "client_id": "sim_bridge",
+  "currency": "GBP",
+  "expected_failure_class": "unsupported_source_schema",
+  "expected_outcome": "failure",
+  "expected_regime": {
+    "applicability": "not_applicable",
+    "artefact_status": "not_applicable",
+    "reason": "Guard case: the run never reaches a regime.",
+    "regime_id": null
+  },
+  "expected_risk_status": "green",
+  "expected_targeted_limits": [],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 33994356.24,
+    "closing_loan_count": 57,
+    "direction": "decrease",
+    "month_on_month_direction": [
+      "decrease",
+      "increase",
+      "decrease",
+      "decrease",
+      "decrease",
+      "decrease"
+    ],
+    "opening_balance": 39436656.52,
+    "opening_loan_count": 60,
+    "total_movement": -5442300.28
+  },
+  "periods_digest": {
+    "count": 6,
+    "sha256": "af2cbaa7aa379fd9325648551623830587c569703e8a3f3af69a5f23511ce023"
+  },
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41901,
+  "simulation_version": 1,
+  "spv_id": "SPV_BR_1",
+  "truth_version": 1
+}

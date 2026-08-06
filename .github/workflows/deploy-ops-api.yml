@@ -64,17 +64,12 @@ jobs:
         # effective-configuration contract, and the administrator configuration
         # API this service exposes.
         #
-        # Two real-component Annex 2 golden tests are deselected BY NAME. They
-        # assert the XML builder's output validates against the vendored draft
-        # ESMA XSD, and they are already failing on main (verified against a
-        # clean tree) — the generated file does not pass the format check. They
-        # are deselected here so this deployment gate reflects THIS service's
-        # health rather than a pre-existing product failure. They are not
-        # skipped in the suite itself, and they must be fixed separately.
+        # The two real-component Annex 2 golden tests were previously deselected
+        # here because they failed on main: the builder's output did not pass
+        # XSD validation. That is fixed, so the deselects are removed and the
+        # gate now covers the full suite including real XSD validation.
         run: |
-          python -m pytest tests/operations_control/ -q \
-            --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_normaliser_and_builder_pass_xsd" \
-            --deselect "tests/operations_control/test_annex2_delivery.py::TestRealComponentsMiniGolden::test_builder_interventions_are_captured"
+          python -m pytest tests/operations_control/ -q
 
       - name: Test the deployment scripts
         # All three suites run with stubbed `az`/`curl` and need no Azure access.

@@ -1,0 +1,48 @@
+{
+  "acquisition_date": null,
+  "asset_class": "asset_finance",
+  "asset_subtype": "equipment_finance",
+  "case_id": "asset_finance_clean_sme_equipment_v1",
+  "client_id": "sim_asset_finance",
+  "currency": "GBP",
+  "dialects": [
+    "clean_csv",
+    "lender_excel",
+    "european_locale_csv"
+  ],
+  "economic_intent": [
+    "clean_performing"
+  ],
+  "expectation": "success",
+  "expected_failure_class": null,
+  "expected_validation_warnings": [],
+  "jurisdiction": "GB",
+  "months": 6,
+  "opening_loan_count": 115,
+  "portfolio_id": "direct_001",
+  "portfolio_type": "equipment",
+  "profiles": [
+    "smoke",
+    "standard"
+  ],
+  "purpose": "Baseline: a clean SME equipment-finance book. Proves equipment finance runs as an asset-finance SUBTYPE through --portfolio-type equipment with no new architecture.",
+  "regime": {
+    "applicability": "applicable",
+    "artefact_status": "awaiting_configuration",
+    "reason": "Leasing exposures. The projection is supported; no XML delivery template is committed for Annex 8, so the artefact awaits deployment configuration.",
+    "regime_id": "ESMA_Annex8"
+  },
+  "risk_intent": {
+    "intended_status": "green",
+    "targeted_limits": []
+  },
+  "run_key": "asset_finance_clean_sme_equipment_v1|asset_finance|seed=41301|v1",
+  "scale": "small",
+  "schema_evolution": [],
+  "seed": 41301,
+  "seller_name": null,
+  "simulation_version": 1,
+  "source_portfolio_type": "direct",
+  "spv_id": "SPV_AF_1",
+  "start_reporting_date": "2025-01-31"
+}

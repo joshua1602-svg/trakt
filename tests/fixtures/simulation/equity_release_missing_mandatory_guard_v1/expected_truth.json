@@ -1,0 +1,51 @@
+{
+  "asset_class": "equity_release",
+  "asset_subtype": "lump_sum",
+  "case_id": "equity_release_missing_mandatory_guard_v1",
+  "client_id": "sim_equity_release",
+  "currency": "GBP",
+  "expected_failure_class": "missing_mandatory_data",
+  "expected_outcome": "failure",
+  "expected_regime": {
+    "applicability": "not_applicable",
+    "artefact_status": "not_applicable",
+    "reason": "Guard case: the run never reaches a regime.",
+    "regime_id": null
+  },
+  "expected_risk_status": "green",
+  "expected_targeted_limits": [],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 11133911.71,
+    "closing_loan_count": 64,
+    "direction": "increase",
+    "month_on_month_direction": [
+      "increase",
+      "decrease",
+      "increase",
+      "increase",
+      "increase",
+      "increase"
+    ],
+    "opening_balance": 10333983.23,
+    "opening_loan_count": 61,
+    "total_movement": 799928.48
+  },
+  "periods_digest": {
+    "count": 6,
+    "sha256": "0dbecf81b62b2d4b56d953377bec824f6911bd06589e771f64691a7f7f4130c0"
+  },
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41902,
+  "simulation_version": 1,
+  "spv_id": "SPV_ER_1",
+  "truth_version": 1
+}

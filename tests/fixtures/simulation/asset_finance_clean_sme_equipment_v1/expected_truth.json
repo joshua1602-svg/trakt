@@ -1,0 +1,51 @@
+{
+  "asset_class": "asset_finance",
+  "asset_subtype": "equipment_finance",
+  "case_id": "asset_finance_clean_sme_equipment_v1",
+  "client_id": "sim_asset_finance",
+  "currency": "GBP",
+  "expected_failure_class": null,
+  "expected_outcome": "success",
+  "expected_regime": {
+    "applicability": "applicable",
+    "artefact_status": "awaiting_configuration",
+    "reason": "Leasing exposures. The projection is supported; no XML delivery template is committed for Annex 8, so the artefact awaits deployment configuration.",
+    "regime_id": "ESMA_Annex8"
+  },
+  "expected_risk_status": "green",
+  "expected_targeted_limits": [],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 7932823.75,
+    "closing_loan_count": 139,
+    "direction": "increase",
+    "month_on_month_direction": [
+      "increase",
+      "decrease",
+      "increase",
+      "increase",
+      "increase",
+      "increase"
+    ],
+    "opening_balance": 6691109.28,
+    "opening_loan_count": 120,
+    "total_movement": 1241714.47
+  },
+  "periods_digest": {
+    "count": 6,
+    "sha256": "926fed6f16e5d8d21f3f861c4ccc0bc55f79112c31d7eb95d8188e4a4a13ad22"
+  },
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41301,
+  "simulation_version": 1,
+  "spv_id": "SPV_AF_1",
+  "truth_version": 1
+}
