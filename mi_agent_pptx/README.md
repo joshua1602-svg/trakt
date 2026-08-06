@@ -47,10 +47,17 @@ python -m mi_agent_pptx.cli \
 
 Optional flags:
 
-- `--lens total|direct|acquired|cohort` — portfolio lens (default: deck config).
-- `--consolidated` — consolidated funded lens; **suppresses broker channel**
-  where acquired portfolios carry no broker data.
+- `--portfolio-context total|direct|acquired|<source_portfolio_id>` — the
+  **governed analytical scope** the report covers. Resolved through
+  `mi_agent_api.portfolio_context.resolve_context()`, the same service React and
+  Copilot use. Separate from `--client-id`, which is tenant/client identity.
+- `--tenant-id` — owning tenant (defaults to the client id).
+- `--lens` — deprecated alias for `--portfolio-context`.
+- `--consolidated` — accepted for compatibility (no effect).
 - `--work-dir` — where intermediate chart PNGs are written.
+
+Exit codes: `0` publishable · `3` generated but **blocked from publication** by a
+mandatory preflight gate (see below) · non-zero otherwise.
 
 ## Module layout
 
@@ -69,14 +76,55 @@ Optional flags:
 | `validation.py`       | Enforce 12–15 slides, straplines populated, mandatory-content checks. |
 | `cli.py`              | Command-line entry point. |
 
+## Portfolio context, composition and governed commentary
+
+The deck is **portfolio-aware**. Three modules carry that:
+
+| Module | Responsibility |
+|---|---|
+| `deck_context.py` | `DeckPortfolioContext` — scope, constituent books, per-book reporting dates, and a governed funded snapshot per portfolio type. Composes existing contracts; computes no economic value. |
+| `composition.py` | Decides which slides the portfolio justifies (`when:` conditions + per-type data guards) and records every omission with a reason. |
+| `insights.py` | The deterministic executive summary. Extends the governed `Insight` contract from `mi_agent_api`. **No LLM.** |
+| `preflight.py` | Publication gates. A deck that fails one is generated but withheld. |
+
+Consequences:
+
+- every deck states its **reporting scope, constituent books and reporting
+  dates** on the cover, and carries a scope stamp in every slide footer — a
+  single-book pack can no longer be read as a total-portfolio pack;
+- there are **no placeholder slides**: a section with no data is omitted and
+  explained in the appendix's omission ledger;
+- when both a direct and an acquired book are in scope, the pack adds a
+  **Portfolio Composition** slide and a **Direct vs Acquired** movement
+  attribution, so a blended total cannot hide a growing book offset by a
+  redeeming one.
+
 ## Deck structure (`configs/pptx/investor_pack.yaml`)
 
-Cover · Executive Summary (KPI tiles) · Pipeline Overview · Pipeline Conversion
-· Run-Rate / Forecast · Funded Balance Evolution · Stratifications I–III
-(LTV / ticket / age / structure / region / broker) · Multi-Dimensional Risk
-Analytics (LTV×age heatmap + bubble) · Vintage / Origination · Scenario /
-Forecast Snapshot · Risk Monitor · Methodology & Notes · Appendix (data
-coverage).
+The deck has **no fixed length** — composition decides it. The configured
+sequence is: Cover · Executive Summary (governed observations) · Portfolio
+Composition · Direct vs Acquired _(mixed books only)_ · Funded Key Measures ·
+Stratifications I–III · Multi-Dimensional Risk Analytics · Geographic Exposure ·
+Funded Balance Evolution _(≥2 periods)_ · Origination Vintages · Pipeline
+Overview / Evolution / Funnel / Flow _(pipeline only)_ · Forecast Bridge /
+Projection _(forecast only)_ · Risk Limits _(limits only)_ · Methodology ·
+Appendix.
+
+Cover, Methodology and Appendix are mandatory — they are the pack's disclosure
+spine, and a deck missing one fails preflight.
+
+## Publication gates (`preflight.py`)
+
+Checked against the **rendered file**, not the build record: the deck opens; the
+mandatory slides are present; the reporting scope, every reporting date and
+every constituent book are rendered; direct + acquired reconcile to the total in
+both balance and loan count; an executive summary was generated where
+observation was possible; no placeholder slide reached the deck.
+
+On failure the deck is still written (an operator needs it to diagnose the run),
+a `<deck>.preflight.json` sidecar records the verdict, the CLI returns `3`, and
+`pptx_stage` withholds durable publication and marks the artefact
+`generated_not_published`.
 
 ## Charting
 

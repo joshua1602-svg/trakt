@@ -381,37 +381,27 @@ _ORIG_DATE = "origination_date"
 _VINTAGE = "vintage_year"
 
 
-def _column(df, col: str):
-    """The whole column, for resolving a percent scale independently of any
-    subset being aggregated. None when the frame does not carry it."""
-    if df is None or col not in getattr(df, "columns", []):
-        return None
-    return df[col]
-
-
 def _pct_fraction(df, col: str, scale_from=None) -> Optional[float]:
-    """Balance-weighted average of a percent column, normalised to a FRACTION.
+    """Balance-weighted average of a percent column, normalised to a FRACTION so
+    the UI's ×100 formatter renders it correctly (the tape stores LTV as a
+    fraction but the interest rate in points).
 
-    THE GOVERNED PERCENT UNIT CONTRACT. Every percent metric this module emits
-    is a fraction (0.395 == 39.5%), whatever the tape stores, so one display
-    rule — multiply by 100 exactly once — is correct for every route. The tape
-    is not consistent on its own: prep normalises LTV to a 0..1 ratio, but the
-    interest rate arrives in points (9.55), so the scale has to be resolved
-    rather than assumed.
-
-    ``scale_from`` is the series the storage scale is decided from, and it must
-    be the WHOLE column, not the subset being aggregated. Deciding per subset
-    lets one cohort be scaled differently from its neighbour: a small pool of
-    genuinely low-LTV loans stored in points has a median under the 1.5
-    threshold, so it is read as a fraction and renders 1.23 as 123%. The scale
-    is a property of the column, so it is read from the column.
+    ``scale_from`` is the frame the storage unit is inferred from, and should be
+    the WHOLE reporting period rather than the subset being averaged. The unit is
+    a property of the tape, not of whichever loans a cohort happens to contain,
+    and ``percent_storage_scale`` is a heuristic over the values: a deeply
+    seasoned roll-up cohort whose fractional LTVs mostly exceed 1.5 was
+    classified as points and divided by 100, so a true 175% LTV rendered as
+    1.75%. Inferring from the full period makes a subset unable to re-decide the
+    unit, which is what produced a 100x discontinuity inside a single series.
     """
     wavg = _weighted_avg(df, col)
     if wavg is None:
         return None
-    basis = scale_from if scale_from is not None else (
-        df[col] if col in df.columns else None)
-    if basis is not None and percent_storage_scale(basis) == PERCENT_POINTS:
+    basis = scale_from if scale_from is not None and col in getattr(
+        scale_from, "columns", ()) else df
+    if col in getattr(basis, "columns", ()) and \
+            percent_storage_scale(basis[col]) == PERCENT_POINTS:
         return round(wavg / 100.0, 6)
     return wavg
 
@@ -456,47 +446,140 @@ def _origination_labels(df, grain: str = "Y"):
     return None
 
 
+#: Loan identifier columns, in preference order. Cohort membership is a set of
+#: these; without one, a static pool cannot be formed and the service says so
+#: rather than falling back to a per-period filter that only looks like one.
+_LOAN_ID_COLS = ("unique_identifier", "loan_id", "account_id", "loan_reference")
+
+#: Bumped whenever the membership rule or the emitted contract changes, so every
+#: channel can assert it is reading the same methodology.
+COHORT_METHODOLOGY_VERSION = "static-pool-2"
+
+
+def _loan_id_col(df) -> Optional[str]:
+    return next((c for c in _LOAN_ID_COLS if c in getattr(df, "columns", ())), None)
+
+
+def _member_ids(df, col: str) -> set:
+    ids = df[col].dropna().astype(str)
+    return set(ids.tolist())
+
+
 def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
                               lens_filters: Optional[Dict[str, str]] = None,
                               lens_label: str = "Total",
                               vintage: Optional[str] = None, grain: str = "Y",
                               to_run_id: Optional[str] = None) -> Dict[str, Any]:
-    """Static-pool progression: how a cohort's funded metrics (balance, loan
-    count, WA LTV, WA rate, NNEG exposure/headroom) evolve ACROSS reporting
-    periods. The cohort is defined by a source-portfolio lens (Total / direct /
-    acquired / a cohort id like ``acquired_001``) AND, optionally, an origination
-    ``vintage`` at the chosen ``grain`` (Y/Q/M) — so "acquired_001 loans
-    originated in 2023" is a first-class cohort even within the consolidated book."""
+    """Static-pool progression: a cohort FIXED AT FORMATION, tracked forward.
+
+    The membership rule, and the whole point of this service:
+
+      1. the formation cut is the earliest reporting period in which the cohort
+         has any loans;
+      2. the loan identifiers present at that cut ARE the cohort, for life;
+      3. every later period reports only those identifiers;
+      4. surviving membership is therefore always a subset of formation
+         membership, and the surviving count can hold or fall but never rise;
+      5. a loan boarded later carrying an old origination date does NOT enter an
+         already-formed pool;
+      6. exits are formation identifiers no longer present.
+
+    This replaced a per-period re-filter on origination vintage. That rule
+    reselected members every period, so a late-boarded loan of an earlier vintage
+    joined its cohort and the "surviving" count rose — which made retention,
+    exits and seasoning measures of a moving population. The vintage filter is
+    still what SELECTS the cohort at formation; it is no longer what defines
+    membership afterwards.
+
+    Balance may exceed 100% of formation, because roll-up interest accrues on
+    surviving loans. Loan count may not.
+
+    A corrected upload for a later reporting date replaces that period's
+    observation without touching the formation rule; a corrected FORMATION
+    snapshot re-forms the pool, because the formation cut is derived from the
+    frames rather than stored.
+    """
+    frames = list(funded_frames(output_root, client_id, to_run_id))
+    scoped: List[Dict[str, Any]] = []
+    for fr in frames:
+        d = _scope_frame_lens(fr.get("df"), lens_filters)
+        if d is not None:
+            scoped.append({**fr, "df": d})
+
+    id_col = next((_loan_id_col(f["df"]) for f in scoped if _loan_id_col(f["df"])), None)
     vintage_filterable = True
-    periods: List[Dict[str, Any]] = []
-    for fr in funded_frames(output_root, client_id, to_run_id):
-        full = fr.get("df")
-        d = _scope_frame_lens(full, lens_filters)
-        if d is None:
-            continue
+
+    # -- 1/2. formation: the earliest period holding this cohort -------------
+    formation: Optional[Dict[str, Any]] = None
+    formation_at = -1                      # INDEX, not identity: `formation`
+    formation_ids: set = set()             # is a rebuilt dict, never `fr` itself
+    for i, fr in enumerate(scoped):
+        d = fr["df"]
         if vintage:
             labels = _origination_labels(d, grain)
             if labels is None:
                 vintage_filterable = False
-                d = d.iloc[0:0]
-            else:
-                d = d[labels.astype(str) == str(vintage)]
+                continue
+            d = d[labels.astype(str) == str(vintage)]
+        if len(d):
+            formation = {**fr, "df": d}
+            formation_at = i
+            if id_col:
+                formation_ids = _member_ids(d, id_col)
+            break
+
+    periods: List[Dict[str, Any]] = []
+    data_quality: Dict[str, Any] = {}
+    if formation is not None and id_col:
+        # Duplicate identifiers within the formation cut are a data-quality
+        # finding, not something to silently de-duplicate away: the count and the
+        # id-set would then disagree, and every retention figure divides by one
+        # of them.
+        dup = int(len(formation["df"]) - len(formation_ids))
+        if dup:
+            data_quality["duplicate_formation_ids"] = dup
+
+    for i, fr in enumerate(scoped):
+        if formation is None or i < formation_at:
+            continue                       # periods BEFORE formation are not the pool
+        d = fr["df"]
+        if id_col:
+            # -- 3. only the frozen identifiers, never a re-filter ------------
+            d = d[d[id_col].astype(str).isin(formation_ids)]
+        else:
+            # Without an identifier this cannot be a static pool. Report the
+            # formation cut alone rather than a series that only looks like one.
+            d = d if i == formation_at else d.iloc[0:0]
+
+        surviving_ids = _member_ids(d, id_col) if id_col else set()
         metrics: Dict[str, Any] = {
             "funded_balance": _bal_sum(d),
             "loan_count": int(len(d)),
-            # The scale comes from the WHOLE period frame, never the cohort
-            # slice — see _pct_fraction. A vintage is a subset by construction.
-            "wa_ltv": _pct_fraction(
-                d, "current_loan_to_value", _column(full, "current_loan_to_value")),
-            "wa_interest_rate": _pct_fraction(
-                d, "current_interest_rate", _column(full, "current_interest_rate")),
+            # The unit comes from the WHOLE period, never from the cohort subset.
+            "wa_ltv": _pct_fraction(d, "current_loan_to_value", fr["df"]),
+            "wa_interest_rate": _pct_fraction(d, "current_interest_rate", fr["df"]),
             "avg_borrower_age": _simple_avg(d, "youngest_borrower_age"),
         }
         metrics.update(_nneg_metrics(d))
+        formation_balance = _bal_sum(formation["df"]) if formation is not None else None
+        formation_count = int(len(formation["df"])) if formation is not None else 0
+        exits = max(0, len(formation_ids) - len(surviving_ids)) if id_col else None
         periods.append({
             "period": _period_label(fr),
             "reporting_date": fr.get("reporting_date"),
+            "source_run": fr.get("run_id"),
+            "snapshot": fr.get("source"),
             "loanCount": int(len(d)),
+            "survivingLoanCount": int(len(d)),
+            "survivingLoanIds": sorted(surviving_ids) if id_col else None,
+            "survivingBalance": metrics["funded_balance"],
+            "exitsCount": exits,
+            "loanRetention": (round(len(surviving_ids) / len(formation_ids) * 100.0, 4)
+                              if id_col and formation_ids else None),
+            "balanceRetention": (round(metrics["funded_balance"] / formation_balance * 100.0, 4)
+                                 if formation_balance else None),
+            "seasoningPeriods": len(periods),
+            "monthsOnBook": _simple_avg(d, "months_on_book"),
             "metrics": metrics,
         })
 
@@ -506,26 +589,49 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
         reason = ("no loans match this cohort in any reporting period"
                   if vintage_filterable else
                   "origination vintage is not available on the funded tape")
+    elif not id_col:
+        reason = ("the funded tape carries no loan identifier, so cohort "
+                  "membership cannot be fixed at formation")
     metric_keys = ["funded_balance", "loan_count", "wa_ltv", "wa_interest_rate",
                    "avg_borrower_age"]
     if any("nneg_exposure" in p["metrics"] for p in periods):
         metric_keys += ["nneg_exposure", "nneg_headroom", "nneg_headroom_pct"]
+
+    counts = [p["loanCount"] for p in periods if p["loanCount"]]
+    if any(b > a for a, b in zip(counts, counts[1:])):
+        # Cannot happen with a frozen set; asserted here so a future regression
+        # surfaces in the contract rather than in a slide.
+        data_quality["membership_not_fixed"] = True
+
     return {
         "dataset": "cohort_progression",
         "portfolioId": client_id,
-        "available": available,
+        "available": available and bool(id_col),
         "reason": reason,
         "lens": lens_label,
         "vintage": vintage,
         "grain": grain,
+        # -- the versioned static-pool contract ------------------------------
+        "methodologyVersion": COHORT_METHODOLOGY_VERSION,
+        "membershipRule": "fixed_at_formation",
+        "cohortId": f"{lens_label}:{vintage}" if vintage else lens_label,
+        "loanIdColumn": id_col,
+        "formationDate": formation.get("reporting_date") if formation else None,
+        "formationPeriod": _period_label(formation) if formation else None,
+        "formationLoanIds": sorted(formation_ids) if id_col else None,
+        "formationLoanCount": len(formation_ids) if id_col else (
+            int(len(formation["df"])) if formation is not None else 0),
+        "formationBalance": _bal_sum(formation["df"]) if formation is not None else None,
+        "dataQuality": data_quality,
         "metricsAvailable": metric_keys,
         "periods": periods,
         "singlePeriod": len([p for p in periods if p["loanCount"]]) <= 1,
         "lineage": {
             "source": "governed funded reporting periods (static pool)",
             "metric": "cohort funded metrics per reporting period",
-            "note": ("Static-pool seasoning: the SAME cohort (source portfolio "
-                     "± origination vintage) tracked across reporting periods."),
+            "note": ("Static pool: the loan identifiers present at the formation "
+                     "cut, tracked forward. Membership is frozen at formation, so "
+                     "the surviving count can hold or fall but never rise."),
         },
     }
 
@@ -613,12 +719,75 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
         "uniqueWeeklyExtractsUsed": inv.get("uniqueWeeklyExtractsUsed"),
         "periods": periods,
         "byStage": by_stage,
+        # Governed trailing five-week average of the SAME weekly series above,
+        # using the SAME window and the SAME trailing-mean helper the funnel
+        # already publishes per stage. Additive: no existing field changes.
+        "fiveWeekAverage": five_week_average(periods),
         "lineage": {
             "source": "governed weekly pipeline extracts (deduplicated)",
             "metric": "origination pipeline amount / weighted expected funded per extract",
+            "fiveWeekAverage": _FIVE_WEEK_BASIS,
             "primarySourcePreference": inv.get("primarySourcePreference"),
         },
         "singlePeriod": len(periods) <= 1,
+    }
+
+
+#: How the total-pipeline five-week average is defined. Stated once, quoted by
+#: every channel that shows the comparison, so a card and a chart can never
+#: describe the same number differently.
+_FIVE_WEEK_BASIS = (
+    "trailing mean of the last 5 governed weekly extracts INCLUDING the current "
+    "week, on the pipeline STOCK level (the same window and convention as the "
+    "origination funnel's fiveWeekAvgStock* fields)")
+
+#: The metrics the trailing average is published for. Each is already a governed
+#: per-week value on ``periods[].metrics`` — this adds no new measure.
+_FIVE_WEEK_METRICS = ("pipeline_amount", "pipeline_case_count",
+                      "weighted_expected_funded_amount")
+
+
+def five_week_average(periods: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Trailing five-week average of the governed weekly pipeline series.
+
+    THE governed total-pipeline five-week comparison, shared by React, the
+    investor deck and the Teams Portfolio Update so none of them has to derive
+    one. It computes nothing new: it is the existing trailing-mean helper over
+    the existing per-week metrics, at the existing 5-week window.
+
+    ``weeksObserved`` is published alongside every value because a "five-week
+    average" over two weeks of history is a materially weaker statement, and a
+    caller that cannot see the sample size cannot know to say so. ``available``
+    is False when there is no history at all — a caller must then omit the
+    comparison with a reason rather than compare against a fabricated baseline.
+    """
+    window = _CONVERSION_WINDOW
+    values: Dict[str, Optional[float]] = {}
+    observed: Dict[str, int] = {}
+    current: Dict[str, Optional[float]] = {}
+    for metric in _FIVE_WEEK_METRICS:
+        series = [(p.get("metrics") or {}).get(metric) for p in periods]
+        series = [(float(v) if v is not None else None) for v in series]
+        values[metric] = _trailing_avg(series, window)
+        observed[metric] = _window_count(series, window)
+        current[metric] = series[-1] if series else None
+
+    return {
+        "available": any(v is not None for v in values.values()),
+        "window": window,
+        "basis": _FIVE_WEEK_BASIS,
+        "weeksObserved": max(observed.values()) if observed else 0,
+        "weeksObservedByMetric": observed,
+        "current": current,
+        "average": values,
+        # Signed percentage difference of the current week against the trailing
+        # mean, per metric. Emitted here rather than at each call site so every
+        # channel divides the same way round and rounds identically.
+        "differencePct": {
+            m: (round((current[m] - values[m]) / abs(values[m]) * 100.0, 1)
+                if current.get(m) is not None and values.get(m) else None)
+            for m in _FIVE_WEEK_METRICS
+        },
     }
 
 

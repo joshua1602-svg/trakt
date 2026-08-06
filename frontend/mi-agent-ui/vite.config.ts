@@ -24,7 +24,10 @@ export default defineConfig({
     // so the identity request fell through to the dev server and came back as
     // the SPA's index.html (or a 404) instead of reaching the API.
     proxy: Object.fromEntries(
-      ["/mi", "/health", "/me", "/v1"].map((route) => [
+      // "/api" is the DEPLOYED form (Static Web Apps linked backend). The bare
+      // forms remain so an existing local setup with VITE_AGENT_API_URL=/ keeps
+      // working; the API answers on both (mi_agent_api/gateway.py).
+      ["/api", "/mi", "/health", "/me", "/v1"].map((route) => [
         route,
         { target: process.env.VITE_PROXY_TARGET || "http://localhost:8000", changeOrigin: true },
       ]),

@@ -63,7 +63,16 @@ def build_parser() -> argparse.ArgumentParser:
                         "MI_AGENT_PIPELINE_ROOT). Defaults to the run dir's parent.")
     p.add_argument("--prior-run-dir", default=None,
                    help="Previous reporting-period run directory (enables MoM deltas).")
-    p.add_argument("--lens", default=None, help="(accepted for compatibility)")
+    p.add_argument("--portfolio-context", default=None,
+                   help="Governed portfolio scope this report covers: 'total' "
+                        "(default), a type group ('direct' / 'acquired') or a "
+                        "single source_portfolio_id. This is the analytical "
+                        "scope and is separate from --client-id (tenant/client "
+                        "identity).")
+    p.add_argument("--tenant-id", default=None,
+                   help="Owning tenant (defaults to the client id).")
+    p.add_argument("--lens", default=None,
+                   help="Deprecated alias for --portfolio-context.")
     p.add_argument("--consolidated", action="store_true",
                    help="(accepted for compatibility)")
     p.add_argument("--work-dir", default=None)
@@ -260,9 +269,54 @@ def _resolve_pipeline_tape(artifacts: RunArtifacts, as_of: Optional[str],
 # Entry point.
 # --------------------------------------------------------------------------- #
 
+#: Exit code meaning "the deck was generated but must NOT be published".
+#: Distinct from 0 (publishable) and from a hard failure, so the orchestration
+#: can withhold publication without treating the run as crashed.
+PREFLIGHT_BLOCKED_RC = 3
+
+#: Sidecar carrying the publication verdict and the artefact context, written
+#: next to the deck so the orchestration (and an operator) can read it.
+PREFLIGHT_SUFFIX = ".preflight.json"
+
+
+def preflight_path(output: str | Path) -> Path:
+    return Path(str(output) + PREFLIGHT_SUFFIX)
+
+
+def _write_preflight(output, report, preflight, *, deck_meta=None, data=None) -> None:
+    """Persist the publication verdict + artefact context beside the deck."""
+    import json
+    diagnostics = getattr(data, "diagnostics", {}) or {}
+    payload = {
+        "deck": str(report.get("output")),
+        "preflight": preflight.to_dict(),
+        "portfolio_context": report.get("portfolio_context"),
+        "insights": report.get("insights"),
+        "omitted_slides": report.get("omitted_slides"),
+        "template_version": (deck_meta or {}).get("template_version"),
+        "source_runs": {"client_id": getattr(data, "client_id", None),
+                        "run_id": getattr(data, "run_id", None)},
+        "input_snapshots": {
+            "funded_current_source": diagnostics.get("fundedCurrentSource"),
+            "pipeline_current_source": diagnostics.get("pipelineCurrentSource"),
+            "funded_cuts_found": diagnostics.get("fundedCutsFound"),
+            "pipeline_snapshots_found": diagnostics.get("pipelineSnapshotsFound"),
+        },
+        "slides": [{"id": r.get("id"), "title": r.get("title"),
+                    "placeholder": bool(r.get("placeholder"))}
+                   for r in (report.get("slides") or [])],
+    }
+    try:
+        preflight_path(output).write_text(json.dumps(payload, indent=2, default=str),
+                                          encoding="utf-8")
+    except OSError as exc:
+        print(f"[preflight][warn] could not write the preflight sidecar: {exc}")
+
+
 def run(argv: Optional[List[str]] = None) -> int:
     from .deck import DeckBuilder, DeckContext
     from .mi_api import build_dashboard_data
+    from .preflight import run_preflight
     from .pptx_theme import THEME
 
     args = build_parser().parse_args(argv)
@@ -274,6 +328,9 @@ def run(argv: Optional[List[str]] = None) -> int:
     deck_meta, slides = _load_slides(args.deck_config)
 
     # Compute the dashboard payloads (identical to the /mi/* endpoints).
+    # --lens is the historical spelling of the same idea; --portfolio-context wins.
+    portfolio_context = args.portfolio_context or args.lens
+
     data = build_dashboard_data(
         args.run_dir,
         client_id=args.client_id,
@@ -282,6 +339,8 @@ def run(argv: Optional[List[str]] = None) -> int:
         output_root=args.output_root,
         pipeline_root=args.pipeline_root,
         prior_run_dir=args.prior_run_dir,
+        portfolio_context=portfolio_context,
+        tenant_id=args.tenant_id,
     )
     for note in data.notes:
         print(f"[mi_api] {note}")
@@ -309,10 +368,25 @@ def run(argv: Optional[List[str]] = None) -> int:
           f"({len(placeholders)} placeholder{'s' if len(placeholders) != 1 else ''})")
     for r in placeholders:
         print(f"  [placeholder] {r['id']}: {r.get('title')}")
+    for o in report.get("omitted_slides") or []:
+        print(f"  [omitted] {o['slide_id']}: {o['reason']}")
+    brief = report.get("insights") or {}
+    print(f"Executive summary: {brief.get('count', 0)} governed observation(s) "
+          f"[{brief.get('insight_version')}]")
     if report["coverage_notes"]:
         print(f"Coverage notes: {len(report['coverage_notes'])} (see appendix).")
-    # A deck always renders (placeholders never fail the build).
-    return 0
+
+    # -- publication gates ------------------------------------------------
+    # The deck is ALWAYS written. A gate failure withholds publication; it does
+    # not destroy the artefact an operator needs in order to diagnose it.
+    preflight = run_preflight(report, data)
+    print(f"\nPreflight: {preflight.summary()}")
+    for r in preflight.results:
+        if not r.passed:
+            flag = "FAIL" if r.mandatory else "warn"
+            print(f"  [{flag}] {r.gate}: {r.detail}")
+    _write_preflight(output, report, preflight, deck_meta=deck_meta, data=data)
+    return 0 if preflight.publishable else PREFLIGHT_BLOCKED_RC
 
 
 def main() -> None:  # pragma: no cover

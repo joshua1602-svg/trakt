@@ -94,7 +94,9 @@ def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
               "total": theme.mint}
     fig = plt.figure(figsize=(width_in, height_in), dpi=dpi)
     fig.patch.set_facecolor(theme.bg_panel)
-    ax = fig.add_axes([0.11, 0.14, 0.86, 0.80])
+    # Left margin fits a full compact-currency tick. At 0.11 a book in the
+    # hundreds of millions clipped the leading £ off "£800.0MM".
+    ax = fig.add_axes([0.155, 0.14, 0.815, 0.80])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)

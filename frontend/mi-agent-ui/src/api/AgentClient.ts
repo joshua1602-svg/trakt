@@ -17,6 +17,8 @@ import type {
   CohortProgressionQuery,
   CohortStaticPool,
   CohortVintageQuery,
+  DeckGenerationJob,
+  DeckGenerationRequest,
   DeckIndex,
   ForecastEvolution,
   ForecastExtrapolation,
@@ -166,6 +168,22 @@ export interface AgentClient {
   /** A direct download URL for an investor deck (latest, or a specific period),
    * or `null` when the client cannot serve decks (e.g. the mock). */
   deckDownloadUrl(portfolioId: string, period?: string | null): string | null;
+
+  /** Ask the API to generate an investor pack. Resolves as soon as the work is
+   *  accepted — generation takes seconds — so the caller polls
+   *  {@link getDeckGeneration}.
+   *
+   *  Declared as a nullable PROPERTY, not a method, so a client that cannot
+   *  generate decks (the mock) says so by being `null`. The UI can then present
+   *  an unavailable action up front instead of discovering the limitation only
+   *  when a user clicks. */
+  generateDeck?:
+    | ((request: DeckGenerationRequest, signal?: AbortSignal) => Promise<DeckGenerationJob>)
+    | null;
+
+  /** The state of a requested generation. Optional alongside
+   *  {@link generateDeck} — a client that cannot start one is never asked. */
+  getDeckGeneration?(jobId: string, signal?: AbortSignal): Promise<DeckGenerationJob>;
 
   /** Funded static-pool cohort analysis for a portfolio, grouped by
    *  ``dimension`` (vintage | age | ltv | channel; default vintage). ``grain``

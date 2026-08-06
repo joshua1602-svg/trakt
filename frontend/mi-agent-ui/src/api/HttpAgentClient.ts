@@ -282,6 +282,43 @@ export class HttpAgentClient implements AgentClient {
     return `${this.baseUrl}/mi/decks/download?${q.toString()}`;
   }
 
+  /**
+   * Request a deck. The API answers 202 with a job, so a non-2xx here means the
+   * request itself was refused (not authorised, no data for that period, the
+   * deployment does not offer on-demand packs) — surface the API's own reason
+   * rather than a generic transport message, because those reasons are the ones
+   * a user can act on.
+   */
+  async generateDeck(request: import("@/domain").DeckGenerationRequest,
+                     signal?: AbortSignal
+                     ): Promise<import("@/domain").DeckGenerationJob> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/mi/decks/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        signal,
+      });
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
+      throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
+    }
+    const body = await res.json().catch(() => null) as
+      (import("@/domain").DeckGenerationJob & { error?: string }) | null;
+    if (!res.ok) {
+      throw new AgentError(body?.error || this.describeStatus(res, "/mi/decks/generate"));
+    }
+    if (!body) throw new AgentError("MI Agent API returned an invalid response");
+    return body;
+  }
+
+  getDeckGeneration(jobId: string, signal?: AbortSignal
+                    ): Promise<import("@/domain").DeckGenerationJob> {
+    return this.getJson<import("@/domain").DeckGenerationJob>(
+      `/mi/decks/generate/${encodeURIComponent(jobId)}`, signal);
+  }
+
   getCohorts(portfolioId: string, grain?: import("@/domain").CohortGrain,
              dimension?: import("@/domain").CohortDimension,
              portfolioContext?: string,

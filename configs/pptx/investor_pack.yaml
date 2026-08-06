@@ -1,117 +1,221 @@
 # =========================================================================
-# MI Agent — Investor / Funder PPTX pack (payload-driven deck definition).
+# MI Agent — Investor / Funder PPTX pack (portfolio-aware deck definition).
 # =========================================================================
 #
-# This deck is a faithful EXPORT of the React MI dashboard. Every slide renders
-# directly from an MI Agent API payload (see mi_agent_pptx/mi_api.py) — the same
-# compute functions behind the dashboard's /mi/* endpoints — so every number and
-# chart in the pack equals the dashboard for the same portfolio. Nothing is
-# recomputed in the deck; slides degrade to a branded placeholder only when the
-# dashboard itself would have no data for that panel.
+# Every slide renders from an MI Agent API payload (see mi_agent_pptx/mi_api.py)
+# — the same compute functions behind the dashboard's /mi/* endpoints — so every
+# number and chart in the pack equals the dashboard for the same portfolio.
+# Nothing is recomputed in the deck.
 #
-# `slides[].type` maps to a handler in mi_agent_pptx/deck.py (_DISPATCH):
-#   cover · kpi_summary · strat_barlists · geo · funded_evolution · cohorts ·
-#   pipeline_summary · pipeline_evolution · funnel · forecast_bridge ·
-#   forecast_projection · forecast_evolution · risk · methodology · appendix
+# COMPOSITION. A slide appears only when the portfolio justifies it. Two gates,
+# both of which must pass (see mi_agent_pptx/composition.py):
+#
+#   when:  a condition over governed FACTS about this portfolio. Supported:
+#            scope, is_total, portfolio_count, type_count, has_direct,
+#            has_acquired, is_mixed, mixed_reporting_dates, has_funded,
+#            has_stratifications, has_movement, has_funded_history, has_geo,
+#            has_cohorts, has_multidim, has_pipeline, has_pipeline_history,
+#            has_funnel, has_forecast, has_forecast_projection,
+#            has_forecast_history, has_risk
+#          Names, and/or/not, comparisons and `in` only — never arbitrary code.
+#
+#   guard: a data check on the payload the handler would draw from, so a slide
+#          can never reach the deck and then discover it has nothing to show.
+#
+# Anything dropped is recorded with a reason and rendered in the appendix. The
+# deck therefore contains NO placeholder pages.
+#
+# `slides[].type` maps to a handler in mi_agent_pptx/deck.py (_DISPATCH).
 
 deck:
   name: "Investor & Funder MI Pack"
   theme: trakt_mi_agent_dark
   footer: "trakt MI Agent · Confidential — for institutional funders/investors"
   logo_path: null
+  template_version: "2.0.0"
 
 slides:
   # 1 --------------------------------------------------------------- Cover
+  # States the reporting entity, the governed scope, every constituent book and
+  # every reporting date. Always present — a deck must say what it is about.
   - id: cover
     type: cover
     title: "Investor & Funder MI Pack"
+    question: "What is this report about?"
 
-  # 2 ----------------------------------------------------- Executive Summary
-  # Funded KPI tiles (compute_funded_snapshot.kpis) with month-on-month deltas —
-  # identical to the dashboard's Funded snapshot header.
+  # 2 --------------------------------------------------- Executive Summary
+  # Deterministic governed observations. No LLM.
   - id: executive_summary
-    type: kpi_summary
+    type: exec_insights
     title: "Executive Summary"
+    question: "What changed this period?"
 
-  # 3 --------------------------------------------- Funded Stratifications I
+  # 3 ------------------------------------------------ Portfolio Composition
+  # The anchor slide: total, then each portfolio type on identical measures.
+  - id: portfolio_composition
+    type: portfolio_composition
+    title: "Portfolio Composition"
+    question: "What do I own today?"
+
+  # NOTE: a separate "Direct vs Acquired" slide was removed in the close-out
+  # pass. Its comparison table duplicated Portfolio Composition, and its
+  # waterfall was identical to the one on Portfolio Movement and Drivers. The
+  # unique measures (WA borrower age, loan movement) moved to Portfolio
+  # Composition. The handler remains available for a future configuration.
+
+  # 5 ------------------------------------------ Portfolio Movement and Drivers
+  # Governed attribution: which portfolio types and which dimensions moved the
+  # total. Every component reconciles exactly to the headline movement.
+  - id: movement_drivers
+    type: movement_drivers
+    title: "Portfolio Movement and Drivers"
+    question: "Why did funded AuM change during the period?"
+    when: "has_attribution or has_movement"
+
+  # 6 --------------------------------------------------------- Funded KPIs
+  - id: funded_kpis
+    type: kpi_summary
+    title: "Funded Portfolio — Key Measures"
+    question: "How large is the book and what are its characteristics?"
+
+  # 6 --------------------------------------------- Funded Stratifications I
   - id: stratification_1
     type: strat_barlists
     title: "Funded Stratifications — LTV & Ticket Size"
+    question: "How is exposure distributed by risk and size?"
     keys: [ltv, ticket]
 
-  # 4 -------------------------------------------- Funded Stratifications II
+  # 7 -------------------------------------------- Funded Stratifications II
   - id: stratification_2
     type: strat_barlists
     title: "Funded Stratifications — Borrower Age & Type"
+    question: "What is the borrower profile?"
     keys: [age, borrower_type]
 
-  # 5 ------------------------------------------- Funded Stratifications III
+  # 8 ------------------------------------------- Funded Stratifications III
   - id: stratification_3
     type: strat_barlists
     title: "Funded Stratifications — Broker & Region"
+    question: "Where does the business come from?"
     keys: [broker, region]
 
-  # 6 -------------------------------------- Multi-Dimensional Risk Analytics
+  # 9 -------------------------------------- Multi-Dimensional Risk Analytics
   - id: multidim
     type: multidim
     title: "Multi-Dimensional Risk Analytics"
+    question: "Where do risk dimensions concentrate together?"
 
-  # 7 --------------------------------------------------- Geographic Exposure
+  # 10 -------------------------------------------------- Geographic Exposure
   - id: geography
     type: geo
     title: "Geographic Exposure"
+    question: "Where is the collateral?"
 
-  # 8 ------------------------------------------------- Funded Evolution
+  # 11 ------------------------------------------------------ Funded Evolution
+  # A trend needs at least two reporting periods.
   - id: funded_evolution
     type: funded_evolution
     title: "Funded Balance Evolution"
+    question: "How is the book changing over time?"
+    when: "has_funded_history"
 
-  # 9 ------------------------------------------------------- Vintage Cohorts
+  # 12 ------------------------------------------------------ Vintage Cohorts
+  # Vintage formation, from the governed cohort table the React Cohorts tab
+  # reads (cohorts.cohort_analysis). Point-in-time by construction: it describes
+  # what each vintage looks like TODAY.
   - id: cohorts
     type: cohorts
-    title: "Vintage Cohorts"
+    title: "Vintage Formation"
+    question: "How much of the book sits in each origination vintage?"
+    when: has_cohorts
 
-  # 10 ----------------------------------------------------- Pipeline Overview
+  # Static-pool seasoning, from the governed progression service
+  # (evolution.funded_cohort_progression) — one call per cohort, exactly as the
+  # dashboard issues when a user selects a vintage. Omitted unless a cohort
+  # holds loans in two or more reporting periods: a single period is a formation
+  # snapshot, and joining one point into a line would be the misleading trend
+  # the sufficiency rules exist to prevent.
+  - id: cohort_progression
+    type: cohort_progression
+    title: "Cohort Progression"
+    question: "How have the cohorts seasoned since they formed?"
+    when: has_cohort_progression
+
+  # 13 ---------------------------------------------------- Pipeline Overview
+  # Pipeline is direct-origination only; an acquired book does not originate.
   - id: pipeline
     type: pipeline_summary
     title: "Pipeline Overview"
+    question: "What is likely to fund next?"
+    when: "has_pipeline"
 
-  # 11 ---------------------------------------------------- Pipeline Evolution
+  # 14 --------------------------------------------------- Pipeline Evolution
   - id: pipeline_evolution
     type: pipeline_evolution
     title: "Pipeline Evolution"
+    question: "How is the pipeline trending?"
+    when: "has_pipeline_history"
 
-  # 12 --------------------------------------------------- Origination Funnel
+  # 15 -------------------------------------------------- Origination Funnel
   - id: funnel
     type: funnel
     title: "Origination Funnel"
+    question: "How does the pipeline convert?"
+    when: "has_pipeline"
 
-  # 13 ------------------------------------- Origination Flow (KFIs & Completions)
+  # 16 ---------------------------------- Origination Flow (KFIs & Completions)
   - id: origination_flow
     type: origination_flow
     title: "Origination Flow — KFIs & Completions"
+    question: "What is the weekly origination run-rate?"
+    when: "has_pipeline_history"
 
-  # 14 ------------------------------------------------------- Forecast Bridge
+  # 17 ------------------------------------------------------ Forecast Bridge
   - id: forecast_bridge
     type: forecast_bridge
     title: "Forecast Bridge — Funded to Forecast"
+    question: "Where is the portfolio heading on the current book?"
+    when: "has_forecast"
 
-  # 15 --------------------------------------------------- Forecast Projection
+  # 18 -------------------------------------------------- Forecast Projection
   - id: forecast_projection
     type: forecast_projection
     title: "Forecast Projection — Run-Rate Scale-Up"
+    question: "What does the run-rate imply?"
+    when: "has_forecast_projection"
 
-  # 16 ----------------------------------------------------------- Risk Limits
+  # 18b --------------------------------- Portfolio Health and Watch Items
+  # At most five governed watch items and three observations. Always rendered:
+  # "no material watch items" is a finding, not an empty slide.
+  - id: watchlist
+    type: watchlist
+    title: "Portfolio Health and Watch Items"
+    question: "What requires attention before the next reporting period?"
+
+  # 19 ------------------------------------ Concentration Tests and Headroom
+  # The governed, operator-approved concentration capability
+  # (/mi/concentration-tests). Carries CURRENT funded, EXPECTED forecast and the
+  # ALL-PIPELINE-CONVERTS stress as three distinct states — the stress is never
+  # presented as the expected outcome.
+  - id: concentration
+    type: concentration
+    title: "Concentration Tests and Headroom"
+    question: "Am I operating within approved limits, and where could pressure emerge?"
+    when: "has_concentration"
+
+  # 20 ---------------------------------------------------------- Risk Limits
+  # The legacy extracted monitor. Shown only when no approved concentration
+  # configuration exists, so the two never appear together saying similar things.
   - id: risk
     type: risk
     title: "Risk Limits"
+    question: "Am I operating within approved limits?"
+    when: "has_risk and not has_concentration"
 
-  # 17 ------------------------------------------------ Methodology / Notes
+  # 21 ------------------------------------------- Data and Methodology
+  # Investor-safe: scope, source dates, coverage, basis of preparation and the
+  # omission ledger. Never storage locations, endpoints or module names.
   - id: methodology
     type: methodology
-    title: "Methodology & Notes"
-
-  # 18 ------------------------------------------------ Appendix / Coverage
-  - id: appendix
-    type: appendix
-    title: "Appendix — Data Coverage"
+    title: "Data and Methodology"
+    question: "What does this report cover, as at when, and how was it produced?"

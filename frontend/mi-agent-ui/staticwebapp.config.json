@@ -1,5 +1,64 @@
 {
   "$schema": "https://json.schemas.azureedge.net/staticwebapp.config.json",
+
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/b82f67da-60de-45df-866c-9bb675176a85/v2.0",
+          "clientIdSettingName": "AAD_CLIENT_ID",
+          "clientSecretSettingName": "AAD_CLIENT_SECRET"
+        }
+      }
+    }
+  },
+
+  "routes": [
+    {
+      "route": "/.auth/login/github",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/twitter",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/facebook",
+      "statusCode": 404
+    },
+
+    {
+      "route": "/.auth/invitations/*",
+      "allowedRoles": ["anonymous", "authenticated"]
+    },
+
+    {
+      "route": "/login",
+      "rewrite": "/.auth/login/aad"
+    },
+    {
+      "route": "/logout",
+      "redirect": "/.auth/logout"
+    },
+
+    {
+      "route": "/api/*",
+      "allowedRoles": ["client", "operator"]
+    },
+
+    {
+      "route": "/*",
+      "allowedRoles": ["authenticated"]
+    }
+  ],
+
+  "responseOverrides": {
+    "401": {
+      "statusCode": 302,
+      "redirect": "/.auth/login/aad?post_login_redirect_uri=.referrer"
+    }
+  },
+
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": [
@@ -11,6 +70,7 @@
       "/me"
     ]
   },
+
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
