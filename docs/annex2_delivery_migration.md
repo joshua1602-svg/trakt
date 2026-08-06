@@ -427,6 +427,96 @@ rather than a substitute when its inputs are absent, so an absent input stays
 absent. The `generator` mechanism (securitisation-ID composition) exists in code
 but **no rule declares it**; it too refuses rather than invents.
 
+## Configuration ownership and representation (complete)
+
+### The layer hierarchy is now real
+
+```
+Global regime -> Asset pack -> Client -> Deal/SPV -> Reporting cycle -> Loan tape
+      -> Projection -> Delivery normalisation -> XML
+```
+
+**The asset pack is active in the production projection path.** It previously
+was not, for two independent reasons: no caller passed `--product-defaults`
+(neither `trakt_run.py` nor the demo route), and the pack publishes
+`nd_defaults` at the top level while Gate 4 reads `defaults.nd_defaults`.
+Fixing only the first would have changed nothing. `trakt_run.py` now carries an
+`ASSET_PACKS` registry keyed by portfolio type, so a new asset class registers a
+pack rather than editing a call site.
+
+**Product defaults no longer live in client configuration.** Ten product
+decisions moved to the pack — payment frequencies, grace period, rate index and
+tenor, margin, reset interval, cap, floor, deposit. The client keeps deal facts
+and source-system limits only: 17 ND entries down to 6, none owned twice.
+
+**Precedence is explicit and fail-closed.** Where the asset pack and the client
+declare different no-data codes for the same field, Gate 4 **refuses**, naming
+the field and both values, unless the exception is declared under
+`nd_override_rationale`. Agreement passes; a declared override passes and is
+evidenced.
+
+### Workbook concept vs XML representation
+
+Three Annex 2 concepts are workbook fields but **XML attributes**:
+
+| Code | Workbook concept | XML representation | Qualifies |
+|---|---|---|---|
+| RREL18 | Primary Income Currency | `Ccy` attribute | RREL16 income amount |
+| RREL28 | Currency Denomination | `Ccy` attribute | exposure amounts |
+| RREC22 | Collateral Currency | `Ccy` attribute | RREC13 valuation amount |
+
+The XSD carries a currency as `Ccy` on the amount it qualifies
+(`ActiveOrHistoricCurrencyAndAmount`, `use="required"`), and its own
+documentation says so: *"Include the currency in which the amount is
+denominated, using {CURRENCYCODE_3} format."* The authoritative workbook declares
+**zero** paths for all three, while sibling elements RREL16/17/19 have 9/7/7.
+
+A currency is due **only where an amount is reported**. On this benchmark
+RREL16 is `ND1`, so there is no income amount and no currency is missing.
+**No delivery rule, XML path or node may be created for these three** — emitting
+an element the schema does not define would fail validation.
+
+Across all 107 concepts: **87 value-vs-NoData choices, 17 elements, 3
+attributes.**
+
+This is declared as governed metadata in
+`annex2_delivery_rules.yaml::reconciliation_scope.representation`
+(`representation_type`, `attribute_name`, `attribute_of`, `emission_condition`).
+**The structure is INTERIM** — deliberately scoped to the concepts that need it,
+designed to move into a generic per-regime representation model once one exists
+so Annex 12 and FCA reuse it without special-case code.
+
+### ND reconciliation is scoped to emitting concepts
+
+```
+ND in delivery-ready data      628,978
+  on non-emitting concepts      11,035   (RREL18, disclosed not hidden)
+  on emitting concepts         617,943   <- the XML tie-out
+ND nodes in the XML            617,943   ✅
+```
+
+The non-emitting cells are legitimate delivery-ready data that produce no XML
+node. They are disclosed separately rather than counted as a shortfall.
+
+### KNOWN LIMITATION — single run-level currency
+
+The builder stamps **every** monetary `Ccy` from the run-level `--currency`
+(default `GBP`), applied uniformly to all 121,381 amount attributes. It is not
+read from `primary_income_currency`, `exposure_currency_denomination` or
+`collateral_currency`.
+
+* Correct for this **GBP-only** benchmark.
+* **Not proven for multi-currency portfolios**, or where income, exposure and
+  collateral are denominated differently — every amount would be stamped with
+  the run currency regardless of what was reported.
+* Per-amount currency lineage is **not implemented**. Income, exposure and
+  collateral currency may each need a distinct source.
+* **OCC production should block or clearly mark multi-currency submissions**
+  until this is resolved.
+
+Deliberately not fixed in this phase: it would change delivered values for any
+non-GBP book and cannot be validated against the accepted benchmark.
+
 ## Remaining work
 
 **Phase 3 — governed OCC promotion.** Add delivery normalisation and XML+XSD as

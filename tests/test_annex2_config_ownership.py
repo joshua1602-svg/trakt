@@ -175,13 +175,14 @@ class TestOwnershipBoundaries(unittest.TestCase):
                          f"duplicated ND ownership: {sorted(overlap)} — one layer "
                          f"must be authoritative")
 
-    def test_the_global_regime_holds_no_client_identifiers(self):
-        """A regime file is shared by every client; it must stay anonymous."""
+    def test_the_regime_declares_the_representation_model(self):
+        """Representation is governed metadata, not inference in code."""
         rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
         scope = rules.get("reconciliation_scope") or {}
-        self.assertIn("non_emitting_fields", scope)
+        self.assertIn("representation", scope,
+                      "the workbook-vs-XML representation model must be declared")
         for code in ("RREL18", "RREL28", "RREC22"):
-            self.assertIn(code, scope["non_emitting_fields"])
+            self.assertIn(code, scope["representation"])
 
 
 class TestNonEmittingReconciliation(unittest.TestCase):
@@ -220,6 +221,130 @@ class TestNonEmittingReconciliation(unittest.TestCase):
                          "a value with no destination")
         text = _RULES.read_text(encoding="utf-8")
         self.assertIn("Ccy", text, "the attribute rationale must be recorded")
+
+
+class TestRepresentationModel(unittest.TestCase):
+    """Workbook concept != XML representation, declared rather than inferred."""
+
+    @classmethod
+    def setUpClass(cls):
+        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+        cls.model = (rules.get("reconciliation_scope") or {}).get("representation") or {}
+        cls.rules = rules
+
+    def test_all_three_currency_concepts_are_classified_consistently(self):
+        for code in ("RREL18", "RREL28", "RREC22"):
+            meta = self.model[code]
+            self.assertEqual(meta["representation_type"], "xml_attribute", code)
+            self.assertEqual(meta["attribute_name"], "Ccy", code)
+            self.assertTrue(str(meta.get("emission_condition") or "").strip(),
+                            f"{code} must state WHEN it is emitted")
+            self.assertTrue(meta.get("attribute_of") or meta.get("qualifies_codes"),
+                            f"{code} must name the amount(s) it qualifies")
+
+    def test_each_names_the_amount_it_qualifies(self):
+        self.assertEqual(self.model["RREL18"]["attribute_of"], "RREL16")
+        self.assertEqual(self.model["RREC22"]["attribute_of"], "RREC13")
+        self.assertIn("RREL30", self.model["RREL28"]["qualifies_codes"])
+
+    def test_the_qualified_codes_exist_and_carry_amounts(self):
+        """A currency cannot qualify a concept that has no amount."""
+        universe = yaml.safe_load(
+            (_REPO / "config" / "regime" / "annex2_field_universe.yaml").read_text(
+                encoding="utf-8"))
+        universe = universe.get("fields") or universe
+        targets = ["RREL16", "RREC13"] + list(self.model["RREL28"]["qualifies_codes"])
+        for code in targets:
+            self.assertIn(code, universe, f"{code} is not a real Annex 2 code")
+
+    def test_none_of_the_three_has_a_delivery_rule_or_would_emit(self):
+        for code in ("RREL18", "RREL28", "RREC22"):
+            self.assertNotIn(code, self.rules["field_rules"],
+                             f"{code} has no XML element; a delivery rule would "
+                             f"write a value with no destination")
+
+    def test_classification_is_metadata_driven_not_hard_coded(self):
+        """Adding a concept must be configuration, not a code change."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_norm_repr", _REPO / "engine" / "gate_4b_delivery" / "annex2_delivery_normalizer.py")
+        norm = importlib.util.module_from_spec(spec)
+        sys.modules["_norm_repr"] = norm
+        spec.loader.exec_module(norm)
+        self.assertEqual(norm.non_emitting_codes(self.rules),
+                         ["RREC22", "RREL18", "RREL28"])
+        # A synthetic extra concept must be picked up with no code change.
+        extended = {"reconciliation_scope": {"representation": dict(
+            self.model, ZZZ99={"representation_type": "xml_attribute",
+                               "attribute_name": "Ccy"})}}
+        self.assertIn("ZZZ99", norm.non_emitting_codes(extended))
+
+    def test_the_occ_evidence_module_reads_the_same_authority(self):
+        from operations_control.annex2 import interventions as iv
+        self.assertEqual(tuple(iv._non_emitting_codes()),
+                         tuple(sorted(("RREL18", "RREL28", "RREC22"))))
+        self.assertEqual(tuple(sorted(iv.NON_EMITTING_CODES_FALLBACK)),
+                         tuple(iv._non_emitting_codes()),
+                         "the fallback must stay in step with the configuration")
+
+    def test_the_model_is_marked_interim(self):
+        """Its status must be explicit so it is promoted, not entrenched."""
+        text = _RULES.read_text(encoding="utf-8")
+        self.assertIn("STATUS: INTERIM", text)
+
+
+class TestRepresentationCountsAcrossAllConcepts(unittest.TestCase):
+    """The whole 107-code universe, classified from the authoritative workbook.
+
+    Slow: reads the 9.6 MB mapping workbook once. It is the only source that can
+    prove a code has no XML path of its own.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from engine.gate_5_delivery import xml_builder_annex2 as builder
+        wb = str(_REPO / "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure "
+                         "Report_Version_1.3.1.xlsx")
+        specs = {}
+        for mode in ("PRF", "NPRF"):
+            for code, s in builder.load_mapping_specs(wb, "DRAFT1auth.099.001.04", mode).items():
+                specs.setdefault(code, []).extend(s)
+        cls.specs = specs
+        universe = yaml.safe_load(
+            (_REPO / "config" / "regime" / "annex2_field_universe.yaml").read_text(
+                encoding="utf-8"))
+        cls.universe = universe.get("fields") or universe
+
+    def _classify(self, code):
+        tags = {x.tag for x in (self.specs.get(code) or [])}
+        nd = {"NoDataOptn", "NoData", "NoData4"}
+        if not tags:
+            return "xml_attribute"
+        if tags & nd and tags - nd:
+            return "xml_choice"
+        return "xml_element"
+
+    def test_the_universe_is_107_concepts(self):
+        self.assertEqual(len(self.universe), 107)
+
+    def test_representation_totals(self):
+        counts = {"xml_choice": 0, "xml_element": 0, "xml_attribute": 0}
+        for code in self.universe:
+            counts[self._classify(code)] += 1
+        self.assertEqual(counts["xml_choice"], 87)
+        self.assertEqual(counts["xml_element"], 17)
+        self.assertEqual(counts["xml_attribute"], 3)
+        self.assertEqual(sum(counts.values()), 107)
+
+    def test_exactly_the_three_declared_codes_have_no_workbook_path(self):
+        """The declared model must match what the workbook actually says."""
+        no_path = sorted(c for c in self.universe if not (self.specs.get(c) or []))
+        self.assertEqual(no_path, ["RREC22", "RREL18", "RREL28"])
+
+    def test_their_qualified_amounts_do_have_paths(self):
+        for code in ("RREL16", "RREC13", "RREL30"):
+            self.assertTrue(any(x.tag == "Amt" for x in self.specs.get(code) or []),
+                            f"{code} should carry an Amt leaf for a Ccy to qualify")
 
 
 if __name__ == "__main__":  # pragma: no cover

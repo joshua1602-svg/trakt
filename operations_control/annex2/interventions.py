@@ -126,20 +126,43 @@ def _scan_xml(xml_path: Path) -> Dict[str, int]:
     return counts
 
 
-#: Codes the XSD carries as a ``Ccy`` ATTRIBUTE on the amount they qualify
-#: rather than as an element of their own — all three are currencies. A value in
-#: one of these delivery-ready columns legitimately produces NO XML node, so it
-#: must be excluded from the XML tie-out or the reconciliation reports a phantom
-#: shortfall. Declared in
-#: ``config/regime/annex2_delivery_rules.yaml::reconciliation_scope.non_emitting_fields``;
-#: mirrored here because this module reads artefacts, not rules.
-NON_EMITTING_CODES = ("RREL18", "RREL28", "RREC22")
+#: Fallback only. The authority is the declared representation model in
+#: ``config/regime/annex2_delivery_rules.yaml::reconciliation_scope.representation``,
+#: read by :func:`_non_emitting_codes`. This tuple exists so the evidence
+#: document still reconciles if the rules file cannot be read, and must stay in
+#: step with it — a test asserts they agree.
+NON_EMITTING_CODES_FALLBACK = ("RREL18", "RREL28", "RREC22")
+
+
+def _non_emitting_codes() -> tuple:
+    """Codes carried by the XSD as an attribute, from governed configuration.
+
+    A value in one of these delivery-ready columns legitimately produces NO XML
+    node, so it must be excluded from the XML tie-out or the reconciliation
+    reports a phantom shortfall.
+    """
+    try:
+        import yaml
+        rules_path = (Path(__file__).resolve().parents[2]
+                      / "config" / "regime" / "annex2_delivery_rules.yaml")
+        model = ((yaml.safe_load(rules_path.read_text(encoding="utf-8")) or {})
+                 .get("reconciliation_scope") or {}).get("representation") or {}
+        codes = tuple(sorted(
+            c for c, m in model.items()
+            if isinstance(m, dict)
+            and str(m.get("representation_type", "")).strip().lower() == "xml_attribute"))
+        if codes:
+            return codes
+    except Exception:  # noqa: BLE001 - evidence must still be produced
+        pass
+    return NON_EMITTING_CODES_FALLBACK
 
 
 def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
     """Produce the intervention evidence document."""
     csv_nd = _csv_nd_count(delivery_csv)
-    non_emitting_nd = _csv_nd_count_for(delivery_csv, NON_EMITTING_CODES)
+    non_emitting = _non_emitting_codes()
+    non_emitting_nd = _csv_nd_count_for(delivery_csv, non_emitting)
     # The tie-out must compare like with like: only ND that CAN become a node.
     csv_nd_emitting = max(0, csv_nd - non_emitting_nd)
     sourced_scndry_nd = _csv_nd_count_for(delivery_csv, ("RREL20", "RREL21"))
@@ -211,7 +234,7 @@ def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
         # Split so the tie-out is against what the XML can actually contain.
         "nodata_on_non_emitting_fields": non_emitting_nd,
         "nodata_in_delivery_csv_emitting": csv_nd_emitting,
-        "non_emitting_codes": list(NON_EMITTING_CODES),
+        "non_emitting_codes": list(non_emitting),
         "nodata_in_xml": x["nodata_total"],
         "nodata_injected_by_builder": injected_nd,
         "nonperforming_blocks": x["nonprfrmg_blocks"],

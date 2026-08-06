@@ -11,33 +11,63 @@ reconciliation_scope:
   deferred_fields:
     - RREC22
 
-  # Codes the workbook lists as standalone fields but the XSD represents as an
-  # ATTRIBUTE of another value rather than an element of their own.
+  # ------------------------------------------------------------------ #
+  # REPRESENTATION MODEL — workbook concept vs XML representation
   #
-  # All three are currencies. The XSD carries a currency as `Ccy` on the amount
-  # it qualifies (`ActiveOrHistoricCurrencyAndAmount`, attribute `Ccy`,
-  # use="required"), and the schema's own documentation on the income value says
-  # so: "Include the currency in which the amount is denominated, using
-  # {CURRENCYCODE_3} format." Consequently:
+  # STATUS: INTERIM. This is the smallest governed structure that removes the
+  # undocumented inference; it is deliberately scoped to the codes that need it
+  # rather than restating all 107. It is designed to be lifted verbatim into a
+  # generic per-regime representation model (Annex 12, FCA, …) once one exists,
+  # at which point this block should MOVE, not be duplicated.
   #
-  #   * the authoritative mapping workbook declares ZERO paths for them —
-  #     verified: RREL18/RREL28/RREC22 have 0 specs in both PRF and NPRF, while
-  #     their sibling elements RREL16/17/19 have 9/7/7;
-  #   * a currency is required only WHERE AN AMOUNT IS REPORTED. Where the value
-  #     takes a NoData branch there is no amount, so no currency is due and none
-  #     is missing;
-  #   * a value in these delivery-ready columns is therefore legitimate data that
-  #     does NOT produce an XML node.
+  # The workbook lists every regulatory concept as a column. The XSD does not:
+  # a currency is carried as the `Ccy` ATTRIBUTE of the amount it qualifies
+  # (`ActiveOrHistoricCurrencyAndAmount`, attribute `Ccy`, use="required"), and
+  # the schema's own documentation on the income value says so — "Include the
+  # currency in which the amount is denominated, using {CURRENCYCODE_3} format."
   #
-  # This is not a coverage gap and must not be "fixed" by inventing a delivery
-  # rule, an XML path or a node — doing so would emit an element the schema does
-  # not define and fail validation. The list exists so the ND reconciliation can
-  # tie out against what the XML actually contains while still disclosing these
-  # cells (see delivery_instrumentation.nd_on_non_emitting_fields).
-  non_emitting_fields:
-    - RREL18   # Primary Income Currency   -> Ccy on PmryOblgrIncm/IncmVal/Val/Amt
-    - RREL28   # Currency Denomination     -> Ccy on the exposure amount
-    - RREC22   # Collateral Currency       -> Ccy on the valuation amount (also deferred)
+  # Verified against the authoritative mapping workbook: these three codes have
+  # ZERO paths in both PRF and NPRF, while sibling ELEMENTS RREL16/17/19 have
+  # 9/7/7. A currency is due only WHERE AN AMOUNT IS REPORTED, so where the
+  # qualified value takes a NoData branch none is missing.
+  #
+  # Consequences, both enforced by tests:
+  #   * a value in one of these delivery-ready columns is legitimate data that
+  #     produces NO XML node — it is disclosed, not counted as a shortfall;
+  #   * no delivery rule, XML path or node may be created for them. Emitting an
+  #     element the schema does not define would fail XSD validation.
+  representation:
+    RREL18:
+      workbook_concept: Primary Income Currency
+      representation_type: xml_attribute
+      attribute_name: Ccy
+      attribute_of: RREL16
+      attribute_of_semantic: PmryOblgrIncm/IncmVal/Val/Amt
+      emission_condition: >-
+        Emitted only when RREL16 (Primary Income) emits a Val/Amt branch. Where
+        RREL16 takes the NoData branch there is no amount and therefore no
+        currency attribute. On the accepted benchmark RREL16 is ND1 for all
+        11,035 records, so no Ccy is due for this concept.
+    RREL28:
+      workbook_concept: Currency Denomination
+      representation_type: xml_attribute
+      attribute_name: Ccy
+      attribute_of_semantic: the underlying-exposure monetary amounts
+      qualifies_codes: [RREL29, RREL30, RREL31, RREL32, RREL33, RREL39, RREL41]
+      emission_condition: >-
+        Emitted on each exposure amount that takes a Val/Amt branch. The
+        delivery-ready column carries GBP for every record on the accepted
+        benchmark and is not itself emitted as an element.
+    RREC22:
+      workbook_concept: Collateral Currency
+      representation_type: xml_attribute
+      attribute_name: Ccy
+      attribute_of: RREC13
+      attribute_of_semantic: Coll/CollCmonData/Valtn/CurInf/ValtnAmt/Val/Amt
+      emission_condition: >-
+        The workbook defines this as "the currency in which the valuation amount
+        provided in RREC13 is denominated", so it is emitted only where the
+        RREC13 valuation amount is present. Also listed in deferred_fields.
   # AUDIT-ONLY, NOT loaded at runtime. These codes were previously listed as
   # deferred but do NOT exist in the authoritative Annex 2 workbook universe
   # (phantom). Retained here only as an audit trail; they are excluded from 28a

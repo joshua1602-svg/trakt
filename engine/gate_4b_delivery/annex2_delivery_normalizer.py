@@ -229,6 +229,24 @@ INSTRUMENTATION_SCHEMA_VERSION = 1
 COERCION_RECORD_CAP = 5000
 
 
+def non_emitting_codes(rules: Dict[str, Any]) -> List[str]:
+    """Codes the XSD carries as an ATTRIBUTE rather than an element.
+
+    Derived from the declared representation model
+    (``reconciliation_scope.representation``), never from a hard-coded list, so
+    adding a concept is configuration rather than code. Any entry whose
+    ``representation_type`` is not an element cannot produce an XML node of its
+    own, so its values are disclosed separately and excluded from the XML
+    tie-out.
+    """
+    model = ((rules.get("reconciliation_scope") or {}).get("representation") or {})
+    return sorted(
+        code for code, meta in model.items()
+        if isinstance(meta, dict)
+        and str(meta.get("representation_type", "")).strip().lower() == "xml_attribute"
+    )
+
+
 class _DeliveryInstrumentation:
     """ND provenance and coercion records for one normalisation run."""
 
@@ -543,8 +561,7 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
     _INSTR.reset()
     # Codes the XSD carries as an attribute rather than an element; declared, not
     # inferred. Used only to split the reconciliation — never to change a value.
-    _INSTR.set_non_emitting_fields(
-        (rules.get("reconciliation_scope") or {}).get("non_emitting_fields") or [])
+    _INSTR.set_non_emitting_fields(non_emitting_codes(rules))
     # ND already present in the projected input, across EVERY column — not just
     # the rule-governed ones. The normaliser passes unlisted columns through
     # verbatim, so counting only rule-governed fields would under-report
