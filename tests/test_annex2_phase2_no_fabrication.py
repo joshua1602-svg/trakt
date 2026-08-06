@@ -184,24 +184,40 @@ class TestSecondaryIncomeRulesAreDeclared(unittest.TestCase):
         for code in ("RREL20", "RREL21"):
             self.assertIn(code, self.rules, f"{code} is not a governed rule")
 
-    def test_they_default_to_nd5_not_applicable(self):
-        """ND5 = 'Not applicable'. There is no secondary obligor."""
+    def test_they_default_to_nd1_not_collected(self):
+        """ND1 = 'Data not collected as not required by the underwriting criteria'.
+
+        Not ND5. Equity-release loans commonly have joint borrowers, so a
+        secondary obligor usually exists — the code is not about the obligor's
+        absence. Income is simply outside the product's underwriting
+        methodology. Full reasoning in
+        tests/test_annex2_secondary_income_applicability.py.
+        """
         for code in ("RREL20", "RREL21"):
             rule = self.rules[code]
             self.assertTrue(rule["default_allowed"])
-            self.assertEqual(rule["default_value"], "ND5")
-            self.assertIn("ND5", rule["nd_allowed"])
+            self.assertEqual(rule["default_value"], "ND1")
+            self.assertIn("ND1", rule["nd_allowed"])
 
-    def test_the_nd1_versus_nd5_distinction_is_preserved(self):
-        """RREL19 is the structural sibling and must stay on ND1.
+    def test_the_whole_income_family_shares_one_rationale(self):
+        """Primary and secondary income are treated alike, because the reason
+        is the same: equity-release underwriting does not use borrower income.
 
-        Primary income IS applicable and merely unavailable (ND1). Secondary
-        income is NOT applicable where there is no secondary obligor (ND5).
-        Collapsing the two would misreport why the field is empty.
+        RREL19 (primary verification) cannot use ND5 at all — the workbook sets
+        nd5_allowed FALSE — so a secondary field answering ND5 on the identical
+        rationale would be inconsistent.
         """
-        self.assertEqual(self.rules["RREL19"]["default_value"], "ND1")
-        self.assertEqual(self.rules["RREL20"]["default_value"], "ND5")
-        self.assertEqual(self.rules["RREL21"]["default_value"], "ND5")
+        for code in ("RREL19", "RREL20", "RREL21"):
+            self.assertEqual(self.rules[code]["default_value"], "ND1", code)
+
+    def test_nd5_stays_permitted_even_though_it_is_not_the_default(self):
+        """The workbook allows ND5 here; configuration chooses ND1.
+
+        A different book whose secondary-income field genuinely does not apply
+        can still declare ND5 without a code change.
+        """
+        for code in ("RREL20", "RREL21"):
+            self.assertIn("ND5", self.rules[code]["nd_allowed"])
 
     def test_the_workbook_semantic_paths_are_correct(self):
         self.assertEqual(self.rules["RREL20"]["workbook_semantic"],
@@ -518,10 +534,15 @@ class TestFieldProvenanceIsReported(unittest.TestCase):
 class TestPhase2IsDeterministicAndOutputNeutral(unittest.TestCase):
     """Instrumentation observes; it must never influence.
 
-    End-to-end neutrality is proven by the benchmark SHA-256
-    (``a21f8a4c…d685d``, unchanged across Phase 1 and Phase 2). What is checked
-    here is the property that makes that reproducible: identical input yields a
-    byte-identical CSV and identical counts, run after run.
+    End-to-end neutrality was proven by the benchmark SHA-256
+    (``a21f8a4c…d685d``, unchanged across Phase 1 and Phase 2). The baseline is
+    now ``8018abb9…3da5`` after the deliberate RREL20/RREL21 ND5 → ND1
+    regulatory correction — the only intentional change to the submission, and
+    a value-level one: 22,070 bytes differ, every one a ``5`` → ``1``.
+
+    What is checked here is the property that makes any of it reproducible:
+    identical input yields a byte-identical CSV and identical counts, run after
+    run.
     """
 
     def _rules(self):

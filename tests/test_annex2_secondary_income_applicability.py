@@ -124,38 +124,40 @@ class TestTheRationaleIsAboutUnderwritingNotBorrowerCount(unittest.TestCase):
 # 2. The two configuration layers must not disagree silently
 # --------------------------------------------------------------------------- #
 class TestProductDefaultAndDeliveryRuleAgree(unittest.TestCase):
-    """A known, recorded divergence — asserted so it cannot go quiet.
+    """The two layers that express this decision must not disagree.
 
-    ``product_defaults_ERM.yaml`` applies ND1 across the whole income family;
-    the delivery rule currently declares ND5, inherited from the pre-Phase-2
-    builder. The delivery path uses the rule, so ND5 is what ships today.
-
-    This test does **not** decide the question. It fails the moment the two
-    files agree — at which point the divergence is resolved and this test
-    should be replaced by a plain equality assertion.
+    They previously did: ``product_defaults_ERM.yaml`` applied ND1 across the
+    income family while the delivery rule declared ND5, inherited from the
+    pre-Phase-2 builder. The delivery path uses the rule, so ND5 shipped. That
+    divergence is now resolved on **ND1** and this test keeps it resolved.
     """
 
-    def test_the_divergence_is_exactly_where_it_is_documented(self):
+    def test_both_layers_declare_the_same_code(self):
         rules = _rules()["field_rules"]
         erm = _erm_nd_defaults()
-        observed = {
-            code: (rules[code].get("default_value"), erm.get(_SOURCES[code]))
-            for code in _CODES
-        }
-        self.assertEqual(
-            observed,
-            {"RREL20": ("ND5", "ND1"), "RREL21": ("ND5", "ND1")},
-            "the RREL20/RREL21 divergence changed. If it was RESOLVED, replace "
-            "this test with an equality assertion and update the comment above "
-            "RREL20 in annex2_delivery_rules.yaml plus "
-            "docs/annex2_delivery_migration.md. If it MOVED, it must not have "
-            "moved silently.")
+        for code in _CODES:
+            rule_value = rules[code].get("default_value")
+            erm_value = erm.get(_SOURCES[code])
+            self.assertEqual(
+                rule_value, erm_value,
+                f"{code}: annex2_delivery_rules.yaml says {rule_value!r} but "
+                f"product_defaults_ERM.yaml says {erm_value!r}. Two files "
+                f"disagreeing on a regulatory judgement is how the wrong code "
+                f"ships silently.")
 
-    def test_the_open_question_is_recorded_next_to_the_rule(self):
+    def test_the_agreed_code_is_nd1(self):
+        rules = _rules()["field_rules"]
+        erm = _erm_nd_defaults()
+        for code in _CODES:
+            self.assertEqual(rules[code]["default_value"], "ND1", code)
+            self.assertEqual(erm[_SOURCES[code]], "ND1", code)
+
+    def test_the_rationale_is_recorded_next_to_the_rule(self):
         text = _RULES.read_text(encoding="utf-8")
-        self.assertIn("UNDER REVIEW", text,
-                      "an unresolved regulatory decision must be visible in "
-                      "the configuration that carries it")
+        self.assertIn("underwriting criteria do not require", text,
+                      "the ND1 rationale must sit beside the rule it explains")
+        self.assertNotIn("UNDER REVIEW", text,
+                         "the decision is settled; the review marker must go")
 
     def test_the_whole_income_family_is_treated_consistently_by_the_product(self):
         """The ERM product position is uniform ND1 across all income fields."""

@@ -24,7 +24,7 @@ second Annex 2 implementation.**
 | Builder fabrication | **zero** |
 | Latent fabrication anywhere in the delivery path | **zero** |
 | Instrumentation | **complete** — every ND and every value transform attributed |
-| Benchmark | **reproduced byte-identically** (`a21f8a4c…d685d`, 7 runs) |
+| Benchmark | **reproducible** — current baseline `8018abb9…3da5`; byte-identical to `a21f8a4c…d685d` apart from the deliberate RREL20/RREL21 correction |
 | Production collateral mapping | **corrected** — no demo overlay required |
 
 **Remaining work is operational governance (Phase 3), not XML correctness.**
@@ -63,10 +63,16 @@ HEAD **byte-identically**:
 | Exposure records | 11,035 | 11,035 | ✅ |
 | XML size | 208,822,291 bytes | 208,822,291 bytes | ✅ |
 | SHA-256 | `a21f8a4c…d685d` | `a21f8a4c…d685d` | ✅ |
+| SHA-256 *(after the RREL20/21 correction)* | — | **`8018abb9…3da5`** | new baseline |
 | XSD validation | PASSED | PASSED | ✅ |
 
-The same SHA-256 holds after Phase 2. Phase 2 changed *where* the RREL20/RREL21
-answer is decided, not what it is.
+The same SHA-256 held through Phase 2 and every subsequent change **except one**:
+the deliberate RREL20/RREL21 ND5 → ND1 regulatory correction, which re-baselined
+the benchmark to **`8018abb960e2472b80bf928c354d712a604c1b05f3aed1997942dd86b0a63da5`**
+(size unchanged at 208,822,291 bytes). A byte-level diff of the two files shows
+**22,070 differing bytes, every one a `5` → `1`**, distributed exactly 11,035
+under `IncmVal` and 11,035 under `Vrfctn`. Nothing else in the 208 MB submission
+changed.
 
 Reproduce (writes only to the scratch root — the repository is untouched):
 
@@ -85,13 +91,14 @@ Since Phase 2 the count is stated as a split rather than as one number, because
 "a field is present" and "a field carries client data" are different claims:
 
 > **105** fields populated from projected/source data ·
-> **2** fields populated by governed delivery rules as `ND5` ·
+> **2** fields populated by governed delivery rules as `ND1` ·
 > **107** fields represented in the final Annex 2 submission
 
 The delivery-ready CSV now has 107 columns where it had 105, because RREL20 and
 RREL21 are created by rule instead of being injected by the builder. **Coverage
-did not increase.** The same two fields carry the same `ND5` in the same XML
-positions; they are simply visible one stage earlier. Gate 4b reports the split
+did not increase** — the same two fields occupy the same XML positions, now
+carrying `ND1` (see the correction recorded below) and visible one stage
+earlier. Gate 4b reports the split
 in `*_delivery_report.json` → `field_provenance`, and the demo manifest carries
 `fieldsFromProjectedSource` / `fieldsFromDeliveryRule` beside `fields`.
 
@@ -225,7 +232,7 @@ RREL20:
   enforce_presence: false
   nd_allowed: [ND1, ND2, ND3, ND4, ND5]
   default_allowed: true
-  default_value: ND5      # UNDER REVIEW — see 'Which no-data code' below
+  default_value: ND1      # not collected — outside ERM underwriting
 ```
 
 Gate 4b creates a column for any absent field whose rule authorises a default.
@@ -254,45 +261,41 @@ default_value your product rationale supports (ND1 = not collected because the
 underwriting criteria did not require it; ND5 = not applicable to this product).
 ```
 
-### Which no-data code — OPEN, and not settled by the benchmark
+### Which no-data code — RESOLVED as ND1 (regulatory correction)
 
 **Equity-release loans commonly have joint borrowers**, so a secondary obligor
 usually *does* exist. An earlier version of this document justified `ND5` on the
 basis that no secondary obligor exists. **That reasoning was wrong** and has
-been removed everywhere it appeared.
+been removed everywhere it appeared, including a production error message.
 
 The real product fact is different: borrower income — primary and secondary
 alike — is generally not part of equity-release underwriting, which runs on age,
-property value and LTV. The question is therefore whether that makes the field
-*not applicable* (ND5) or *not collected because underwriting did not require
-it* (ND1).
-
-The evidence in this repository points to **ND1**:
+property value and LTV. The lender does not collect it because the underwriting
+criteria do not require it. **That is ND1, not ND5.**
 
 | Evidence | Finding |
 |---|---|
 | `standards_library.yaml` | **ND1 = "Data not collected as not required by the lending or underwriting criteria"** — a verbatim description of the equity-release position. ND5 = "Not applicable". |
-| RREL16 (Primary Income) | Carries the **identical** workbook wording ("…income used to underwrite the underlying exposure…") and ESMA sets `nd5_allowed: **False**`. The standard-setter has already rejected the reading that "income was not used to underwrite" makes an income field not-applicable. |
+| RREL16 (Primary Income) | Carries the **identical** workbook wording ("…income used to underwrite the underlying exposure…") and ESMA sets `nd5_allowed: **False**`. The standard-setter has already rejected the reading that "income was not used to underwrite" makes an income field not-applicable — so the secondary field cannot take a different answer on the same rationale. |
 | `product_defaults_ERM.yaml` | Applies **ND1 uniformly** to the whole income family (RREL16/17/18/19 **and** RREL20/21), and reserves ND5 for features the product genuinely lacks — `maturity_date` ("No fixed term"), `scheduled_principal_payment_frequency` ("No payments"). |
-| Provenance of the current ND5 | It was **inherited from the pre-Phase-2 builder**, which hard-coded it. Phase 2 preserved the value to keep the benchmark byte-identical — not because ND5 had been established as correct. The benchmark is therefore not evidence. |
+| Provenance of the previous ND5 | **Inherited from the pre-Phase-2 builder**, which hard-coded it. Phase 2 preserved the value to keep the benchmark byte-identical — not because ND5 had been established as correct. The benchmark was therefore never evidence for it. |
 
-**Status: unresolved, and deliberately not changed during merge preparation.**
-Moving RREL20/RREL21 to ND1 alters 22,070 XML nodes and so the benchmark
-SHA-256; that needs explicit sign-off and a re-baselined benchmark. Until then
-`annex2_delivery_rules.yaml` (ND5) and `product_defaults_ERM.yaml` (ND1)
-disagree. The delivery path uses the rule, so **ND5 is what ships today**.
+**This is a deliberate regulatory correctness correction, not a regression.** It
+is the one change in this work that intentionally alters the submission. Both
+configuration layers now declare ND1 and are asserted to agree by
+`tests/test_annex2_secondary_income_applicability.py`.
 
-The divergence is asserted by
-`tests/test_annex2_secondary_income_applicability.py` so it cannot go quiet, and
-that file also pins the properties that hold whichever code wins:
+`ND5` remains **permitted** for these codes (the workbook allows it) but is no
+longer the default: a book whose secondary-income field genuinely does not apply
+can declare it without a code change.
+
+The properties that hold regardless of the code, all pinned by test:
 
 * a **real supplied value is never overwritten** by a default — a joint-borrower
   loan that does report secondary income delivers the reported figure;
 * **borrower count alone never determines the code** — a joint-borrower loan
   with no income data reports exactly what a single-borrower loan reports,
   because the rationale is the underwriting methodology, not the obligor count;
-* **ND1 remains reachable** by configuration for a book where income *is*
-  underwritten and merely unavailable;
 * the decision is **configuration, never Python** — no module names RREL20 or
   RREL21 against an ND code;
 * **canonical truth carries no regime ND code**; ND is a delivery decision.
