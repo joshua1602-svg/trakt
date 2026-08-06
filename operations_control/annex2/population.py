@@ -31,13 +31,21 @@ RULES_PATH = REPO / "config/regime/annex2_delivery_rules.yaml"
 REGISTRY_PATH = REPO / "config/system/fields_registry.yaml"
 
 # Codes the Gate 5 builder represents itself with permitted no-data scaffolding
-# (documented behaviour, instrumented by interventions.py — never altered here):
-#   RREL20/RREL21 — _ensure_scndry_oblgr_incm_defaults writes ND5 into
-#   IncmVal / Vrfctn when the columns are absent from the delivery frame.
-BUILDER_ND_COVERED = {
-    "RREL20": "builder inserts permitted ND5 into Secondary Income (IncmVal)",
-    "RREL21": "builder inserts permitted ND5 into Secondary Income Verification",
-}
+# (documented behaviour, instrumented by interventions.py — never altered here).
+#
+# Phase 2 emptied this set. RREL20/RREL21 used to live here:
+# ``_ensure_scndry_oblgr_incm_defaults`` wrote ND5 into IncmVal / Vrfctn when
+# the columns were absent from the delivery frame. They are now declared in
+# ``config/regime/annex2_delivery_rules.yaml`` with ``default_value: ND5``, so
+# the ``elif rule:`` branch in ``assess_population`` classifies them as
+# rule-governed — which is the truth — and the builder inserts nothing. The
+# mechanism constant is kept because it
+# is a real category the classifier must still be able to express: the
+# non-performing historical-collection block
+# (``_ensure_hstrcl_colltn_nd_defaults``) remains builder-side and would belong
+# here if it were ever reached by this report.
+# See docs/annex2_delivery_migration.md.
+BUILDER_ND_COVERED: dict = {}
 
 MECH_RULE = "direct field rule"
 MECH_REGISTRY = "projected registry mapping"

@@ -133,6 +133,17 @@ in the reproduced XSD-valid output:
   by ND defaulting — in rules (legitimate, declared) and in the builder
   (silent, the documented reason the builder must not ship as-is).
 
+> **Superseded in part by Phase 2** (see
+> [`annex2_delivery_migration.md`](../../annex2_delivery_migration.md)). The
+> rule count is now **70**: `RREL20`/`RREL21` moved out of the builder into
+> declared rules, so they are delivered as rule-populated `ND5` rather than
+> omitted end-to-end. The builder injects **no** ND for them — the only
+> remaining builder-side ND insertion is `_ensure_hstrcl_colltn_nd_defaults`,
+> which did not fire on this benchmark. The XML is byte-identical
+> (`a21f8a4c…d685d`): what changed is where the decision is made, not the
+> output. The delivered field split is now stated as 105 from projected source
+> + 2 by declared rule = 107 represented.
+
 ## F. Route comparison (same 11,035-record input)
 
 Route A's projector stage was executed with the exact orchestrator arguments

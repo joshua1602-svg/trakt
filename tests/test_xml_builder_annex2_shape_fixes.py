@@ -2,6 +2,7 @@ from pathlib import Path
 
 from lxml import etree
 import pandas as pd
+import pytest
 
 from engine.gate_5_delivery.xml_builder_annex2 import (
     MappingSpec,
@@ -21,7 +22,14 @@ from engine.gate_5_delivery.xml_builder_annex2 import (
 
 
 def test_branch_coercion_for_rrel12_non_year_value() -> None:
-    assert _coerce_record_value_for_branch("RREL12", "GBZZZ") == "2026"
+    """Phase 2: a non-year RREL12 value routes to NoData; it is never invented.
+
+    This previously asserted ``== "2026"``. That was the fabrication, not the
+    requirement: the Yr branch accepts an ISO year only, so a value that is not
+    one has no typed branch to enter. It now yields an empty string and the
+    caller places it in the NoData branch the mapping permits.
+    """
+    assert _coerce_record_value_for_branch("RREL12", "GBZZZ") == ""
     assert _coerce_record_value_for_branch("RREL12", "2026") == "2026"
     assert _coerce_record_value_for_branch("RREL11", "GBZZZ") == "GBZZZ"
 
@@ -169,6 +177,23 @@ def test_ensure_scndry_oblgr_incm_defaults_adds_nd5_choice_nodes() -> None:
     val = etree.SubElement(mthly, f"{{{ns}}}Val")
     etree.SubElement(val, f"{{{ns}}}Amt").text = "1"
 
+    # Phase 2: the builder no longer decides the ND code. A record whose input
+    # supplied neither a value nor a NoData branch is a delivery-rule gap, and
+    # the builder says so instead of filling it in.
+    with pytest.raises(ValueError) as excinfo:
+        _ensure_scndry_oblgr_incm_defaults(record, ns, order_index)
+    message = str(excinfo.value)
+    assert "RREL20" in message
+    assert "annex2_delivery_rules.yaml" in message, (
+        "the refusal must name the file that fixes it, not just the problem")
+
+    # With the rule-supplied ND5 present as data — which is what Gate 4b now
+    # produces — the builder's remaining job is shape, and it is unchanged.
+    rule_supplied = pd.Series({"RREL20": "ND5", "RREL21": "ND5"})
+    for code in ("RREL20", "RREL21"):
+        apply_record_code(record, rule_supplied, code, specs_by_code,
+                          "/Document/Root/UndrlygXpsrRcrd", ns, order_index, "GBP")
+
     _ensure_scndry_oblgr_incm_defaults(record, ns, order_index)
 
     assert len(root.xpath("//*[local-name()='ScndryOblgrIncm']")) == 1
@@ -266,6 +291,10 @@ def test_delivery_ready_fixture_without_npe_columns_still_xsd_valid_for_prf_and_
     df = pd.read_csv(fixture_csv, dtype=str).fillna("")
     assert not any(c.startswith("NPEL") for c in df.columns)
     assert not any(c.startswith("NPEC") for c in df.columns)
+    # Phase 2: a delivery-ready CSV is Gate 4b output, and Gate 4b now creates
+    # these two from the declared rules. The fixture carries them because the
+    # real stage does; the builder no longer supplies them if they are absent.
+    assert list(df["RREL20"]) == ["ND5"] and list(df["RREL21"]) == ["ND5"]
 
     code_order = load_code_order(str(code_order_yaml))
     ns = get_namespace_from_xsd(str(xsd))

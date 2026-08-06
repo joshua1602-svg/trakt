@@ -949,13 +949,30 @@ def main() -> None:
             c_path = Path(__file__).resolve().parent / c_path
         client_config = load_yaml_optional(c_path)
 
+    # 2b. Normalise the asset-pack schema onto the config schema.
+    #
+    # The asset pack declares ``nd_defaults`` at the TOP level, but every
+    # consumer of a merged config — including ``apply_nd_defaults`` below —
+    # reads ``defaults.nd_defaults``. Without this lift the asset pack could be
+    # passed and still contribute nothing, which is exactly the defect the
+    # provenance audit found: the layer was wired but unreachable.
+    #
+    # The lift is done on a COPY. The asset-pack file keeps its published shape,
+    # because validation_agent, target_coverage and the OCC configuration
+    # resolver all read ``nd_defaults`` from the top level.
+    import copy
+    product_config = copy.deepcopy(product_config)
+    _asset_nd = product_config.get("nd_defaults")
+    if isinstance(_asset_nd, dict) and _asset_nd:
+        product_config.setdefault("defaults", {}).setdefault("nd_defaults", {}).update(_asset_nd)
+
     # 3. Recursive Deep Merge Function
     def deep_merge(base, overlay):
         """Recursively merges overlay into base."""
         # If either is not a dict, the overlay wins (no merge possible)
         if not isinstance(base, dict) or not isinstance(overlay, dict):
             return overlay
-            
+
         for key, value in overlay.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
                 deep_merge(base[key], value)
@@ -963,11 +980,35 @@ def main() -> None:
                 base[key] = value
         return base
 
+    # 3b. A no-data code is a REGULATORY decision. Where the asset pack and the
+    # client config both declare one for the same field and they DISAGREE,
+    # precedence would silently pick the client's answer and no one would see
+    # that the product-level decision had been overridden. Refuse instead: an
+    # override must be stated, not inferred from layer order.
+    _asset_nd_eff = ((product_config.get("defaults") or {}).get("nd_defaults") or {})
+    _client_nd_eff = ((client_config.get("defaults") or {}).get("nd_defaults") or {})
+    _allowed_overrides = ((client_config.get("nd_override_rationale") or {}))
+    _conflicts = {
+        f: (_asset_nd_eff[f], _client_nd_eff[f])
+        for f in set(_asset_nd_eff) & set(_client_nd_eff)
+        if str(_asset_nd_eff[f]).strip().upper() != str(_client_nd_eff[f]).strip().upper()
+        and f not in _allowed_overrides
+    }
+    if _conflicts:
+        detail = "; ".join(f"{f}: asset={a} client={c}" for f, (a, c) in sorted(_conflicts.items()))
+        raise ValueError(
+            "[Gate 4] Conflicting no-data decisions between the asset pack and "
+            f"the client configuration: {detail}. A no-data code states WHY a "
+            "regulatory field is empty, so one layer must not silently override "
+            "another. Either align the two files, or declare the exception "
+            "under 'nd_override_rationale: {<canonical_field>: <reason>}' in the "
+            "client configuration so the override is explicit and reviewable."
+        )
+
     # 4. Create Final Config (Client overrides Product)
     # We copy product_config to avoid mutating the original if we reused it
-    import copy
     config = deep_merge(copy.deepcopy(product_config), client_config)
-    
+
     if args.product_defaults:
         logging.info(f"Merged Product Defaults ({args.product_defaults}) with Client Config")
 

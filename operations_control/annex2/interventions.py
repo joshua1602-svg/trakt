@@ -46,9 +46,33 @@ def _csv_nd_count(delivery_csv: Path) -> int:
     return total
 
 
+def _csv_nd_count_for(delivery_csv: Path, fields: tuple) -> int:
+    """ND cells the delivery CSV itself supplies for the named fields.
+
+    Phase 2: RREL20/RREL21 are declared in
+    ``config/regime/annex2_delivery_rules.yaml`` and populated by Gate 4b, so
+    the ND nodes under ``ScndryOblgrIncm`` in the XML are now SOURCED, not
+    builder-inserted. Counting XML nodes alone can no longer tell the two
+    apart — this is what distinguishes them.
+    """
+    import pandas as pd
+    total = 0
+    for chunk in pd.read_csv(delivery_csv, dtype=str,
+                             usecols=lambda c: c in fields, chunksize=20000):
+        for field in fields:
+            if field in chunk.columns:
+                total += int(chunk[field].fillna("").str.fullmatch(r"ND[1-5]").sum())
+    return total
+
+
 def _rrel12_coercion_count(delivery_csv: Path) -> int:
-    """Rows whose RREL12 value is not a 4-digit year — the builder coerces
-    those to a constant year (documented behaviour)."""
+    """Rows whose RREL12 value is not a 4-digit year.
+
+    Phase 2: the builder no longer coerces these to a constant year — it routes
+    them to the NoData branch. The count is still worth reporting, because a
+    value that cannot enter its typed branch is an operator-visible event; only
+    the treatment changed.
+    """
     import pandas as pd
     total = 0
     for chunk in pd.read_csv(delivery_csv, dtype=str, usecols=lambda c: c == "RREL12",
@@ -102,12 +126,49 @@ def _scan_xml(xml_path: Path) -> Dict[str, int]:
     return counts
 
 
+#: Fallback only. The authority is the declared representation model in
+#: ``config/regime/annex2_delivery_rules.yaml::reconciliation_scope.representation``,
+#: read by :func:`_non_emitting_codes`. This tuple exists so the evidence
+#: document still reconciles if the rules file cannot be read, and must stay in
+#: step with it — a test asserts they agree.
+NON_EMITTING_CODES_FALLBACK = ("RREL18", "RREL28", "RREC22")
+
+
+def _non_emitting_codes() -> tuple:
+    """Codes carried by the XSD as an attribute, from governed configuration.
+
+    A value in one of these delivery-ready columns legitimately produces NO XML
+    node, so it must be excluded from the XML tie-out or the reconciliation
+    reports a phantom shortfall.
+    """
+    try:
+        import yaml
+        rules_path = (Path(__file__).resolve().parents[2]
+                      / "config" / "regime" / "annex2_delivery_rules.yaml")
+        model = ((yaml.safe_load(rules_path.read_text(encoding="utf-8")) or {})
+                 .get("reconciliation_scope") or {}).get("representation") or {}
+        codes = tuple(sorted(
+            c for c, m in model.items()
+            if isinstance(m, dict)
+            and str(m.get("representation_type", "")).strip().lower() == "xml_attribute"))
+        if codes:
+            return codes
+    except Exception:  # noqa: BLE001 - evidence must still be produced
+        pass
+    return NON_EMITTING_CODES_FALLBACK
+
+
 def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
     """Produce the intervention evidence document."""
     csv_nd = _csv_nd_count(delivery_csv)
+    non_emitting = _non_emitting_codes()
+    non_emitting_nd = _csv_nd_count_for(delivery_csv, non_emitting)
+    # The tie-out must compare like with like: only ND that CAN become a node.
+    csv_nd_emitting = max(0, csv_nd - non_emitting_nd)
+    sourced_scndry_nd = _csv_nd_count_for(delivery_csv, ("RREL20", "RREL21"))
     coerced_rrel12 = _rrel12_coercion_count(delivery_csv)
     x = _scan_xml(xml_path)
-    injected_nd = max(0, x["nodata_total"] - csv_nd)
+    injected_nd = max(0, x["nodata_total"] - csv_nd_emitting)
 
     interventions: List[Intervention] = []
     if x["nodata_hstrcl_colltn"]:
@@ -121,10 +182,14 @@ def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
             reason="the schema requires the historical collection blocks; "
                    "the builder fills them with permitted no-data values",
             severity="warning", review_required=True))
-    if x["nodata_scndry_incm"]:
+    # Only the PORTION the delivery data did not supply is a builder
+    # intervention. Since Phase 2 the rules supply all of it, so this reports
+    # nothing — which is the correct answer, not a missing check.
+    scndry_unsourced = max(0, x["nodata_scndry_incm"] - sourced_scndry_nd)
+    if scndry_unsourced:
         interventions.append(Intervention(
             code="RREL20/RREL21", intervention_type="nd_insertion",
-            count=x["nodata_scndry_incm"],
+            count=scndry_unsourced,
             example_source_state="secondary income not present in the "
                                  "delivery data",
             generated_treatment="ND5 'no data' for secondary income and its "
@@ -143,12 +208,14 @@ def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
             severity="warning", review_required=True))
     if coerced_rrel12:
         interventions.append(Intervention(
-            code="RREL12", intervention_type="value_coercion",
+            code="RREL12", intervention_type="nodata_routing",
             count=coerced_rrel12,
             example_source_state="geography classification year not a "
                                  "4-digit year",
-            generated_treatment="replaced with a fixed year by the generator",
-            reason="documented generator behaviour for non-year values",
+            generated_treatment="reported as no-data; the value is NOT "
+                                "replaced with a substitute year",
+            reason="the schema branch accepts a 4-digit year only, so a value "
+                   "that is not one cannot be placed there",
             severity="warning", review_required=True))
     if x["ccy_attributes"]:
         interventions.append(Intervention(
@@ -164,6 +231,10 @@ def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
     return {
         "records": x["records"],
         "nodata_in_delivery_csv": csv_nd,
+        # Split so the tie-out is against what the XML can actually contain.
+        "nodata_on_non_emitting_fields": non_emitting_nd,
+        "nodata_in_delivery_csv_emitting": csv_nd_emitting,
+        "non_emitting_codes": list(non_emitting),
         "nodata_in_xml": x["nodata_total"],
         "nodata_injected_by_builder": injected_nd,
         "nonperforming_blocks": x["nonprfrmg_blocks"],

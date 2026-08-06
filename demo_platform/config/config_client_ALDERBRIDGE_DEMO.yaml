@@ -52,31 +52,25 @@ defaults:
   originator_establishment_country: "GB"
 
   # ESMA "no data" options, applied at regime projection only — never written into
-  # the canonical model. Every entry below is a field the Annex 2 template requires
-  # but this product genuinely does not have, so ND5 ("not applicable") is the
-  # correct answer rather than a fabricated value. The two ND1s are different: the
-  # field applies, but neither source system carries it.
+  # the canonical model.
+  #
+  # OWNERSHIP: this list holds only what is true of THIS LENDER or THIS DEAL.
+  # Everything that follows from the equity-release product itself — no payment
+  # schedule, no rate index, no cap or floor, no deposit — now lives in the
+  # asset pack (config/asset/product_defaults_ERM.yaml) and is merged UNDER this
+  # file at Gate 4. A second lender writing the same product inherits those
+  # automatically instead of restating them, and cannot restate them differently
+  # by accident.
+  #
+  # If a value here ever contradicts the asset pack, Gate 4 refuses rather than
+  # silently preferring this file; an intentional exception must be declared
+  # under `nd_override_rationale`.
   nd_defaults:
-    # A lifetime mortgage capitalises interest and repays on redemption. There is
-    # no payment schedule, no grace period and no index.
-    scheduled_principal_payment_frequency: ND5
-    scheduled_interest_payment_frequency: ND5
-    principal_grace_period_end_date: ND5
-    current_interest_rate_index: ND5
-    current_interest_rate_index_tenor: ND5
-    current_interest_rate_margin: ND5
-    interest_rate_reset_interval: ND5
-    interest_rate_cap: ND5
-    interest_rate_floor: ND5
-    # Neither book has been repurchased out of the pool, and no deposit is held
-    # against any loan.
+    # Deal facts: neither book has been repurchased out of the pool, and the
+    # acquired book was bought as a portfolio rather than loan by loan.
     date_of_repurchase: ND5
-    deposit_amount: ND5
-    # Originated loans have no purchase price; the acquired book was bought as a
-    # portfolio, not loan by loan.
     purchase_price: ND5
-    # Applicable fields that neither source extract carries.
-    employment_status: ND1
+    # Source-system limitation: this lender's extracts do not carry it.
     customer_type: ND1
     # Where the validation gate has flagged a missing valuation, the derived LTV
     # cannot be stated. The exception is reported, not papered over.

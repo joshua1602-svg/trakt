@@ -32,6 +32,12 @@ nd_defaults:
   primary_income_type: ND1                # RREL17
   primary_income_currency: ND1            # RREL18
   primary_income_verification: ND1        # RREL19
+  # RREL20/RREL21. Equity-release loans commonly have JOINT BORROWERS, so a
+  # secondary obligor usually exists — the code is NOT about borrower absence.
+  # Borrower income is simply not part of equity-release underwriting (age,
+  # property value and LTV are), so the data is not collected because the
+  # underwriting criteria do not require it: exactly ND1. Matches the whole
+  # income family above and config/regime/annex2_delivery_rules.yaml.
   secondary_income: ND1                   # RREL20
   secondary_income_verification: ND1      # RREL21
   debt_to_income_ratio: ND5               # RREL40 — DTI not captured for ERM (see reporting_policy.nd_policy)
@@ -43,6 +49,19 @@ nd_defaults:
   scheduled_interest_payment_frequency: ND5  # No payments
   current_interest_rate_margin: ND5          # Fixed rate, no margin
   interest_rate_reset_interval: ND5          # Fixed rate
+
+  # --- 5b. Relocated from client configuration (ownership refactor) ---
+  # These follow from what a lifetime mortgage IS, not from who originated it or
+  # which system the tape came out of, so they belong to the asset class and are
+  # declared once here instead of by every client. Previously each of these sat
+  # in a client config, where a second lender writing the same product would
+  # have had to restate them — and could have restated them differently.
+  principal_grace_period_end_date: ND5       # Interest capitalises; no grace period
+  current_interest_rate_index: ND5           # Fixed for life; no reference index
+  current_interest_rate_index_tenor: ND5     # No index, therefore no tenor
+  interest_rate_cap: ND5                     # Fixed rate; no cap
+  interest_rate_floor: ND5                   # Fixed rate; no floor
+  deposit_amount: ND5                        # No deposit is taken on a lifetime mortgage
   next_interest_rate_reset_date: ND5         # Fixed rate
   
   # --- 5. Data Gaps (ND5) ---

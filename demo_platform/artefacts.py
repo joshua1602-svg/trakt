@@ -369,6 +369,10 @@ def regulatory_output(*, verbose: bool = True) -> Dict[str, Any]:
         staged, "--regime", "ESMA_Annex2",
         "--registry", config_root / "system" / "fields_registry.yaml",
         "--enum-mapping", _demo_enum_mapping(out_dir),
+        # Layer 2 — the equity-release asset pack, merged UNDER the client
+        # config. Product no-data treatment is owned here, once per asset
+        # class, rather than restated in every client configuration.
+        "--product-defaults", config_root / "asset" / "product_defaults_ERM.yaml",
         "--config", cfg.demo_client_config(),
         "--template-order", config_root / "system" / "esma_code_order.yaml",
         "--portfolio-type", "equity_release",
@@ -404,15 +408,31 @@ def regulatory_output(*, verbose: bool = True) -> Dict[str, Any]:
 
     projected_df = pd.read_csv(projected, low_memory=False)
     delivery_df = pd.read_csv(delivery, low_memory=False)
+    # A bare field count treats a governed "not applicable" the same as a field
+    # carrying client data. Gate 4b reports the split; carry it through rather
+    # than letting one number stand for both.
+    provenance: Dict[str, Any] = {}
+    report_json = next(iter(sorted(out_dir.glob("*_delivery_report.json"))), None)
+    if report_json is not None:
+        try:
+            provenance = (json.loads(report_json.read_text(encoding="utf-8"))
+                          .get("field_provenance") or {})
+        except (OSError, ValueError):
+            provenance = {}
     # The builder prints "XSD Validation: PASSED" and exits non-zero on failure;
     # match its own wording rather than inferring from the return code alone.
     xsd_validated = "XSD Validation: PASSED" in (xml.stdout or "")
     exposure_records = _count_xml_records(xml_out)
 
+    from_source = provenance.get("populated_from_projected_source")
+    by_rule = provenance.get("populated_by_declared_delivery_rule")
+
     if verbose:
+        fields = (f"{len(delivery_df.columns)} fields" if from_source is None else
+                  f"{len(delivery_df.columns)} fields ({from_source} from source, "
+                  f"{by_rule} by declared delivery rule)")
         print(f"  [artefacts] ESMA Annex 2: {exposure_records:,} exposure records, "
-              f"{len(delivery_df.columns)} fields, "
-              f"{xml_out.stat().st_size / 1e6:,.1f} MB XML"
+              f"{fields}, {xml_out.stat().st_size / 1e6:,.1f} MB XML"
               + (", XSD valid" if xsd_validated else ""))
 
     return {
@@ -424,6 +444,10 @@ def regulatory_output(*, verbose: bool = True) -> Dict[str, Any]:
         "rows": int(len(projected_df)),
         "exposureRecords": exposure_records,
         "fields": int(len(delivery_df.columns)),
+        # A field carrying a governed "not applicable" is not a field carrying
+        # client data. `fields` is the total; these two say what it is made of.
+        "fieldsFromProjectedSource": from_source,
+        "fieldsFromDeliveryRule": by_rule,
         "sizeBytes": xml_out.stat().st_size,
         "xsdValidated": xsd_validated,
         "contentSha256": _sha256(xml_out),
