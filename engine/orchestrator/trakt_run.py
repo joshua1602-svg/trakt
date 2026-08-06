@@ -85,6 +85,37 @@ ENGINE_ROOT  = Path(__file__).resolve().parent.parent          # engine/
 PROJECT_ROOT = ENGINE_ROOT.parent                               # trakt/
 CONFIG_ROOT  = PROJECT_ROOT / "config"
 
+#: Asset packs (configuration Layer 2), keyed by ``--portfolio-type``.
+#
+# The pack owns PRODUCT decisions — characteristics, defaults, no-data
+# treatment and enum mappings that follow from the product itself and are the
+# same for every lender writing that business. It is merged UNDER the client
+# configuration at Gate 4, so a client can still state lender-specific facts
+# without re-declaring the product.
+#
+# A portfolio type with no registered pack runs with none; that is a supported
+# state, not an error. Asset classes are added here, not in client files.
+ASSET_PACKS = {
+    "equity_release": CONFIG_ROOT / "asset" / "product_defaults_ERM.yaml",
+}
+
+
+def _resolve_asset_pack(args) -> Optional[Path]:
+    """The asset pack for this run, or None.
+
+    ``--product-defaults none`` disables the layer explicitly; an explicit path
+    is used as given; otherwise the pack registered for the portfolio type is
+    used when it exists.
+    """
+    explicit = getattr(args, "product_defaults", None)
+    if explicit:
+        if str(explicit).strip().lower() == "none":
+            return None
+        return Path(explicit)
+    pack = ASSET_PACKS.get(str(getattr(args, "portfolio_type", "") or "").strip())
+    return pack if (pack and pack.exists()) else None
+
+
 SCRIPTS = {
     "semantic_alignment":   ENGINE_ROOT / "gate_1_alignment"  / "semantic_alignment.py",
     "canonical_transform":  ENGINE_ROOT / "gate_2_transform"  / "canonical_transform.py",
@@ -675,7 +706,10 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
     xml_out   = out_dir / f"{regime_short}_final.xml"
 
     # -- Gate 4: Regime projection -----------------------------------------
-    _run([
+    # The asset pack is Layer 2 and is merged UNDER the client config, so
+    # product decisions are owned once per asset class rather than restated by
+    # every client. Omitted only when the portfolio type has no pack.
+    proj_cmd = [
         py, _script("regime_projector"),
         str(ctx["canonical_typed"]),
         "--regime", regime,
@@ -685,7 +719,11 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
         "--template-order", args.code_order_yaml,
         "--portfolio-type", args.portfolio_type,
         "--output-dir", str(out_dir),
-    ])
+    ]
+    asset_pack = _resolve_asset_pack(args)
+    if asset_pack is not None:
+        proj_cmd += ["--product-defaults", str(asset_pack)]
+    _run(proj_cmd)
 
     if not projected.exists():
         # regime_projector uses {stem}_{regime}_projected.csv naming
@@ -1070,6 +1108,12 @@ examples:
              "contract). Repeatable; later directories win.",
     )
     ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
+    ap.add_argument(
+        "--product-defaults", dest="product_defaults", default=None,
+        help="Asset-pack YAML (Layer 2) merged UNDER the client config at Gate 4. "
+             "Defaults to the pack registered for --portfolio-type; pass 'none' "
+             "to run without an asset pack.",
+    )
     ap.add_argument("--out-dir", default="out")
     ap.add_argument("--validation-out-dir", default="out_validation")
     ap.add_argument("--pipeline-output-dir", default="out_pipeline")

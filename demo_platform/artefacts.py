@@ -369,6 +369,10 @@ def regulatory_output(*, verbose: bool = True) -> Dict[str, Any]:
         staged, "--regime", "ESMA_Annex2",
         "--registry", config_root / "system" / "fields_registry.yaml",
         "--enum-mapping", _demo_enum_mapping(out_dir),
+        # Layer 2 — the equity-release asset pack, merged UNDER the client
+        # config. Product no-data treatment is owned here, once per asset
+        # class, rather than restated in every client configuration.
+        "--product-defaults", config_root / "asset" / "product_defaults_ERM.yaml",
         "--config", cfg.demo_client_config(),
         "--template-order", config_root / "system" / "esma_code_order.yaml",
         "--portfolio-type", "equity_release",

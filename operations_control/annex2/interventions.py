@@ -126,13 +126,26 @@ def _scan_xml(xml_path: Path) -> Dict[str, int]:
     return counts
 
 
+#: Codes the XSD carries as a ``Ccy`` ATTRIBUTE on the amount they qualify
+#: rather than as an element of their own — all three are currencies. A value in
+#: one of these delivery-ready columns legitimately produces NO XML node, so it
+#: must be excluded from the XML tie-out or the reconciliation reports a phantom
+#: shortfall. Declared in
+#: ``config/regime/annex2_delivery_rules.yaml::reconciliation_scope.non_emitting_fields``;
+#: mirrored here because this module reads artefacts, not rules.
+NON_EMITTING_CODES = ("RREL18", "RREL28", "RREC22")
+
+
 def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
     """Produce the intervention evidence document."""
     csv_nd = _csv_nd_count(delivery_csv)
+    non_emitting_nd = _csv_nd_count_for(delivery_csv, NON_EMITTING_CODES)
+    # The tie-out must compare like with like: only ND that CAN become a node.
+    csv_nd_emitting = max(0, csv_nd - non_emitting_nd)
     sourced_scndry_nd = _csv_nd_count_for(delivery_csv, ("RREL20", "RREL21"))
     coerced_rrel12 = _rrel12_coercion_count(delivery_csv)
     x = _scan_xml(xml_path)
-    injected_nd = max(0, x["nodata_total"] - csv_nd)
+    injected_nd = max(0, x["nodata_total"] - csv_nd_emitting)
 
     interventions: List[Intervention] = []
     if x["nodata_hstrcl_colltn"]:
@@ -195,6 +208,10 @@ def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:
     return {
         "records": x["records"],
         "nodata_in_delivery_csv": csv_nd,
+        # Split so the tie-out is against what the XML can actually contain.
+        "nodata_on_non_emitting_fields": non_emitting_nd,
+        "nodata_in_delivery_csv_emitting": csv_nd_emitting,
+        "non_emitting_codes": list(NON_EMITTING_CODES),
         "nodata_in_xml": x["nodata_total"],
         "nodata_injected_by_builder": injected_nd,
         "nonperforming_blocks": x["nonprfrmg_blocks"],

@@ -10,6 +10,34 @@ reconciliation_scope:
   # workbook universe (config/regime/annex2_field_universe.yaml).
   deferred_fields:
     - RREC22
+
+  # Codes the workbook lists as standalone fields but the XSD represents as an
+  # ATTRIBUTE of another value rather than an element of their own.
+  #
+  # All three are currencies. The XSD carries a currency as `Ccy` on the amount
+  # it qualifies (`ActiveOrHistoricCurrencyAndAmount`, attribute `Ccy`,
+  # use="required"), and the schema's own documentation on the income value says
+  # so: "Include the currency in which the amount is denominated, using
+  # {CURRENCYCODE_3} format." Consequently:
+  #
+  #   * the authoritative mapping workbook declares ZERO paths for them —
+  #     verified: RREL18/RREL28/RREC22 have 0 specs in both PRF and NPRF, while
+  #     their sibling elements RREL16/17/19 have 9/7/7;
+  #   * a currency is required only WHERE AN AMOUNT IS REPORTED. Where the value
+  #     takes a NoData branch there is no amount, so no currency is due and none
+  #     is missing;
+  #   * a value in these delivery-ready columns is therefore legitimate data that
+  #     does NOT produce an XML node.
+  #
+  # This is not a coverage gap and must not be "fixed" by inventing a delivery
+  # rule, an XML path or a node — doing so would emit an element the schema does
+  # not define and fail validation. The list exists so the ND reconciliation can
+  # tie out against what the XML actually contains while still disclosing these
+  # cells (see delivery_instrumentation.nd_on_non_emitting_fields).
+  non_emitting_fields:
+    - RREL18   # Primary Income Currency   -> Ccy on PmryOblgrIncm/IncmVal/Val/Amt
+    - RREL28   # Currency Denomination     -> Ccy on the exposure amount
+    - RREC22   # Collateral Currency       -> Ccy on the valuation amount (also deferred)
   # AUDIT-ONLY, NOT loaded at runtime. These codes were previously listed as
   # deferred but do NOT exist in the authoritative Annex 2 workbook universe
   # (phantom). Retained here only as an audit trail; they are excluded from 28a

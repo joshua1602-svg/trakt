@@ -243,6 +243,7 @@ class _DeliveryInstrumentation:
         self.coercions: List[Dict[str, Any]] = []
         self.coercion_count = 0
         self.coercions_truncated = False
+        self.non_emitting: set = set()
 
     def scan_input_nd(self, df: "pd.DataFrame") -> None:
         """Count every ND code already present in the projected input."""
@@ -274,20 +275,59 @@ class _DeliveryInstrumentation:
         else:
             self.coercions_truncated = True
 
+    def set_non_emitting_fields(self, codes: Any) -> None:
+        """Codes the XSD represents as an ATTRIBUTE rather than an element.
+
+        Declared in ``annex2_delivery_rules.yaml::reconciliation_scope
+        .non_emitting_fields`` with the schema evidence. A value in one of these
+        columns is legitimate delivery-ready data that produces no XML node, so
+        it must be disclosed but excluded from the XML tie-out.
+        """
+        self.non_emitting = {str(c).strip().upper() for c in (codes or []) if str(c).strip()}
+
     def to_dict(self) -> Dict[str, Any]:
         """The report. Zero is stated explicitly — an absent entry is not zero."""
+        in_input_total = int(sum(self.in_input_by_code.values()))
+        by_rule_total = int(sum(self.by_rule_by_code.values()))
+        non_emitting = getattr(self, "non_emitting", set())
+        # ND sitting on a code the schema carries as an attribute. Counted here
+        # so the delivery-ready data is fully described, and subtracted from the
+        # tie-out so the XML comparison measures what the XML can contain.
+        ne_by_field = {
+            code: int(self.in_input_by_field.get(code, 0) + self.by_rule_by_field.get(code, 0))
+            for code in sorted(non_emitting)
+            if (self.in_input_by_field.get(code, 0) + self.by_rule_by_field.get(code, 0))
+        }
+        ne_total = int(sum(ne_by_field.values()))
         return {
             "schema_version": INSTRUMENTATION_SCHEMA_VERSION,
             "stage": "gate_4b_delivery_normalisation",
             "nd_present_in_input": {
-                "total": int(sum(self.in_input_by_code.values())),
+                "total": in_input_total,
                 "by_code": {k: int(v) for k, v in sorted(self.in_input_by_code.items())},
                 "by_field": {k: int(v) for k, v in sorted(self.in_input_by_field.items())},
             },
             "nd_applied_by_rules": {
-                "total": int(sum(self.by_rule_by_code.values())),
+                "total": by_rule_total,
                 "by_code": {k: int(v) for k, v in sorted(self.by_rule_by_code.items())},
                 "by_field": {k: int(v) for k, v in sorted(self.by_rule_by_field.items())},
+            },
+            # The four-way split the XML tie-out needs. `nd_in_delivery_data` is
+            # everything the CSV carries; `nd_on_emitting_fields` is the figure
+            # that must equal the ND node count in the XML; the difference is
+            # accounted for explicitly rather than left as an unexplained gap.
+            "nd_reconciliation": {
+                "nd_in_delivery_data": in_input_total + by_rule_total,
+                "nd_on_non_emitting_fields": ne_total,
+                "nd_on_emitting_fields": in_input_total + by_rule_total - ne_total,
+                "non_emitting_by_field": ne_by_field,
+                "non_emitting_fields_declared": sorted(non_emitting),
+                "basis": "Codes listed in annex2_delivery_rules.yaml::"
+                         "reconciliation_scope.non_emitting_fields are carried by "
+                         "the XSD as a Ccy attribute on the amount they qualify, "
+                         "not as an element. A currency is due only where an "
+                         "amount is reported, so these cells legitimately produce "
+                         "no XML node. nd_on_emitting_fields is the XML tie-out.",
             },
             "coercions": {
                 "count": int(self.coercion_count),
@@ -501,6 +541,10 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
     default_year = str((rules.get("defaults") or {}).get("reporting_year", "1900"))
 
     _INSTR.reset()
+    # Codes the XSD carries as an attribute rather than an element; declared, not
+    # inferred. Used only to split the reconciliation — never to change a value.
+    _INSTR.set_non_emitting_fields(
+        (rules.get("reconciliation_scope") or {}).get("non_emitting_fields") or [])
     # ND already present in the projected input, across EVERY column — not just
     # the rule-governed ones. The normaliser passes unlisted columns through
     # verbatim, so counting only rule-governed fields would under-report
