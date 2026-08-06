@@ -198,13 +198,29 @@ def _kpi_artifact(qr: Dict[str, Any], spec: Dict[str, Any], ctx: AdapterContext,
     for key, value in row.items():
         h = _hint(hints, key)
         fmt = h.get("format") or _infer_col_format(key, resolved)
-        kpis.append(
-            {
-                "id": _uid("kpi"),
-                "label": _kpi_label(key, resolved),
-                "value": _format_kpi_value(value, fmt, h.get("scale")),
-            }
-        )
+        kpi = {
+            "id": _uid("kpi"),
+            "label": _kpi_label(key, resolved),
+            "value": _format_kpi_value(value, fmt, h.get("scale")),
+        }
+        # ADDITIVE machine-readable evidence alongside the display string.
+        #
+        # ``value`` is deliberately formatted for a human ("£18.9MM"), which
+        # means the headline figure of a governed answer could not be verified
+        # by a machine without re-parsing display prose — and a rounded display
+        # string cannot be reconciled to the underlying book at all. The raw
+        # number, its canonical field and its unit are therefore carried beside
+        # it. Nothing existing was renamed or removed, so every current consumer
+        # is unaffected; a machine caller (Copilot, an assurance harness, a
+        # future agent) now has the figure itself.
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            kpi["rawValue"] = float(value)
+            kpi["valueFormat"] = fmt
+            kpi["field"] = key
+            canonical = (resolved.get(key) or {}).get("canonical_field")
+            if canonical:
+                kpi["canonicalField"] = canonical
+        kpis.append(kpi)
     return {
         "id": _uid(),
         "type": "kpi",

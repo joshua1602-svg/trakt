@@ -23,6 +23,10 @@ DEFAULT_LIBRARY_PATH = REPO_ROOT / "config" / "risk" / "concentration_test_libra
 CATEGORIES = (
     "geography", "property_value", "loan_balance", "borrower", "rate_product",
     "ltv", "performance", "composition", "external_index", "primitive",
+    # Short-dated secured lending and asset finance carry two concentration
+    # risks an amortising residential book does not: WHEN the book falls due,
+    # and how much of it is a contractual residual.
+    "maturity", "residual_value",
 )
 
 IMPLEMENTATION_STATUSES = ("implemented", "interface_only", "not_implemented")
@@ -37,6 +41,7 @@ KNOWN_EVALUATORS = (
     "borrower_aggregate_share",
     "joint_borrower_share", "arrears_share", "dimension_share",
     "vintage_share", "external_index_ratio", "filtered_share",
+    "maturity_horizon_share", "extension_share", "residual_value_share",
 )
 
 _PARAM_TYPES = ("number", "integer", "string", "list_string", "enum", "date",

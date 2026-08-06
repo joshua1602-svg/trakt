@@ -126,35 +126,89 @@ ESMA_Annex2:
   # You map to your chosen ESMA collateral classification
   # ============================================================
   collateral_type:
-    HOUSE: "R1"
-    DETACHED: "R1"
-    SEMI_DETACHED: "R1"
-    BUNGALOW: "R1"
+    # CORRECTED against the auth.099.001.04 XSD. ``CollTp`` is typed
+    # ``CollateralType7Code``, whose enumeration is:
+    #   AERO CARX CBLD CMTR ENEQ GUAR IBLD INDE INDV ITEQ MCHT MDEQ MIXD
+    #   NACM NALV OFEQ OTFA OTGI OTHE OTHR OTHV OTRE RALV RBLD SECU
+    # The previous targets R1/R2/C1/C2 are NOT members of that set. They were
+    # also load-bearing, not merely dead: the projector's synonym resolver
+    # discards a synonym whose TARGET is absent from this table, so
+    # "Residential property" (mapped to RBLD by enum_synonyms.yaml) reached
+    # Gate 5 unmapped and the XSD rejected it. The demo platform worked around
+    # this with a per-run overlay (demo_platform/artefacts.py::_demo_enum_mapping);
+    # with the identity block below, production configuration no longer needs it.
+    #
+    # Every value on the right MUST be a member of CollateralType7Code. That is
+    # asserted by tests/test_annex2_collateral_enum_mapping.py.
 
-    FLAT: "R2"
-    APARTMENT: "R2"
-    MAISONETTE: "R2"
+    # -- dwelling and building forms ------------------------------------- #
+    HOUSE: RBLD
+    DETACHED: RBLD
+    SEMI_DETACHED: RBLD
+    BUNGALOW: RBLD
+    FLAT: RBLD
+    APARTMENT: RBLD
+    MAISONETTE: RBLD
+    MIXED_USE: MIXD
+    COMMERCIAL_RESIDENTIAL: MIXD
+    OFFICE: CBLD
+    RETAIL: CBLD
+    WAREHOUSE: IBLD
+    INDUSTRIAL: IBLD
+    # LAND / AGRICULTURAL / DEVELOPMENT stay on OTHR. OTHR is already a valid
+    # CollTp member, so no defect required changing them, and "Other Real
+    # Estate" (OTRE) is a semantic reclassification that needs its own
+    # regulatory decision rather than riding along with an XSD-validity fix.
+    LAND: OTHR
+    AGRICULTURAL: OTHR
+    DEVELOPMENT: OTHR
+    MANUAL: OTHR
+    OTHER: OTHR
+    UNKNOWN: OTHR
 
-    MIXED_USE: "C1"
-    COMMERCIAL_RESIDENTIAL: "C1"
+    # -- labelled forms seen in real client tapes ------------------------- #
+    # ESMA's own field-universe content uses a "Label (CODE)" convention, and
+    # real ERE canonical data arrives in exactly that form. These are EXPLICIT
+    # keys, not a parenthetical-code parser: a parser would have to validate
+    # the extracted code against this field's enumeration before it could be
+    # trusted, and an exact key needs no such guard.
+    RESIDENTIAL BUILDING (RBLD): RBLD
+    COMMERCIAL BUILDING (CBLD): CBLD
+    INDUSTRIAL BUILDING (IBLD): IBLD
+    MIXED USE BUILDING (MIXD): MIXD
+    OTHER REAL ESTATE (OTRE): OTRE
+    OTHER (OTHR): OTHR
 
-    OFFICE: "C2"
-    RETAIL: "C2"
-    WAREHOUSE: "C2"
-    INDUSTRIAL: "C2"
+    # -- identity: a value already carrying a valid CollTp code ----------- #
+    # Present for EVERY member of the enumeration so a tape that already speaks
+    # ESMA survives projection unchanged, and so the synonym resolver never
+    # discards a synonym whose target is a valid code.
+    AERO: AERO
+    CARX: CARX
+    CBLD: CBLD
+    CMTR: CMTR
+    ENEQ: ENEQ
+    GUAR: GUAR
+    IBLD: IBLD
+    INDE: INDE
+    INDV: INDV
+    ITEQ: ITEQ
+    MCHT: MCHT
+    MDEQ: MDEQ
+    MIXD: MIXD
+    NACM: NACM
+    NALV: NALV
+    OFEQ: OFEQ
+    OTFA: OTFA
+    OTGI: OTGI
+    OTHE: OTHE
+    OTHR: OTHR
+    OTHV: OTHV
+    OTRE: OTRE
+    RALV: RALV
+    RBLD: RBLD
+    SECU: SECU
 
-    LAND: "OTHR"
-    AGRICULTURAL: "OTHR"
-    DEVELOPMENT: "OTHR"
-    MANUAL: "OTHR"
-    OTHER: "OTHR"
-    UNKNOWN: "OTHR"
-
-
-  # ============================================================
-  # PROPERTY TYPE (RREC9)
-  # RHOS, RFLT, RBGL, PCMM, BIZZ, OTHR
-  # ============================================================
   property_type:
     DETACHED HOUSE: "RHOS"
     DETACHED: "RHOS"

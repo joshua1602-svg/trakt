@@ -147,6 +147,53 @@ field_roles:
     candidates: [loan_id, loan_identifier, loan_policy_number, account_number]
     description: Loan identifier for drill-through.
 
+  # ---- short-dated secured lending (bridge) ------------------------------- #
+  maturity_date:
+    candidates: [maturity_date, date_of_lease_expiration]
+    description: >-
+      Contractual maturity of the facility. A short-dated secured book's
+      principal risk is a maturity wall rather than an amortisation profile.
+  original_term:
+    candidates: [original_term]
+    description: Original contractual term in months, as written at inception.
+  charge_type:
+    candidates: [charge_type]
+    description: First / second charge over the security.
+  lien:
+    candidates: [lien]
+    description: Numeric charge rank (1 = senior).
+
+  # ---- asset finance (including equipment finance) ------------------------ #
+  contract_type:
+    candidates: [loan_sub_type, product_type]
+    description: >-
+      Hire purchase / finance lease / asset loan, carried on the canonical
+      sub-product fields. Asset finance has no separate contract-type field.
+  manufacturer:
+    candidates: [manufacturer]
+    description: Manufacturer of the financed asset.
+  vendor:
+    candidates: [seller_name, originator_name]
+    description: >-
+      Introducing vendor / dealer. Vendor concentration is a real asset-finance
+      covenant and the vendor is carried on the canonical seller field.
+  industry:
+    candidates: [nace_industry_code, fitch_industry_code, other_industry_code,
+                 customer_segment]
+    description: Lessee / obligor industry classification.
+  collateral_type:
+    candidates: [collateral_type]
+    description: Collateral class of the security or financed asset.
+  balloon_amount:
+    candidates: [balloon_amount]
+    description: Contractual balloon payment due at the end of the agreement.
+  residual_value_current:
+    candidates: [current_residual_value_of_asset, securitised_residual_value]
+    description: Current estimated residual value of the financed asset.
+  residual_value_original:
+    candidates: [original_residual_value_of_asset]
+    description: Residual value assumed at inception.
+
 # Shared parameter fragments (documented here; the loader inlines nothing —
 # each metric declares its own schema explicitly so the contract is local).
 denominators: &denominators [current_balance, original_balance, loan_count]
@@ -1184,6 +1231,134 @@ metrics:
     version: "1.0"
 
   # ---------------------------- H. Portfolio composition and diversification
+  # ------------------------------------------------------- G. Maturity profile
+  # Short-dated secured lending (bridge) is repaid at maturity, not amortised,
+  # so its concentration risk is WHEN the book falls due. These two metrics
+  # measure that from canonical dates alone; neither invents a schedule.
+  - metric_id: maturity_within_horizon_share
+    canonical_name: balance_maturing_within_horizon
+    display_name: Balance maturing within horizon
+    category: maturity
+    description: >-
+      Balance share of loans whose contractual maturity falls within
+      `horizon_days` of the reporting date. The reference date is the reporting
+      date supplied by the evaluation service, or the latest cut-off date the
+      frame itself carries — never today's date, so a re-run of an old period
+      answers the same way.
+    asset_classes: [cross_asset]
+    evaluator: maturity_horizon_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans maturing on or before the horizon.
+    denominator_options: *denominators
+    required_roles: [maturity_date, balance_current]
+    parameters:
+      denominator_floor: *denominator_floor
+      horizon_days:
+        type: number
+        required: true
+        minimum: 0
+        description: Days from the reporting date, inclusive.
+      include_past_due:
+        type: boolean
+        default: true
+        description: >-
+          Count loans already past their contractual maturity. Excluding them
+          would hide the very exposure the test exists to measure.
+      reference_date:
+        type: string
+        required: false
+        description: >-
+          Explicit reporting date (ISO). Omit to use the evaluation service's
+          reporting date, then the frame's own latest cut-off date.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [maturity concentration, maturity wall, maturing within,
+              near-term maturities, days to maturity]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  - metric_id: extension_share
+    canonical_name: extended_balance_share
+    display_name: Extended loans
+    category: maturity
+    description: >-
+      Balance share of loans whose current maturity date sits later than their
+      ORIGINAL term implies — i.e. loans that have been extended. Derived
+      entirely from canonical fields (origination date, original term, current
+      maturity date); no extension flag is required and none is invented.
+    asset_classes: [cross_asset]
+    evaluator: extension_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for loans whose maturity has moved beyond the original term.
+    denominator_options: *denominators
+    required_roles: [maturity_date, original_term, origination_date, balance_current]
+    parameters:
+      denominator_floor: *denominator_floor
+      tolerance_months:
+        type: number
+        default: 1
+        description: >-
+          Months of slack before a later maturity counts as an extension, so a
+          month-end rounding difference is not reported as a term variation.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [extension concentration, extended loans, term extensions,
+              rolled facilities]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
+  # --------------------------------------------- H. Residual / balloon exposure
+  - metric_id: residual_value_exposure_share
+    canonical_name: residual_value_exposure_share
+    display_name: Balloon and residual-value exposure
+    category: residual_value
+    description: >-
+      Balance share of agreements carrying a contractual balloon payment or a
+      residual value above `minimum_amount`. Asset finance takes residual-value
+      risk that a pure amortising book does not, and a covenant on it is a real
+      asset-finance limit.
+    asset_classes: [cross_asset]
+    evaluator: residual_value_share
+    unit: percent
+    output_precision: 2
+    supported_operators: [max, min]
+    aggregation: sum
+    numerator: Sum of balance for agreements whose residual basis exceeds the minimum.
+    denominator_options: *denominators
+    required_roles: [balance_current]
+    parameters:
+      denominator_floor: *denominator_floor
+      residual_basis:
+        type: enum
+        values: [balloon, residual_current, residual_original]
+        default: balloon
+        description: Which contractual residual the test measures.
+      minimum_amount:
+        type: number
+        default: 0
+        description: Residual amount above which an agreement is in the numerator.
+      denominator:
+        type: enum
+        values: [current_balance, original_balance]
+        default: current_balance
+    aliases: [balloon concentration, residual value concentration,
+              balloon exposure, residual exposure]
+    composable: true
+    implementation_status: implemented
+    version: "1.0"
+
   - metric_id: composition_dimension_share
     canonical_name: composition_dimension_share
     display_name: Composition exposure
@@ -1207,7 +1382,12 @@ metrics:
         type: enum
         values: [originator, seller, source_type, source_portfolio, servicer,
                  spv, loan_purpose, property_type, tenure, product,
-                 payment_option, rate_type]
+                 payment_option, rate_type,
+                 # Added with bridge lending and asset finance. Each names a
+                 # declared field role above, so the evaluator resolves it with
+                 # no code change.
+                 charge_type, contract_type, collateral_type, manufacturer,
+                 vendor, industry]
         required: true
         description: The governed field role the test groups on.
       values: {type: list_string, required: true}
@@ -1246,7 +1426,12 @@ metrics:
         type: enum
         values: [originator, seller, source_type, source_portfolio, servicer,
                  spv, loan_purpose, property_type, tenure, product, region,
-                 broker]
+                 broker,
+                 # Added with bridge lending and asset finance. Each names a
+                 # declared field role above, so the evaluator resolves it with
+                 # no code change.
+                 charge_type, contract_type, collateral_type, manufacturer,
+                 vendor, industry]
         required: true
       denominator:
         type: enum

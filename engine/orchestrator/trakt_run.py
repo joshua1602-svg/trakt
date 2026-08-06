@@ -412,6 +412,21 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
 
     hq_recs = _count_hq_recommendations(header, min_conf=0.88)
 
+    # A source that resolves to NO canonical field at all is not a loan tape
+    # this platform understands. Left to run, Gate 1 reported OK, the transform
+    # produced an empty canonical, and every later gate reported OK on zero
+    # rows — so an unreadable file and a genuinely empty portfolio became
+    # indistinguishable, and the run exited 0. Refuse here instead: an
+    # unresolvable schema is a governed ingestion outcome, not a silent success.
+    if fields_mapped == 0:
+        raise RuntimeError(
+            "[Gate 1] Unsupported source schema: no canonical field could be "
+            f"resolved from {input_path.name}. Every header was unmapped, so "
+            "the run would produce an empty canonical rather than a portfolio. "
+            "Supply an approved onboarding-contract alias overlay "
+            "(--extra-aliases-dir) or correct the source headers."
+        )
+
     if fields_mapped is not None:
         print(f"[Gate 1] Semantic alignment.............. OK {fields_mapped} fields mapped | {hq_recs} HQ recommendations")
     else:
@@ -724,9 +739,35 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
             "--currency", args.currency,
         ])
     else:
+        # Annex 2 is the ONLY regime whose delivery capability has been built
+        # and validated in this repository (dedicated builder + XSD validation).
+        # For every other regime there is no implemented, validated delivery
+        # template — not merely an unset deployment path — so refuse here and
+        # say so. Previously this call fell through to the generic builder's
+        # own default ("esma_template.xml", which exists nowhere in the tree)
+        # and died inside a subprocess with a Jinja TemplateNotFound, which
+        # reads as a crash rather than as a governed "not built yet".
+        template = getattr(args, "regime_xml_template", None)
+        if not template:
+            raise RuntimeError(
+                f"[Gate 5] Regulatory delivery for {regime} is NOT IMPLEMENTED: "
+                f"no delivery template for this regime has been authored and "
+                f"validated in this repository, and no XSD validation exists "
+                f"for it. This is an unbuilt capability, not a missing "
+                f"deployment setting — supplying --regime-xml-template would "
+                f"render an UNVALIDATED artefact and must not be treated as "
+                f"producing a submission. The Gate 4 projection at {projected} "
+                f"is complete and is the supported output for {regime} today. "
+                f"Annex 2 is the only regime with a built and XSD-validated "
+                f"delivery path (xml_builder_annex2 + DRAFT1auth.099.001.04)."
+            )
+        if not Path(template).exists():
+            raise RuntimeError(
+                f"[Gate 5] --regime-xml-template {template!r} does not exist.")
         _run([
             py, _script("xml_builder"),
             "--input", str(projected),
+            "--template", str(template),
             "--output", str(xml_out),
             "--currency", args.currency,
         ])
@@ -1029,6 +1070,13 @@ examples:
              "contract). Repeatable; later directories win.",
     )
     ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
+    ap.add_argument(
+        "--regime-xml-template", dest="regime_xml_template", default=None,
+        help="Jinja XML delivery template for a NON-Annex-2 regime "
+             "(ESMA_Annex3/4/8/9). Annex 2 has a committed builder and XSD and "
+             "ignores this. Without it, Gate 5 refuses with an explicit "
+             "'delivery not configured' error rather than crashing.")
+
     ap.add_argument("--out-dir", default="out")
     ap.add_argument("--validation-out-dir", default="out_validation")
     ap.add_argument("--pipeline-output-dir", default="out_pipeline")

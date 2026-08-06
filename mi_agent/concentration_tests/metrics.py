@@ -273,7 +273,7 @@ def _eval_dimension_share(df, lib, metric, params, external=None):
     if total is None:
         return _no_denominator(metric, basis, len(df))
     dimension = str(params.get("dimension") or "")
-    role = _DIMENSION_ROLES.get(dimension)
+    role = _dimension_role(lib, dimension)
     col = resolve_role_column(df, lib, role) if role else None
     if col is None:
         return MetricComputation.missing(role or dimension,
@@ -344,10 +344,28 @@ def _eval_postcode_area_share(df, lib, metric, params, external=None):
     return _share_result(df, mask, bal, total, metric, basis, {"postcode": col})
 
 
-def _group_role(metric: MetricDefinition, params: Dict[str, Any]) -> Optional[str]:
+def _dimension_role(lib: ConcentrationLibrary, dimension: Any) -> Optional[str]:
+    """Resolve a governed ``dimension`` parameter onto a field role.
+
+    The explicit table below is kept for the dimensions whose name differs from
+    their role. Anything else resolves to a role of the SAME NAME, provided that
+    role is DECLARED in the library's ``field_roles``. That is what lets a new
+    composition dimension (manufacturer, vendor, industry, charge_type, ...) be
+    added as configuration rather than as code, while still refusing a dimension
+    no governed role backs.
+    """
+    name = str(dimension or "")
+    role = _DIMENSION_ROLES.get(name)
+    if role:
+        return role
+    return name if (name and lib.role(name) is not None) else None
+
+
+def _group_role(lib: ConcentrationLibrary, metric: MetricDefinition,
+                params: Dict[str, Any]) -> Optional[str]:
     dimension = params.get("dimension")
     if dimension:
-        return _DIMENSION_ROLES.get(str(dimension))
+        return _dimension_role(lib, dimension)
     return _categorical_role(metric)
 
 
@@ -358,7 +376,7 @@ def _eval_largest_group_share(df, lib, metric, params, external=None):
                                          total_loans=len(df))
     if total is None:
         return _no_denominator(metric, basis, len(df))
-    role = _group_role(metric, params)
+    role = _group_role(lib, metric, params)
     col = resolve_role_column(df, lib, role) if role else None
     if col is None:
         return MetricComputation.missing(role or "dimension",
@@ -813,6 +831,124 @@ def _eval_filtered_share(df, lib, metric, params, external=None):
     return _share_result(df, mask, bal, total, metric, basis, resolved)
 
 
+# --------------------------------------------------------------------------- #
+# Maturity profile + residual value
+#
+# Short-dated secured lending is repaid AT maturity and asset finance carries a
+# contractual residual, so both have concentration risks an amortising
+# residential book does not. Both evaluators read canonical fields only; neither
+# invents a payment schedule or a valuation.
+# --------------------------------------------------------------------------- #
+def _reference_date(df: pd.DataFrame, lib: ConcentrationLibrary,
+                    params: Dict[str, Any]) -> Optional[pd.Timestamp]:
+    """The AS-AT date a maturity horizon is measured from.
+
+    In precedence order: an explicit ``reference_date`` parameter, the reporting
+    date the evaluation service injected, then the latest cut-off date the frame
+    itself carries. Never ``today``: a re-run of an old reporting period must
+    answer exactly as it did the first time.
+    """
+    for key in ("reference_date", "_reporting_date"):
+        value = params.get(key)
+        if value:
+            parsed = pd.to_datetime(value, errors="coerce")
+            if pd.notna(parsed):
+                return parsed
+    for col in ("reporting_date", "data_cut_off_date", "cut_off_date"):
+        if col in getattr(df, "columns", []):
+            parsed = pd.to_datetime(df[col], errors="coerce").dropna()
+            if not parsed.empty:
+                return parsed.max()
+    return None
+
+
+def _eval_maturity_horizon_share(df, lib, metric, params, external=None):
+    bal, total, basis, missing = _denominator(df, lib, metric, params)
+    if missing:
+        return MetricComputation.missing("balance", missing, unit=metric.unit,
+                                         total_loans=len(df))
+    if total is None:
+        return _no_denominator(metric, basis, len(df))
+    col = resolve_role_column(df, lib, "maturity_date")
+    if col is None:
+        return MetricComputation.missing(
+            "maturity_date", role_candidates(lib, "maturity_date"),
+            unit=metric.unit, total_loans=len(df))
+    as_at = _reference_date(df, lib, params)
+    if as_at is None:
+        return MetricComputation(
+            value=None, unit=metric.unit, data_status=DATA_MISSING,
+            total_loans=len(df),
+            notes="No reporting date is available to measure a maturity "
+                  "horizon from; the horizon is not assumed.")
+    maturities = pd.to_datetime(df[col], errors="coerce")
+    horizon = float(_param(metric, params, "horizon_days") or 0)
+    days = (maturities - as_at).dt.days
+    within = days <= horizon
+    if not bool(_param(metric, params, "include_past_due")):
+        within &= days >= 0
+    out = _share_result(df, within.fillna(False), bal, total, metric, basis,
+                        {"maturity_date": col})
+    out.notes = (f"Maturing on or before "
+                 f"{(as_at + pd.Timedelta(days=horizon)).date().isoformat()} "
+                 f"(as at {as_at.date().isoformat()}).")
+    return out
+
+
+def _eval_extension_share(df, lib, metric, params, external=None):
+    bal, total, basis, missing = _denominator(df, lib, metric, params)
+    if missing:
+        return MetricComputation.missing("balance", missing, unit=metric.unit,
+                                         total_loans=len(df))
+    if total is None:
+        return _no_denominator(metric, basis, len(df))
+    resolved: Dict[str, str] = {}
+    for role in ("maturity_date", "origination_date", "original_term"):
+        col = resolve_role_column(df, lib, role)
+        if col is None:
+            return MetricComputation.missing(role, role_candidates(lib, role),
+                                             unit=metric.unit,
+                                             total_loans=len(df))
+        resolved[role] = col
+    maturity = pd.to_datetime(df[resolved["maturity_date"]], errors="coerce")
+    origination = pd.to_datetime(df[resolved["origination_date"]], errors="coerce")
+    original_term = coerce_numeric(df[resolved["original_term"]])
+    elapsed_months = ((maturity.dt.year - origination.dt.year) * 12
+                      + (maturity.dt.month - origination.dt.month))
+    tolerance = float(_param(metric, params, "tolerance_months") or 0)
+    mask = (elapsed_months - original_term) > tolerance
+    return _share_result(df, mask.fillna(False), bal, total, metric, basis,
+                         resolved)
+
+
+_RESIDUAL_ROLES = {"balloon": "balloon_amount",
+                   "residual_current": "residual_value_current",
+                   "residual_original": "residual_value_original"}
+
+
+def _eval_residual_value_share(df, lib, metric, params, external=None):
+    bal, total, basis, missing = _denominator(df, lib, metric, params)
+    if missing:
+        return MetricComputation.missing("balance", missing, unit=metric.unit,
+                                         total_loans=len(df))
+    if total is None:
+        return _no_denominator(metric, basis, len(df))
+    role = _RESIDUAL_ROLES.get(str(_param(metric, params, "residual_basis") or ""))
+    col = resolve_role_column(df, lib, role) if role else None
+    if col is None:
+        return MetricComputation.missing(
+            role or "residual_basis", role_candidates(lib, role or ""),
+            unit=metric.unit, total_loans=len(df))
+    minimum = float(_param(metric, params, "minimum_amount") or 0)
+    residual = coerce_numeric(df[col])
+    mask = (residual > minimum).fillna(False)
+    out = _share_result(df, mask, bal, total, metric, basis, {role: col})
+    contractual = float(residual[mask].sum(skipna=True)) if mask.any() else 0.0
+    out.notes = (f"Contractual {str(_param(metric, params, 'residual_basis'))} "
+                 f"exposure: {contractual:,.2f}.")
+    return out
+
+
 EVALUATORS: Dict[str, Callable[..., MetricComputation]] = {
     "share_of_balance": _eval_share_of_balance,
     "share_of_balance_numeric": _eval_share_of_balance_numeric,
@@ -827,6 +963,9 @@ EVALUATORS: Dict[str, Callable[..., MetricComputation]] = {
         _eval_field_extremum(df, lib, m, p, take_max=False, external=external),
     "largest_by_field_share": _eval_largest_by_field_share,
     "top_n_share": _eval_top_n_share,
+    "maturity_horizon_share": _eval_maturity_horizon_share,
+    "extension_share": _eval_extension_share,
+    "residual_value_share": _eval_residual_value_share,
     "max_count_per_group": _eval_max_count_per_group,
     "multi_loan_borrower_share": _eval_multi_loan_borrower_share,
     "borrower_aggregate_share": _eval_borrower_aggregate_share,
