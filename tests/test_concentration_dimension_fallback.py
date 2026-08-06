@@ -11,8 +11,9 @@ one of those names appears as a ``dimension`` in a live configuration, that
 test could start MEASURING, and a client's RAG state could move with no
 configuration change and no operator approval.
 
-`docs/concentration_dimension_fallback_audit.md` records that no committed
-configuration is affected today. This file keeps it that way: a future
+No committed configuration is affected today — the audit that established this
+is recorded in the commit that introduced the fallback. This file keeps it that
+way: a future
 configuration that uses one of these names as a governed ``dimension`` and
 reaches metric parameters fails here rather than changing a RAG state quietly.
 
@@ -118,10 +119,11 @@ class TestNoCommittedConfigurationIsAffected(unittest.TestCase):
     def setUpClass(cls):
         cls.newly = set(_newly_resolvable())
 
-    def test_the_audit_scope_is_what_the_document_records(self):
+    def test_the_audited_scope_is_still_thirty_six_names(self):
         self.assertEqual(len(self.newly), 36,
-                         "the newly-resolvable set changed; re-run the audit in "
-                         "docs/concentration_dimension_fallback_audit.md")
+                         "the newly-resolvable set changed; re-audit which "
+                         "configurations could now resolve a dimension that "
+                         "previously returned None")
 
     def test_no_configuration_feeds_a_newly_resolvable_dimension_to_a_metric(self):
         offenders = []
@@ -138,8 +140,8 @@ class TestNoCommittedConfigurationIsAffected(unittest.TestCase):
                                   node.get("limit_id") or node.get("test_id")))
         self.assertEqual(offenders, [],
                          "a configuration now uses a newly-resolvable dimension; "
-                         "confirm the RAG impact and update "
-                         "docs/concentration_dimension_fallback_audit.md")
+                         "confirm the RAG impact before allowing it — a test "
+                         "that was 'unavailable' may now report a breach")
 
     def test_the_known_hit_cannot_reach_metric_parameters(self):
         """`borrower_structure` in the extracted limits is inert."""

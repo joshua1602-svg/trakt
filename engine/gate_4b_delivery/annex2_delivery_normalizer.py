@@ -204,6 +204,161 @@ def _build_outputs(input_csv: Path, output_dir: Path) -> Dict[str, Path]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Phase 1 delivery instrumentation — OBSERVE ONLY.
+#
+# Separates the two kinds of ND this stage sees, which the report previously
+# conflated into a single "delivery ready" outcome:
+#
+#   * present_in_input  — the projected CSV already carried an ND code. That is
+#     upstream truth (registry/projector), not a delivery decision.
+#   * applied_by_rules  — this normaliser substituted an ND because a DECLARED
+#     rule in annex2_delivery_rules.yaml said to (``default_allowed`` +
+#     ``default_value``). Governed and auditable, but still a value the client
+#     did not supply.
+#
+# Coercions are recorded whenever a declared transform CHANGES a value, with
+# the rule that caused it. Counts are exact; individual records are capped.
+#
+# Nothing here alters a value: removing every ``record_*`` call would leave the
+# delivery-ready CSV byte-identical.
+# --------------------------------------------------------------------------- #
+INSTRUMENTATION_SCHEMA_VERSION = 1
+
+#: Hard cap on individually recorded coercions. Counts remain exact above it.
+COERCION_RECORD_CAP = 5000
+
+
+def non_emitting_codes(rules: Dict[str, Any]) -> List[str]:
+    """Codes the XSD carries as an ATTRIBUTE rather than an element.
+
+    Derived from the declared representation model
+    (``reconciliation_scope.representation``), never from a hard-coded list, so
+    adding a concept is configuration rather than code. Any entry whose
+    ``representation_type`` is not an element cannot produce an XML node of its
+    own, so its values are disclosed separately and excluded from the XML
+    tie-out.
+    """
+    model = ((rules.get("reconciliation_scope") or {}).get("representation") or {})
+    return sorted(
+        code for code, meta in model.items()
+        if isinstance(meta, dict)
+        and str(meta.get("representation_type", "")).strip().lower() == "xml_attribute"
+    )
+
+
+class _DeliveryInstrumentation:
+    """ND provenance and coercion records for one normalisation run."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.in_input_by_code: Dict[str, int] = defaultdict(int)
+        self.in_input_by_field: Dict[str, int] = defaultdict(int)
+        self.by_rule_by_code: Dict[str, int] = defaultdict(int)
+        self.by_rule_by_field: Dict[str, int] = defaultdict(int)
+        self.coercions: List[Dict[str, Any]] = []
+        self.coercion_count = 0
+        self.coercions_truncated = False
+        self.non_emitting: set = set()
+
+    def scan_input_nd(self, df: "pd.DataFrame") -> None:
+        """Count every ND code already present in the projected input."""
+        for column in df.columns:
+            values = df[column].astype(str).str.strip().str.upper()
+            matched = values[values.str.fullmatch(r"ND[1-5]", na=False)]
+            if matched.empty:
+                continue
+            self.in_input_by_field[str(column)] += int(len(matched))
+            for code, count in matched.value_counts().items():
+                self.in_input_by_code[str(code)] += int(count)
+
+    def record_nd_from_rule(self, *, nd_code: str, field: str) -> None:
+        self.by_rule_by_code[nd_code] += 1
+        self.by_rule_by_field[field] += 1
+
+    def record_coercion(self, *, field_code: str, original_value: str,
+                        resulting_value: str, reason: str,
+                        row_identifier: Optional[str] = None) -> None:
+        self.coercion_count += 1
+        if len(self.coercions) < COERCION_RECORD_CAP:
+            self.coercions.append({
+                "field_code": field_code,
+                "row_identifier": row_identifier,
+                "original_value": original_value,
+                "resulting_value": resulting_value,
+                "reason": reason,
+            })
+        else:
+            self.coercions_truncated = True
+
+    def set_non_emitting_fields(self, codes: Any) -> None:
+        """Codes the XSD represents as an ATTRIBUTE rather than an element.
+
+        Declared in ``annex2_delivery_rules.yaml::reconciliation_scope
+        .non_emitting_fields`` with the schema evidence. A value in one of these
+        columns is legitimate delivery-ready data that produces no XML node, so
+        it must be disclosed but excluded from the XML tie-out.
+        """
+        self.non_emitting = {str(c).strip().upper() for c in (codes or []) if str(c).strip()}
+
+    def to_dict(self) -> Dict[str, Any]:
+        """The report. Zero is stated explicitly — an absent entry is not zero."""
+        in_input_total = int(sum(self.in_input_by_code.values()))
+        by_rule_total = int(sum(self.by_rule_by_code.values()))
+        non_emitting = getattr(self, "non_emitting", set())
+        # ND sitting on a code the schema carries as an attribute. Counted here
+        # so the delivery-ready data is fully described, and subtracted from the
+        # tie-out so the XML comparison measures what the XML can contain.
+        ne_by_field = {
+            code: int(self.in_input_by_field.get(code, 0) + self.by_rule_by_field.get(code, 0))
+            for code in sorted(non_emitting)
+            if (self.in_input_by_field.get(code, 0) + self.by_rule_by_field.get(code, 0))
+        }
+        ne_total = int(sum(ne_by_field.values()))
+        return {
+            "schema_version": INSTRUMENTATION_SCHEMA_VERSION,
+            "stage": "gate_4b_delivery_normalisation",
+            "nd_present_in_input": {
+                "total": in_input_total,
+                "by_code": {k: int(v) for k, v in sorted(self.in_input_by_code.items())},
+                "by_field": {k: int(v) for k, v in sorted(self.in_input_by_field.items())},
+            },
+            "nd_applied_by_rules": {
+                "total": by_rule_total,
+                "by_code": {k: int(v) for k, v in sorted(self.by_rule_by_code.items())},
+                "by_field": {k: int(v) for k, v in sorted(self.by_rule_by_field.items())},
+            },
+            # The four-way split the XML tie-out needs. `nd_in_delivery_data` is
+            # everything the CSV carries; `nd_on_emitting_fields` is the figure
+            # that must equal the ND node count in the XML; the difference is
+            # accounted for explicitly rather than left as an unexplained gap.
+            "nd_reconciliation": {
+                "nd_in_delivery_data": in_input_total + by_rule_total,
+                "nd_on_non_emitting_fields": ne_total,
+                "nd_on_emitting_fields": in_input_total + by_rule_total - ne_total,
+                "non_emitting_by_field": ne_by_field,
+                "non_emitting_fields_declared": sorted(non_emitting),
+                "basis": "Codes listed in annex2_delivery_rules.yaml::"
+                         "reconciliation_scope.non_emitting_fields are carried by "
+                         "the XSD as a Ccy attribute on the amount they qualify, "
+                         "not as an element. A currency is due only where an "
+                         "amount is reported, so these cells legitimately produce "
+                         "no XML node. nd_on_emitting_fields is the XML tie-out.",
+            },
+            "coercions": {
+                "count": int(self.coercion_count),
+                "records": list(self.coercions),
+                "truncated": bool(self.coercions_truncated),
+                "record_cap": COERCION_RECORD_CAP,
+            },
+        }
+
+
+_INSTR = _DeliveryInstrumentation()
+
+
 def _normalize_field(
     df: pd.DataFrame,
     out_df: pd.DataFrame,
@@ -231,6 +386,10 @@ def _normalize_field(
 
     if current == "" and rule.get("default_allowed") and "default_value" in rule:
         current = to_str(rule.get("default_value"))
+        if current and ND_PATTERN.fullmatch(current.upper()):
+            # A DECLARED rule supplied this ND — governed, but still a value
+            # the client did not provide.
+            _INSTR.record_nd_from_rule(nd_code=current.upper(), field=field)
 
     generator = rule.get("generator") if isinstance(rule.get("generator"), dict) else None
     if current == "" and generator and generator.get("type") == "securitisation_id":
@@ -323,15 +482,98 @@ def _normalize_field(
             return Issue("error", "precision", field, row_idx, err, raw, current)
         current = cur_num or ""
 
+    # A declared transform CHANGED a supplied value. Recorded so the delivery
+    # report can show what the rules did to the client's data, distinct from
+    # the builder's own coercion (see xml_builder_annex2._INSTR).
+    if raw and current != raw:
+        _INSTR.record_coercion(
+            field_code=field, original_value=raw, resulting_value=current,
+            row_identifier=_row_identifier(df, row_idx),
+            reason=_transform_reason(rule))
     out_df.at[row_idx, field] = current
     return None
+
+
+def _add_defaulted_columns(df: "pd.DataFrame", out_df: "pd.DataFrame",
+                           fields_cfg: Dict[str, Any]) -> List[str]:
+    """Create columns for absent fields whose rule authorises a default.
+
+    A field the projection legitimately does not carry may still be REQUIRED in
+    the submission — an XSD-mandatory element whose data does not apply to this
+    book. RREL20/RREL21 (secondary obligor income) are the case in point: no
+    canonical source exists, the XSD mandates the element, and the correct
+    answer is ND5 ("not applicable").
+
+    Creating the column here, once, lets the ORDINARY declared-default path in
+    :func:`_normalize_field` fill every row — so a rule-supplied ND is recorded
+    as ``nd_applied_by_rules`` exactly like every other one, with no special
+    case anywhere.
+
+    Entirely rule-driven: no field is named. A field with no
+    ``default_allowed`` default stays absent, exactly as before. Columns are
+    appended in rule-declaration order, so the header is deterministic. Gate 5
+    orders the XML from ``esma_code_order.yaml``, never from CSV column order.
+    """
+    added: List[str] = []
+    for field, rule in fields_cfg.items():
+        if not isinstance(rule, dict) or field in out_df.columns:
+            continue
+        if bool(rule.get("enforce_presence", rule.get("mandatory", False))):
+            continue        # a required projected source must still be missing
+        if rule.get("default_allowed") and to_str(rule.get("default_value")):
+            df[field] = ""
+            out_df[field] = ""
+            added.append(field)
+    return added
+
+
+#: Columns that identify an exposure, best first. RREL3 is the new underlying
+#: exposure identifier; RREL2 the original.
+_ROW_ID_FIELDS = ("RREL3", "RREL2")
+
+
+def _row_identifier(df: pd.DataFrame, row_idx: int) -> Optional[str]:
+    """The exposure a record belongs to, or ``None`` — never invented."""
+    for field in _ROW_ID_FIELDS:
+        if field in df.columns:
+            value = to_str(df.at[row_idx, field])
+            if value:
+                return value
+    return None
+
+
+def _transform_reason(rule: Dict[str, Any]) -> str:
+    """Which declared rule caused a value to change."""
+    transforms = rule.get("transform") if isinstance(rule.get("transform"), dict) else {}
+    applied = sorted(str(k) for k in transforms)
+    if applied:
+        return ("annex2_delivery_rules.yaml field_rules transform: "
+                + ", ".join(applied))
+    if "precision" in rule:
+        return "annex2_delivery_rules.yaml field_rules precision"
+    return "annex2_delivery_rules.yaml field_rules normalisation"
 
 
 def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.DataFrame, List[Issue], Dict[str, Any]]:
     fields_cfg = rules.get("field_rules") if isinstance(rules.get("field_rules"), dict) else {}
     default_year = str((rules.get("defaults") or {}).get("reporting_year", "1900"))
 
+    _INSTR.reset()
+    # Codes the XSD carries as an attribute rather than an element; declared, not
+    # inferred. Used only to split the reconciliation — never to change a value.
+    _INSTR.set_non_emitting_fields(non_emitting_codes(rules))
+    # ND already present in the projected input, across EVERY column — not just
+    # the rule-governed ones. The normaliser passes unlisted columns through
+    # verbatim, so counting only rule-governed fields would under-report
+    # upstream ND and silently attribute the difference to nothing.
+    _INSTR.scan_input_nd(df)
     out_df = df.copy()
+    # Rule-authorised defaults for fields the projection did not carry. This
+    # adds a column to the working frame as well as the output one, so the
+    # ordinary per-row path can read it back — on a PRIVATE copy, so a caller's
+    # frame is never mutated behind its back.
+    df = df.copy()
+    defaulted_columns = _add_defaulted_columns(df, out_df, fields_cfg)
     issues: List[Issue] = []
     seq_counter: Dict[str, int] = defaultdict(int)
 
@@ -358,6 +600,20 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
             "status": "PASS" if not errors else "FAIL",
             "blocking_errors": int(len(errors)),
         },
+        # Phase 1: what this stage did to values, stated explicitly. A run with
+        # no coercions records a count of zero rather than omitting the key.
+        "columns_created_from_declared_defaults": list(defaulted_columns),
+        # Phase 2: a bare field count cannot distinguish a field carrying client
+        # data from one carrying a governed "not applicable". Split it, so a
+        # headline number can never imply more coverage than was delivered.
+        "field_provenance": {
+            "populated_from_projected_source": int(len(out_df.columns)
+                                                   - len(defaulted_columns)),
+            "populated_by_declared_delivery_rule": int(len(defaulted_columns)),
+            "represented_in_submission": int(len(out_df.columns)),
+            "declared_rule_fields": sorted(defaulted_columns),
+        },
+        "delivery_instrumentation": _INSTR.to_dict(),
     }
     return out_df, issues, summary
 

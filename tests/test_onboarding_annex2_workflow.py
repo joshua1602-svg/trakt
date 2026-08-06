@@ -265,9 +265,9 @@ class TestAnnex2FieldUniverse(unittest.TestCase):
 
     def test_universe_loader_unit(self):
         auth = tcov.load_annex2_authoritative_universe(REGISTRY)
-        # Workbook registry carries the full Annex 2 code set (> the 68 regime
+        # Workbook registry carries the full Annex 2 code set (> the 70 regime
         # rules), e.g. RREL3 / RREL5 / RREL7 are present but unruled.
-        self.assertGreater(len(auth), 68)
+        self.assertGreater(len(auth), 70)
         for code in ("RREL3", "RREL5", "RREL7"):
             self.assertIn(code, auth)
 
@@ -364,8 +364,10 @@ class TestAnnex2FieldUniverse(unittest.TestCase):
                   "annex2_missing_from_28a_count", "annex2_deferred_field_count",
                   "annex2_deliverable_field_count"):
             self.assertIn(k, s)
-        self.assertEqual(s["annex2_regime_rule_count"], 68)
-        self.assertGreater(s["annex2_authoritative_field_count"], 68)
+        # 70 since Phase 2: RREL20/RREL21 moved out of xml_builder_annex2.py
+        # into declared rules. See docs/annex2_delivery_migration.md.
+        self.assertEqual(s["annex2_regime_rule_count"], 70)
+        self.assertGreater(s["annex2_authoritative_field_count"], 70)
 
     def test_review_pack_shows_universe_reconciliation(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
@@ -512,8 +514,8 @@ class TestAnnex2SemanticMapping(unittest.TestCase):
                      "47_annex2_semantic_mapping_reconciliation_summary.md"):
             self.assertTrue((self.out / name).exists(), name)
 
-    def test_all_68_ruled_codes_checked(self):
-        self.assertEqual(self.sem["summary"]["semantic_rows_total"], 68)
+    def test_all_70_ruled_codes_checked(self):
+        self.assertEqual(self.sem["summary"]["semantic_rows_total"], 70)
 
     def test_all_mappings_now_aligned(self):
         # After the mapping corrections, the previously mismapped codes align.

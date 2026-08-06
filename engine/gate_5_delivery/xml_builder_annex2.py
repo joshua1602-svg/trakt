@@ -14,9 +14,11 @@ Design notes specific to the Annex 2 workbook:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -106,15 +108,179 @@ def _is_iso_year(value: str) -> bool:
     return bool(re.match(r"^\d{4}$", _safe_str(value)))
 
 
-def _coerce_record_value_for_branch(code: str, value: str) -> str:
-    """
-    Small branch-aware coercions for known Annex2 mapping edge cases.
+# --------------------------------------------------------------------------- #
+# Phase 1 delivery instrumentation — OBSERVE ONLY.
+#
+# Records what this builder does to values that did not come from the delivery-
+# ready input: ND codes it inserts itself, and value coercions it applies. It
+# changes no value, no node, no ordering and no XSD outcome; removing every
+# ``_INSTR`` call would leave the emitted XML byte-identical.
+#
+# The distinction this exists to make visible:
+#   * ND already present in the projected input        (upstream truth)
+#   * ND applied by a DECLARED delivery rule           (governed, auditable)
+#   * ND injected inside this builder                  (Phase 2: only the
+#                                                       non-performing
+#                                                       historical block
+#                                                       remains)
+#   * value routed to NoData, never invented           (Phase 2)
+#   * value coercion                                   (fabrication risk)
+# --------------------------------------------------------------------------- #
+INSTRUMENTATION_SCHEMA_VERSION = 1
 
-    - RREL12 maps to a Yr branch. Non-year literals should route to NoData branch.
+#: Hard cap on individually recorded coercions. Counts stay exact above it.
+COERCION_RECORD_CAP = 5000
+
+
+class _DeliveryInstrumentation:
+    """Counts and exemplars for builder-side ND injection and coercion."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.nd_by_code: Dict[str, int] = defaultdict(int)
+        self.nd_by_field: Dict[str, int] = defaultdict(int)
+        self.nd_by_branch: Dict[str, int] = defaultdict(int)
+        self.coercions: List[Dict[str, Any]] = []
+        self.coercion_count = 0
+        self.coercions_truncated = False
+        self.routed: List[Dict[str, Any]] = []
+        self.routed_count = 0
+        self.routed_truncated = False
+
+    def record_routed_to_nodata(self, *, field_code: str, original_value: str,
+                                reason: str,
+                                row_identifier: Optional[str] = None) -> None:
+        """A value that could not enter its typed branch and was NOT invented.
+
+        Phase 2 replaced fabrication with routing. This is deliberately a
+        SEPARATE channel from ``record_coercion``: a coercion changes a value,
+        a routing declines to.
+        """
+        self.routed_count += 1
+        if len(self.routed) < COERCION_RECORD_CAP:
+            self.routed.append({
+                "field_code": field_code,
+                "row_identifier": row_identifier,
+                "original_value": original_value,
+                "resulting_value": "",
+                "routed_to": "NoData branch (or refused if none is mapped)",
+                "reason": reason,
+            })
+        else:
+            self.routed_truncated = True
+
+    def record_nd(self, *, nd_code: str, field_code: str, branch: str) -> None:
+        self.nd_by_code[nd_code] += 1
+        self.nd_by_field[field_code] += 1
+        self.nd_by_branch[branch] += 1
+
+    def record_coercion(self, *, field_code: str, original_value: str,
+                        resulting_value: str, reason: str,
+                        row_identifier: Optional[str] = None) -> None:
+        """RETAINED OBSERVABILITY CHANNEL — deliberately has no caller.
+
+        This is **not** dead code. Phase 2 removed the builder's only value
+        coercion (RREL12 -> a fabricated year), so the expected Annex 2 builder
+        coercion count is **zero**, and the benchmark records zero.
+
+        The channel is kept, executable and tested, for one reason: if a future
+        change ever makes this builder alter a value, that must be *surfaced*
+        rather than happen silently. Deleting the mechanism and hard-coding a
+        zero would make the claim unfalsifiable — ``to_dict`` reports the
+        **actually observed** count, so a zero means "nothing was recorded",
+        not "nothing can be recorded".
+
+        Adding a caller is a policy change, not a refactor: any new coercion
+        needs its own regulatory justification and belongs in declared
+        configuration first. See ``record_routed_to_nodata`` for the mechanism
+        that replaced the removed fabrication.
+        """
+        self.coercion_count += 1
+        if len(self.coercions) < COERCION_RECORD_CAP:
+            self.coercions.append({
+                "field_code": field_code,
+                "row_identifier": row_identifier,
+                "original_value": original_value,
+                "resulting_value": resulting_value,
+                "reason": reason,
+            })
+        else:
+            self.coercions_truncated = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """The report. Zero is stated explicitly — an absent entry is not zero."""
+        return {
+            "schema_version": INSTRUMENTATION_SCHEMA_VERSION,
+            "stage": "gate_5_xml_builder",
+            "nd_injected_by_builder": {
+                "total": int(sum(self.nd_by_code.values())),
+                "by_code": {k: int(v) for k, v in sorted(self.nd_by_code.items())},
+                "by_field": {k: int(v) for k, v in sorted(self.nd_by_field.items())},
+                "by_branch": {k: int(v) for k, v in sorted(self.nd_by_branch.items())},
+            },
+            "coercions": {
+                "count": int(self.coercion_count),
+                "records": list(self.coercions),
+                "truncated": bool(self.coercions_truncated),
+                "record_cap": COERCION_RECORD_CAP,
+            },
+            # Phase 2: values that could not enter their typed branch and were
+            # routed to NoData (or refused) INSTEAD of being fabricated. Stated
+            # explicitly at zero, like every other category.
+            "routed_to_nodata": {
+                "count": int(self.routed_count),
+                "records": list(self.routed),
+                "truncated": bool(self.routed_truncated),
+                "record_cap": COERCION_RECORD_CAP,
+            },
+            "fabricated_values": {
+                "count": 0,
+                "note": "Phase 2 removed the BUILDER's only fabrication path "
+                        "(RREL12 -> hardcoded '2026'). The builder invents no "
+                        "value; a value it cannot place is routed to NoData "
+                        "where the mapping permits, otherwise the run fails. "
+                        "This statement covers Gate 5 only — it does not "
+                        "certify the declared Gate 4b transforms, which are "
+                        "reported separately by the normaliser.",
+            },
+        }
+
+
+_INSTR = _DeliveryInstrumentation()
+
+#: Set per record so a coercion can name the exposure it happened on.
+_CURRENT_ROW_ID: Optional[str] = None
+
+
+def _coerce_record_value_for_branch(code: str, value: str) -> str:
+    """Branch-aware handling for known Annex 2 mapping edge cases.
+
+    RREL12 (Geographic Region Classification) maps to a ``Yr`` branch, which
+    accepts an ISO year only. A non-year literal cannot go there.
+
+    Phase 2 removed the fabrication that used to live here: an invalid value was
+    silently replaced with the hardcoded string ``"2026"``, inventing a NUTS
+    classification year that appeared in the submission as though the client had
+    reported it. It is now routed to the NoData branch — which is what this
+    function's own docstring specified all along — and if the mapping offers no
+    NoData branch, the builder raises rather than inventing a value.
+
+    Returning ``""`` hands the value to :func:`select_specs_for_value`, which
+    picks the NoData branch for an empty value where the workbook provides one
+    and otherwise leaves the field unmapped; ``apply_record_code`` then raises
+    for a mandatory field with no valid branch. Fabrication is never an option.
     """
     v = _safe_str(value)
     if code == "RREL12" and v and not _is_iso_year(v):
-        return "2026"
+        _INSTR.record_routed_to_nodata(
+            field_code=code, original_value=v,
+            row_identifier=_CURRENT_ROW_ID,
+            reason="RREL12 maps to a Yr branch that accepts an ISO year only; "
+                   "a non-year value is routed to the NoData branch where the "
+                   "mapping permits one, never replaced with a fabricated year")
+        return ""
     return v
 
 
@@ -466,8 +632,28 @@ def _path_tuple_from_record_node(record_node: etree._Element, node: etree._Eleme
 
 
 def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, order_index: Dict[Tuple[str, ...], List[str]]) -> None:
-    """
-    Ensure FinDtls includes required ScndryOblgrIncm branch with NoData defaults.
+    """Ensure the XSD-mandatory ``ScndryOblgrIncm`` node SHAPE exists.
+
+    ``ScndryOblgrIncm`` is declared in ``SecondaryIncome2`` with no
+    ``minOccurs``, so it defaults to 1 — the element cannot be omitted, and
+    neither can its ``IncmVal`` / ``Vrfctn`` children.
+
+    Phase 2 removed the POLICY decision that used to live here. This function
+    previously wrote ``ND5`` into both children itself, which made a regulatory
+    judgement a hardcoded line in an XML builder rather than a governed rule
+    anyone could read or approve. Whichever no-data code is correct now comes
+    from ``config/regime/annex2_delivery_rules.yaml`` (RREL20 / RREL21), is
+    applied by Gate 4b, and arrives here as data like every other field.
+
+    The builder holds no opinion on which code that is, and must not acquire
+    one: the choice turns on whether borrower income is part of the product's
+    underwriting methodology, which is a product question, not an XML question.
+    Note that equity-release loans commonly have JOINT BORROWERS — a secondary
+    obligor usually exists — so the code must never be justified by the absence
+    of one.
+
+    What remains is shape only: if the delivery-ready input genuinely supplied
+    neither a value nor a NoData branch, this raises rather than inventing one.
     """
     fin_nodes = record_node.findall(f".//{{{ns}}}FinDtls")
     for fin in fin_nodes:
@@ -482,17 +668,28 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
         incm_has_value = incm_val.find(f"{{{ns}}}Val") is not None
         incm_nd = incm_val.find(f"{{{ns}}}NoDataOptn")
         if not incm_has_value and incm_nd is None:
-            incm_nd = _get_or_create_singleton(incm_val, "NoDataOptn", ns, order_index, (*scndry_path, "IncmVal"))
-            nd_leaf = _get_or_create_singleton(incm_nd, "NoData", ns, order_index, (*scndry_path, "IncmVal", "NoDataOptn"))
-            nd_leaf.text = "ND5"
+            raise ValueError(
+                "[Gate 5] RREL20 (secondary obligor income) reached the builder "
+                "with neither a value nor a NoData branch. The XSD requires "
+                "ScndryOblgrIncm/IncmVal, and the builder no longer invents an "
+                "ND code for it. Declare RREL20 in "
+                "config/regime/annex2_delivery_rules.yaml with "
+                "default_allowed: true and a default_value your product "
+                "rationale supports (ND1 = not collected because the "
+                "underwriting criteria did not require it; ND5 = not "
+                "applicable to this product).")
 
         vrfctn = _get_or_create_singleton(scndry, "Vrfctn", ns, order_index, scndry_path)
         vrfctn_has_code = vrfctn.find(f"{{{ns}}}Cd") is not None
         vrfctn_nd = vrfctn.find(f"{{{ns}}}NoDataOptn")
         if not vrfctn_has_code and vrfctn_nd is None:
-            vrfctn_nd = _get_or_create_singleton(vrfctn, "NoDataOptn", ns, order_index, (*scndry_path, "Vrfctn"))
-            nd_leaf = _get_or_create_singleton(vrfctn_nd, "NoData", ns, order_index, (*scndry_path, "Vrfctn", "NoDataOptn"))
-            nd_leaf.text = "ND5"
+            raise ValueError(
+                "[Gate 5] RREL21 (secondary obligor income verification) "
+                "reached the builder with neither a value nor a NoData branch. "
+                "The XSD requires ScndryOblgrIncm/Vrfctn, and the builder no "
+                "longer invents an ND code for it. Declare RREL21 in "
+                "config/regime/annex2_delivery_rules.yaml with "
+                "default_allowed: true and default_value: ND5.")
 
 
 def _ensure_hstrcl_colltn_nd_defaults(non_prfrmg_data_node: etree._Element, record_node: etree._Element, ns: str, order_index: Dict[Tuple[str, ...], List[str]]) -> None:
@@ -515,6 +712,8 @@ def _ensure_hstrcl_colltn_nd_defaults(non_prfrmg_data_node: etree._Element, reco
             nd = _get_or_create_singleton(nd_opt, "NoData", ns, order_index, (*month_path, "NoDataOptn"))
             if not _safe_str(nd.text):
                 nd.text = "ND5"
+                _INSTR.record_nd(nd_code="ND5", field_code=f"{block}/{month_name}",
+                                 branch="NonPrfrmgLn/HstrclColltn")
 
 
 def _ensure_nprf_nonprfrmgdata_defaults(
@@ -546,6 +745,9 @@ def _ensure_nprf_nonprfrmgdata_defaults(
 
 
 def build_annex2_tree(df: pd.DataFrame, code_order: List[str], specs_by_code: Dict[str, List[MappingSpec]], ns: str, currency: str, xsd_path: Optional[str]) -> etree._Element:
+    # Phase 1: a fresh instrumentation record per build, so repeated in-process
+    # builds report their own counts rather than an accumulating total.
+    _INSTR.reset()
     if df.empty:
         raise ValueError("Input projected CSV is empty")
 
@@ -610,6 +812,12 @@ def build_annex2_tree(df: pd.DataFrame, code_order: List[str], specs_by_code: Di
                 nprf_fallback_codes.append(code)
 
     for _, row in df.iterrows():
+        # Name the exposure a coercion happened on, where the tape carries an
+        # identifier. RREL3 is the new underlying-exposure identifier, RREL2
+        # the original. Falls back to None rather than inventing one.
+        global _CURRENT_ROW_ID
+        _CURRENT_ROW_ID = (_safe_str(row.get("RREL3"))
+                           or _safe_str(row.get("RREL2")) or None)
         record_node = create_new_record_node(root, record_root_path, ns, order_index)
         for code in record_codes:
             apply_record_code(record_node, row, code, specs_by_code, record_root_path, ns, order_index, currency)
@@ -677,6 +885,19 @@ def main() -> None:
     tree = etree.ElementTree(root)
     tree.write(args.output, pretty_print=True, xml_declaration=True, encoding="UTF-8")
     print(f"Generated: {args.output}")
+
+    # Phase 1 instrumentation sidecar. Written AFTER the XML so it cannot
+    # influence what was emitted — those bytes are already on disk.
+    instrumentation = _INSTR.to_dict()
+    instrumentation["input"] = str(args.input)
+    instrumentation["output"] = str(args.output)
+    instr_path = Path(args.output).with_name(
+        Path(args.output).stem + "_delivery_instrumentation.json")
+    instr_path.write_text(json.dumps(instrumentation, indent=2, sort_keys=True) + "\n",
+                          encoding="utf-8")
+    print(f"Builder-injected ND values: {instrumentation['nd_injected_by_builder']['total']}")
+    print(f"Value coercions: {instrumentation['coercions']['count']}")
+    print(f"Instrumentation: {instr_path}")
 
     if args.xsd:
         schema = etree.XMLSchema(etree.parse(args.xsd))

@@ -45,7 +45,13 @@ SOURCE_FIXTURE = (_REPO_ROOT / "synthetic_demo" / "output"
 #: The historically recorded full-scale run this tier reproduces.
 HISTORICAL = {
     "records": 11_035,
-    "fields": 105,
+    # 105 populated from projected source + 2 populated by declared delivery
+    # rule (RREL20/RREL21 as ND5) = 107 represented. Before Phase 2 the two
+    # were injected by the builder and so absent from the delivery-ready CSV,
+    # which is why this read 105. The XML is byte-identical either way.
+    "fields": 107,
+    "fields_from_projected_source": 105,
+    "fields_from_delivery_rule": 2,
     "artefact_mb": 208.8,
     "seconds": 171.5,
     "peak_rss_mb": 772.7,
