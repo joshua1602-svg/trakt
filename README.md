@@ -473,6 +473,38 @@ producing a non-compliant regulatory tape. Agent internals, canonical/MI
 calculations and Regime/Annex 2 logic are unchanged — regime projection runs the
 existing projector on the assembled central canonical.
 
+## Asset-class hardening framework
+
+`simulation/` generates deterministic, seed-controlled funded portfolio histories
+for **equity release**, **bridge lending** and **asset finance** (with *equipment
+finance* as an asset-finance subtype), renders the same economic truth into three
+materially different lender source formats, and drives them through the real
+Trakt pathway — Gates 1-3b, platform assembly, governed snapshot integration,
+deterministic MI, the governed limit engine, the governed MI Agent and regime
+projection. Expected truth is computed independently of the production code it
+checks, so a passing case means the platform agrees with an outside answer.
+
+```bash
+python -m simulation.runner list                       # the case catalogue
+python -m simulation.runner run --case bridge_maturity_wall_v1
+python -m simulation.runner run-all --profile smoke    # CI-sized
+python -m simulation.runner run-all --profile standard # the whole catalogue
+python -m simulation.runner reproduce --case bridge_maturity_wall_v1 --seed 41204
+```
+
+One case models a single SPV fed by two separately delivered funded
+populations — directly originated and acquired — which is what exercises
+`engine/platform_assembler.py` through the production Assembler Agent. Run
+summaries report the production modules **observed** to execute, each with the
+evidence that proves it, rather than a declared list.
+
+Bridge runs under `--portfolio-type cre` and asset finance under
+`--portfolio-type equipment`; both use canonical fields the registry already
+carried, so no new asset-class architecture was introduced. See
+[docs/asset_class_hardening_framework.md](docs/asset_class_hardening_framework.md)
+for the discovered production flow and for how to add a case, a dialect or an
+asset subtype.
+
 ## Configuration
 
 | File | Role |

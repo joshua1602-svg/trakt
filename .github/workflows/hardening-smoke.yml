@@ -1,0 +1,111 @@
+name: Hardening smoke
+
+# The durable regression gate for the asset-class hardening framework and the
+# Annex 2 delivery path.
+#
+# WHY THIS EXISTS: the framework and the Annex 2 regression tests were, until
+# this workflow, run by a human or not at all. A regression suite nothing runs
+# automatically does not protect anything — it records that something once
+# worked. This runs the parts that are fast, deterministic and load-bearing on
+# every push and pull request that touches them.
+#
+# WHAT IT DELIBERATELY DOES NOT RUN:
+#   * the full 11,035-record Annex 2 benchmark (~3 minutes, 208 MB artefact) —
+#     it needs the generated demo platform, so it stays a release-time check;
+#   * `simulation.runner run-all --profile standard` — minutes per asset class;
+#   * the performance profile — it is explicitly excluded from the smoke and
+#     standard profiles by design.
+#
+# Everything here is seed-controlled, so a failure is reproducible from the
+# case id and seed named in the assertion.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'simulation/**'
+      - 'engine/gate_4_projection/**'
+      - 'engine/gate_4b_delivery/**'
+      - 'engine/gate_5_delivery/**'
+      - 'config/regime/**'
+      - 'config/asset/**'
+      - 'config/system/enum_mapping.yaml'
+      - 'tests/test_simulation_*.py'
+      - 'tests/test_annex2_*.py'
+      - 'tests/fixtures/simulation/**'
+      - '.github/workflows/hardening-smoke.yml'
+  pull_request:
+    paths:
+      - 'simulation/**'
+      - 'engine/gate_4_projection/**'
+      - 'engine/gate_4b_delivery/**'
+      - 'engine/gate_5_delivery/**'
+      - 'config/regime/**'
+      - 'config/asset/**'
+      - 'config/system/enum_mapping.yaml'
+      - 'tests/test_simulation_*.py'
+      - 'tests/test_annex2_*.py'
+      - 'tests/fixtures/simulation/**'
+      - '.github/workflows/hardening-smoke.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: hardening-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Pinned economics reproduce from their committed manifests
+        # The load-bearing determinism check. Each case regenerates from its
+        # committed manifest and must match the committed expected truth; a
+        # silent change to the generator, knobs or an asset profile fails here
+        # with the case and seed named.
+        run: python -m pytest tests/test_simulation_regression_fixtures.py -q
+
+      - name: Framework invariants
+        # Seeded generation, manifest round-trips, dialect vocabulary and the
+        # approved onboarding-contract alias overlays.
+        run: python -m pytest tests/test_simulation_framework.py -q
+
+      - name: Production defect fixes stay fixed
+        # Gate 1 zero-mapping refusal, Gate 5 unsupported-regime refusal,
+        # seller/acquisition provenance preservation, and the governed-library
+        # extensions — each pinned to the defect it closed.
+        run: python -m pytest tests/test_simulation_platform_extensions.py -q
+
+      - name: Annex 2 delivery governance
+        # No fabrication, no builder-inserted no-data, declared delivery rules,
+        # the configuration-ownership hierarchy and fail-closed precedence, and
+        # the workbook-vs-XML representation model.
+        run: |
+          python -m pytest \
+            tests/test_annex2_phase1_instrumentation.py \
+            tests/test_annex2_phase2_no_fabrication.py \
+            tests/test_annex2_config_ownership.py \
+            tests/test_annex2_secondary_income_applicability.py \
+            tests/test_annex2_collateral_enum_mapping.py \
+            tests/test_annex2_collateral_projection.py \
+            tests/test_xml_builder_annex2_shape_fixes.py \
+            -q
+
+      - name: Concentration dimension fallback is still inert
+        # A dimension that previously reported "unavailable" must not start
+        # measuring — and moving a client's RAG state is not a silent change.
+        run: python -m pytest tests/test_concentration_dimension_fallback.py -q

@@ -1,0 +1,53 @@
+{
+  "asset_class": "bridge",
+  "asset_subtype": "commercial_bridge",
+  "case_id": "bridge_maturity_wall_v1",
+  "client_id": "sim_bridge",
+  "currency": "GBP",
+  "expected_failure_class": null,
+  "expected_outcome": "success",
+  "expected_regime": {
+    "applicability": "applicable",
+    "artefact_status": "awaiting_configuration",
+    "reason": "Commercial-real-estate-secured exposures. The projection is supported; no XML delivery template is committed for Annex 3, so the artefact awaits deployment configuration.",
+    "regime_id": "ESMA_Annex3"
+  },
+  "expected_risk_status": "red",
+  "expected_targeted_limits": [
+    "maturity_concentration"
+  ],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 18007629.93,
+    "closing_loan_count": 29,
+    "direction": "decrease",
+    "month_on_month_direction": [
+      "decrease",
+      "decrease",
+      "decrease",
+      "decrease",
+      "decrease",
+      "decrease"
+    ],
+    "opening_balance": 85554933.2,
+    "opening_loan_count": 119,
+    "total_movement": -67547303.27
+  },
+  "periods_digest": {
+    "count": 6,
+    "sha256": "991c593325e0e35ec86f497e789ae6ed28561374e648efa8d44c69ef2f2d0418"
+  },
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41204,
+  "simulation_version": 1,
+  "spv_id": "SPV_BR_1",
+  "truth_version": 1
+}

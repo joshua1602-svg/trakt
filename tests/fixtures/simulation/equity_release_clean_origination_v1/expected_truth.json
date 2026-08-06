@@ -1,0 +1,51 @@
+{
+  "asset_class": "equity_release",
+  "asset_subtype": "lump_sum",
+  "case_id": "equity_release_clean_origination_v1",
+  "client_id": "sim_equity_release",
+  "currency": "GBP",
+  "expected_failure_class": null,
+  "expected_outcome": "success",
+  "expected_regime": {
+    "applicability": "applicable",
+    "artefact_status": "supported",
+    "reason": "UK residential-secured exposures reported at exposure level.",
+    "regime_id": "ESMA_Annex2"
+  },
+  "expected_risk_status": "green",
+  "expected_targeted_limits": [],
+  "expected_validation_warnings": [],
+  "history_summary": {
+    "closing_balance": 18900916.49,
+    "closing_loan_count": 142,
+    "direction": "increase",
+    "month_on_month_direction": [
+      "increase",
+      "increase",
+      "increase",
+      "increase",
+      "increase",
+      "increase"
+    ],
+    "opening_balance": 15638101.69,
+    "opening_loan_count": 122,
+    "total_movement": 3262814.8
+  },
+  "periods_digest": {
+    "count": 6,
+    "sha256": "bb0307855250a34d3200c4e00364a25bbcf5661b5334f81f80f57106fda4f3a5"
+  },
+  "portfolio_id": "direct_001",
+  "reporting_dates": [
+    "2025-01-31",
+    "2025-02-28",
+    "2025-03-31",
+    "2025-04-30",
+    "2025-05-31",
+    "2025-06-30"
+  ],
+  "seed": 41101,
+  "simulation_version": 1,
+  "spv_id": "SPV_ER_1",
+  "truth_version": 1
+}
