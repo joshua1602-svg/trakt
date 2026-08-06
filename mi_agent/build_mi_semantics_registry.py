@@ -274,6 +274,102 @@ CURATION: Dict[str, dict] = {
         "business_description": "Name of the loan originator.",
         "synonyms": ["originator", "originator name", "lender"],
     },
+
+    # ---------------------------------------------------------------- #
+    # Bridge lending. Short-dated secured facilities are repaid AT maturity
+    # over a first or second charge, so charge rank, contractual maturity and
+    # the original term are portfolio-management dimensions, not regulatory
+    # detail. Without them the MI Agent cannot answer the questions a bridge
+    # book is actually managed by.
+    # ---------------------------------------------------------------- #
+    "charge_type": {
+        "tier": "core", "business_name": "Charge Rank",
+        "business_description": "First or second charge over the security.",
+        # Deliberately NOT the bare word "charge": ``lien`` already owns it
+        # below, and a synonym owned by two fields makes resolution
+        # order-dependent (mi_agent/tests/test_registry_governance.py).
+        "synonyms": ["charge type", "charge rank", "first charge",
+                     "second charge", "security rank"],
+    },
+    "collateral_type": {
+        "tier": "core", "business_name": "Collateral Type",
+        "business_description": "Class of the security or financed asset.",
+        # Not the bare word "collateral" either: "total collateral valuation"
+        # is a VALUATION question, and a bare "collateral" synonym pulls a
+        # dimension into it that the caller never asked for.
+        "synonyms": ["collateral type", "security type", "security category",
+                     "asset class"],
+    },
+    "original_term": {
+        "tier": "extended", "business_name": "Original Term",
+        "business_description": "Original contractual term, in months.",
+        "synonyms": ["original term", "term", "term months",
+                     "contractual term"],
+    },
+
+    # ---------------------------------------------------------------- #
+    # Asset finance, including equipment finance. Manufacturer, vendor,
+    # lessee industry, balloon and residual value are the dimensions an asset
+    # finance book is managed and covenanted on.
+    # ---------------------------------------------------------------- #
+    "manufacturer": {
+        "tier": "core", "business_name": "Manufacturer",
+        "business_description": "Manufacturer of the financed asset.",
+        "synonyms": ["manufacturer", "make", "asset manufacturer",
+                     "equipment manufacturer"],
+    },
+    "model": {
+        "tier": "extended", "business_name": "Asset Model",
+        "business_description": "Model / equipment category of the financed asset.",
+        "synonyms": ["model", "asset model", "equipment model"],
+    },
+    "seller_name": {
+        "tier": "core", "business_name": "Vendor",
+        "business_description": ("Seller / introducing vendor or dealer of the "
+                                 "agreement or acquired book."),
+        "synonyms": ["vendor", "seller", "dealer", "introducer",
+                     "vendor name", "seller name"],
+    },
+    "nace_industry_code": {
+        "tier": "core", "business_name": "Industry",
+        "business_description": "Lessee / obligor industry classification.",
+        "synonyms": ["industry", "sector", "lessee industry",
+                     "obligor industry", "nace"],
+        # The heuristic reads "code" in the name and infers an identifier. For
+        # an asset-finance book this IS the sector dimension the portfolio is
+        # covenanted on, so the inference is pinned.
+        "overrides": {
+            "role": "dimension", "chartable": True,
+            "allowed_aggregations": ["count", "balance_sum"],
+            "default_aggregation": "balance_sum",
+            "allowed_chart_roles": ["x", "group", "filter", "color"],
+            "default_chart_role": "x",
+        },
+    },
+    "balloon_amount": {
+        "tier": "core", "business_name": "Balloon Amount",
+        "business_description": ("Contractual balloon payment due at the end of "
+                                 "the agreement."),
+        "synonyms": ["balloon", "balloon amount", "balloon payment",
+                     "final payment"],
+    },
+    "current_residual_value_of_asset": {
+        "tier": "core", "business_name": "Residual Value",
+        "business_description": "Current estimated residual value of the asset.",
+        "synonyms": ["residual value", "residual", "current residual value"],
+    },
+    "date_of_lease_expiration": {
+        "tier": "extended", "business_name": "Agreement Expiry",
+        "business_description": "Contractual expiry date of the lease / agreement.",
+        "synonyms": ["lease expiry", "agreement expiry", "expiry date",
+                     "lease expiration"],
+    },
+    "number_of_leased_objects": {
+        "tier": "extended", "business_name": "Units Financed",
+        "business_description": "Number of assets financed under the agreement.",
+        "synonyms": ["units", "units financed", "number of assets",
+                     "leased objects"],
+    },
     "broker_channel": {
         "tier": "core", "business_name": "Broker",
         "business_description": "Broker / origination channel.",

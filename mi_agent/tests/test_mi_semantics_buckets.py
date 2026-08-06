@@ -119,9 +119,14 @@ def test_registry_field_count_and_tiers(semantics):
     # acquired_portfolio_id) == 104; borrower_type (single vs joint, derived
     # from second-applicant presence) == 105; protected_equity_percentage — the
     # sourced percentage that protected_equity_flag is now derived FROM, split
-    # out so percentage text never reaches a boolean parser == 106.
-    assert m["field_count"] == 106
-    assert m["core_field_count"] == 73
+    # out so percentage text never reaches a boolean parser == 106; the
+    # asset-class hardening work curates the 10 bridge and asset-finance fields
+    # the canonical registry already carried but MI could not reach —
+    # charge_type, collateral_type, seller_name, nace_industry_code,
+    # manufacturer, model, balloon_amount, current_residual_value_of_asset,
+    # date_of_lease_expiration, number_of_leased_objects == 116.
+    assert m["field_count"] == 116
+    assert m["core_field_count"] == 80
     # The generated metadata counts must match the actual entries (drift guard).
     assert m["field_count"] == len(semantics["fields"])
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])
