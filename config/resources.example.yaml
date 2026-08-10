@@ -1,0 +1,162 @@
+# =========================================================================
+# Resource catalogue — WHAT can be permissioned, and exactly which rows it means.
+# =========================================================================
+#
+# OPTIONAL. Copy to config/resources.yaml (or point TRAKT_RESOURCES_CONFIG at it).
+#
+# ------------------------------------------------------------------------
+# What this file is, and what it is NOT
+# ------------------------------------------------------------------------
+#
+# config/tenancy.yaml        answers : WHOSE DATA is this?      (the Trakt tenant)
+# config/organisations.yaml  answers : WHO IS ASKING?           (the external org)
+# config/resources.yaml      answers : WHAT can be asked about? (this file)
+#
+# It does NOT answer "who may reach it". Registering a resource grants nobody
+# anything — the entitlement stage is what maps organisations onto resources.
+# Today nothing in the request path consults this catalogue at all; it exists so
+# that a scope like "ERE / SPV I / funded" can be WRITTEN DOWN deterministically
+# before anyone is given it.
+#
+# ------------------------------------------------------------------------
+# Why a resource is not just a portfolio
+# ------------------------------------------------------------------------
+#
+# `source_portfolio_id` is stamped at onboarding and is MANDATORY on every row,
+# so it is the one axis that can always carry a boundary. The others are weaker,
+# and this file is where that difference is made explicit rather than assumed:
+#
+#   * `spv_id` is a RESERVED **OPTIONAL** column. A client may not supply it. An
+#     SPV is permissionable only where they do — otherwise declare it
+#     `unpartitionable: true` (see SPV II below) so Trakt refuses rather than
+#     quietly serving the whole book.
+#   * funded / pipeline / forecast are VIEWS, chosen per request today. Pinning
+#     `population:` on a resource makes the choice part of the resource instead,
+#     so "SPV I / funded" cannot be widened to pipeline by anything a caller —
+#     or an LLM — says.
+#
+# ------------------------------------------------------------------------
+# Fields
+# ------------------------------------------------------------------------
+#
+#   tenant_id             required. The Trakt tenant that OWNS the data. Part of
+#                         the resource identity, so two tenants may both have an
+#                         `spv_i` without any chance of collision.
+#   kind                  required. portfolio | source_portfolio | spv |
+#                         facility | population.
+#   resource_id           required. Stable slug, unique within (tenant, kind).
+#                         This is what a future grant is written against, so
+#                         choose it as carefully as a tenant id and never reuse
+#                         one. The canonical reference is "{tenant}/{kind}/{id}".
+#   display_label         optional. Operator- and UI-facing only.
+#
+#   --- constraints (conjunctive: all declared constraints must hold) ---
+#   source_portfolio_ids  books on the mandatory provenance axis.
+#   spv_id                the SPV / facility key, where the client supplies it.
+#   population            funded | pipeline | forecast. Immutable once declared.
+#
+#   --- the two explicit escapes ---
+#   whole_tenant_book     true = this resource is the tenant's entire book. The
+#                         ONLY way to declare a resource with no narrowing; a
+#                         record with no constraints and no flag is REJECTED at
+#                         load, so "everything" can never be reached by omission.
+#   unpartitionable       true = registered, but the data cannot separate it.
+#                         Every expansion refuses with the reason below.
+#
+#   enabled               default true. false switches the resource off while
+#                         keeping its registration.
+#
+# How a resource narrows is DERIVED from the constraints above, never declared,
+# so a mis-typed `attribution:` cannot make a resource look narrower than it is.
+#
+# A duplicate (tenant, kind, resource_id) is rejected; so is a resource with no
+# constraint at all. A file that cannot be trusted leaves the catalogue EMPTY —
+# every lookup refuses — rather than falling back to something permissive.
+
+resources:
+
+  # -------------------------------------------------------------------
+  # The provenance axis. Strongest kind: source_portfolio_id is on every row.
+  # These can also be generated from the live portfolio registry without config,
+  # via trakt_core.resource.resources_from_portfolio_records.
+  # -------------------------------------------------------------------
+  - tenant_id: ERE
+    kind: source_portfolio
+    resource_id: direct_001
+    display_label: ERE Direct Originations
+    source_portfolio_ids: [direct_001]
+
+  - tenant_id: ERE
+    kind: source_portfolio
+    resource_id: acquired_001
+    display_label: BigBank Legacy Book
+    source_portfolio_ids: [acquired_001]
+
+  # -------------------------------------------------------------------
+  # SPVs. The warehouse-funder case.
+  # -------------------------------------------------------------------
+
+  # SPV I — safely partitionable TWO ways: the tape carries spv_id, and the SPV
+  # happens to align with a whole source portfolio. Declaring both narrows on
+  # both, which is strictly safer than either alone. `population: funded` is what
+  # keeps a future funder entitlement away from the unfunded pipeline.
+  - tenant_id: ERE
+    kind: spv
+    resource_id: spv_i
+    display_label: SPV I
+    spv_id: SPV_I
+    source_portfolio_ids: [direct_001]
+    population: funded
+
+  # SPV II — the honest case. This client's tape does not carry spv_id, and the
+  # SPV holds only PART of a source portfolio, so no combination of existing
+  # fields identifies its rows. It is registered (so it can be named, audited and
+  # refused by name) and marked unpartitionable, so every expansion refuses.
+  #
+  # Do NOT "fix" this by pointing it at the enclosing source portfolio. That
+  # would hand a future SPV II funder the whole book — the exact failure this
+  # flag exists to prevent. Fix it in the data: have the client supply spv_id,
+  # then replace this entry with a real constraint.
+  - tenant_id: ERE
+    kind: spv
+    resource_id: spv_ii
+    display_label: SPV II
+    unpartitionable: true
+    unpartitionable_reason: >-
+      SPV II holds part of a source portfolio and the supplied tape carries no
+      SPV attribution, so its rows cannot be separated from the rest of the book.
+
+  # -------------------------------------------------------------------
+  # Populations. No portfolio narrowing — the view IS the constraint.
+  # -------------------------------------------------------------------
+  - tenant_id: ERE
+    kind: population
+    resource_id: pipeline
+    display_label: ERE Pipeline
+    population: pipeline
+
+  - tenant_id: ERE
+    kind: population
+    resource_id: funded
+    display_label: ERE Funded Book
+    population: funded
+
+  # -------------------------------------------------------------------
+  # The aggregate. Whole-book access, written down deliberately — which is the
+  # only way it can be reached.
+  # -------------------------------------------------------------------
+  - tenant_id: ERE
+    kind: portfolio
+    resource_id: ere_total
+    display_label: ERE — all books
+    whole_tenant_book: true
+
+  # A warehouse facility looks the same as an SPV structurally; it is a separate
+  # kind so an entitlement says which one it means.
+  #
+  # - tenant_id: ERE
+  #   kind: facility
+  #   resource_id: warehouse_a
+  #   display_label: Warehouse Facility A
+  #   spv_id: SPV_I
+  #   population: funded

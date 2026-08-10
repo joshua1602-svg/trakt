@@ -52,6 +52,13 @@ class ErrorCode:
     ORGANISATION_NOT_REGISTERED = "ORGANISATION_NOT_REGISTERED"
     #: The organisation is registered but its access has been withdrawn.
     ORGANISATION_DISABLED = "ORGANISATION_DISABLED"
+    #: The named resource is not in the resource catalogue.
+    RESOURCE_NOT_REGISTERED = "RESOURCE_NOT_REGISTERED"
+    #: The resource is registered but currently switched off.
+    RESOURCE_DISABLED = "RESOURCE_DISABLED"
+    #: The resource is registered but the data carries no attribution that can
+    #: separate it from the rest of the book. Refused rather than widened.
+    RESOURCE_NOT_PARTITIONABLE = "RESOURCE_NOT_PARTITIONABLE"
 
     # -- input ------------------------------------------------------------- #
     INVALID_INPUT = "INVALID_INPUT"
@@ -104,6 +111,11 @@ _CODES: Dict[str, _CodeSpec] = {
     # behind it is not accepted.
     ErrorCode.ORGANISATION_NOT_REGISTERED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.ORGANISATION_DISABLED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.RESOURCE_NOT_REGISTERED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.RESOURCE_DISABLED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    # Not retryable and not the caller's fault: the boundary cannot be enforced
+    # from the data, so serving anything would mean serving too much.
+    ErrorCode.RESOURCE_NOT_PARTITIONABLE: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
 
     ErrorCode.INVALID_INPUT: _CodeSpec(ErrorCategory.INPUT, False, 400),
 

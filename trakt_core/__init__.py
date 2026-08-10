@@ -17,6 +17,10 @@ Contents:
   * :mod:`trakt_core.organisation` — the *external organisation* registry: which
     Microsoft Entra directory belongs to which organisation. Answers "who is
     asking", which is not the same question as "whose data is this".
+  * :mod:`trakt_core.resource`  — the permissionable resource model: what a
+    portfolio / SPV / facility / population *is*, and which existing data
+    population it deterministically means. Answers "what is the thing", and
+    deliberately not "who may reach it".
   * :mod:`trakt_core.runtime`   — the runtime mode (production / development /
     test) and its fail-closed startup validation.
   * :mod:`trakt_core.policy`    — the production data-source approval rule.
@@ -74,6 +78,31 @@ from .organisation import (
     load_organisation_registry,
     normalise_directory_id,
 )
+from .resource import (
+    ATTRIBUTION_PROVENANCE,
+    ATTRIBUTION_SPV_FIELD,
+    ATTRIBUTION_UNPARTITIONABLE,
+    ATTRIBUTION_VIEW,
+    ATTRIBUTION_WHOLE_BOOK,
+    KIND_FACILITY,
+    KIND_POPULATION,
+    KIND_PORTFOLIO,
+    KIND_SOURCE_PORTFOLIO,
+    KIND_SPV,
+    POPULATION_FORECAST,
+    POPULATION_FUNDED,
+    POPULATION_PIPELINE,
+    POPULATIONS,
+    RESOURCE_KINDS,
+    AttributionCheck,
+    ResolvedResource,
+    ResourceCatalogue,
+    ResourceRecord,
+    ResourceRef,
+    check_attribution,
+    load_resource_catalogue,
+    resources_from_portfolio_records,
+)
 from .policy import (
     PRODUCTION_APPROVED_SOURCE_BASES,
     SourceApproval,
@@ -111,6 +140,15 @@ __all__ = [
     "normalise_directory_id", "KNOWN_ORGANISATION_TYPES",
     "ORG_TYPE_ORIGINATOR", "ORG_TYPE_WAREHOUSE_FUNDER", "ORG_TYPE_INVESTOR",
     "ORG_TYPE_SERVICER", "ORG_TYPE_OPERATOR", "ORG_TYPE_UNKNOWN",
+    # resource model (what a permissionable thing is — not who may reach it)
+    "ResourceRef", "ResourceRecord", "ResolvedResource", "ResourceCatalogue",
+    "AttributionCheck", "check_attribution", "load_resource_catalogue",
+    "resources_from_portfolio_records",
+    "RESOURCE_KINDS", "KIND_PORTFOLIO", "KIND_SOURCE_PORTFOLIO", "KIND_SPV",
+    "KIND_FACILITY", "KIND_POPULATION",
+    "POPULATIONS", "POPULATION_FUNDED", "POPULATION_PIPELINE", "POPULATION_FORECAST",
+    "ATTRIBUTION_PROVENANCE", "ATTRIBUTION_SPV_FIELD", "ATTRIBUTION_VIEW",
+    "ATTRIBUTION_WHOLE_BOOK", "ATTRIBUTION_UNPARTITIONABLE",
     # runtime + policy
     "runtime_mode", "validate_runtime_mode", "is_production",
     "MODE_PRODUCTION", "MODE_DEVELOPMENT", "MODE_TEST",

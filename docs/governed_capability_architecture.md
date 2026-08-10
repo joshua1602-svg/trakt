@@ -182,6 +182,52 @@ The React path deliberately resolves no organisation: Easy Auth hands this
 process a trusted-by-topology header, not a signature-verified directory, and the
 SWA principal shape carries no `tid` at all.
 
+### Resource identity — what can be permissioned
+
+`trakt_core/resource.py` names the things an entitlement will later be written
+against, and expands each one into a deterministic predicate over existing
+canonical fields. It answers *what the resource is*, never *who may reach it* —
+nothing in the request path consults it yet, and registering a resource grants
+nobody anything.
+
+| Type | Purpose |
+|---|---|
+| `ResourceRef(tenant_id, kind, resource_id)` | Stable, hashable identity. Canonical string `"{tenant}/{kind}/{id}"`. Kinds: `portfolio`, `source_portfolio`, `spv`, `facility`, `population`. |
+| `ResourceRecord` | The catalogue entry: which books, which `spv_id`, which population. |
+| `ResolvedResource` | The expansion — `predicate()`, `required_fields`, `to_portfolio_scope()`. |
+| `check_attribution(resolved, available_fields)` | Confirms the data can carry the boundary, or raises. |
+
+The model exists because the axes differ in strength, and that difference has to
+be explicit rather than assumed:
+
+* `source_portfolio_id` is **mandatory on every onboarded row**, so it can always
+  carry a boundary;
+* `spv_id` is a **reserved optional** snapshot column (`snapshot.model`), absent
+  from the canonical fields registry — an SPV is permissionable only where the
+  client supplies it;
+* funded / pipeline / forecast are **views** chosen per request (and inferred
+  from question wording by `workspace.resolve_active_view`), so population is
+  pinned onto the resource as an immutable constraint rather than left to the
+  caller.
+
+Two invariants distinguish this from the presentation lens, which must **not** be
+reused as an entitlement filter:
+
+* **A resource never widens.** `predicate()` cannot return an empty filter unless
+  the record explicitly set `whole_tenant_book`, and a record declaring no
+  constraint is rejected at load — so whole-book access is unreachable by
+  omission. Compare `resolve_scope`, which answers an unrecognised context with
+  Total.
+* **Missing attribution refuses.** `check_attribution` raises
+  `RESOURCE_NOT_PARTITIONABLE` when the needed column is absent. Compare
+  `apply_scope`, which returns the frame unfiltered. A partial-book SPV with no
+  attribution is declared `unpartitionable` and always refuses, rather than being
+  mapped to its enclosing portfolio.
+
+Config-driven via `config/resources.yaml` (see `config/resources.example.yaml`);
+an absent or untrusted file leaves the catalogue **empty**, so every lookup
+refuses. Covered by `tests/test_governance_resource_model.py`.
+
 ### Portfolio authorisation
 
 `trakt_core.tenancy.authorise_portfolio_access(context, portfolio_id, registry)`
