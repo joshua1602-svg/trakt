@@ -8,8 +8,33 @@ Two identity mechanisms exist today and both land here:
 
   * **React** — Azure Static Web Apps / App Service Easy Auth performs the login
     and injects ``X-MS-CLIENT-PRINCIPAL``. ``auth.parse_principal`` decodes it.
-  * **Copilot** — a Microsoft Entra bearer token validated against the tenant
+  * **Copilot** — a Microsoft Entra bearer token validated against the directory
     JWKS by ``copilot_auth``.
+
+Two identities, not one
+-----------------------
+A governed context now records two separate facts about a request, and keeping
+them separate is the whole point:
+
+  * ``tenant_id`` — **whose data is served.** Deployment configuration, exactly
+    as before. Never a token claim, never a request field.
+  * ``organisation_id`` / ``microsoft_tenant_id`` — **who is asking.** Resolved
+    from the caller's signature-verified Entra directory through
+    :mod:`trakt_core.organisation`.
+
+A funder signing in from its own directory is ``organisation_id="funder_a"``
+asking about ``tenant_id="ERE"``. Which resources that organisation may reach is
+a third fact again — ``context.entitlements``, resolved here from
+``trakt_core.entitlement`` and frozen for the life of the request:
+
+    validated directory → organisation → entitlements → immutable context
+
+With no ``config/organisations.yaml`` the deployment is in compatibility mode:
+``resolve_organisation`` returns ``None``, the context's organisation fields stay
+unset, entitlements stay unresolved, and every existing caller is unchanged.
+``entitlements is None`` never means "unrestricted" — the resource authorisation
+helper refuses such a context outright, and the legacy path is unaffected because
+it authorises through ``trakt_core.tenancy.authorise_portfolio_access``.
 
 Trusting the injected header
 ----------------------------
@@ -43,7 +68,24 @@ from trakt_core.context import (
     ExecutionContext,
     new_request_id,
 )
+from trakt_core.entitlement import (
+    EntitlementStore,
+    ResolvedEntitlements,
+    resolve_entitlements,
+)
 from trakt_core.errors import ErrorCode, TraktError
+from trakt_core.organisation import (
+    OrganisationRecord,
+    OrganisationRegistry,
+    load_organisation_registry,
+    normalise_directory_id,
+)
+from trakt_core.principal import (
+    PrincipalBinding,
+    PrincipalRegistry,
+    load_principal_registry,
+    normalise_object_id,
+)
 from trakt_core.runtime import is_production, running_in_azure
 
 logger = logging.getLogger("mi_agent_api.identity")
@@ -138,6 +180,17 @@ def context_from_principal(
     ``tenant_id`` is deployment configuration, never a principal claim: this is a
     deployment-per-tenant product, and taking the tenant from a token claim would
     make it caller-influenced.
+
+    **No organisation is resolved on this path, deliberately.** Easy Auth injects
+    a principal that this process trusts because the platform overwrites the
+    header — it does not hand us a signature-verified directory id, and the SWA
+    principal shape carries no ``tid`` at all. Resolving an organisation from an
+    unverified value would be exactly the mistake ``copilot_auth`` exists to
+    avoid, and applying organisation-mode refusal to a channel that cannot
+    produce a verified directory would break the signed-in React user for no
+    security gain. The React context therefore leaves the organisation fields
+    unset. Giving this channel a first-class organisation identity means putting
+    a validated token in front of it, which is its own change.
     """
     require_trustworthy_platform_auth()
     if principal is None:
@@ -158,18 +211,72 @@ def context_from_principal(
     )
 
 
+def resolve_organisation(
+    microsoft_tenant_id: Optional[str],
+    *,
+    registry: Optional[OrganisationRegistry] = None,
+    request_id: Optional[str] = None,
+) -> Optional[OrganisationRecord]:
+    """The organisation behind a **signature-verified** Microsoft directory id.
+
+    ``None`` means compatibility mode — no organisation config is loaded, so this
+    deployment makes no claim about who is asking and behaves exactly as it did
+    before organisations existed.
+
+    In organisation mode an unregistered or disabled directory raises
+    :class:`~trakt_core.errors.TraktError`. There is no permissive branch: a
+    deployment that has declared which organisations it serves must not answer
+    one it has not.
+
+    Callers must pass a directory id that came out of token *validation*
+    (``copilot_auth``). This function cannot distinguish a verified claim from an
+    asserted one and does not try to.
+    """
+    reg = registry if registry is not None else load_organisation_registry()
+    return reg.resolve_microsoft_tenant(microsoft_tenant_id, request_id=request_id)
+
+
+def resolve_principal(
+    microsoft_tenant_id: Optional[str],
+    microsoft_object_id: Optional[str],
+    *,
+    registry: Optional[PrincipalRegistry] = None,
+    request_id: Optional[str] = None,
+) -> Optional[PrincipalBinding]:
+    """The individual behind a **signature-verified** ``(tid, oid)``, if checked.
+
+    ``None`` means this directory is not principal-gated — no principal config,
+    or none registered for it — which is the Stage 1 behaviour and is preserved
+    exactly. It never means "allowed".
+
+    For a gated directory an unregistered or disabled individual raises, so a
+    departed employee is refused even while their organisation stays entitled.
+    """
+    reg = registry if registry is not None else load_principal_registry()
+    return reg.resolve(microsoft_tenant_id, microsoft_object_id,
+                       request_id=request_id)
+
+
 def context_from_copilot_principal(
     principal: Any,
     *,
     tenant_id: str,
     request_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
+    organisation_registry: Optional[OrganisationRegistry] = None,
+    entitlement_store: Optional[EntitlementStore] = None,
+    principal_registry: Optional[PrincipalRegistry] = None,
 ) -> ExecutionContext:
     """Build a context from a validated Entra bearer principal.
 
     Not subject to :func:`require_trustworthy_platform_auth`: the Copilot routes
     validate the token signature, issuer, audience and expiry themselves
     (``copilot_auth``), so their trust does not depend on an upstream gateway.
+
+    ``tenant_id`` — whose data is served — is the caller-supplied deployment
+    configuration and is used verbatim, unchanged by this stage. The principal's
+    directory (``tid``) resolves the *organisation* and nothing else: it is
+    recorded on the context, and it never reaches ``tenant_id``.
     """
     if principal is None:
         raise TraktError(ErrorCode.AUTHENTICATION_REQUIRED,
@@ -180,6 +287,55 @@ def context_from_copilot_principal(
     # A Copilot call may be delegated (a signed-in user) or app-only. ``scp``
     # implies a user; app-only tokens carry roles instead.
     actor_type = ACTOR_USER if getattr(principal, "scopes", None) else ACTOR_SERVICE
+
+    # WHO IS ASKING. Resolved before the context is built so an unregistered
+    # organisation is refused rather than producing a usable context — and so
+    # nothing downstream has to remember to check.
+    microsoft_tenant_id = normalise_directory_id(getattr(principal, "tenant_id", None))
+
+    # WHICH PERSON. Checked only for a directory that has registered
+    # individuals, so a directory nobody has enumerated behaves exactly as it
+    # did in Stage 1. A disabled individual is refused HERE — before an
+    # organisation is resolved — so a departed employee cannot reach their
+    # (still entitled) employer's grants.
+    binding = resolve_principal(
+        microsoft_tenant_id, normalise_object_id(getattr(principal, "subject", None)),
+        registry=principal_registry, request_id=request_id)
+
+    organisation = resolve_organisation(
+        microsoft_tenant_id, registry=organisation_registry, request_id=request_id)
+
+    # A binding is the more specific statement of who is asking, so where one
+    # exists it decides the organisation. It can only ever CONFIRM or NARROW:
+    # a binding naming a different organisation from the directory's is a
+    # contradiction in server-side config, and contradictory config is refused
+    # rather than resolved in either direction.
+    if binding is not None:
+        if organisation is not None and \
+                binding.organisation_id != organisation.organisation_id:
+            logger.error(
+                "principal %s is bound to organisation %s but its directory "
+                "maps to %s", binding.microsoft_object_id,
+                binding.organisation_id, organisation.organisation_id)
+            raise TraktError(
+                ErrorCode.PRINCIPAL_NOT_REGISTERED,
+                "This user's Trakt registration is inconsistent and cannot be "
+                "used until an administrator corrects it.",
+                request_id=request_id)
+        if organisation is None:
+            organisation = (organisation_registry
+                            or load_organisation_registry()).get(
+                                binding.organisation_id)
+
+    # MAY THEY. Resolved once, here, and frozen onto the context — so no
+    # capability downstream can widen its own authority, and nothing has to
+    # remember to look grants up again. ``None`` whenever there is no
+    # organisation or no entitlement config, which is every deployment today.
+    entitlements: Optional[ResolvedEntitlements] = None
+    if organisation is not None:
+        entitlements = resolve_entitlements(organisation.organisation_id,
+                                            store=entitlement_store)
+
     return ExecutionContext(
         tenant_id=tenant_id,
         actor_id=str(actor_id),
@@ -189,4 +345,7 @@ def context_from_copilot_principal(
         request_id=request_id or new_request_id(),
         correlation_id=correlation_id,
         actor_label=getattr(principal, "name", None),
+        organisation_id=organisation.organisation_id if organisation else None,
+        microsoft_tenant_id=microsoft_tenant_id,
+        entitlements=entitlements,
     )

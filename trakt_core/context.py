@@ -22,7 +22,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, FrozenSet, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, Optional
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, no runtime import
+    # Imported lazily to keep the dependency direction one-way: entitlement
+    # builds on context, never the reverse.
+    from .entitlement import ResolvedEntitlements
+    from .resource import ResourceRef
 
 # --------------------------------------------------------------------------- #
 # Channels — which interface adapter is calling.
@@ -57,12 +63,43 @@ SCOPE_ARTEFACT_READ = "artefact:read"
 #: generation consumes real compute and republishes what external investors
 #: receive, so a deployment may grant reading without granting production.
 SCOPE_ARTEFACT_GENERATE = "artefact:generate"
+#: Current risk / concentration position. A separate scope because a funder may
+#: legitimately be shown where a book stands against its limits without being
+#: given the free-form MI query surface, and because ``mi:query`` is a much wider
+#: grant than "tell me the limit status".
+SCOPE_RISK_READ = "risk:read"
+#: Forward-looking risk and exposure. Split from :data:`SCOPE_RISK_READ` for the
+#: reason the target design calls out explicitly — forward-looking risk is
+#: "where permissioned", so it has to be grantable separately from the current
+#: position rather than riding along with it.
+SCOPE_FORECAST_READ = "forecast:read"
 
 #: The scope set granted to an authenticated MI user or an internal caller. New
 #: scopes should be added here only when a capability genuinely gates on them.
+#:
+#: ``risk:read`` / ``forecast:read`` are included so that today's users keep
+#: doing what they already do: the risk, concentration and forecast routes are
+#: not scope-gated at all yet, so adding the scopes here is inert now and is what
+#: stops those users losing access at the moment those routes start checking.
 DEFAULT_MI_SCOPES: FrozenSet[str] = frozenset({
     SCOPE_PORTFOLIO_READ, SCOPE_MI_QUERY, SCOPE_ARTEFACT_READ,
-    SCOPE_ARTEFACT_GENERATE,
+    SCOPE_ARTEFACT_GENERATE, SCOPE_RISK_READ, SCOPE_FORECAST_READ,
+})
+
+#: The capability vocabulary, in full. Deliberately the SAME strings as the
+#: scopes above rather than a parallel set of entitlement verbs: a grant says
+#: "this organisation may do X to this resource" using exactly the name the
+#: capability already gates on, so there is nothing to translate and nothing to
+#: drift.
+#:
+#: The two axes are distinct and both apply. ``ExecutionContext.scopes`` is what
+#: this caller may do *at all* (channel- and role-level); an entitlement grant is
+#: what an organisation may do *to one resource*. The effective permission is the
+#: intersection, and ``trakt_core.entitlement.authorise_resource_access`` checks
+#: both.
+KNOWN_CAPABILITIES: FrozenSet[str] = frozenset({
+    SCOPE_PORTFOLIO_READ, SCOPE_MI_QUERY, SCOPE_ARTEFACT_READ,
+    SCOPE_ARTEFACT_GENERATE, SCOPE_RISK_READ, SCOPE_FORECAST_READ,
 })
 
 
@@ -91,6 +128,32 @@ class ExecutionContext:
     #: Free-form, non-authoritative labels for logs (e.g. display name). Never
     #: consulted for an access decision.
     actor_label: Optional[str] = None
+    #: WHO IS ASKING — the external organisation this caller belongs to, resolved
+    #: from their validated Microsoft directory by
+    #: :mod:`trakt_core.organisation`. Deliberately distinct from ``tenant_id``,
+    #: which is WHOSE DATA is served and remains deployment configuration.
+    #: ``None`` on a deployment with no organisation config (the historical
+    #: single-client shape) and on channels that carry no directory identity.
+    #: Carries no authority of its own in Stage 1: nothing branches on it, it is
+    #: recorded for audit and is the anchor the entitlement model will use.
+    organisation_id: Optional[str] = None
+    #: The Microsoft Entra directory (tenant) id the caller's token was issued
+    #: by, once that token's signature has been verified. Identifies the caller's
+    #: directory ONLY; it never selects which Trakt tenant's data is served.
+    microsoft_tenant_id: Optional[str] = None
+    #: The resolved, frozen entitlement state for this request — which resources
+    #: this organisation may reach and with which capabilities. Resolved ONCE, at
+    #: context construction, from server-side configuration; nothing downstream
+    #: can widen it, and no request field contributes to it.
+    #:
+    #: ``None`` means **no entitlements were resolved**, which is the state every
+    #: caller is in today: either the deployment has no entitlement config, or
+    #: the channel carries no organisation identity. ``None`` is NOT "unlimited"
+    #: — :func:`trakt_core.entitlement.authorise_resource_access` refuses a
+    #: context that has no entitlements. The legacy path is unaffected because it
+    #: uses :func:`trakt_core.tenancy.authorise_portfolio_access`, which is
+    #: untouched.
+    entitlements: Optional["ResolvedEntitlements"] = None
 
     def __post_init__(self) -> None:
         if not str(self.tenant_id or "").strip():
@@ -103,6 +166,14 @@ class ExecutionContext:
             object.__setattr__(self, "request_id", new_request_id())
         if not isinstance(self.scopes, frozenset):
             object.__setattr__(self, "scopes", frozenset(self.scopes or ()))
+        # Blank -> None, so "no organisation" is one value rather than two, and
+        # directory ids compare case-insensitively wherever they are read back.
+        object.__setattr__(self, "organisation_id",
+                           (str(self.organisation_id).strip().lower() or None)
+                           if self.organisation_id is not None else None)
+        object.__setattr__(self, "microsoft_tenant_id",
+                           (str(self.microsoft_tenant_id).strip().lower() or None)
+                           if self.microsoft_tenant_id is not None else None)
 
     # -- scopes ------------------------------------------------------------ #
     def has_scope(self, scope: str) -> bool:
@@ -119,6 +190,40 @@ class ExecutionContext:
                 details={"required_scope": scope},
             )
 
+    # -- entitlements ------------------------------------------------------ #
+    @property
+    def entitlement_mode(self) -> bool:
+        """True when entitlements were resolved for this request.
+
+        False is today's state for every caller and means the entitlement model
+        is dormant for this request — not that everything is permitted.
+        """
+        return self.entitlements is not None
+
+    @property
+    def permitted_resources(self) -> FrozenSet["ResourceRef"]:
+        """The closed set of resources this caller may reach. Empty when no
+        entitlements were resolved — never a wildcard."""
+        if self.entitlements is None:
+            return frozenset()
+        return self.entitlements.permitted_resources
+
+    @property
+    def entitlement_version(self) -> Optional[str]:
+        """Fingerprint of the grants this context was built from.
+
+        Stable across processes for the same grants, so it can go in an audit
+        line and — later — in a cache key, where it is what makes a revoked
+        grant invalidate a cached answer.
+        """
+        return self.entitlements.version if self.entitlements is not None else None
+
+    def capabilities_for(self, resource_ref: "ResourceRef") -> FrozenSet[str]:
+        """Capabilities granted against one resource. Empty when none are."""
+        if self.entitlements is None:
+            return frozenset()
+        return self.entitlements.capabilities_for(resource_ref)
+
     # -- derivation -------------------------------------------------------- #
     def with_correlation(self, correlation_id: Optional[str]) -> "ExecutionContext":
         return replace(self, correlation_id=correlation_id or self.correlation_id)
@@ -129,9 +234,21 @@ class ExecutionContext:
 
         Deliberately excludes ``actor_label`` (may carry an email address) —
         ``actor_id`` is the stable, minimal identifier.
+
+        ``organisation_id`` and ``microsoft_tenant_id`` are included: without
+        them an audit trail on a multi-organisation deployment cannot say which
+        party asked, only which tenant's data answered. Both are non-secret
+        identifiers — a directory id appears in every token the caller already
+        holds — and no token, claim set or bearer material is projected here.
         """
         return {
             "tenant_id": self.tenant_id,
+            "organisation_id": self.organisation_id,
+            "microsoft_tenant_id": self.microsoft_tenant_id,
+            # Which grants answered, not what they were: a fingerprint, so an
+            # audit line can be tied back to a configuration without the log
+            # becoming a copy of the entitlement table.
+            "entitlement_version": self.entitlement_version,
             "actor_id": self.actor_id,
             "actor_type": self.actor_type,
             "channel": self.channel,

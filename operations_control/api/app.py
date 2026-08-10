@@ -972,6 +972,125 @@ def admin_config_rollback(layer: str, body: RollbackBody,
     return {"ok": True, "active_version": doc["version"]}
 
 
+# --------------------------------------------------------------------------- #
+# Access administration — organisations, principals, resources, entitlements.
+#
+# A dedicated surface rather than the generic /ops/admin/config/{layer} routes
+# above, which take raw YAML edits. An access change has to arrive as reviewable
+# structured actions, so the `access` layer is deliberately excluded from
+# ADMIN_LAYERS and driven from here instead. See operations_control.access_admin.
+#
+# These routes ADMINISTER access. No runtime MI, risk or forecast request
+# reaches them: a request is decided by ExecutionContext -> EntitlementStore ->
+# ResourceCatalogue -> authorise_resource_access, against published config.
+# --------------------------------------------------------------------------- #
+
+class AccessProposalBody(BaseModel):
+    changes: List[Dict[str, Any]]
+    title: str = ""
+    rationale: str = ""
+    source: str = "operator"
+
+
+class AccessConfirmBody(BaseModel):
+    #: Quoted back from the proposal the operator actually read, so approving
+    #: one change set can never activate a different one.
+    fingerprint: Optional[str] = None
+
+
+def _access_admin(eng: OpsEngine):
+    from ..access_admin import AccessAdminService
+    return AccessAdminService(eng.store, _packages(eng))
+
+
+def _access_error(exc: Exception, code: str, status_code: int = 409):
+    return HTTPException(status_code=status_code,
+                         detail={"errorCode": code, "message": str(exc)})
+
+
+@app.get("/ops/admin/access")
+def admin_access_overview(principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    """Who exists, who they are, and what they can reach."""
+    require_admin(principal)
+    return {"ok": True, **_access_admin(get_engine()).overview()}
+
+
+@app.get("/ops/admin/access/proposals")
+def admin_access_proposals(principal: Principal = Depends(authenticate)
+                           ) -> Dict[str, Any]:
+    require_admin(principal)
+    service = _access_admin(get_engine())
+    return {"ok": True,
+            "proposals": [p.summary() for p in service.open_proposals()]}
+
+
+@app.get("/ops/admin/access/proposals/{version}")
+def admin_access_proposal(version: int,
+                          principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    """The full proposal, including before/after, for the approver to read."""
+    require_admin(principal)
+    proposal = _access_admin(get_engine()).proposal(version)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail={
+            "errorCode": "OPS_NOT_FOUND", "message": "That could not be found."})
+    return {"ok": True, "proposal": proposal.to_dict()}
+
+
+@app.post("/ops/admin/access/proposals", status_code=201)
+def admin_access_propose(body: AccessProposalBody,
+                         principal: Principal = Depends(authenticate)
+                         ) -> Dict[str, Any]:
+    """Propose an access change. Activates nothing."""
+    require_admin(principal)
+    from ..access_admin import AccessChange, AccessChangeSet, ChangeSetError
+
+    try:
+        change_set = AccessChangeSet(
+            changes=tuple(AccessChange(action=c.get("action"),
+                                       payload=c.get("payload") or {},
+                                       reason=c.get("reason") or "")
+                          for c in body.changes),
+            proposed_by=principal.name, source=body.source,
+            title=body.title, rationale=body.rationale)
+        proposal = _access_admin(get_engine()).propose(change_set)
+    except ChangeSetError as exc:
+        raise _access_error(exc, "OPS_ACCESS_CHANGE_INVALID", 400)
+    return {"ok": True, "proposal": proposal.to_dict()}
+
+
+@app.post("/ops/admin/access/proposals/{version}/confirm")
+def admin_access_confirm(version: int, body: AccessConfirmBody,
+                         principal: Principal = Depends(authenticate)
+                         ) -> Dict[str, Any]:
+    """Activate a proposal. The human decision — never the agent's."""
+    require_admin(principal)
+    from ..access_admin import ConfirmationError
+
+    try:
+        proposal = _access_admin(get_engine()).confirm(
+            version, actor=principal.name, fingerprint=body.fingerprint)
+    except ConfirmationError as exc:
+        raise _access_error(exc, "OPS_ACCESS_NOT_CONFIRMABLE")
+    return {"ok": True, "proposal": proposal.summary()}
+
+
+@app.post("/ops/admin/access/proposals/{version}/reject")
+def admin_access_reject(version: int, body: ReasonBody,
+                        principal: Principal = Depends(authenticate)
+                        ) -> Dict[str, Any]:
+    require_admin(principal)
+    from ..access_admin import ConfirmationError
+
+    try:
+        proposal = _access_admin(get_engine()).reject(
+            version, actor=principal.name, reason=body.reason)
+    except ConfirmationError as exc:
+        raise _access_error(exc, "OPS_ACCESS_NOT_CONFIRMABLE")
+    return {"ok": True, "proposal": proposal.summary()}
+
+
 @app.get("/ops/audit")
 def audit(client: str, workflow_id: Optional[str] = None,
           principal: Principal = Depends(authenticate)) -> Dict[str, Any]:

@@ -14,6 +14,20 @@ Contents:
   * :mod:`trakt_core.tenancy`   — the tenant registry and
     :func:`~trakt_core.tenancy.authorise_portfolio_access`: the one place that
     decides whether a context may read a portfolio.
+  * :mod:`trakt_core.organisation` — the *external organisation* registry: which
+    Microsoft Entra directory belongs to which organisation. Answers "who is
+    asking", which is not the same question as "whose data is this".
+  * :mod:`trakt_core.principal` — which individual is asking, bound to an
+    organisation by stable Microsoft identity. An independent kill switch;
+    entitlements stay at the organisation level.
+  * :mod:`trakt_core.resource`  — the permissionable resource model: what a
+    portfolio / SPV / facility / population *is*, and which existing data
+    population it deterministically means. Answers "what is the thing", and
+    deliberately not "who may reach it".
+  * :mod:`trakt_core.entitlement` — organisation × resource × capability, and
+    :func:`~trakt_core.entitlement.authorise_resource_access`: the one place that
+    decides whether an organisation may perform a capability against a resource.
+    Server-side configuration only; dormant until configured.
   * :mod:`trakt_core.runtime`   — the runtime mode (production / development /
     test) and its fail-closed startup validation.
   * :mod:`trakt_core.policy`    — the production data-source approval rule.
@@ -58,6 +72,67 @@ from .envelope import (
     SnapshotRef,
 )
 from .errors import ErrorCategory, ErrorCode, TraktError, http_status_for
+from .organisation import (
+    KNOWN_ORGANISATION_TYPES,
+    ORG_TYPE_INVESTOR,
+    ORG_TYPE_OPERATOR,
+    ORG_TYPE_ORIGINATOR,
+    ORG_TYPE_SERVICER,
+    ORG_TYPE_UNKNOWN,
+    ORG_TYPE_WAREHOUSE_FUNDER,
+    OrganisationRecord,
+    OrganisationRegistry,
+    load_organisation_registry,
+    normalise_directory_id,
+)
+from .entitlement import (
+    KNOWN_GRANT_STATUSES,
+    STATUS_ACTIVE,
+    STATUS_PROPOSED,
+    STATUS_REVOKED,
+    AuthorisedResource,
+    EntitlementStore,
+    Grant,
+    ResolvedEntitlements,
+    authorise_resource_access,
+    load_entitlement_store,
+    permitted_resources_for,
+    resolve_entitlements,
+)
+from .principal import (
+    KNOWN_PRINCIPAL_STATUSES,
+    PRINCIPAL_ACTIVE,
+    PRINCIPAL_DISABLED,
+    PrincipalBinding,
+    PrincipalRegistry,
+    load_principal_registry,
+    normalise_object_id,
+)
+from .resource import (
+    ATTRIBUTION_PROVENANCE,
+    ATTRIBUTION_SPV_FIELD,
+    ATTRIBUTION_UNPARTITIONABLE,
+    ATTRIBUTION_VIEW,
+    ATTRIBUTION_WHOLE_BOOK,
+    KIND_FACILITY,
+    KIND_POPULATION,
+    KIND_PORTFOLIO,
+    KIND_SOURCE_PORTFOLIO,
+    KIND_SPV,
+    POPULATION_FORECAST,
+    POPULATION_FUNDED,
+    POPULATION_PIPELINE,
+    POPULATIONS,
+    RESOURCE_KINDS,
+    AttributionCheck,
+    ResolvedResource,
+    ResourceCatalogue,
+    ResourceRecord,
+    ResourceRef,
+    check_attribution,
+    load_resource_catalogue,
+    resources_from_portfolio_records,
+)
 from .policy import (
     PRODUCTION_APPROVED_SOURCE_BASES,
     SourceApproval,
@@ -90,6 +165,29 @@ __all__ = [
     # tenancy
     "TenantRegistry", "TenantRecord", "AuthorisedPortfolio",
     "authorise_portfolio_access", "load_tenant_registry",
+    # organisation (who is asking — not the data-owning tenant)
+    "OrganisationRegistry", "OrganisationRecord", "load_organisation_registry",
+    "normalise_directory_id", "KNOWN_ORGANISATION_TYPES",
+    "ORG_TYPE_ORIGINATOR", "ORG_TYPE_WAREHOUSE_FUNDER", "ORG_TYPE_INVESTOR",
+    "ORG_TYPE_SERVICER", "ORG_TYPE_OPERATOR", "ORG_TYPE_UNKNOWN",
+    # principals (which individual, and which organisation they belong to)
+    "PrincipalBinding", "PrincipalRegistry", "load_principal_registry",
+    "normalise_object_id", "PRINCIPAL_ACTIVE", "PRINCIPAL_DISABLED",
+    "KNOWN_PRINCIPAL_STATUSES",
+    # resource model (what a permissionable thing is — not who may reach it)
+    "ResourceRef", "ResourceRecord", "ResolvedResource", "ResourceCatalogue",
+    "AttributionCheck", "check_attribution", "load_resource_catalogue",
+    "resources_from_portfolio_records",
+    "RESOURCE_KINDS", "KIND_PORTFOLIO", "KIND_SOURCE_PORTFOLIO", "KIND_SPV",
+    "KIND_FACILITY", "KIND_POPULATION",
+    "POPULATIONS", "POPULATION_FUNDED", "POPULATION_PIPELINE", "POPULATION_FORECAST",
+    "ATTRIBUTION_PROVENANCE", "ATTRIBUTION_SPV_FIELD", "ATTRIBUTION_VIEW",
+    "ATTRIBUTION_WHOLE_BOOK", "ATTRIBUTION_UNPARTITIONABLE",
+    # entitlements (organisation × resource × capability)
+    "Grant", "EntitlementStore", "ResolvedEntitlements", "AuthorisedResource",
+    "authorise_resource_access", "permitted_resources_for",
+    "load_entitlement_store", "resolve_entitlements",
+    "STATUS_ACTIVE", "STATUS_PROPOSED", "STATUS_REVOKED", "KNOWN_GRANT_STATUSES",
     # runtime + policy
     "runtime_mode", "validate_runtime_mode", "is_production",
     "MODE_PRODUCTION", "MODE_DEVELOPMENT", "MODE_TEST",

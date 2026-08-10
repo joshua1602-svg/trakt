@@ -198,6 +198,8 @@ def _audit(context: ExecutionContext, *, outcome: str, started_at: str,
     return AuditMetadata(
         capability=CAPABILITY, request_id=context.request_id,
         correlation_id=context.correlation_id, tenant_id=context.tenant_id,
+        organisation_id=context.organisation_id,
+        microsoft_tenant_id=context.microsoft_tenant_id,
         actor_id=context.actor_id, actor_type=context.actor_type,
         channel=context.channel, portfolio_id=portfolio_id,
         snapshot_id=snapshot_id, outcome=outcome, started_at=started_at,

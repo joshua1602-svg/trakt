@@ -134,12 +134,231 @@ capability its token does not carry.
 | Channel | Identity mechanism | Tenant source |
 |---|---|---|
 | React | Azure Easy Auth / SWA injects `X-MS-CLIENT-PRINCIPAL`; `auth.py` decodes it | `MI_AGENT_CLIENT_ID`, else the client in `MI_AGENT_PLATFORM_URI` |
-| Copilot | Entra bearer token validated against tenant JWKS (`copilot_auth.py`) | same deployment config |
+| Copilot | Entra bearer token validated against the issuing directory's JWKS (`copilot_auth.py`) | same deployment config |
 | Internal | `ExecutionContext.for_internal(...)` — the process is inside the trust boundary | caller-declared |
 
 The tenant is **never** taken from `portfolio_id`, `client_id` or a token claim.
 `tests/test_governance_context_and_tenancy.py::test_tenant_is_never_taken_from_a_principal_claim`
 locks that in.
+
+### Organisation identity — who is asking
+
+A context now carries a second identity, and the two must not be conflated:
+
+| Field | Question it answers | Source |
+|---|---|---|
+| `tenant_id` | **Whose data is served?** | Deployment configuration. Unchanged. |
+| `organisation_id` | **Who is asking?** | The caller's signature-verified Entra directory, mapped through `trakt_core/organisation.py` |
+| `microsoft_tenant_id` | Which Entra directory did the token come from? | The validated `tid` claim |
+
+They are separate because they stop being the same party as soon as a warehouse
+funder, investor or servicer signs in to *its own* directory to ask about someone
+else's book. A validated `tid` selects an **organisation** and never a tenant.
+
+Two modes, chosen by whether `config/organisations.yaml` exists (see
+`config/organisations.example.yaml`):
+
+* **compatibility** (no file) — the current ERE shape. No organisation identity
+  is claimed, `resolve_organisation` returns `None`, and every existing caller is
+  unchanged.
+* **organisation mode** (file present) — an unregistered or disabled directory is
+  refused (`ORGANISATION_NOT_REGISTERED` / `ORGANISATION_DISABLED`, both 403) on
+  any path carrying a validated directory. There is no permissive fallback, and a
+  config file that cannot be trusted leaves the registry strict-but-empty rather
+  than reopening the deployment.
+
+`copilot_auth` validates against a **set** of accepted directories — the
+comma-separated `TRAKT_COPILOT_ENTRA_TENANT_ID` plus every enabled organisation's
+directories. The `tid` claim is read unverified only to *select* which
+allow-listed directory's JWKS to verify the signature against; nothing in the
+token is trusted until that verification succeeds.
+
+Organisations are **identity only**. They carry no entitlements, resources or
+capabilities yet, so registering one changes nothing about which data is served.
+`tests/test_governance_organisation_identity.py` covers the model, both modes and
+the tenant/organisation separation.
+
+The React path deliberately resolves no organisation: Easy Auth hands this
+process a trusted-by-topology header, not a signature-verified directory, and the
+SWA principal shape carries no `tid` at all.
+
+### Resource identity — what can be permissioned
+
+`trakt_core/resource.py` names the things an entitlement will later be written
+against, and expands each one into a deterministic predicate over existing
+canonical fields. It answers *what the resource is*, never *who may reach it* —
+nothing in the request path consults it yet, and registering a resource grants
+nobody anything.
+
+| Type | Purpose |
+|---|---|
+| `ResourceRef(tenant_id, kind, resource_id)` | Stable, hashable identity. Canonical string `"{tenant}/{kind}/{id}"`. Kinds: `portfolio`, `source_portfolio`, `spv`, `facility`, `population`. |
+| `ResourceRecord` | The catalogue entry: which books, which `spv_id`, which population. |
+| `ResolvedResource` | The expansion — `predicate()`, `required_fields`, `to_portfolio_scope()`. |
+| `check_attribution(resolved, available_fields)` | Confirms the data can carry the boundary, or raises. |
+
+The model exists because the axes differ in strength, and that difference has to
+be explicit rather than assumed:
+
+* `source_portfolio_id` is **mandatory on every onboarded row**, so it can always
+  carry a boundary;
+* `spv_id` is a **reserved optional** snapshot column (`snapshot.model`), absent
+  from the canonical fields registry — an SPV is permissionable only where the
+  client supplies it;
+* funded / pipeline / forecast are **views** chosen per request (and inferred
+  from question wording by `workspace.resolve_active_view`), so population is
+  pinned onto the resource as an immutable constraint rather than left to the
+  caller.
+
+Two invariants distinguish this from the presentation lens, which must **not** be
+reused as an entitlement filter:
+
+* **A resource never widens.** `predicate()` cannot return an empty filter unless
+  the record explicitly set `whole_tenant_book`, and a record declaring no
+  constraint is rejected at load — so whole-book access is unreachable by
+  omission. Compare `resolve_scope`, which answers an unrecognised context with
+  Total.
+* **Missing attribution refuses.** `check_attribution` raises
+  `RESOURCE_NOT_PARTITIONABLE` when the needed column is absent. Compare
+  `apply_scope`, which returns the frame unfiltered. A partial-book SPV with no
+  attribution is declared `unpartitionable` and always refuses, rather than being
+  mapped to its enclosing portfolio.
+
+Config-driven via `config/resources.yaml` (see `config/resources.example.yaml`);
+an absent or untrusted file leaves the catalogue **empty**, so every lookup
+refuses. Covered by `tests/test_governance_resource_model.py`.
+
+### Entitlements — who may do what to which resource
+
+`trakt_core/entitlement.py` completes the relationship:
+
+```
+organisation  ×  resource  ×  capability
+```
+
+A `Grant(organisation_id, resource_ref, capabilities, status, enabled)` is
+server-side configuration (`config/entitlements.yaml`), validated at load against
+the organisation registry and the resource catalogue, resolved **once** at
+context construction, and frozen onto `ExecutionContext.entitlements`. No request
+field contributes to it and nothing downstream can widen it.
+
+Capabilities are held **per resource** — Funder A holds `mi:query` and `risk:read`
+against SPV I and nothing at all against SPV II — so a resolved entitlement is
+`ResourceRef -> frozenset(capabilities)`.
+
+`authorise_resource_access(context, resource, capability, catalogue=…)` returns an
+`AuthorisedResource` token or raises. The check order is part of the design:
+scope → parse → entitlements present → membership → capability → tenant →
+catalogue. Membership precedes the catalogue lookup so an ungranted resource and
+a nonexistent one are **indistinguishable** to the caller.
+
+Two rules worth stating plainly:
+
+* **Explicit grants, never inferred roles.** `organisation_type: warehouse_funder`
+  grants nothing. "Funder A funds SPV I" is a commercial fact; a written grant is
+  the authorisation fact, and only the second is consulted.
+* **A resource the data cannot partition cannot be granted to anyone.** A grant
+  over an `unpartitionable` resource is rejected at load, so the SPV II case
+  fails in config review rather than confusingly at request time.
+
+**Capability vocabulary.** The grant verbs are the existing scope strings, not a
+parallel set — `portfolio:read`, `mi:query`, `artefact:read`, `artefact:generate`,
+plus two additions: `risk:read` (current position, grantable without the much
+wider `mi:query`) and `forecast:read` (forward-looking, "where permissioned", so
+it has to be separable from current risk). Both are in `DEFAULT_MI_SCOPES`, which
+is inert today — the risk and forecast routes are not scope-gated yet — and is
+what stops existing users losing access when they are.
+
+Two axes, both enforced: `ExecutionContext.scopes` is what a caller may do at all;
+a grant is what an organisation may do to one resource. The effective permission
+is the intersection.
+
+**Dormant until configured.** With no `config/entitlements.yaml` the store is
+unconfigured, `context.entitlements` stays `None`, and every existing caller is
+unchanged — they authorise through `authorise_portfolio_access`, which is
+untouched. `None` is not "unlimited": `authorise_resource_access` refuses a
+context that carries no entitlements. Covered by
+`tests/test_governance_entitlements.py`.
+
+**OCC seam.** A grant carries `status` (`active` / `proposed` / `revoked`) plus
+`source` / `approved_by` / `approved_at`, recorded and never consulted for an
+access decision. The OCC Agent may later *propose* grants by writing
+`status: proposed` entries; only a human setting `status: active` grants anything.
+The runtime reads the file and never asks the agent, so an authorisation decision
+does not depend on an agent being reachable, correct or uncompromised.
+
+### Principals — which individual, and their organisation
+
+`trakt_core/principal.py` binds an individual to an organisation by stable
+Microsoft identity: `(microsoft_tenant_id, microsoft_object_id)`. Display name
+and email are stored for operators and **never consulted** — a display name is
+user-editable in most directories and an email is reassignable.
+
+Entitlements stay at the **organisation** level; a principal is an independent
+kill switch:
+
+| Organisation | Principal | Result |
+|---|---|---|
+| entitled | active | the organisation's grants |
+| entitled | disabled | nothing |
+
+So a leaver is revoked without touching, or risking, the funder's grants.
+
+**Enforcement is per directory, and opting in is an act.** A directory with no
+registered principals resolves exactly as it did in Stage 1; a directory with any
+registered principal is enforced, and an unregistered or disabled object id in it
+is refused. Registering Funder A's first user gates Funder A's directory and
+leaves ERE's untouched — there is no flag to remember and no way to half-enable
+it. A binding that disagrees with its directory's organisation is refused in both
+directions rather than resolved. Covered by
+`tests/test_governance_principal_identity.py`.
+
+One asymmetry worth knowing: an untrusted *organisation* config refuses
+everything, an untrusted *principal* config gates nothing. An unreadable
+organisation file means Trakt cannot tell who is asking and must refuse; an
+unreadable principal file means it has lost a narrowing control it did not have
+before Stage 3.5, and failing every request closed there would be an outage
+caused by an additive feature.
+
+### Administering access — the OCC lifecycle
+
+`operations_control/access_admin/` is how organisations, principals, resources and
+grants are actually changed, for initial onboarding and for everything after it.
+
+```
+operator request / document
+      ↓  OCC Agent extracts or receives facts
+AccessChangeSet         structured actions, never raw YAML
+      ↓  apply_change_set()      pure, atomic, all-or-nothing
+AccessDocument          candidate: all four registries together
+      ↓  validate_document()     the REAL Stage 1-3 registries; nothing restated
+DRAFT version           ConfigPackageStore, content-hashed, immutable
+      ↓  operator reads before/after + fingerprint
+confirm(actor)          a NAMED HUMAN. Never the agent.
+ACTIVE version          prior version superseded, hash-chained audit appended
+      ↓  materialise(dest)
+published YAML          what load_organisation_registry() and friends read
+```
+
+Reused rather than rebuilt: `ConfigPackageStore` (draft → validate → activate →
+rollback, versioned and immutable), `OpsStore.append_audit` (hash-chained,
+tamper-evident), and the existing admin-only operator principals. The access
+layer is deliberately **excluded from `ADMIN_LAYERS`**, because the generic
+`/ops/admin/config/{layer}/draft` route takes raw YAML edits and access changes
+must arrive as reviewable actions. It has its own routes under
+`/ops/admin/access`.
+
+Fourteen actions cover the lifecycle (`ADD_ORGANISATION`,
+`ADD_MICROSOFT_TENANT`, `ADD_PRINCIPAL`, `DISABLE_PRINCIPAL`, `ADD_GRANT`,
+`SET_GRANT_CAPABILITIES`, `REVOKE_GRANT`, …). Every one requires confirmation;
+`DISABLE_ORGANISATION` cascades to that organisation's grants and
+`ENABLE_ORGANISATION` deliberately does not restore them.
+
+**The OCC is never in the runtime authorisation path.** A data request is decided
+by `ExecutionContext` → `EntitlementStore` → `ResourceCatalogue` →
+`authorise_resource_access` against published configuration. Nothing under
+`mi_agent_api/`, `mi_agent/`, `trakt_core/` or `engine/` imports `access_admin`,
+and a test asserts it.
 
 ### Portfolio authorisation
 
