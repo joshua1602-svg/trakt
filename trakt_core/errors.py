@@ -59,6 +59,15 @@ class ErrorCode:
     #: The resource is registered but the data carries no attribution that can
     #: separate it from the rest of the book. Refused rather than widened.
     RESOURCE_NOT_PARTITIONABLE = "RESOURCE_NOT_PARTITIONABLE"
+    #: This organisation holds no grant over the named resource. Deliberately
+    #: also returned for a resource that does not exist, so a caller cannot
+    #: enumerate another organisation's resources by comparing error codes.
+    RESOURCE_NOT_AUTHORISED = "RESOURCE_NOT_AUTHORISED"
+    #: The organisation may reach the resource, but not with this capability.
+    CAPABILITY_NOT_GRANTED = "CAPABILITY_NOT_GRANTED"
+    #: The request carries no resolved entitlements, so no resource can be
+    #: authorised for it. Absence of configuration is not absence of restriction.
+    ENTITLEMENTS_NOT_RESOLVED = "ENTITLEMENTS_NOT_RESOLVED"
 
     # -- input ------------------------------------------------------------- #
     INVALID_INPUT = "INVALID_INPUT"
@@ -116,6 +125,9 @@ _CODES: Dict[str, _CodeSpec] = {
     # Not retryable and not the caller's fault: the boundary cannot be enforced
     # from the data, so serving anything would mean serving too much.
     ErrorCode.RESOURCE_NOT_PARTITIONABLE: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.RESOURCE_NOT_AUTHORISED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.CAPABILITY_NOT_GRANTED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.ENTITLEMENTS_NOT_RESOLVED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
 
     ErrorCode.INVALID_INPUT: _CodeSpec(ErrorCategory.INPUT, False, 400),
 

@@ -228,6 +228,65 @@ Config-driven via `config/resources.yaml` (see `config/resources.example.yaml`);
 an absent or untrusted file leaves the catalogue **empty**, so every lookup
 refuses. Covered by `tests/test_governance_resource_model.py`.
 
+### Entitlements — who may do what to which resource
+
+`trakt_core/entitlement.py` completes the relationship:
+
+```
+organisation  ×  resource  ×  capability
+```
+
+A `Grant(organisation_id, resource_ref, capabilities, status, enabled)` is
+server-side configuration (`config/entitlements.yaml`), validated at load against
+the organisation registry and the resource catalogue, resolved **once** at
+context construction, and frozen onto `ExecutionContext.entitlements`. No request
+field contributes to it and nothing downstream can widen it.
+
+Capabilities are held **per resource** — Funder A holds `mi:query` and `risk:read`
+against SPV I and nothing at all against SPV II — so a resolved entitlement is
+`ResourceRef -> frozenset(capabilities)`.
+
+`authorise_resource_access(context, resource, capability, catalogue=…)` returns an
+`AuthorisedResource` token or raises. The check order is part of the design:
+scope → parse → entitlements present → membership → capability → tenant →
+catalogue. Membership precedes the catalogue lookup so an ungranted resource and
+a nonexistent one are **indistinguishable** to the caller.
+
+Two rules worth stating plainly:
+
+* **Explicit grants, never inferred roles.** `organisation_type: warehouse_funder`
+  grants nothing. "Funder A funds SPV I" is a commercial fact; a written grant is
+  the authorisation fact, and only the second is consulted.
+* **A resource the data cannot partition cannot be granted to anyone.** A grant
+  over an `unpartitionable` resource is rejected at load, so the SPV II case
+  fails in config review rather than confusingly at request time.
+
+**Capability vocabulary.** The grant verbs are the existing scope strings, not a
+parallel set — `portfolio:read`, `mi:query`, `artefact:read`, `artefact:generate`,
+plus two additions: `risk:read` (current position, grantable without the much
+wider `mi:query`) and `forecast:read` (forward-looking, "where permissioned", so
+it has to be separable from current risk). Both are in `DEFAULT_MI_SCOPES`, which
+is inert today — the risk and forecast routes are not scope-gated yet — and is
+what stops existing users losing access when they are.
+
+Two axes, both enforced: `ExecutionContext.scopes` is what a caller may do at all;
+a grant is what an organisation may do to one resource. The effective permission
+is the intersection.
+
+**Dormant until configured.** With no `config/entitlements.yaml` the store is
+unconfigured, `context.entitlements` stays `None`, and every existing caller is
+unchanged — they authorise through `authorise_portfolio_access`, which is
+untouched. `None` is not "unlimited": `authorise_resource_access` refuses a
+context that carries no entitlements. Covered by
+`tests/test_governance_entitlements.py`.
+
+**OCC seam.** A grant carries `status` (`active` / `proposed` / `revoked`) plus
+`source` / `approved_by` / `approved_at`, recorded and never consulted for an
+access decision. The OCC Agent may later *propose* grants by writing
+`status: proposed` entries; only a human setting `status: active` grants anything.
+The runtime reads the file and never asks the agent, so an authorisation decision
+does not depend on an agent being reachable, correct or uncompromised.
+
 ### Portfolio authorisation
 
 `trakt_core.tenancy.authorise_portfolio_access(context, portfolio_id, registry)`

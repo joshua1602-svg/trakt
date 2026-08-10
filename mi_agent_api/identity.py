@@ -23,14 +23,18 @@ them separate is the whole point:
     :mod:`trakt_core.organisation`.
 
 A funder signing in from its own directory is ``organisation_id="funder_a"``
-asking about ``tenant_id="ERE"``. Stage 1 establishes that identity and records
-it; it grants nothing and narrows nothing. Which resources an organisation may
-reach is the entitlement stage, and until it lands an organisation is served
-exactly what the deployment's tenant configuration already allowed.
+asking about ``tenant_id="ERE"``. Which resources that organisation may reach is
+a third fact again — ``context.entitlements``, resolved here from
+``trakt_core.entitlement`` and frozen for the life of the request:
+
+    validated directory → organisation → entitlements → immutable context
 
 With no ``config/organisations.yaml`` the deployment is in compatibility mode:
 ``resolve_organisation`` returns ``None``, the context's organisation fields stay
-unset, and every existing caller is unchanged.
+unset, entitlements stay unresolved, and every existing caller is unchanged.
+``entitlements is None`` never means "unrestricted" — the resource authorisation
+helper refuses such a context outright, and the legacy path is unaffected because
+it authorises through ``trakt_core.tenancy.authorise_portfolio_access``.
 
 Trusting the injected header
 ----------------------------
@@ -63,6 +67,11 @@ from trakt_core.context import (
     DEFAULT_MI_SCOPES,
     ExecutionContext,
     new_request_id,
+)
+from trakt_core.entitlement import (
+    EntitlementStore,
+    ResolvedEntitlements,
+    resolve_entitlements,
 )
 from trakt_core.errors import ErrorCode, TraktError
 from trakt_core.organisation import (
@@ -228,6 +237,7 @@ def context_from_copilot_principal(
     request_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
     organisation_registry: Optional[OrganisationRegistry] = None,
+    entitlement_store: Optional[EntitlementStore] = None,
 ) -> ExecutionContext:
     """Build a context from a validated Entra bearer principal.
 
@@ -257,6 +267,15 @@ def context_from_copilot_principal(
     organisation = resolve_organisation(
         microsoft_tenant_id, registry=organisation_registry, request_id=request_id)
 
+    # MAY THEY. Resolved once, here, and frozen onto the context — so no
+    # capability downstream can widen its own authority, and nothing has to
+    # remember to look grants up again. ``None`` whenever there is no
+    # organisation or no entitlement config, which is every deployment today.
+    entitlements: Optional[ResolvedEntitlements] = None
+    if organisation is not None:
+        entitlements = resolve_entitlements(organisation.organisation_id,
+                                            store=entitlement_store)
+
     return ExecutionContext(
         tenant_id=tenant_id,
         actor_id=str(actor_id),
@@ -268,4 +287,5 @@ def context_from_copilot_principal(
         actor_label=getattr(principal, "name", None),
         organisation_id=organisation.organisation_id if organisation else None,
         microsoft_tenant_id=microsoft_tenant_id,
+        entitlements=entitlements,
     )

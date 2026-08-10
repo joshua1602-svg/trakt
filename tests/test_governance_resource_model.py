@@ -529,9 +529,16 @@ def test_stage2_grants_nobody_anything():
     assert not hasattr(resource_mod, "EntitlementStore")
     assert not hasattr(resource_mod, "AuthorisedResourceSet")
 
+    # Stage 3 later gave ExecutionContext an entitlement axis, so the original
+    # form of this check — "the context has no permitted_resources attribute" —
+    # became a statement about which stage had shipped rather than about the
+    # resource model. The property that actually matters is unchanged and is
+    # asserted directly: naming a resource confers nothing, and a context that
+    # was granted nothing permits nothing.
     ctx = ExecutionContext(tenant_id="ERE", actor_id="u")
-    assert not hasattr(ctx, "permitted_resources")
-    assert not hasattr(ctx, "entitlements")
+    assert ctx.entitlements is None
+    assert ctx.permitted_resources == frozenset()
+    assert ctx.capabilities_for(_ref(KIND_SPV, "spv_i")) == frozenset()
 
 
 # --------------------------------------------------------------------------- #

@@ -1,0 +1,165 @@
+# =========================================================================
+# Entitlements — WHO may do WHAT to WHICH resource.
+# =========================================================================
+#
+# OPTIONAL. Copy to config/entitlements.yaml (or point TRAKT_ENTITLEMENTS_CONFIG
+# at it).
+#
+# ------------------------------------------------------------------------
+# Where this sits
+# ------------------------------------------------------------------------
+#
+# config/tenancy.yaml        : WHOSE DATA is this?      (the Trakt tenant)
+# config/organisations.yaml  : WHO IS ASKING?           (the external org)
+# config/resources.yaml      : WHAT can be asked about? (the resource catalogue)
+# config/entitlements.yaml   : MAY THEY?                (this file)
+#
+#     organisation  ×  resource  ×  capability
+#
+# Every grant is validated at load against the other two files. A grant naming an
+# organisation that is not registered, a resource that is not in the catalogue,
+# or a capability Trakt does not recognise is rejected — and rejecting ONE grant
+# rejects the WHOLE file, leaving no grants active. Partially applying a config
+# would mean a typo silently changes who can see what.
+#
+# ------------------------------------------------------------------------
+# Explicit grants, never inferred roles
+# ------------------------------------------------------------------------
+#
+# `organisation_type: warehouse_funder` in config/organisations.yaml grants
+# NOTHING. "Funder A funds SPV I" is a commercial fact; the line below is the
+# authorisation fact, and only the line below is consulted at runtime. If a
+# funder should see something, it has to be written here.
+#
+# ------------------------------------------------------------------------
+# Capabilities are PER RESOURCE
+# ------------------------------------------------------------------------
+#
+# Funder A holds mi:query and risk:read against SPV I and nothing whatsoever
+# against SPV II. One capability list per organisation could not express that
+# without also deciding it applied everywhere.
+#
+# The vocabulary is exactly the existing scope names — there is no separate
+# entitlement verb list to keep in step:
+#
+#   portfolio:read      read a portfolio's position
+#   mi:query            the free-form natural-language MI surface (a WIDE grant;
+#                       give risk:read instead if all that is wanted is limits)
+#   risk:read           current risk / concentration position
+#   forecast:read       forward-looking risk and exposure
+#   artefact:read       download a generated artefact
+#   artefact:generate   PRODUCE one — consumes real compute and republishes what
+#                       investors receive. Withhold unless genuinely intended.
+#
+# A grant must name at least one capability; an empty list is rejected as more
+# likely a mistake than an intent.
+#
+# ------------------------------------------------------------------------
+# Fields
+# ------------------------------------------------------------------------
+#
+#   organisation_id   required. Must exist and be enabled in organisations.yaml.
+#   resource          required. The canonical "{tenant}/{kind}/{id}" reference
+#                     from resources.yaml. Must exist, be enabled, and be
+#                     PARTITIONABLE — a resource the data cannot separate cannot
+#                     be granted to anyone, because granting it would hand over
+#                     whatever the enclosing book turns out to be.
+#   capabilities      required, non-empty.
+#   status            active | proposed | revoked. Default active. ONLY `active`
+#                     confers anything.
+#   enabled           default true. The operational on/off, kept separate from
+#                     `status` so access can be withdrawn without losing the
+#                     approval history.
+#
+#   --- recorded for governance review, never consulted at runtime ---
+#   source            who or what produced this entry, e.g. `operator` or
+#                     `occ_agent`.
+#   approved_by       the human who approved it.
+#   approved_at       ISO timestamp of that approval.
+#   note              free text.
+#
+# ------------------------------------------------------------------------
+# The OCC Agent seam
+# ------------------------------------------------------------------------
+#
+# The OCC Agent may later PROPOSE grants by writing entries with
+# `status: proposed` and `source: occ_agent`. Those are inert: a proposal is not
+# an approval, and a human turning it into `status: active` is what grants
+# anything.
+#
+# The runtime never asks the OCC Agent anything. It reads this file. An
+# authorisation decision must not depend on an agent being reachable, being
+# correct, or being uncompromised.
+#
+# ------------------------------------------------------------------------
+# Compatibility
+# ------------------------------------------------------------------------
+#
+# NO FILE -> the entitlement model is dormant. Resolution yields nothing, the
+# context's entitlements stay unset, and every existing caller (React MI, the
+# Copilot actions, decks, internal jobs) is unchanged — they authorise through
+# the existing tenant/portfolio path, which this model does not touch.
+#
+# "No entitlements" NEVER means "unrestricted": authorise_resource_access refuses
+# a request that carries none. An organisation that is registered but has no
+# grants resolves to an EMPTY permitted set and is refused everything.
+
+entitlements:
+
+  # -------------------------------------------------------------------
+  # Warehouse Funder A — funds SPV I only.
+  # -------------------------------------------------------------------
+  #
+  # This single entry is the whole warehouse-funder case:
+  #
+  #   * SPV I is reachable, and only with these four capabilities;
+  #   * SPV II is absent from this file, so it is refused — and it could not be
+  #     granted even by mistake, because resources.yaml marks it unpartitionable;
+  #   * ERE/population/pipeline is absent, so the unfunded pipeline is refused;
+  #   * artefact:generate is absent, so the funder cannot make Trakt produce and
+  #     republish an investor artefact;
+  #   * the resource itself pins `population: funded`, so no question wording can
+  #     move this grant onto the pipeline.
+  - organisation_id: funder_a
+    resource: ERE/spv/spv_i
+    capabilities:
+      - portfolio:read
+      - mi:query
+      - risk:read
+      - forecast:read
+    status: active
+    enabled: true
+    source: operator
+    approved_by: "<name of the person who approved this>"
+    approved_at: "2026-01-15T09:30:00Z"
+    note: Funds SPV I under the warehouse facility. Funded population only.
+
+  # -------------------------------------------------------------------
+  # The originator's own management view.
+  # -------------------------------------------------------------------
+  #
+  # Written down deliberately, like any other grant. ERE's own organisation is
+  # not privileged by being the data owner — that is `tenancy.yaml`'s business,
+  # and this file still has to say what ERE's PEOPLE may do.
+  #
+  # - organisation_id: ere
+  #   resource: ERE/portfolio/ere_total
+  #   capabilities: [portfolio:read, mi:query, risk:read, forecast:read,
+  #                  artefact:read, artefact:generate]
+  #
+  # - organisation_id: ere
+  #   resource: ERE/population/pipeline
+  #   capabilities: [portfolio:read, mi:query, forecast:read]
+
+  # -------------------------------------------------------------------
+  # A grant the OCC Agent proposed and nobody has approved. Inert.
+  # -------------------------------------------------------------------
+  #
+  # - organisation_id: funder_b
+  #   resource: ERE/source_portfolio/acquired_001
+  #   capabilities: [portfolio:read, risk:read]
+  #   status: proposed
+  #   source: occ_agent
+  #   note: >-
+  #     Proposed from the facility agreement uploaded on 2026-02-01.
+  #     Confers nothing until a human sets status: active.

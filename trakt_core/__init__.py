@@ -21,6 +21,10 @@ Contents:
     portfolio / SPV / facility / population *is*, and which existing data
     population it deterministically means. Answers "what is the thing", and
     deliberately not "who may reach it".
+  * :mod:`trakt_core.entitlement` — organisation × resource × capability, and
+    :func:`~trakt_core.entitlement.authorise_resource_access`: the one place that
+    decides whether an organisation may perform a capability against a resource.
+    Server-side configuration only; dormant until configured.
   * :mod:`trakt_core.runtime`   — the runtime mode (production / development /
     test) and its fail-closed startup validation.
   * :mod:`trakt_core.policy`    — the production data-source approval rule.
@@ -77,6 +81,20 @@ from .organisation import (
     OrganisationRegistry,
     load_organisation_registry,
     normalise_directory_id,
+)
+from .entitlement import (
+    KNOWN_GRANT_STATUSES,
+    STATUS_ACTIVE,
+    STATUS_PROPOSED,
+    STATUS_REVOKED,
+    AuthorisedResource,
+    EntitlementStore,
+    Grant,
+    ResolvedEntitlements,
+    authorise_resource_access,
+    load_entitlement_store,
+    permitted_resources_for,
+    resolve_entitlements,
 )
 from .resource import (
     ATTRIBUTION_PROVENANCE,
@@ -149,6 +167,11 @@ __all__ = [
     "POPULATIONS", "POPULATION_FUNDED", "POPULATION_PIPELINE", "POPULATION_FORECAST",
     "ATTRIBUTION_PROVENANCE", "ATTRIBUTION_SPV_FIELD", "ATTRIBUTION_VIEW",
     "ATTRIBUTION_WHOLE_BOOK", "ATTRIBUTION_UNPARTITIONABLE",
+    # entitlements (organisation × resource × capability)
+    "Grant", "EntitlementStore", "ResolvedEntitlements", "AuthorisedResource",
+    "authorise_resource_access", "permitted_resources_for",
+    "load_entitlement_store", "resolve_entitlements",
+    "STATUS_ACTIVE", "STATUS_PROPOSED", "STATUS_REVOKED", "KNOWN_GRANT_STATUSES",
     # runtime + policy
     "runtime_mode", "validate_runtime_mode", "is_production",
     "MODE_PRODUCTION", "MODE_DEVELOPMENT", "MODE_TEST",
