@@ -180,6 +180,12 @@ class AuditMetadata:
     portfolio_id: Optional[str] = None
     snapshot_id: Optional[str] = None
     error_code: Optional[str] = None
+    #: WHO ASKED, where the channel established it — see
+    #: :mod:`trakt_core.organisation`. Optional and defaulted so every existing
+    #: construction site is unchanged; ``None`` on the single-client deployment
+    #: and on channels that carry no directory identity.
+    organisation_id: Optional[str] = None
+    microsoft_tenant_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -187,6 +193,8 @@ class AuditMetadata:
             "request_id": self.request_id,
             "correlation_id": self.correlation_id,
             "tenant_id": self.tenant_id,
+            "organisation_id": self.organisation_id,
+            "microsoft_tenant_id": self.microsoft_tenant_id,
             "actor_id": self.actor_id,
             "actor_type": self.actor_type,
             "channel": self.channel,

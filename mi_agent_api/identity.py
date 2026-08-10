@@ -8,8 +8,29 @@ Two identity mechanisms exist today and both land here:
 
   * **React** — Azure Static Web Apps / App Service Easy Auth performs the login
     and injects ``X-MS-CLIENT-PRINCIPAL``. ``auth.parse_principal`` decodes it.
-  * **Copilot** — a Microsoft Entra bearer token validated against the tenant
+  * **Copilot** — a Microsoft Entra bearer token validated against the directory
     JWKS by ``copilot_auth``.
+
+Two identities, not one
+-----------------------
+A governed context now records two separate facts about a request, and keeping
+them separate is the whole point:
+
+  * ``tenant_id`` — **whose data is served.** Deployment configuration, exactly
+    as before. Never a token claim, never a request field.
+  * ``organisation_id`` / ``microsoft_tenant_id`` — **who is asking.** Resolved
+    from the caller's signature-verified Entra directory through
+    :mod:`trakt_core.organisation`.
+
+A funder signing in from its own directory is ``organisation_id="funder_a"``
+asking about ``tenant_id="ERE"``. Stage 1 establishes that identity and records
+it; it grants nothing and narrows nothing. Which resources an organisation may
+reach is the entitlement stage, and until it lands an organisation is served
+exactly what the deployment's tenant configuration already allowed.
+
+With no ``config/organisations.yaml`` the deployment is in compatibility mode:
+``resolve_organisation`` returns ``None``, the context's organisation fields stay
+unset, and every existing caller is unchanged.
 
 Trusting the injected header
 ----------------------------
@@ -44,6 +65,12 @@ from trakt_core.context import (
     new_request_id,
 )
 from trakt_core.errors import ErrorCode, TraktError
+from trakt_core.organisation import (
+    OrganisationRecord,
+    OrganisationRegistry,
+    load_organisation_registry,
+    normalise_directory_id,
+)
 from trakt_core.runtime import is_production, running_in_azure
 
 logger = logging.getLogger("mi_agent_api.identity")
@@ -138,6 +165,17 @@ def context_from_principal(
     ``tenant_id`` is deployment configuration, never a principal claim: this is a
     deployment-per-tenant product, and taking the tenant from a token claim would
     make it caller-influenced.
+
+    **No organisation is resolved on this path, deliberately.** Easy Auth injects
+    a principal that this process trusts because the platform overwrites the
+    header — it does not hand us a signature-verified directory id, and the SWA
+    principal shape carries no ``tid`` at all. Resolving an organisation from an
+    unverified value would be exactly the mistake ``copilot_auth`` exists to
+    avoid, and applying organisation-mode refusal to a channel that cannot
+    produce a verified directory would break the signed-in React user for no
+    security gain. The React context therefore leaves the organisation fields
+    unset. Giving this channel a first-class organisation identity means putting
+    a validated token in front of it, which is its own change.
     """
     require_trustworthy_platform_auth()
     if principal is None:
@@ -158,18 +196,49 @@ def context_from_principal(
     )
 
 
+def resolve_organisation(
+    microsoft_tenant_id: Optional[str],
+    *,
+    registry: Optional[OrganisationRegistry] = None,
+    request_id: Optional[str] = None,
+) -> Optional[OrganisationRecord]:
+    """The organisation behind a **signature-verified** Microsoft directory id.
+
+    ``None`` means compatibility mode — no organisation config is loaded, so this
+    deployment makes no claim about who is asking and behaves exactly as it did
+    before organisations existed.
+
+    In organisation mode an unregistered or disabled directory raises
+    :class:`~trakt_core.errors.TraktError`. There is no permissive branch: a
+    deployment that has declared which organisations it serves must not answer
+    one it has not.
+
+    Callers must pass a directory id that came out of token *validation*
+    (``copilot_auth``). This function cannot distinguish a verified claim from an
+    asserted one and does not try to.
+    """
+    reg = registry if registry is not None else load_organisation_registry()
+    return reg.resolve_microsoft_tenant(microsoft_tenant_id, request_id=request_id)
+
+
 def context_from_copilot_principal(
     principal: Any,
     *,
     tenant_id: str,
     request_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
+    organisation_registry: Optional[OrganisationRegistry] = None,
 ) -> ExecutionContext:
     """Build a context from a validated Entra bearer principal.
 
     Not subject to :func:`require_trustworthy_platform_auth`: the Copilot routes
     validate the token signature, issuer, audience and expiry themselves
     (``copilot_auth``), so their trust does not depend on an upstream gateway.
+
+    ``tenant_id`` — whose data is served — is the caller-supplied deployment
+    configuration and is used verbatim, unchanged by this stage. The principal's
+    directory (``tid``) resolves the *organisation* and nothing else: it is
+    recorded on the context, and it never reaches ``tenant_id``.
     """
     if principal is None:
         raise TraktError(ErrorCode.AUTHENTICATION_REQUIRED,
@@ -180,6 +249,14 @@ def context_from_copilot_principal(
     # A Copilot call may be delegated (a signed-in user) or app-only. ``scp``
     # implies a user; app-only tokens carry roles instead.
     actor_type = ACTOR_USER if getattr(principal, "scopes", None) else ACTOR_SERVICE
+
+    # WHO IS ASKING. Resolved before the context is built so an unregistered
+    # organisation is refused rather than producing a usable context — and so
+    # nothing downstream has to remember to check.
+    microsoft_tenant_id = normalise_directory_id(getattr(principal, "tenant_id", None))
+    organisation = resolve_organisation(
+        microsoft_tenant_id, registry=organisation_registry, request_id=request_id)
+
     return ExecutionContext(
         tenant_id=tenant_id,
         actor_id=str(actor_id),
@@ -189,4 +266,6 @@ def context_from_copilot_principal(
         request_id=request_id or new_request_id(),
         correlation_id=correlation_id,
         actor_label=getattr(principal, "name", None),
+        organisation_id=organisation.organisation_id if organisation else None,
+        microsoft_tenant_id=microsoft_tenant_id,
     )

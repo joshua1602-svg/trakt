@@ -91,6 +91,19 @@ class ExecutionContext:
     #: Free-form, non-authoritative labels for logs (e.g. display name). Never
     #: consulted for an access decision.
     actor_label: Optional[str] = None
+    #: WHO IS ASKING — the external organisation this caller belongs to, resolved
+    #: from their validated Microsoft directory by
+    #: :mod:`trakt_core.organisation`. Deliberately distinct from ``tenant_id``,
+    #: which is WHOSE DATA is served and remains deployment configuration.
+    #: ``None`` on a deployment with no organisation config (the historical
+    #: single-client shape) and on channels that carry no directory identity.
+    #: Carries no authority of its own in Stage 1: nothing branches on it, it is
+    #: recorded for audit and is the anchor the entitlement model will use.
+    organisation_id: Optional[str] = None
+    #: The Microsoft Entra directory (tenant) id the caller's token was issued
+    #: by, once that token's signature has been verified. Identifies the caller's
+    #: directory ONLY; it never selects which Trakt tenant's data is served.
+    microsoft_tenant_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not str(self.tenant_id or "").strip():
@@ -103,6 +116,14 @@ class ExecutionContext:
             object.__setattr__(self, "request_id", new_request_id())
         if not isinstance(self.scopes, frozenset):
             object.__setattr__(self, "scopes", frozenset(self.scopes or ()))
+        # Blank -> None, so "no organisation" is one value rather than two, and
+        # directory ids compare case-insensitively wherever they are read back.
+        object.__setattr__(self, "organisation_id",
+                           (str(self.organisation_id).strip().lower() or None)
+                           if self.organisation_id is not None else None)
+        object.__setattr__(self, "microsoft_tenant_id",
+                           (str(self.microsoft_tenant_id).strip().lower() or None)
+                           if self.microsoft_tenant_id is not None else None)
 
     # -- scopes ------------------------------------------------------------ #
     def has_scope(self, scope: str) -> bool:
@@ -129,9 +150,17 @@ class ExecutionContext:
 
         Deliberately excludes ``actor_label`` (may carry an email address) —
         ``actor_id`` is the stable, minimal identifier.
+
+        ``organisation_id`` and ``microsoft_tenant_id`` are included: without
+        them an audit trail on a multi-organisation deployment cannot say which
+        party asked, only which tenant's data answered. Both are non-secret
+        identifiers — a directory id appears in every token the caller already
+        holds — and no token, claim set or bearer material is projected here.
         """
         return {
             "tenant_id": self.tenant_id,
+            "organisation_id": self.organisation_id,
+            "microsoft_tenant_id": self.microsoft_tenant_id,
             "actor_id": self.actor_id,
             "actor_type": self.actor_type,
             "channel": self.channel,

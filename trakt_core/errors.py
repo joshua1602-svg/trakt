@@ -47,6 +47,11 @@ class ErrorCode:
     SCOPE_MISSING = "SCOPE_MISSING"
     TENANT_MISMATCH = "TENANT_MISMATCH"
     PORTFOLIO_NOT_AUTHORISED = "PORTFOLIO_NOT_AUTHORISED"
+    #: The caller's Microsoft directory is not registered as an organisation on a
+    #: deployment that serves registered organisations only.
+    ORGANISATION_NOT_REGISTERED = "ORGANISATION_NOT_REGISTERED"
+    #: The organisation is registered but its access has been withdrawn.
+    ORGANISATION_DISABLED = "ORGANISATION_DISABLED"
 
     # -- input ------------------------------------------------------------- #
     INVALID_INPUT = "INVALID_INPUT"
@@ -94,6 +99,11 @@ _CODES: Dict[str, _CodeSpec] = {
     ErrorCode.SCOPE_MISSING: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.TENANT_MISMATCH: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.PORTFOLIO_NOT_AUTHORISED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    # Not retryable by the caller: an operator has to register or re-enable the
+    # organisation. 403 rather than 401 — the token was valid, the organisation
+    # behind it is not accepted.
+    ErrorCode.ORGANISATION_NOT_REGISTERED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.ORGANISATION_DISABLED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
 
     ErrorCode.INVALID_INPUT: _CodeSpec(ErrorCategory.INPUT, False, 400),
 

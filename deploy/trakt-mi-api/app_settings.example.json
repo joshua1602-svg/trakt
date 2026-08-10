@@ -17,7 +17,8 @@
 
   { "_comment": "Microsoft 365 Copilot v1 actions (/v1/copilot/*). Default mode is 'entra' and FAILS CLOSED (503) until tenant + audience are set. See docs/copilot_v1_implementation.md.",
     "name": "TRAKT_COPILOT_AUTH_MODE", "value": "entra" },
-  { "name": "TRAKT_COPILOT_ENTRA_TENANT_ID", "value": "<entra-directory-tenant-guid>" },
+  { "_comment": "One Entra directory GUID, or a comma-separated list of them. A single value is the current single-client shape and needs no change. Directories registered in config/organisations.yaml are accepted in addition to whatever is listed here, so a second organisation does not require editing this setting.",
+    "name": "TRAKT_COPILOT_ENTRA_TENANT_ID", "value": "<entra-directory-tenant-guid>" },
   { "name": "TRAKT_COPILOT_ENTRA_AUDIENCE", "value": "api://<trakt-copilot-app-id>" },
   { "name": "TRAKT_COPILOT_REQUIRED_SCOPE", "value": "Trakt.Copilot" },
   { "name": "TRAKT_COPILOT_DOWNLOAD_SIGNING_KEY", "value": "<random-32+-char-secret>" },

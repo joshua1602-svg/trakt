@@ -14,6 +14,9 @@ Contents:
   * :mod:`trakt_core.tenancy`   — the tenant registry and
     :func:`~trakt_core.tenancy.authorise_portfolio_access`: the one place that
     decides whether a context may read a portfolio.
+  * :mod:`trakt_core.organisation` — the *external organisation* registry: which
+    Microsoft Entra directory belongs to which organisation. Answers "who is
+    asking", which is not the same question as "whose data is this".
   * :mod:`trakt_core.runtime`   — the runtime mode (production / development /
     test) and its fail-closed startup validation.
   * :mod:`trakt_core.policy`    — the production data-source approval rule.
@@ -58,6 +61,19 @@ from .envelope import (
     SnapshotRef,
 )
 from .errors import ErrorCategory, ErrorCode, TraktError, http_status_for
+from .organisation import (
+    KNOWN_ORGANISATION_TYPES,
+    ORG_TYPE_INVESTOR,
+    ORG_TYPE_OPERATOR,
+    ORG_TYPE_ORIGINATOR,
+    ORG_TYPE_SERVICER,
+    ORG_TYPE_UNKNOWN,
+    ORG_TYPE_WAREHOUSE_FUNDER,
+    OrganisationRecord,
+    OrganisationRegistry,
+    load_organisation_registry,
+    normalise_directory_id,
+)
 from .policy import (
     PRODUCTION_APPROVED_SOURCE_BASES,
     SourceApproval,
@@ -90,6 +106,11 @@ __all__ = [
     # tenancy
     "TenantRegistry", "TenantRecord", "AuthorisedPortfolio",
     "authorise_portfolio_access", "load_tenant_registry",
+    # organisation (who is asking — not the data-owning tenant)
+    "OrganisationRegistry", "OrganisationRecord", "load_organisation_registry",
+    "normalise_directory_id", "KNOWN_ORGANISATION_TYPES",
+    "ORG_TYPE_ORIGINATOR", "ORG_TYPE_WAREHOUSE_FUNDER", "ORG_TYPE_INVESTOR",
+    "ORG_TYPE_SERVICER", "ORG_TYPE_OPERATOR", "ORG_TYPE_UNKNOWN",
     # runtime + policy
     "runtime_mode", "validate_runtime_mode", "is_production",
     "MODE_PRODUCTION", "MODE_DEVELOPMENT", "MODE_TEST",

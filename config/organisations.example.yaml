@@ -1,0 +1,112 @@
+# =========================================================================
+# Organisation registry — WHICH EXTERNAL PARTIES may ask Trakt anything.
+# =========================================================================
+#
+# OPTIONAL. Copy to config/organisations.yaml (or point TRAKT_ORGANISATIONS_CONFIG
+# at it) to turn on organisation mode.
+#
+# ------------------------------------------------------------------------
+# The distinction this file exists to make
+# ------------------------------------------------------------------------
+#
+# config/tenancy.yaml answers   : WHOSE DATA is this? (the Trakt tenant, e.g. ERE)
+# config/organisations.yaml answers: WHO IS ASKING?   (the external organisation)
+#
+# Until now those were always the same party, because one deployment served one
+# client signing in from one Microsoft directory. They stop being the same as
+# soon as a warehouse funder, an investor or a servicer signs in to THEIR OWN
+# Microsoft directory to ask about SOMEONE ELSE'S book:
+#
+#     Microsoft directory: Warehouse Funder A's Entra tenant
+#     organisation_id:     funder_a                    <- who is asking
+#     data-owning tenant:  ERE                         <- whose data
+#
+# An organisation registered here is IDENTITY ONLY. It grants nothing. Which
+# resources an organisation may reach is a later stage (entitlements); nothing in
+# this file affects which data is served today.
+#
+# ------------------------------------------------------------------------
+# The two modes, and which one you are in
+# ------------------------------------------------------------------------
+#
+# NO FILE  -> compatibility mode. This is the current ERE production shape and
+#             needs no file. No organisation identity is claimed, organisation
+#             resolution returns nothing, and every existing caller — React MI,
+#             the Copilot actions, deck generation, artefact retrieval —
+#             behaves exactly as it does today.
+#
+# THIS FILE PRESENT -> organisation mode. The deployment has declared which
+#             directories it serves, so an unregistered or disabled directory is
+#             REFUSED on any path that carries a validated Microsoft directory
+#             identity (today: the Entra bearer-token Copilot path). There is no
+#             permissive fallback in this mode.
+#
+# Adding this file is therefore a deliberate posture change. Do not add it to the
+# current single-client ERE deployment until its directory GUID is listed below,
+# or Copilot requests from that directory will be refused.
+#
+# A file that exists but cannot be trusted — unparseable, or registering one
+# directory to two organisations — leaves the deployment in organisation mode
+# with NO organisations, so every resolution is refused. It does not fall back to
+# compatibility mode: silently re-opening a deployment that had declared itself
+# closed is the failure this rule prevents. See trakt_core/organisation.py.
+#
+# ------------------------------------------------------------------------
+# Fields
+# ------------------------------------------------------------------------
+#
+#   organisation_id       required. Stable, lower-case, never reused. This is the
+#                         id a future entitlement grant will be written against,
+#                         so choose it as carefully as a tenant id.
+#   display_name          optional. For operators and audit review only; never
+#                         used for an access decision.
+#   organisation_type     originator | warehouse_funder | investor | servicer |
+#                         operator | unknown. Recorded, not branched on.
+#   microsoft_tenant_ids  the Entra directory (tenant) GUIDs this organisation
+#                         signs in from. Plural: one organisation may hold more
+#                         than one directory. A GUID may appear under EXACTLY ONE
+#                         organisation — a duplicate makes "who is asking"
+#                         ambiguous and is rejected.
+#   enabled               default true. Set false to withdraw access while
+#                         keeping the registration (and its audit history).
+#                         `status: disabled` is accepted as an alternative.
+#
+# Directory GUIDs are not secrets — they appear in every token the caller already
+# holds — but do not commit real production GUIDs to this EXAMPLE file. Put them
+# in the deployed config/organisations.yaml only.
+
+organisations:
+
+  # The originator whose data this deployment holds. Registering it does not
+  # give it its data — config/tenancy.yaml and the deployment's dataset root
+  # still decide that. It says only "requests from this directory are ERE".
+  - organisation_id: ere
+    display_name: Equity Release Europe
+    organisation_type: originator
+    microsoft_tenant_ids:
+      - "<ere-entra-directory-guid>"
+    enabled: true
+
+  # A warehouse funder, signing in from its OWN Microsoft directory to ask about
+  # the ERE assets it funds. In Stage 1 this establishes identity only: the
+  # funder is recognised and audited as `funder_a`, and is still served exactly
+  # what the deployment's tenant configuration allows. Restricting it to the
+  # SPVs it actually funds is the entitlement stage, not this file.
+  #
+  # - organisation_id: funder_a
+  #   display_name: Warehouse Funder A
+  #   organisation_type: warehouse_funder
+  #   microsoft_tenant_ids:
+  #     - "<funder-a-entra-directory-guid>"
+  #   enabled: true
+
+  # An organisation whose access has been withdrawn. Kept registered so its
+  # audit history stays attributable and re-enabling is one flag, not a
+  # re-registration.
+  #
+  # - organisation_id: former_investor
+  #   display_name: Former Investor Ltd
+  #   organisation_type: investor
+  #   microsoft_tenant_ids:
+  #     - "<their-entra-directory-guid>"
+  #   enabled: false

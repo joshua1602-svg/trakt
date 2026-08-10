@@ -134,12 +134,53 @@ capability its token does not carry.
 | Channel | Identity mechanism | Tenant source |
 |---|---|---|
 | React | Azure Easy Auth / SWA injects `X-MS-CLIENT-PRINCIPAL`; `auth.py` decodes it | `MI_AGENT_CLIENT_ID`, else the client in `MI_AGENT_PLATFORM_URI` |
-| Copilot | Entra bearer token validated against tenant JWKS (`copilot_auth.py`) | same deployment config |
+| Copilot | Entra bearer token validated against the issuing directory's JWKS (`copilot_auth.py`) | same deployment config |
 | Internal | `ExecutionContext.for_internal(...)` — the process is inside the trust boundary | caller-declared |
 
 The tenant is **never** taken from `portfolio_id`, `client_id` or a token claim.
 `tests/test_governance_context_and_tenancy.py::test_tenant_is_never_taken_from_a_principal_claim`
 locks that in.
+
+### Organisation identity — who is asking
+
+A context now carries a second identity, and the two must not be conflated:
+
+| Field | Question it answers | Source |
+|---|---|---|
+| `tenant_id` | **Whose data is served?** | Deployment configuration. Unchanged. |
+| `organisation_id` | **Who is asking?** | The caller's signature-verified Entra directory, mapped through `trakt_core/organisation.py` |
+| `microsoft_tenant_id` | Which Entra directory did the token come from? | The validated `tid` claim |
+
+They are separate because they stop being the same party as soon as a warehouse
+funder, investor or servicer signs in to *its own* directory to ask about someone
+else's book. A validated `tid` selects an **organisation** and never a tenant.
+
+Two modes, chosen by whether `config/organisations.yaml` exists (see
+`config/organisations.example.yaml`):
+
+* **compatibility** (no file) — the current ERE shape. No organisation identity
+  is claimed, `resolve_organisation` returns `None`, and every existing caller is
+  unchanged.
+* **organisation mode** (file present) — an unregistered or disabled directory is
+  refused (`ORGANISATION_NOT_REGISTERED` / `ORGANISATION_DISABLED`, both 403) on
+  any path carrying a validated directory. There is no permissive fallback, and a
+  config file that cannot be trusted leaves the registry strict-but-empty rather
+  than reopening the deployment.
+
+`copilot_auth` validates against a **set** of accepted directories — the
+comma-separated `TRAKT_COPILOT_ENTRA_TENANT_ID` plus every enabled organisation's
+directories. The `tid` claim is read unverified only to *select* which
+allow-listed directory's JWKS to verify the signature against; nothing in the
+token is trusted until that verification succeeds.
+
+Organisations are **identity only**. They carry no entitlements, resources or
+capabilities yet, so registering one changes nothing about which data is served.
+`tests/test_governance_organisation_identity.py` covers the model, both modes and
+the tenant/organisation separation.
+
+The React path deliberately resolves no organisation: Easy Auth hands this
+process a trusted-by-topology header, not a signature-verified directory, and the
+SWA principal shape carries no `tid` at all.
 
 ### Portfolio authorisation
 
