@@ -17,6 +17,9 @@ Contents:
   * :mod:`trakt_core.organisation` — the *external organisation* registry: which
     Microsoft Entra directory belongs to which organisation. Answers "who is
     asking", which is not the same question as "whose data is this".
+  * :mod:`trakt_core.principal` — which individual is asking, bound to an
+    organisation by stable Microsoft identity. An independent kill switch;
+    entitlements stay at the organisation level.
   * :mod:`trakt_core.resource`  — the permissionable resource model: what a
     portfolio / SPV / facility / population *is*, and which existing data
     population it deterministically means. Answers "what is the thing", and
@@ -96,6 +99,15 @@ from .entitlement import (
     permitted_resources_for,
     resolve_entitlements,
 )
+from .principal import (
+    KNOWN_PRINCIPAL_STATUSES,
+    PRINCIPAL_ACTIVE,
+    PRINCIPAL_DISABLED,
+    PrincipalBinding,
+    PrincipalRegistry,
+    load_principal_registry,
+    normalise_object_id,
+)
 from .resource import (
     ATTRIBUTION_PROVENANCE,
     ATTRIBUTION_SPV_FIELD,
@@ -158,6 +170,10 @@ __all__ = [
     "normalise_directory_id", "KNOWN_ORGANISATION_TYPES",
     "ORG_TYPE_ORIGINATOR", "ORG_TYPE_WAREHOUSE_FUNDER", "ORG_TYPE_INVESTOR",
     "ORG_TYPE_SERVICER", "ORG_TYPE_OPERATOR", "ORG_TYPE_UNKNOWN",
+    # principals (which individual, and which organisation they belong to)
+    "PrincipalBinding", "PrincipalRegistry", "load_principal_registry",
+    "normalise_object_id", "PRINCIPAL_ACTIVE", "PRINCIPAL_DISABLED",
+    "KNOWN_PRINCIPAL_STATUSES",
     # resource model (what a permissionable thing is — not who may reach it)
     "ResourceRef", "ResourceRecord", "ResolvedResource", "ResourceCatalogue",
     "AttributionCheck", "check_attribution", "load_resource_catalogue",

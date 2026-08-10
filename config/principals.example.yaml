@@ -1,0 +1,98 @@
+# =========================================================================
+# Principals — WHICH INDIVIDUAL, and which organisation they belong to.
+# =========================================================================
+#
+# OPTIONAL. Copy to config/principals.yaml (or point TRAKT_PRINCIPALS_CONFIG at
+# it). Normally written by the Operations Control Centre rather than by hand —
+# see operations_control/access_admin.
+#
+# ------------------------------------------------------------------------
+# Where this sits
+# ------------------------------------------------------------------------
+#
+# config/organisations.yaml : WHO IS ASKING?           (the company)
+# config/principals.yaml    : WHICH PERSON?            (this file)
+# config/resources.yaml     : WHAT can be asked about?
+# config/entitlements.yaml  : MAY THEY?                (org-level grants)
+#
+# Stage 1 resolves an organisation from the Microsoft directory alone: one
+# directory, one organisation, everybody in it. That is right for deciding which
+# COMPANY is asking and insufficient on its own, because a warehouse funder is
+# not one person. When an analyst leaves, the directory is still the funder's
+# directory — without this file, nothing in Trakt knew that individual existed,
+# so nothing in Trakt can stop serving them.
+#
+# ------------------------------------------------------------------------
+# Entitlements stay at the ORGANISATION level
+# ------------------------------------------------------------------------
+#
+# This file grants nothing. A funder's twelve analysts share one set of grants;
+# duplicating entitlements per person is how they drift apart. A principal
+# answers one question — is this individual still a member in good standing? —
+# and `status` is an independent kill switch:
+#
+#   organisation entitled + principal active   -> the organisation's grants
+#   organisation entitled + principal disabled -> nothing
+#
+# So revoking one person never touches, and never risks, the funder's grants.
+#
+# ------------------------------------------------------------------------
+# Enforcement is per directory, and opting in is an ACT
+# ------------------------------------------------------------------------
+#
+#   a directory with NO entries here  -> not checked. Stage 1 behaviour exactly.
+#   a directory with ANY entry here   -> checked. An unregistered or disabled
+#                                        object id in it is refused.
+#
+# Registering Funder A's first user is therefore what switches enforcement on
+# for Funder A's directory — and it leaves ERE's directory untouched. There is
+# no flag to remember, and no way to half-enable it.
+#
+# ------------------------------------------------------------------------
+# Fields
+# ------------------------------------------------------------------------
+#
+#   organisation_id       required. Must exist in organisations.yaml, and must
+#                         own the directory below.
+#   microsoft_tenant_id   required. The Entra directory GUID they sign in to.
+#   microsoft_object_id   required. Their Entra OBJECT ID (`oid`), which is
+#                         stable and which the user does not control.
+#   display_name          optional, operator-facing ONLY.
+#   email                 optional, operator-facing ONLY.
+#   status                active | disabled. Default active.
+#
+# Authorization keys on (microsoft_tenant_id, microsoft_object_id) and NOTHING
+# else. Display name and email are recorded so an operator can tell who a row
+# refers to, and are never consulted: a display name is user-editable in most
+# directories and an email address is reassignable, so treating either as
+# identity is an authorisation bug.
+#
+# Do not delete a departed user's row — set `status: disabled`. The binding is
+# what keeps their past activity attributable in the audit trail, and restoring
+# access later is then one field rather than a re-identification.
+
+principals:
+
+  # Two analysts at Warehouse Funder A. Both inherit funder_a's grants — which
+  # in the example entitlements are SPV I / funded, read-only — and neither
+  # carries any permission of their own.
+  - organisation_id: funder_a
+    microsoft_tenant_id: "<funder-a-entra-directory-guid>"
+    microsoft_object_id: "<jane-entra-object-id>"
+    display_name: Jane Smith
+    email: jane.smith@example.com
+    status: active
+
+  - organisation_id: funder_a
+    microsoft_tenant_id: "<funder-a-entra-directory-guid>"
+    microsoft_object_id: "<another-entra-object-id>"
+    display_name: A. Colleague
+    status: active
+
+  # A leaver. Registered, refused, still attributable.
+  #
+  # - organisation_id: funder_a
+  #   microsoft_tenant_id: "<funder-a-entra-directory-guid>"
+  #   microsoft_object_id: "<departed-entra-object-id>"
+  #   display_name: Former Analyst
+  #   status: disabled

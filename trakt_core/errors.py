@@ -52,6 +52,12 @@ class ErrorCode:
     ORGANISATION_NOT_REGISTERED = "ORGANISATION_NOT_REGISTERED"
     #: The organisation is registered but its access has been withdrawn.
     ORGANISATION_DISABLED = "ORGANISATION_DISABLED"
+    #: The individual is not a registered principal of a directory that Trakt
+    #: checks individuals for.
+    PRINCIPAL_NOT_REGISTERED = "PRINCIPAL_NOT_REGISTERED"
+    #: The individual is registered but their access has been withdrawn — even
+    #: though their organisation remains entitled.
+    PRINCIPAL_DISABLED = "PRINCIPAL_DISABLED"
     #: The named resource is not in the resource catalogue.
     RESOURCE_NOT_REGISTERED = "RESOURCE_NOT_REGISTERED"
     #: The resource is registered but currently switched off.
@@ -120,6 +126,8 @@ _CODES: Dict[str, _CodeSpec] = {
     # behind it is not accepted.
     ErrorCode.ORGANISATION_NOT_REGISTERED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.ORGANISATION_DISABLED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.PRINCIPAL_NOT_REGISTERED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
+    ErrorCode.PRINCIPAL_DISABLED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.RESOURCE_NOT_REGISTERED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     ErrorCode.RESOURCE_DISABLED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
     # Not retryable and not the caller's fault: the boundary cannot be enforced

@@ -80,6 +80,12 @@ from trakt_core.organisation import (
     load_organisation_registry,
     normalise_directory_id,
 )
+from trakt_core.principal import (
+    PrincipalBinding,
+    PrincipalRegistry,
+    load_principal_registry,
+    normalise_object_id,
+)
 from trakt_core.runtime import is_production, running_in_azure
 
 logger = logging.getLogger("mi_agent_api.identity")
@@ -230,6 +236,27 @@ def resolve_organisation(
     return reg.resolve_microsoft_tenant(microsoft_tenant_id, request_id=request_id)
 
 
+def resolve_principal(
+    microsoft_tenant_id: Optional[str],
+    microsoft_object_id: Optional[str],
+    *,
+    registry: Optional[PrincipalRegistry] = None,
+    request_id: Optional[str] = None,
+) -> Optional[PrincipalBinding]:
+    """The individual behind a **signature-verified** ``(tid, oid)``, if checked.
+
+    ``None`` means this directory is not principal-gated — no principal config,
+    or none registered for it — which is the Stage 1 behaviour and is preserved
+    exactly. It never means "allowed".
+
+    For a gated directory an unregistered or disabled individual raises, so a
+    departed employee is refused even while their organisation stays entitled.
+    """
+    reg = registry if registry is not None else load_principal_registry()
+    return reg.resolve(microsoft_tenant_id, microsoft_object_id,
+                       request_id=request_id)
+
+
 def context_from_copilot_principal(
     principal: Any,
     *,
@@ -238,6 +265,7 @@ def context_from_copilot_principal(
     correlation_id: Optional[str] = None,
     organisation_registry: Optional[OrganisationRegistry] = None,
     entitlement_store: Optional[EntitlementStore] = None,
+    principal_registry: Optional[PrincipalRegistry] = None,
 ) -> ExecutionContext:
     """Build a context from a validated Entra bearer principal.
 
@@ -264,8 +292,40 @@ def context_from_copilot_principal(
     # organisation is refused rather than producing a usable context — and so
     # nothing downstream has to remember to check.
     microsoft_tenant_id = normalise_directory_id(getattr(principal, "tenant_id", None))
+
+    # WHICH PERSON. Checked only for a directory that has registered
+    # individuals, so a directory nobody has enumerated behaves exactly as it
+    # did in Stage 1. A disabled individual is refused HERE — before an
+    # organisation is resolved — so a departed employee cannot reach their
+    # (still entitled) employer's grants.
+    binding = resolve_principal(
+        microsoft_tenant_id, normalise_object_id(getattr(principal, "subject", None)),
+        registry=principal_registry, request_id=request_id)
+
     organisation = resolve_organisation(
         microsoft_tenant_id, registry=organisation_registry, request_id=request_id)
+
+    # A binding is the more specific statement of who is asking, so where one
+    # exists it decides the organisation. It can only ever CONFIRM or NARROW:
+    # a binding naming a different organisation from the directory's is a
+    # contradiction in server-side config, and contradictory config is refused
+    # rather than resolved in either direction.
+    if binding is not None:
+        if organisation is not None and \
+                binding.organisation_id != organisation.organisation_id:
+            logger.error(
+                "principal %s is bound to organisation %s but its directory "
+                "maps to %s", binding.microsoft_object_id,
+                binding.organisation_id, organisation.organisation_id)
+            raise TraktError(
+                ErrorCode.PRINCIPAL_NOT_REGISTERED,
+                "This user's Trakt registration is inconsistent and cannot be "
+                "used until an administrator corrects it.",
+                request_id=request_id)
+        if organisation is None:
+            organisation = (organisation_registry
+                            or load_organisation_registry()).get(
+                                binding.organisation_id)
 
     # MAY THEY. Resolved once, here, and frozen onto the context — so no
     # capability downstream can widen its own authority, and nothing has to

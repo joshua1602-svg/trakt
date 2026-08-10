@@ -339,7 +339,13 @@ class EntitlementStore:
                     "The entitlement configuration grants access to an "
                     "organisation that is not registered.",
                     details={"organisation_id": grant.organisation_id})
-            if not record.enabled:
+            # Only an ACTIVE grant contradicts a disabled organisation. A grant
+            # that is itself switched off alongside one is coherent, and
+            # rejecting it made an organisation impossible to disable while it
+            # held any grants — which is the wrong amount of friction on the one
+            # operation that has to be fast. The protective intent is kept: an
+            # active grant naming a disabled organisation is still refused.
+            if grant.active and not record.enabled:
                 raise TraktError(
                     ErrorCode.INVALID_INPUT,
                     "The entitlement configuration grants access to a disabled "
@@ -354,11 +360,16 @@ class EntitlementStore:
                     "The entitlement configuration grants a resource that is "
                     "not in the resource catalogue.",
                     details={"resource": grant.resource_ref.key})
-            if not record.enabled:
+            if grant.active and not record.enabled:
                 raise TraktError(
                     ErrorCode.INVALID_INPUT,
                     "The entitlement configuration grants a disabled resource.",
                     details={"resource": grant.resource_ref.key})
+            # Unconditional, unlike the two checks above: an unpartitionable
+            # resource must not be granted even by a switched-off grant, because
+            # re-enabling one is a single flag and would not revisit the safety
+            # question. The boundary the data cannot enforce has to be refused
+            # at the point someone writes it down.
             if record.unpartitionable:
                 # The SPV II case. The resource names a real commercial thing
                 # that the data cannot separate, so a grant over it would hand

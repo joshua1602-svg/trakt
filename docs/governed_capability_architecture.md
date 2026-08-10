@@ -287,6 +287,79 @@ access decision. The OCC Agent may later *propose* grants by writing
 The runtime reads the file and never asks the agent, so an authorisation decision
 does not depend on an agent being reachable, correct or uncompromised.
 
+### Principals — which individual, and their organisation
+
+`trakt_core/principal.py` binds an individual to an organisation by stable
+Microsoft identity: `(microsoft_tenant_id, microsoft_object_id)`. Display name
+and email are stored for operators and **never consulted** — a display name is
+user-editable in most directories and an email is reassignable.
+
+Entitlements stay at the **organisation** level; a principal is an independent
+kill switch:
+
+| Organisation | Principal | Result |
+|---|---|---|
+| entitled | active | the organisation's grants |
+| entitled | disabled | nothing |
+
+So a leaver is revoked without touching, or risking, the funder's grants.
+
+**Enforcement is per directory, and opting in is an act.** A directory with no
+registered principals resolves exactly as it did in Stage 1; a directory with any
+registered principal is enforced, and an unregistered or disabled object id in it
+is refused. Registering Funder A's first user gates Funder A's directory and
+leaves ERE's untouched — there is no flag to remember and no way to half-enable
+it. A binding that disagrees with its directory's organisation is refused in both
+directions rather than resolved. Covered by
+`tests/test_governance_principal_identity.py`.
+
+One asymmetry worth knowing: an untrusted *organisation* config refuses
+everything, an untrusted *principal* config gates nothing. An unreadable
+organisation file means Trakt cannot tell who is asking and must refuse; an
+unreadable principal file means it has lost a narrowing control it did not have
+before Stage 3.5, and failing every request closed there would be an outage
+caused by an additive feature.
+
+### Administering access — the OCC lifecycle
+
+`operations_control/access_admin/` is how organisations, principals, resources and
+grants are actually changed, for initial onboarding and for everything after it.
+
+```
+operator request / document
+      ↓  OCC Agent extracts or receives facts
+AccessChangeSet         structured actions, never raw YAML
+      ↓  apply_change_set()      pure, atomic, all-or-nothing
+AccessDocument          candidate: all four registries together
+      ↓  validate_document()     the REAL Stage 1-3 registries; nothing restated
+DRAFT version           ConfigPackageStore, content-hashed, immutable
+      ↓  operator reads before/after + fingerprint
+confirm(actor)          a NAMED HUMAN. Never the agent.
+ACTIVE version          prior version superseded, hash-chained audit appended
+      ↓  materialise(dest)
+published YAML          what load_organisation_registry() and friends read
+```
+
+Reused rather than rebuilt: `ConfigPackageStore` (draft → validate → activate →
+rollback, versioned and immutable), `OpsStore.append_audit` (hash-chained,
+tamper-evident), and the existing admin-only operator principals. The access
+layer is deliberately **excluded from `ADMIN_LAYERS`**, because the generic
+`/ops/admin/config/{layer}/draft` route takes raw YAML edits and access changes
+must arrive as reviewable actions. It has its own routes under
+`/ops/admin/access`.
+
+Fourteen actions cover the lifecycle (`ADD_ORGANISATION`,
+`ADD_MICROSOFT_TENANT`, `ADD_PRINCIPAL`, `DISABLE_PRINCIPAL`, `ADD_GRANT`,
+`SET_GRANT_CAPABILITIES`, `REVOKE_GRANT`, …). Every one requires confirmation;
+`DISABLE_ORGANISATION` cascades to that organisation's grants and
+`ENABLE_ORGANISATION` deliberately does not restore them.
+
+**The OCC is never in the runtime authorisation path.** A data request is decided
+by `ExecutionContext` → `EntitlementStore` → `ResourceCatalogue` →
+`authorise_resource_access` against published configuration. Nothing under
+`mi_agent_api/`, `mi_agent/`, `trakt_core/` or `engine/` imports `access_admin`,
+and a test asserts it.
+
 ### Portfolio authorisation
 
 `trakt_core.tenancy.authorise_portfolio_access(context, portfolio_id, registry)`

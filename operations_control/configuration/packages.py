@@ -25,7 +25,14 @@ REPO = Path(__file__).resolve().parents[2]
 LAYER_SYSTEM = "system"
 LAYER_REGIME = "regime"
 LAYER_ASSET = "asset"
+#: Who may reach what: organisations, principals, resources, entitlements.
+#: Deliberately NOT in ``ADMIN_LAYERS`` — the generic admin routes edit raw YAML,
+#: and access changes must arrive as reviewable structured actions instead. See
+#: ``operations_control.access_admin``, which owns this layer's own routes.
+LAYER_ACCESS = "access"
 ADMIN_LAYERS = (LAYER_SYSTEM, LAYER_REGIME, LAYER_ASSET)
+#: Every layer this store versions, admin-editable or not.
+ALL_LAYERS = (LAYER_SYSTEM, LAYER_REGIME, LAYER_ASSET, LAYER_ACCESS)
 
 #: The repository files each package layer governs (relative to repo root).
 LAYER_FILES: Dict[str, List[str]] = {
@@ -53,6 +60,15 @@ LAYER_FILES: Dict[str, List[str]] = {
         "config/asset/product_profiles.yaml",
         "config/asset/product_defaults_ERM.yaml",
         "config/asset/issue_policy.yaml",
+    ],
+    # None of these exist in the repository, and that is the point: version 1
+    # seeds EMPTY, which is the current single-client shape where no external
+    # organisation, principal, resource or grant is configured at all.
+    LAYER_ACCESS: [
+        "config/organisations.yaml",
+        "config/principals.yaml",
+        "config/resources.yaml",
+        "config/entitlements.yaml",
     ],
 }
 
@@ -128,6 +144,18 @@ class ConfigPackageStore:
         return _read_json(self.store.storage,
                           self._version_uri(layer, version))
 
+    def save_version(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist a version document a caller has annotated.
+
+        The access layer attaches its structured change set and proposal status
+        to the version itself, so the proposal and the configuration it would
+        produce cannot drift apart or be reviewed separately.
+        """
+        _write_json(self.store.storage,
+                    self._version_uri(str(doc["layer"]), int(doc["version"])),
+                    dict(doc))
+        return doc
+
     def list_versions(self, layer: str) -> List[Dict[str, Any]]:
         out = []
         for uri in self.store.storage.list(self._base(layer)):
@@ -184,6 +212,15 @@ class ConfigPackageStore:
             reg = doc["files"].get("config/system/fields_registry.yaml")
             if reg and "fields" not in (yaml.safe_load(reg["content"]) or {}):
                 problems.append("fields_registry.yaml: missing 'fields' root")
+        if layer == LAYER_ACCESS:
+            # Domain validation for access configuration: the candidate is fed
+            # to the REAL runtime registries, so a version is activatable only
+            # if the runtime would accept it. Imported lazily to keep this
+            # module free of the access-admin package.
+            from ..access_admin.validation import validate_access_files
+            problems.extend(validate_access_files(
+                {rel: f.get("content", "") for rel, f
+                 in (doc.get("files") or {}).items()}))
         doc["validated"] = not problems
         doc["validation"] = {"ok": not problems, "problems": problems,
                              "validated_at": now_iso()}

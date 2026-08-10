@@ -670,7 +670,10 @@ def test_stage3_did_not_start_route_enforcement_or_mcp():
     import subprocess
 
     hits = subprocess.run(
-        ["git", "grep", "-l", "authorise_resource_access", "--",
+        # A CALL, not a mention. operations_control/api/app.py names the runtime
+        # path in a comment explaining why access ADMINISTRATION is separate from
+        # it — that reference is the boundary being documented, not crossed.
+        ["git", "grep", "-l", "authorise_resource_access(", "--",
          "mi_agent_api/", "mi_agent/", "engine/", "operations_control/"],
         capture_output=True, text=True, cwd=str(_REPO_ROOT))
     assert hits.stdout.strip() == "", (
