@@ -37,14 +37,14 @@ deliberate, labelled, user-started demos — the query demo (section 2) and
 the controls demo (section 4). Neither autoplays and neither loops silently:
 `QueryDemo.tsx` gates the interactive demo behind a start affordance, and
 `DemoPlayer.tsx` gives the controls film poster → play → pause/replay →
-"Watch again". The reporting band and the standalone onboarding section were
-removed from the narrative — their claims survive in the platform output
-chips and the onboarding disclosure below.
+"Watch again". The reporting band and the onboarding content were removed
+from the homepage — reporting claims survive in the platform output chips,
+and onboarding detail now belongs to a product page, not this one.
 
-The page is eight narrative sections plus a disclosure, in this order:
-value proposition · portfolio query demo · platform · risk & controls (the
-controls demo) · operating model · portfolio intelligence (distribution) ·
-governance · onboarding disclosure · contact.
+The page is eight narrative sections, in this order: value proposition ·
+portfolio query demo · platform · risk & controls (the controls demo) ·
+operating model · portfolio intelligence (distribution) · governance ·
+contact.
 
 ---
 
@@ -139,19 +139,24 @@ same end state.
 
 ---
 
-## 4. Onboarding — a compact disclosure, out of the main narrative
+## 4. Onboarding — removed from the homepage
 
-Pass 4 demoted the standalone onboarding section: it substantially duplicated
-the platform architecture. What remains is a `<details>` disclosure
-("How onboarding works") near the foot of the page with four terse steps —
-Source data · Assisted mapping · Team review · Live portfolio — and no
-prose claims beyond them. The evidence underneath is unchanged:
+Pass 4 demoted the standalone onboarding section to a `<details>` disclosure;
+a follow-up removed the disclosure too, so the homepage now makes **no
+onboarding claims at all** — the e2e suite asserts "How onboarding works" is
+absent and no `#onboarding` section exists. Governance flows directly into
+the closing CTA.
 
-| Copy | Class | Evidence |
-|---|---|---|
-| Steps: Source data ("Tapes and documents, as they arrive.") · Assisted mapping ("Mappings and configuration proposed.") · Team review ("Approved before anything activates.") · Live portfolio ("Monitored and reportable with every other book.") | Evidenced | `engine/onboarding_agent/` (60 modules): LLM-assisted mapping under a deterministic-first policy (`llm_assisted_mapping.py`, `llm_policy.py`, `tests` incl. `test_onboarding_deterministic_first.py`, `test_onboarding_llm_cost_policy.py`), mapping review queue and mapping memory; `agents/onboarding_agent.py`. Human review and governed activation: `operations_control/` — workflow engine, onboarding case management, approval before `activate()`, publication, recovery — with its own deployed API and React UI (`frontend/operations-control-ui/`, `.github/workflows/deploy-occ-frontend.yml`) and 17 test modules under `tests/operations_control/`. |
-| **Not claimed:** speed guarantees | Excluded | No "instant onboarding", no "automatic", no per-portfolio speed escalation — asserted by the e2e suite. |
-| **Not claimed:** conversational onboarding | Excluded | The OCC Agent (`operations_control/occ_agent/`, 24 modules) is built and tested but not production-enabled — `docs/occ_agent/01_operating_process_implementation.md` §11 lists eleven preconditions and notes the live adapter has never been exercised. The page says "onboarding agent", true of the mapping agent that ships. |
+The evidence for a future onboarding product page is unchanged and strong:
+`engine/onboarding_agent/` (LLM-assisted mapping under a deterministic-first
+policy with a review queue), `agents/onboarding_agent.py`, and
+`operations_control/` (case management, approval before `activate()`,
+publication, recovery, deployed API + UI, 17 test modules). The exclusions
+recorded in earlier passes still bind any future onboarding copy: no
+"instant"/"automatic" onboarding, no per-portfolio speed escalation, and no
+conversational-onboarding claim while the OCC Agent
+(`operations_control/occ_agent/`) remains not production-enabled
+(`docs/occ_agent/01_operating_process_implementation.md` §11).
 
 ---
 

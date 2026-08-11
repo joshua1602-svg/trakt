@@ -5,7 +5,6 @@ import {
   ForwardControls,
   Governance,
   Lenses,
-  OnboardingDisclosure,
 } from "@/components/site/Content";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
@@ -94,14 +93,10 @@ export default function Page() {
           <DeliveryStrip />
         </Section>
 
-        {/* 7 — Why trust the outputs? */}
+        {/* 7 — Why trust the outputs? Flows straight into the CTA:
+            onboarding detail belongs on a product page, not the homepage. */}
         <Section id="governance" className="pb-16 sm:pb-20">
           <Governance />
-        </Section>
-
-        {/* Implementation, out of the main narrative. */}
-        <Section id="onboarding" className="pb-16 sm:pb-20">
-          <OnboardingDisclosure />
         </Section>
 
         {/* 8 — What next? */}
