@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CopilotDemo } from "@/components/demo/CopilotDemo";
+import { ASK_EVENT } from "@/components/site/RefusalSection";
 import { Badge, buttonStyles } from "@/components/ui";
 import type { DemoMetaResponse } from "@/types/demo";
 
@@ -20,13 +21,27 @@ const OPENING_QUESTION_ID = "balance_by_book";
 
 export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
   const [started, setStarted] = useState(false);
+  const [requested, setRequested] = useState<{ id: string; label: string } | null>(null);
 
   const opening =
     meta.suggestedQuestions.find((q) => q.id === OPENING_QUESTION_ID) ??
     meta.suggestedQuestions[0];
 
+  // The refusal section asks through the demo rather than describing it.
+  useEffect(() => {
+    const onAsk = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; label: string }>).detail;
+      if (!detail) return;
+      setRequested(detail);
+      setStarted(true);
+      document.getElementById("example")?.scrollIntoView({ block: "center" });
+    };
+    window.addEventListener(ASK_EVENT, onAsk);
+    return () => window.removeEventListener(ASK_EVENT, onAsk);
+  }, []);
+
   if (started) {
-    return <CopilotDemo meta={meta} initialQuestion={opening} />;
+    return <CopilotDemo meta={meta} initialQuestion={requested ?? opening} />;
   }
 
   return (
@@ -86,25 +101,16 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-mint-400/25 bg-navy-950/40 p-4">
-            <p className="text-lg font-semibold tracking-tight text-mint-400">
-              Trakt declines what it cannot derive.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {meta.exampleUnsupported.map((example) => (
-                <span
-                  key={example.id}
-                  className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-xs text-ink-200"
-                >
-                  {example.label}
-                </span>
-              ))}
-            </div>
-          </div>
+          {/* The refusal block is deliberately absent: it is a live section
+              of its own below, and a still of the same words directly above
+              it would read as duplication. This band is the plate's room. */}
+          <div className="h-24" />
         </div>
 
-        {/* Backing behind the control only, so the still stays crisp. */}
-        <div className="absolute inset-0 flex items-center justify-center">
+        {/* Backing behind the control only, so the still stays crisp — and
+            low in the frame, over the reserved band rather than the content
+            a skimming reader is trying to take in. */}
+        <div className="absolute inset-x-0 bottom-0 flex justify-center pb-5">
           <div className="rounded-2xl border border-line bg-navy-950/90 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
             {/* demo_open fires from the demo itself when the scripted opening
                 question runs, so starting is counted exactly once. */}

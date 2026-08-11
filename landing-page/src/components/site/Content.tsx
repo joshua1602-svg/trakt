@@ -180,11 +180,8 @@ export function ControlPreview() {
       role="img"
       aria-label="Preview of a concentration control evaluated against the funded book, the expected forecast and the full pipeline"
     >
-      <p className="flex items-center justify-between border-b border-line pb-3 text-xs font-medium text-ink-300">
+      <p className="border-b border-line pb-3 text-xs font-medium text-ink-300">
         Concentration controls
-        <span className="rounded-full border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-          Illustrative
-        </span>
       </p>
 
       <div className="pt-4">

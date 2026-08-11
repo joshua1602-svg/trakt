@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { columnFormat, columnLabel, formatValue } from "@/lib/format";
 import { cx } from "@/components/ui";
 import type {
@@ -112,6 +114,34 @@ function ChartBlock({ artifact }: { artifact: ChartArtifact }) {
   );
 }
 
+/**
+ * Row detail that used to sit in the answer prose.
+ *
+ * A real toggle, not a `title` attribute: native tooltips never open on
+ * touch, which would have made this unreachable on a phone — and it is the
+ * explanation that makes the two-totals answer land.
+ */
+function RowNote({ value, note }: { value: string; note: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="text-left underline decoration-ink-500 decoration-dotted underline-offset-4 hover:decoration-ink-300"
+      >
+        {value}
+      </button>
+      {open ? (
+        <span className="mt-1.5 block max-w-xs text-[11px] leading-relaxed text-ink-400">
+          {note}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function TableBlock({
   artifact,
   caption,
@@ -158,20 +188,7 @@ function TableBlock({
                       column.align === "right" ? "text-right tabular-nums" : "text-left",
                     )}
                   >
-                    {tooltip ? (
-                      // Detail that used to sit in the answer prose: on the row
-                      // it describes, one hover/focus away, never in the way.
-                      <span
-                        tabIndex={0}
-                        title={tooltip}
-                        aria-label={`${value} — ${tooltip}`}
-                        className="cursor-help underline decoration-ink-500 decoration-dotted underline-offset-4"
-                      >
-                        {value}
-                      </span>
-                    ) : (
-                      value
-                    )}
+                    {tooltip ? <RowNote value={value} note={tooltip} /> : value}
                   </td>
                 );
               })}
@@ -196,8 +213,10 @@ function TableBlock({
 
   return (
     <details className="mt-3.5 rounded-lg border border-line-soft bg-navy-950/40">
+      {/* A product capability — drill-through from a figure to its source —
+          not a UI affordance. Closed by default so the panel stays compact. */}
       <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400 hover:text-ink-200">
-        Show the underlying values
+        Underlying values
       </summary>
       <div className="px-1 pb-2">{table}</div>
       {artifact.coverage != null ? (

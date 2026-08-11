@@ -90,10 +90,13 @@ export function DemoPlayer({
         </video>
 
         {state === "idle" ? (
-          // The still stays at full contrast and full sharpness — a global
-          // overlay made a working product look disabled. The backing is a
-          // contained plate sized to the button and its label, nothing more.
-          <div className="absolute inset-0 flex items-center justify-center">
+          /* The still stays at full contrast and full sharpness — a global
+             overlay made working software look disabled. The backing is a
+             contained plate sized to the button and its label, sitting low in
+             the frame: centred, it covered the "Funded book … Pass" row, and
+             the three rows going pass → warning → projected breach are the
+             demo's whole argument. */
+          <div className="absolute inset-x-0 bottom-0 flex justify-center pb-6">
             <div className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-navy-950/90 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
               <button type="button" onClick={play} className={buttonStyles.primary}>
                 <PlayGlyph /> {overlayLabel}

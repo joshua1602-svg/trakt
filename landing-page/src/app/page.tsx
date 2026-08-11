@@ -11,6 +11,7 @@ import { Hero } from "@/components/site/Hero";
 import { LeadForm } from "@/components/site/LeadForm";
 import { Nav } from "@/components/site/Nav";
 import { QueryDemo } from "@/components/site/QueryDemo";
+import { RefusalSection } from "@/components/site/RefusalSection";
 import { Reveal } from "@/components/site/Reveal";
 import { Section, SectionHeading, buttonStyles } from "@/components/ui";
 import { buildMeta } from "@/lib/demo-pack";
@@ -70,6 +71,14 @@ export default function Page() {
             <p className="mt-4 text-[13px] font-medium text-ink-300">
               Same question. Same calculation. Same answer.
             </p>
+          </Reveal>
+        </Section>
+
+        {/* 2b — The refusal claim, out of the demo card and into its own
+            section: behind a play control it was only ever a still. */}
+        <Section id="refusal" className="pb-16 sm:pb-20">
+          <Reveal>
+            <RefusalSection meta={meta} />
           </Reveal>
         </Section>
 

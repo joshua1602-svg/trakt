@@ -75,8 +75,12 @@ test.describe("Trakt landing page", () => {
     await expect(demo.getByText("SPV1 Sponsored Securitisation").first()).toBeVisible();
     await expect(demo.getByText("Platform total (warehoused)")).toBeVisible();
     await expect(demo.getByText("Sponsor total (including SPV1)")).toBeVisible();
-    // The SPV1 story lives in a tooltip on its own row, not the answer prose.
-    await expect(demo.locator('[title*="risk retention"]')).toBeVisible();
+    // The SPV1 story lives on its own row behind a real toggle — tap-
+    // reachable, unlike a native title tooltip, which never opens on touch.
+    const spvNote = demo.getByRole("button", { name: "SPV1 Sponsored Securitisation" });
+    await expect(spvNote).toHaveAttribute("aria-expanded", "false");
+    await spvNote.click();
+    await expect(demo.getByText(/servicing, risk retention and investor reporting retained/i)).toBeVisible();
     // The as-at date appears once, in the portfolio header — not per answer.
     await expect(demo.getByText(/as at 30 June 2026/)).toHaveCount(1);
     // No internal identifiers reach the page.
@@ -364,20 +368,30 @@ test.describe("Trakt landing page", () => {
     await expect(page.getByText("Synthetic portfolio", { exact: true })).toHaveCount(0);
 
     // After it starts: still exactly one, now on the live demo's header.
-    const demo = await startQueryDemo(page);
+    await startQueryDemo(page);
     await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
+  });
 
-    // Refusal is promoted out of small print: a titled block with the two
-    // example prompts as first-class buttons.
+  test("the refusal claim is its own section, and its prompts drive the demo", async ({
+    page,
+  }) => {
+    const refusal = page.locator("#refusal");
+    await refusal.scrollIntoViewIfNeeded();
+
+    // Stated once on the page: a live section, not a still inside the poster.
     await expect(
-      demo.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
+      refusal.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
     ).toBeVisible();
     await expect(
-      demo.getByRole("button", { name: /show me individual loan records/i }),
-    ).toBeVisible();
-    await expect(
-      demo.getByRole("button", { name: /summarise the current pipeline/i }),
-    ).toBeVisible();
+      page.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
+    ).toHaveCount(1);
+
+    // Pressing a prompt starts the demo above and asks it, so the visitor
+    // watches Trakt decline rather than being told that it does.
+    await refusal.getByRole("button", { name: /show me individual loan records/i }).click();
+    const demo = page.locator("#example");
+    await expect(demo.getByText(/not supported in this demonstration/i)).toBeVisible();
+    await expect(demo.getByText(/will not return exposure-level records/i)).toBeVisible();
   });
 
   /**
@@ -391,6 +405,7 @@ test.describe("Trakt landing page", () => {
   test("every section paints: computed opacity and real text", async ({ page }) => {
     for (const id of [
       "query-demo",
+      "refusal",
       "platform",
       "controls",
       "intelligence",
@@ -609,7 +624,7 @@ test.describe("without JavaScript", () => {
   test("every section still renders at full opacity", async ({ page }) => {
     await page.goto("/");
 
-    for (const id of ["platform", "controls", "intelligence", "delivery", "governance"]) {
+    for (const id of ["refusal", "platform", "controls", "intelligence", "delivery", "governance"]) {
       const painted = await page.locator(`#${id}`).evaluate((node) => {
         const target = node.querySelector("[data-reveal]") ?? node;
         return {
