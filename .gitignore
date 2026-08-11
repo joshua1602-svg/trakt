@@ -141,3 +141,11 @@ out_simulation/
 # report JSON records each snapshot's sha256. The generated reports ARE kept.
 output/regulatory_watch/**/snapshots/
 output/regulatory_watch/**/candidate/
+output/regulatory_watch/**/seen_publications.json
+output/regulatory_watch/**/replay_state.json
+output/regulatory_watch/discovery_demo/stage1a/
+
+# Stage 1B publication fixtures are committed test INPUT, not generated output.
+# The blanket *.xml rule above would otherwise drop the RSS fixture and break
+# the discovery suite on a fresh clone.
+!tests/fixtures/regulatory_watch/publications/*.xml

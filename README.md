@@ -350,6 +350,29 @@ It is **observational only**: no active Annex 2 config is written, no regime
 version is created, no XML is generated, and no model is used in the comparison
 path. See `docs/esma_annex2_regulatory_watch.md`.
 
+**Stage 1B** (`regulatory_watch/discovery/`) adds the upstream layer Stage 1A
+cannot see: it discovers new ESMA publications from an explicit allowlist,
+deduplicates them across weekly runs, triages them for Annex 2 relevance and
+creates reviewable **regulatory-development** records:
+
+```
+ESMA publication allowlist → discovery → dedupe → relevance triage
+                           → regulatory development → optional Stage 1A linkage
+```
+
+```bash
+python -m regulatory_watch.discovery.cli discover \
+    --out-dir output/regulatory_watch/discovery \
+    --fixture-dir tests/fixtures/regulatory_watch/publications
+python scripts/run_regulatory_watch_discovery_demo.py
+```
+
+A consultation is a `POTENTIAL_FUTURE_CHANGE`; a Q&A is
+`INTERPRETATION_REVIEW_REQUIRED`; a new schema package is a
+`TECHNICAL_SPEC_CHANGE` that asks **Stage 1A** to compute the exact field
+deltas. Stage 1B never determines a field-level change itself. See
+`docs/esma_annex2_regulatory_watch_stage1b.md`.
+
 ## Annex Delivery Agent
 
 The **Annex Delivery Agent** (`engine/annex_delivery_agent/`) governs the stage
@@ -591,6 +614,13 @@ trakt/
     comparator.py                    # Deterministic spec-vs-spec diff
     impact.py                        # Delta → likely Trakt component impact
     report.py                        # JSON (UI-agnostic) + Markdown reports
+    discovery/                       # Stage 1B: upstream ESMA publication watch
+      sources.py                     # Explicit ESMA publication allowlist
+      parsers.py                     # RSS / Atom / HTML listing parsers
+      state.py                       # Publication identity + deduplication
+      triage.py                      # Annex 2 relevance + classification
+      linkage.py                     # The Stage 1A boundary
+      pipeline.py                    # discover -> dedupe -> classify -> report
   analytics/
     streamlit_app_erm.py             # Analytics dashboard (entry point)
     mi_prep.py                       # Dashboard data preparation layer
