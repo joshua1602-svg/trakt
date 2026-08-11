@@ -979,12 +979,20 @@ def _balance_by_book(engine: Engine, as_of_display: str) -> Dict[str, Any]:
 
     rows = []
     for book_id, meta in BOOKS.items():
-        rows.append({
+        row = {
             "book": meta["label"],
             "status": meta["detail"],
             "exposures": f"{totals[book_id]['loans']:,}",
             "balance": _fmt_currency(totals[book_id]["balance"]),
-        })
+        }
+        # The SPV1 story moves out of the answer prose into a tooltip on its
+        # own row, so the answer can open with the one sentence that matters.
+        if book_id == "spv1_sponsored":
+            row["tooltip"] = (
+                "Originated by the sponsor, securitised and sold; servicing, "
+                "risk retention and investor reporting retained."
+            )
+        rows.append(row)
     rows.append({
         "book": "Platform total (warehoused)",
         "status": "On balance sheet",
@@ -998,14 +1006,11 @@ def _balance_by_book(engine: Engine, as_of_display: str) -> Dict[str, Any]:
         "balance": _fmt_currency(sponsor_balance),
     })
 
+    # One sentence, then the table. The as-at date lives once, in the
+    # portfolio header; the SPV1 story lives in its row's tooltip.
     answer = (
-        f"Across three governed books as at {as_of_display}, the platform carries "
-        f"{_fmt_currency(platform_balance)} over {platform_loans:,} exposures on "
-        f"balance sheet. Including SPV1 — originated by the sponsor, securitised "
-        f"and sold, with servicing, risk retention and investor reporting "
-        f"retained — the sponsor reports on {_fmt_currency(sponsor_balance)} over "
-        f"{sponsor_loans:,} exposures. Both totals are correct; they answer "
-        "different questions, so Trakt returns both rather than choosing one."
+        "Both totals are correct — they answer different questions, so Trakt "
+        "returns both rather than choosing one."
     )
 
     return {
@@ -1020,7 +1025,7 @@ def _balance_by_book(engine: Engine, as_of_display: str) -> Dict[str, Any]:
             "balance sheet", "sponsor total", "platform total",
         ],
         "answer": answer,
-        "interpreted": "Balance by source portfolio; platform and sponsor scopes",
+        "interpreted": None,
         "artifacts": [{
             "kind": "table",
             "title": "Funded balance by governed book",

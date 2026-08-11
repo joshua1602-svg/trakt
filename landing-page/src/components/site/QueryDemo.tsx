@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { CopilotDemo } from "@/components/demo/CopilotDemo";
-import { buttonStyles } from "@/components/ui";
+import { Badge, buttonStyles } from "@/components/ui";
 import type { DemoMetaResponse } from "@/types/demo";
 
 /**
@@ -37,12 +37,15 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
         aria-hidden="true"
         className="pointer-events-none select-none rounded-2xl border border-line bg-navy-900/70 p-4 opacity-70 sm:p-5"
       >
-        <div className="rounded-xl border border-line bg-navy-850/80 px-4 py-3">
-          <p className="text-[15px] font-semibold text-ink-100">{meta.scope.client}</p>
-          <p className="mt-1 text-[12px] text-ink-300">
-            {meta.scope.portfolioName} · {meta.scope.loanCount} exposures ·{" "}
-            {meta.scope.totalBalanceDisplay} as at {meta.scope.asOfDisplay}
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line bg-navy-850/80 px-4 py-3">
+          <div>
+            <p className="text-[15px] font-semibold text-ink-100">{meta.scope.client}</p>
+            <p className="mt-1 text-[12px] text-ink-300">
+              {meta.scope.portfolioName} · {meta.scope.loanCount} exposures ·{" "}
+              {meta.scope.totalBalanceDisplay} as at {meta.scope.asOfDisplay}
+            </p>
+          </div>
+          <Badge tone="synthetic">Synthetic data</Badge>
         </div>
         <div className="mt-4 flex gap-2">
           <div className="flex-1 rounded-xl border border-line bg-navy-950/60 px-4 py-3 text-sm text-ink-500">

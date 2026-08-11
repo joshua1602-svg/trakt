@@ -25,8 +25,8 @@ const PROOF_POINTS = [
 
 export function Hero({ scope }: { scope: DemoScopeInfo }) {
   return (
-    <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
-      <div>
+    <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-x-8">
+      <div className="lg:col-span-6">
         <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-peri-400">
           Trakt for specialist lending
         </p>
@@ -109,7 +109,7 @@ function CheckMark() {
 function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
   return (
     <div
-      className="rounded-2xl border border-line bg-navy-900/80 p-4 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)] sm:p-5"
+      className="rounded-2xl border border-line bg-navy-900/80 p-4 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)] sm:p-5 lg:col-span-6"
       aria-label="Preview of a governed Trakt answer"
       role="img"
     >
@@ -125,9 +125,7 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
         </div>
 
         <div className="rounded-xl border border-line bg-navy-950/70 p-3.5">
-          <p className="text-[13px] leading-relaxed text-ink-100">
-            Three governed books as at {scope.asOfDisplay}.
-          </p>
+          <p className="text-[13px] leading-relaxed text-ink-100">Three governed books.</p>
 
           {/* The differentiator, first thing a visitor sees. A flat total here
               would quietly contradict the multi-book claim above it — and the
@@ -164,14 +162,10 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
             </div>
           </dl>
 
-          {/* Provenance travels with the figures. "Deterministic" is a
-              confirmatory signal, so it carries the accent; the synthetic label
-              is a one-word provenance tag, not the page's disclaimer — that
-              lives once, in the example section. */}
-          <p className="mt-3 flex flex-wrap gap-x-2 border-t border-line-soft pt-2 text-[10px] text-ink-500">
-            <span className="font-medium text-mint-400">Deterministic</span>
-            <span>· As at {scope.asOfDisplay}</span>
-            <span>· Synthetic portfolio</span>
+          {/* One confirmatory provenance signal; the as-at date and the
+              synthetic disclosure live once, in the demo's portfolio header. */}
+          <p className="mt-3 border-t border-line-soft pt-2 text-[10px] font-medium text-mint-400">
+            Deterministic
           </p>
         </div>
       </div>

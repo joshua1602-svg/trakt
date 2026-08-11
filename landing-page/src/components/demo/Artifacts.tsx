@@ -40,7 +40,7 @@ function KpiBlock({ artifact }: { artifact: KpiArtifact }) {
           </div>
         ))}
       </dl>
-      {artifact.coverage !== null ? <Coverage value={artifact.coverage} /> : null}
+      {artifact.coverage != null ? <Coverage value={artifact.coverage} /> : null}
     </div>
   );
 }
@@ -144,17 +144,37 @@ function TableBlock({
         <tbody>
           {artifact.rows.map((row, index) => (
             <tr key={index} className="border-b border-line-soft last:border-0">
-              {artifact.columns.map((column) => (
-                <td
-                  key={column.key}
-                  className={cx(
-                    "px-3 py-2 text-ink-200",
-                    column.align === "right" ? "text-right tabular-nums" : "text-left",
-                  )}
-                >
-                  {formatValue(row[column.key] ?? null, column.format)}
-                </td>
-              ))}
+              {artifact.columns.map((column, columnIndex) => {
+                const value = formatValue(row[column.key] ?? null, column.format);
+                const tooltip =
+                  columnIndex === 0 && typeof row.tooltip === "string"
+                    ? row.tooltip
+                    : null;
+                return (
+                  <td
+                    key={column.key}
+                    className={cx(
+                      "px-3 py-2 text-ink-200",
+                      column.align === "right" ? "text-right tabular-nums" : "text-left",
+                    )}
+                  >
+                    {tooltip ? (
+                      // Detail that used to sit in the answer prose: on the row
+                      // it describes, one hover/focus away, never in the way.
+                      <span
+                        tabIndex={0}
+                        title={tooltip}
+                        aria-label={`${value} — ${tooltip}`}
+                        className="cursor-help underline decoration-ink-500 decoration-dotted underline-offset-4"
+                      >
+                        {value}
+                      </span>
+                    ) : (
+                      value
+                    )}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -169,7 +189,7 @@ function TableBlock({
           <h4 className="mb-2 text-sm font-medium text-ink-200">{artifact.title}</h4>
         ) : null}
         {table}
-        {artifact.coverage !== null ? <Coverage value={artifact.coverage} /> : null}
+        {artifact.coverage != null ? <Coverage value={artifact.coverage} /> : null}
       </div>
     );
   }
@@ -180,7 +200,7 @@ function TableBlock({
         Show the underlying values
       </summary>
       <div className="px-1 pb-2">{table}</div>
-      {artifact.coverage !== null ? (
+      {artifact.coverage != null ? (
         <p className="px-3 pb-2.5 text-[11px] text-ink-500">
           Balance coverage {formatValue(artifact.coverage, "pct")}.
         </p>

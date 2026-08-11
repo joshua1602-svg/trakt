@@ -155,6 +155,41 @@ body {
   }
 }
 
+/* Scroll-triggered reveal (see components/site/Reveal.tsx).
+ *
+ * The hidden state applies only when the `js` class is present (set inline in
+ * the layout) AND motion is acceptable — so visitors without JavaScript, and
+ * visitors preferring reduced motion, always see the final state with no
+ * transform at any point. 240ms ease-out, one 14px rise, staggered by the
+ * component via --reveal-delay. Deliberately no spring and no replay. */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal] {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 240ms ease-out,
+      transform 240ms ease-out;
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  .js [data-reveal].is-revealed {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The concentration bars grow to their final widths on appearance — a CSS
+ * animation, so the reduced-motion override below collapses it to the final
+ * state automatically. */
+@keyframes trakt-bar-grow {
+  from {
+    width: 0;
+  }
+}
+
+.animate-bar {
+  animation: trakt-bar-grow 240ms ease-out both;
+}
+
 .animate-rise {
   animation: trakt-rise 0.32s ease both;
 }

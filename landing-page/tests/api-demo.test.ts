@@ -114,7 +114,9 @@ describe("POST /api/demo/query — supported questions", () => {
     expect(body.answer.length).toBeGreaterThan(20);
     expect(body.asOfDate).toBe("2026-06-30");
     expect(body.asOfDisplay).toBe("30 June 2026");
-    expect(body.portfolioScope).toContain("ALP_Platform_202606");
+    // The client name only — internal portfolio identifiers stay off the page.
+    expect(body.portfolioScope).toBe("Alderbridge Lending Platform");
+    expect(body.portfolioScope).not.toContain("ALP_Platform_202606");
     expect(body.artifacts?.length).toBeGreaterThan(0);
     expect(body.followUps?.length).toBeGreaterThan(0);
     expect(body.usage.questionsRemaining).toBe(LIMITS.questionsPerSession - 1);

@@ -177,7 +177,7 @@ describe("CopilotDemo", () => {
           ],
           asOfDate: "2026-06-30",
           asOfDisplay: "30 November 2025",
-          portfolioScope: "Alderbridge Lending Platform · ALP_Platform_202606",
+          portfolioScope: "Alderbridge Lending Platform",
           followUps: [{ id: "region_exposure", label: "Which regions have the highest exposure?" }],
           synthetic: true,
           usage: { questionsUsed: 1, questionsRemaining: 11 },
@@ -196,8 +196,11 @@ describe("CopilotDemo", () => {
     expect(screen.getByText("Current outstanding balance")).toBeInTheDocument();
     expect(screen.getByText("£5.4MM")).toBeInTheDocument();
     expect(screen.getByText(/Metric: Balance/)).toBeInTheDocument();
-    expect(screen.getByText("As at 30 November 2025")).toBeInTheDocument();
-    expect(screen.getByText("Synthetic portfolio")).toBeInTheDocument();
+    // Provenance is lean: the as-at date and the synthetic disclosure live
+    // once, in the portfolio header, not on every answer footer.
+    expect(screen.queryByText("As at 30 November 2025")).not.toBeInTheDocument();
+    expect(screen.queryByText("Synthetic portfolio")).not.toBeInTheDocument();
+    expect(screen.getByText("Synthetic data")).toBeInTheDocument();
     // The session counter stays silent this early — it is a cap, not a meter.
     expect(screen.queryByText(/questions remaining/i)).not.toBeInTheDocument();
     expect(screen.getByText(/trakt declines what it cannot derive/i))
@@ -217,7 +220,7 @@ describe("CopilotDemo", () => {
           productionNote: "In a client environment, Trakt holds a governed snapshot history.",
           asOfDate: "2026-06-30",
           asOfDisplay: "30 November 2025",
-          portfolioScope: "Alderbridge Lending Platform · ALP_Platform_202606",
+          portfolioScope: "Alderbridge Lending Platform",
           followUps: [],
           synthetic: true,
           usage: { questionsUsed: 1, questionsRemaining: 11 },

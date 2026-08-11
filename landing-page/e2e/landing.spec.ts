@@ -18,7 +18,7 @@ async function startQueryDemo(page: Page): Promise<Locator> {
   const demo = page.locator("#example");
   await demo.scrollIntoViewIfNeeded();
   await demo.getByRole("button", { name: /watch query demo/i }).click();
-  await expect(demo.getByText(/across three governed books/i)).toBeVisible();
+  await expect(demo.getByText(/both totals are correct/i)).toBeVisible();
   return demo;
 }
 
@@ -75,8 +75,13 @@ test.describe("Trakt landing page", () => {
     await expect(demo.getByText("SPV1 Sponsored Securitisation").first()).toBeVisible();
     await expect(demo.getByText("Platform total (warehoused)")).toBeVisible();
     await expect(demo.getByText("Sponsor total (including SPV1)")).toBeVisible();
-    await expect(demo.getByText(/As at 30 June 2026/)).toBeVisible();
-    await expect(demo.getByText("Synthetic portfolio", { exact: true })).toBeVisible();
+    // The SPV1 story lives in a tooltip on its own row, not the answer prose.
+    await expect(demo.locator('[title*="risk retention"]')).toBeVisible();
+    // The as-at date appears once, in the portfolio header — not per answer.
+    await expect(demo.getByText(/as at 30 June 2026/)).toHaveCount(1);
+    // No internal identifiers reach the page.
+    await expect(demo).not.toContainText("ALP_Platform_202606");
+    await expect(demo).not.toContainText(/balance coverage/i);
     // The cap is real but silent this early: it is not a meter.
     await expect(demo.getByText(/questions remaining/)).toHaveCount(0);
   });
@@ -102,7 +107,7 @@ test.describe("Trakt landing page", () => {
     const demo = await startQueryDemo(page);
 
     await demo.getByRole("button", { name: /^reset$/i }).click();
-    await expect(demo.getByText(/across three governed books/i)).toHaveCount(0);
+    await expect(demo.getByText(/both totals are correct/i)).toHaveCount(0);
     // Suggestions survive the reset, ready for the visitor's own questions.
     await expect(
       demo.getByRole("button", { name: "Show the funded balance by book." }),
@@ -239,7 +244,7 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator("main")).not.toContainText(/instant/i);
   });
 
-  test("the lens section shows one truth across governed books", async ({ page }) => {
+  test("the lens switcher recomputes the same rows under each lens", async ({ page }) => {
     const lenses = page.locator("#lenses");
     await lenses.scrollIntoViewIfNeeded();
 
@@ -247,11 +252,78 @@ test.describe("Trakt landing page", () => {
       lenses.getByRole("heading", { name: /one portfolio truth\. every relevant lens\./i }),
     ).toBeVisible();
     await expect(lenses).toContainText(/individually reportable and consolidated/i);
-    await expect(lenses.getByText("Consolidated platform", { exact: true })).toBeVisible();
+
+    // Default lens: the consolidated sponsor scope, summed from the very rows
+    // on screen — and it reconciles to the governed total to the penny.
+    await expect(lenses.getByText("£37,270,061")).toBeVisible();
     await expect(lenses.getByText("SPV1 Sponsored Securitisation")).toBeVisible();
     await expect(lenses.getByText("sold", { exact: true })).toBeVisible();
-    // The synthetic disclosure stays with the figures.
-    await expect(lenses.getByText(/synthetic portfolio/i)).toBeVisible();
+
+    // Narrowing the lens recomputes the total over the same rows: the value
+    // appears twice — once on the book row, once as the recomputed total.
+    await lenses.getByRole("button", { name: "Acquired" }).click();
+    await expect(lenses.getByText("£11,974,544")).toHaveCount(2);
+    await lenses.getByRole("button", { name: "Origination" }).click();
+    await expect(lenses.getByText("£15,432,544")).toHaveCount(2);
+    await lenses.getByRole("button", { name: "Sponsor total" }).click();
+    await expect(lenses.getByText("£37,270,061")).toBeVisible();
+  });
+
+  test("the delivery accordion opens one panel at a time, under user control", async ({
+    page,
+    isMobile,
+  }) => {
+    const delivery = page.locator("#delivery");
+    await delivery.scrollIntoViewIfNeeded();
+
+    await expect(
+      delivery.getByRole("heading", { name: /every mode reads the same governed layer\./i }),
+    ).toBeVisible();
+
+    if (isMobile) {
+      // Below 768px: a plain vertical stack — every panel visible, no
+      // horizontal behaviour, no expand/collapse controls.
+      for (const name of [
+        "Managed service",
+        "Trakt Agent",
+        "Copilot",
+        "Enterprise agent",
+        "Agent-to-agent",
+      ]) {
+        await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
+      }
+      await expect(delivery.getByRole("button")).toHaveCount(0);
+      return;
+    }
+
+    // The horizontal accordion is the visible surface on desktop; the mobile
+    // stack coexists in the DOM behind a display toggle, so assertions scope
+    // to the accordion group.
+    const accordion = delivery.getByRole("group", { name: "Delivery modes" });
+
+    // Panel 1 open on load, and exactly one panel is ever expanded.
+    await expect(accordion.getByText(/recurring reporting, regulatory output/i)).toBeVisible();
+
+    // Selecting another spine moves the expansion — never all-collapsed.
+    await accordion.getByRole("button", { name: "Copilot" }).click();
+    await expect(accordion.getByText(/inside the tools your teams already use/i)).toBeVisible();
+    await expect(accordion.getByText(/recurring reporting, regulatory output/i)).toHaveCount(0);
+
+    // Roadmap panels expand too, and stay labelled as roadmap in grey.
+    await accordion.getByRole("button", { name: "Agent-to-agent" }).click();
+    await expect(accordion.getByText(/consulting the governed layer directly/i)).toBeVisible();
+    await expect(accordion.getByText("Roadmap", { exact: true })).toBeVisible();
+
+    // Arrow keys move between panels.
+    await accordion.getByRole("button", { name: "Enterprise agent" }).focus();
+    await page.keyboard.press("ArrowLeft");
+    const focused = await page.evaluate(
+      () =>
+        document.activeElement?.getAttribute("aria-label") ??
+        document.activeElement?.textContent ??
+        "",
+    );
+    expect(focused).toMatch(/copilot/i);
   });
 
   test("governance makes four claims once, with the reconciliation proof", async ({ page }) => {
@@ -325,23 +397,28 @@ test.describe("Trakt landing page", () => {
     await expect(intelligence.locator("video")).toHaveCount(0);
   });
 
-  test("the synthetic-data disclaimer is stated exactly once, with the query demo", async ({
+  test("the synthetic disclosure is the amber pill, stated exactly once", async ({
     page,
   }) => {
-    const disclaimer = page.getByText(
-      /The portfolios are wholly synthetic, and the page accepts no uploads/,
-    );
-    await expect(disclaimer).toHaveCount(1);
-    await expect(
-      page
-        .locator("#query-demo")
-        .getByText(/The portfolios are wholly synthetic, and the page accepts no uploads/),
-    ).toBeVisible();
+    // Before the demo starts: one pill, on the poster's portfolio header.
+    await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
+    await expect(page.getByText(/wholly synthetic/i)).toHaveCount(0);
+    await expect(page.getByText("Synthetic portfolio", { exact: true })).toHaveCount(0);
 
-    // Refusal is a differentiator, so it is stated rather than footnoted.
-    await startQueryDemo(page);
+    // After it starts: still exactly one, now on the live demo's header.
+    const demo = await startQueryDemo(page);
+    await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
+
+    // Refusal is promoted out of small print: a titled block with the two
+    // example prompts as first-class buttons.
     await expect(
-      page.locator("#example").getByText(/Trakt declines what it cannot derive/),
+      demo.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
+    ).toBeVisible();
+    await expect(
+      demo.getByRole("button", { name: /show me individual loan records/i }),
+    ).toBeVisible();
+    await expect(
+      demo.getByRole("button", { name: /summarise the current pipeline/i }),
     ).toBeVisible();
   });
 
