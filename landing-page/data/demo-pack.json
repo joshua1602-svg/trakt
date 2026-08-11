@@ -1097,9 +1097,12 @@
     },
     {
       "id": "annex_exceptions",
-      "label": "Show the current Annex 2 validation exceptions.",
+      "label": "Show the current reporting validation exceptions.",
       "category": "governance",
       "phrases": [
+        "reporting validation exceptions",
+        "reporting exceptions",
+        "current reporting exceptions",
         "annex 2 validation exceptions",
         "annex 2 exceptions",
         "validation exceptions",

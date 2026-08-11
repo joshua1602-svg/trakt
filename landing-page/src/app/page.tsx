@@ -77,7 +77,7 @@ export default function Page() {
             id="intelligence"
             eyebrow="Portfolio intelligence"
             title="Portfolio intelligence where your team already works."
-            intro="Ask portfolio questions in natural language — in the Trakt workspace, in Microsoft Teams, or through Microsoft 365 Copilot. Every answer comes from the deterministic engine, so the same question returns the same number in every channel — and Trakt declines what it cannot derive. Try it against three governed books below. The portfolios are wholly synthetic, and the page accepts no uploads."
+            intro="Ask portfolio questions in natural language — in the Trakt workspace, Microsoft Teams, or through Microsoft 365 Copilot. Move from a question to governed portfolio evidence without rebuilding the analysis. The portfolios are wholly synthetic, and the page accepts no uploads."
           />
           <DeliveryStrip />
           <div id="example" className="mt-8 scroll-mt-24">

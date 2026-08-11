@@ -141,16 +141,37 @@ test.describe("Trakt landing page", () => {
     ).toBeVisible();
     // The differentiator: three evaluation bases, not a single status.
     await expect(controls.getByText(/what the portfolio is moving toward/i)).toBeVisible();
+    // Activation is a human decision; the path is visible.
+    await expect(controls.getByText("Reviewed", { exact: true })).toBeVisible();
+
+    // The demo loop mounts once the section approaches the viewport: muted,
+    // looping, inline, and served with its poster so nothing shifts.
+    const video = controls.locator("video");
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute("poster", /controls-demo-poster/);
+    await expect(video).toHaveAttribute("loop", /.*/);
+    await expect(video).toHaveAttribute("playsinline", /.*/);
+    // The illustrative provenance is DOM text, not only pixels in the video.
+    await expect(controls.getByText(/figures illustrative/i)).toBeVisible();
+  });
+
+  test("reduced-motion visitors get the static control preview, not the video", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    const controls = page.locator("#controls");
+    await controls.scrollIntoViewIfNeeded();
+
+    await expect(controls.locator("video")).toHaveCount(0);
+    // Real DOM text — the same end state the loop resolves to.
     await expect(controls.getByText("Funded book", { exact: true })).toBeVisible();
     await expect(controls.getByText("Expected forecast", { exact: true })).toBeVisible();
     await expect(
       controls.getByText("Including full pipeline", { exact: true }),
     ).toBeVisible();
     await expect(controls.getByText(/projected breach horizon: nov 2026/i)).toBeVisible();
-    // The preview's figures are not engine output, and the page says so.
     await expect(controls.getByText("Illustrative", { exact: true })).toBeVisible();
-    // Activation is a human decision; the path is visible.
-    await expect(controls.getByText("Reviewed", { exact: true })).toBeVisible();
   });
 
   test("onboarding is a governed sequence ending in a live portfolio", async ({ page }) => {
@@ -208,9 +229,13 @@ test.describe("Trakt landing page", () => {
     // Asset extensibility is an architecture claim, never a coverage claim.
     await expect(governance.getByText(/asset-specific configuration/i)).toBeVisible();
     await expect(governance).not.toContainText(/every asset class/i);
-    // Roadmap channels are labelled as roadmap, in muted grey, with no accent.
-    await expect(governance.getByText("Roadmap")).toBeVisible();
-    await expect(governance).toContainText(/agent-to-agent/i);
+    // The agentic direction is a quiet design-intent sentence, not a roadmap
+    // block — and it is worded as direction, never as live capability.
+    await expect(
+      governance.getByText(/toward increasingly agentic operation/i),
+    ).toBeVisible();
+    await expect(governance).not.toContainText(/roadmap/i);
+    await expect(governance).not.toContainText(/autonomous/i);
   });
 
   test("reporting is a band of outputs, not the identity", async ({ page }) => {
@@ -252,6 +277,19 @@ test.describe("Trakt landing page", () => {
     await cta.getByRole("button", { name: /book a tailored demonstration/i }).click();
 
     await expect(cta.getByRole("status")).toContainText(/thank you/i);
+  });
+
+  test("the intelligence channels read at a glance, each with its glyph", async ({ page }) => {
+    const intelligence = page.locator("#intelligence");
+    await intelligence.scrollIntoViewIfNeeded();
+
+    for (const channel of ["Trakt workspace", "Microsoft Teams", "Microsoft 365 Copilot"]) {
+      await expect(intelligence.getByText(channel, { exact: true })).toBeVisible();
+    }
+    // Three channel chips, each carrying a small neutral glyph — labels do the
+    // naming, no imitation product logos.
+    await expect(intelligence.locator("span:has(> svg)")).toHaveCount(3);
+    await expect(intelligence.getByText("Available today")).toBeVisible();
   });
 
   test("the synthetic-data disclaimer is stated exactly once, in the example", async ({ page }) => {

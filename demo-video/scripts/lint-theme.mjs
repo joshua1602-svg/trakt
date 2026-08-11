@@ -23,6 +23,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const SRC = join(ROOT, "src");
 const THEME = join(SRC, "theme.ts");
+/**
+ * The landing-page composition (src/landing) is a separate visual system —
+ * the landing page's tokens, not the film's — with the same discipline: its
+ * values live in exactly one token file, imported as `T`.
+ */
+const LANDING_THEME = join(SRC, "landing", "theme.ts");
 
 const walk = (dir) =>
   readdirSync(dir).flatMap((entry) => {
@@ -31,7 +37,7 @@ const walk = (dir) =>
   });
 
 const sourceFiles = walk(SRC).filter(
-  (f) => /\.tsx?$/.test(f) && !f.endsWith(".test.ts") && f !== THEME,
+  (f) => /\.tsx?$/.test(f) && !f.endsWith(".test.ts") && f !== THEME && f !== LANDING_THEME,
 );
 
 const findings = [];
@@ -47,8 +53,9 @@ const RULES = [
   {
     id: "font-size-literal",
     // `fontSize: theme.type.body.fontSize * 0.8` is fine: the size still originates
-    // in theme.ts. A bare number or a string literal is not.
-    pattern: /fontSize:\s*(?!theme\.)(?:\d|"|')/g,
+    // in theme.ts (`T.` is the landing token file's import name). A bare number
+    // or a string literal is not.
+    pattern: /fontSize:\s*(?!theme\.|T\.)(?:\d|"|')/g,
     message: "literal font size — use a theme.type token",
   },
   {

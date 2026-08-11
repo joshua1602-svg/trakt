@@ -67,6 +67,26 @@ const PRESETS = {
     encodingBufferSize: "12M",
     label: "1080x1080 LinkedIn / email variant",
   },
+  controls: {
+    composition: "LandingControlsDemo",
+    file: "controls-demo.mp4",
+    /** Ships inside the landing page, so weight beats headroom. Unlike the
+        film's delivery-spec bitrate, this preset uses a CRF: the frames are
+        flat panels, hairlines and static type, where constant quality lands
+        far lighter than an average-bitrate target for identical output. */
+    crf: 28,
+    label: "1200x960 landing-page controls loop (H.264, Safari/iOS)",
+  },
+  "controls-webm": {
+    composition: "LandingControlsDemo",
+    file: "controls-demo.webm",
+    /** VP9 sibling of `controls`: the landing page lists it first, so
+        Chromium and Firefox (including codec-stripped Chromium builds with
+        no H.264) take this one and Safari falls through to the MP4. */
+    codec: "vp9",
+    crf: 36,
+    label: "1200x960 landing-page controls loop (VP9)",
+  },
 };
 
 /**
@@ -199,12 +219,17 @@ const main = async () => {
     await renderMedia({
       composition,
       serveUrl,
-      codec: "h264",
+      codec: preset.codec ?? "h264",
       outputLocation,
-      crf: null,
-      videoBitrate: preset.videoBitrate,
-      encodingMaxRate: preset.encodingMaxRate,
-      encodingBufferSize: preset.encodingBufferSize,
+      // Bitrate-targeted presets state the delivery spec explicitly; the
+      // CRF preset asks for constant quality instead. Exactly one of the
+      // two shapes is set per preset.
+      crf: preset.crf ?? null,
+      videoBitrate: preset.videoBitrate ?? null,
+      ...(preset.encodingMaxRate ? { encodingMaxRate: preset.encodingMaxRate } : {}),
+      ...(preset.encodingBufferSize
+        ? { encodingBufferSize: preset.encodingBufferSize }
+        : {}),
       imageFormat: "jpeg",
       jpegQuality: 95,
       pixelFormat: "yuv420p",
@@ -231,7 +256,7 @@ const main = async () => {
     const mbps = (size * 8) / seconds / 1e6;
     process.stdout.write(
       `\r[render] ${name} 100% · ${humanSize(size)} · ${mbps.toFixed(2)} Mbps ` +
-        `(target ${preset.videoBitrate})\n`,
+        `(${preset.crf ? `crf ${preset.crf}` : `target ${preset.videoBitrate}`})\n`,
     );
   }
 
