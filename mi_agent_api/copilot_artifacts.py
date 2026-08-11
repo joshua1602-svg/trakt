@@ -244,6 +244,8 @@ def _resolve_esma_xml(client_id: str) -> Optional[ResolvedArtifact]:
 # (server deploy) to ship a new downloadable artifact; the package never moves.
 # --------------------------------------------------------------------------- #
 register(ArtifactSpec(
+    # The governed capability owns this slug (``artefacts.ARTEFACT_INVESTOR_DECK``)
+    # and the Copilot route serves this type THROUGH it, so the two must agree.
     artifact_type="investor_deck", content_type=PPTX_MEDIA_TYPE,
     label="investor deck", resolve=_resolve_investor_deck,
     aliases=("investor deck", "investor pack", "deck", "presentation", "slides")))

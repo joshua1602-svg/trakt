@@ -46,6 +46,12 @@ logger = logging.getLogger("mi_agent_api.artefacts")
 
 CAPABILITY = "artefact.investor_pack.get"
 
+#: The artefact-type slug this capability produces. Shared with the Copilot
+#: artifact registry (``copilot_artifacts``), which registers the same slug, so
+#: the route that has to tell "is this the governed deck?" compares a name both
+#: sides own rather than a literal in the middle.
+ARTEFACT_INVESTOR_DECK = "investor_deck"
+
 
 @dataclass(frozen=True)
 class ResolvedArtefact:
@@ -149,7 +155,7 @@ def get_investor_pack(
             size = None
 
         artefact = ResolvedArtefact(
-            artefact_type="investor_deck", local_path=Path(path),
+            artefact_type=ARTEFACT_INVESTOR_DECK, local_path=Path(path),
             download_name=download_name, content_type=PPTX_MEDIA_TYPE,
             tenant_id=context.tenant_id, portfolio_id=authorised.portfolio_id,
             period=latest.get("period") if period is None else period,

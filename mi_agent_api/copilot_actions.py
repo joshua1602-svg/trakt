@@ -74,7 +74,7 @@ from .copilot_auth import copilot_auth_guard
 from .copilot_text import normalise_payload, normalise_text
 from .data_source import data_source_kind, data_source_label
 from . import artefacts as artefacts_mod
-from . import decks as decks_mod
+from . import copilot_artifacts as artifacts_registry
 from . import copilot_package
 from . import copilot_workspace
 from . import identity as identity_mod
@@ -468,34 +468,19 @@ def ask_trakt_mi(req: CopilotMiQueryRequest, request: Request):
                503: {"model": CopilotError}},
     dependencies=[Depends(copilot_auth_guard)],
 )
-def get_latest_investor_deck(request: Request):
-    # The SAME governed artefact capability the React deck route calls: tenant
-    # from the validated context, portfolio authorised before any path is built.
-    # The signed download token is minted only after that authorisation succeeds.
+def get_latest_artifact(request: Request, artifactType: str):
+    # Identity first, exactly as before: the tenant comes from the validated
+    # context, never from a caller parameter, and no artefact path is built for
+    # a caller whose identity did not resolve.
     context = identity_mod.context_from_copilot_principal(
         getattr(request.state, "copilot_principal", None),
         tenant_id=_copilot_client_id(),
         request_id=request.headers.get("x-request-id") or None,
     )
-    result = artefacts_mod.get_investor_pack(context)
-    if not result.ok:
-        return JSONResponse(status_code=result.http_status,
-                            content=presenters.to_copilot_error(result))
 
-    artefact = result.result
-    token, expires = make_download_token("deck", context.tenant_id)
-    return CopilotArtifactInfo(
-        artifactType=artefact.artefact_type,
-        fileName=artefact.download_name,
-        contentType=artefact.content_type,
-        sizeBytes=artefact.size_bytes,
-        clientId=artefact.tenant_id,
-        reportingPeriod=artefact.period,
-        generatedAt=artefact.generated_at,
-        downloadUrl=_download_url(request, token),
-        downloadExpiresAt=expires,
-    )
-
+    # The registry decides what the requested type IS — including normalising a
+    # natural phrase the model may have passed ("Investor Deck"). An unknown
+    # type is refused here, before any resolver runs.
     spec = artifacts_registry.lookup(artifactType)
     if spec is None:
         available = ", ".join(artifacts_registry.available_types())
@@ -503,7 +488,35 @@ def get_latest_investor_deck(request: Request):
             404, f"'{artifactType}' is not a Trakt artifact type. "
                  f"Available types: {available}.")
 
-    client_id = _copilot_client_id()
+    # The investor deck keeps its GOVERNED path: artefacts.get_investor_pack
+    # runs the scope check, portfolio authorisation and audit emission that the
+    # React deck route runs, and the signed token is minted only after that
+    # authorisation succeeds. The registry resolver for this type would locate
+    # the same file with none of those controls, so the deck must not be served
+    # through it.
+    if spec.artifact_type == artefacts_mod.ARTEFACT_INVESTOR_DECK:
+        result = artefacts_mod.get_investor_pack(context)
+        if not result.ok:
+            return JSONResponse(status_code=result.http_status,
+                                content=presenters.to_copilot_error(result))
+        artefact = result.result
+        token, expires = make_download_token(spec.artifact_type,
+                                             context.tenant_id)
+        return CopilotArtifactInfo(
+            artifactType=artefact.artefact_type,
+            fileName=artefact.download_name,
+            contentType=artefact.content_type,
+            sizeBytes=artefact.size_bytes,
+            clientId=artefact.tenant_id,
+            reportingPeriod=artefact.period,
+            generatedAt=artefact.generated_at,
+            downloadUrl=_download_url(request, token),
+            downloadExpiresAt=expires,
+        )
+
+    # Every other registered type: the trusted tenant selects the artefact, so
+    # a caller still cannot reach another client's file by naming one.
+    client_id = context.tenant_id
     try:
         resolved = spec.resolve(client_id)
     except Exception as exc:  # noqa: BLE001 - storage fault → explicit 503

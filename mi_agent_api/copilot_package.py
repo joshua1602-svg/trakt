@@ -26,7 +26,7 @@ logger = logging.getLogger("mi_agent_api.copilot")
 #: The package version THIS backend build ships / expects. Keep in lock-step with
 #: deploy/copilot-agent/manifest.json ("version") and trakt-copilot-openapi.yaml
 #: ("info.version").
-COPILOT_PACKAGE_VERSION = "2.0.0"
+COPILOT_PACKAGE_VERSION = "3.0.0"
 
 #: Header the shipped package sends on every request (see the OpenAPI spec).
 PACKAGE_VERSION_HEADER = "X-Trakt-Package-Version"
