@@ -1,8 +1,6 @@
 import { DemoPlayer } from "@/components/site/DemoPlayer";
-import { LensSwitcher } from "@/components/site/LensSwitcher";
 import { Reveal } from "@/components/site/Reveal";
 import { Card, SectionHeading, cx } from "@/components/ui";
-import type { DemoScopeInfo } from "@/types/demo";
 
 /**
  * The static marketing sections: platform architecture, risk & controls
@@ -20,14 +18,20 @@ import type { DemoScopeInfo } from "@/types/demo";
 /* Platform — build the portfolio once, use it everywhere                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Step 2 carries no body: "mapped, validated and traceable" duplicated the
+ * Governance cards, which state the same properties with evidence behind
+ * them. The resulting empty middle box is a layout question, handled at
+ * Stage 4 — not by restoring the copy.
+ */
 const FLOW = [
   {
     title: "Data and documents",
-    copy: "Loan tapes, servicing data, valuations and facility documents.",
+    copy: "Loan tapes, servicing data, valuations, facility documents.",
   },
   {
     title: "One governed portfolio layer",
-    copy: "Mapped, validated and traceable.",
+    copy: null,
   },
 ] as const;
 
@@ -58,11 +62,10 @@ export function Architecture() {
           <li key={step.title} className="relative">
             <Reveal delay={index * 60} className="h-full">
               <Card className="h-full">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
-                  Step {index + 1}
-                </p>
-                <h3 className="mt-2 text-[15px] font-semibold text-ink-100">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-400">{step.copy}</p>
+                <h3 className="text-[15px] font-semibold text-ink-100">{step.title}</h3>
+                {step.copy ? (
+                  <p className="mt-2 text-sm leading-relaxed text-ink-400">{step.copy}</p>
+                ) : null}
               </Card>
             </Reveal>
             <span
@@ -77,10 +80,7 @@ export function Architecture() {
         <li>
           <Reveal delay={120} className="h-full">
             <Card className="h-full">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
-                Step 3
-              </p>
-              <h3 className="mt-2 text-[15px] font-semibold text-ink-100">Every output</h3>
+              <h3 className="text-[15px] font-semibold text-ink-100">Every output</h3>
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {OUTPUTS.map((output) => (
                   <li
@@ -107,11 +107,13 @@ export function ForwardControls() {
   return (
     <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-x-8">
       <Reveal className="lg:col-span-6">
+        {/* The deleted intro said what the demo shows: "structure
+            requirements once" is its first eight seconds, and the three
+            evaluation bases are its final frame. The demo is the home. */}
         <SectionHeading
           id="controls"
           eyebrow="Risk & controls"
           title="Turn portfolio requirements into live controls."
-          intro="Structure covenant and concentration requirements once. Trakt monitors them against the funded book, forecast and pipeline — showing today's position and emerging breaches."
         />
         <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
           Know what is breached today — and what the portfolio is moving toward.
@@ -132,7 +134,7 @@ export function ForwardControls() {
           webmSrc="/controls-demo.webm"
           mp4Src="/controls-demo.mp4"
           description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
-          caption="From documented requirement to live monitoring. Figures illustrative."
+          caption="From documented requirement to live monitoring."
           fallback={<ControlPreview />}
         />
       </Reveal>
@@ -234,22 +236,21 @@ export function ControlPreview() {
 /* Portfolio operating model                                                  */
 /* -------------------------------------------------------------------------- */
 
-export function Lenses({ scope }: { scope: DemoScopeInfo }) {
+/**
+ * A full-width statement with no right-hand visual. The scope card was the
+ * third appearance of the same four figures, and the book names it listed
+ * are already visible in the query demo's table two sections above.
+ */
+export function Lenses() {
   return (
-    <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-x-8">
-      <Reveal className="lg:col-span-6">
-        <SectionHeading
-          id="lenses"
-          eyebrow="Operating model"
-          title="One portfolio truth. Every relevant lens."
-          intro="Origination books, acquired portfolios and funding vehicles sit in one governed model — individually reportable and consolidated, without separate datasets to reconcile."
-        />
-      </Reveal>
-
-      <Reveal delay={60} className="lg:col-span-6">
-        <LensSwitcher scope={scope} />
-      </Reveal>
-    </div>
+    <Reveal>
+      <SectionHeading
+        id="lenses"
+        eyebrow="Operating model"
+        title="One portfolio truth. Every relevant lens."
+        intro="One model. No separate datasets to reconcile."
+      />
+    </Reveal>
   );
 }
 
@@ -313,8 +314,10 @@ export function DeliveryStrip() {
           {surface.name}
         </span>
       ))}
-      <span className="basis-full text-[12px] text-ink-400 sm:basis-auto">
-        Approved risk findings can also be delivered proactively into Teams.
+      {/* The section's single body line. Push, not pull — that is the claim,
+          and "approved" is what keeps it governed. */}
+      <span className="basis-full text-[12px] text-ink-300 sm:basis-auto">
+        Approved risk findings are pushed to Teams.
       </span>
     </div>
   );
@@ -436,14 +439,11 @@ export function Governance() {
         ))}
       </ul>
 
-      {/* Two short sentences, not one long one — the mobile column is
-          narrow, and neither claim needs the other to stand. */}
+      {/* One line, answering the extensibility objection. The agentic
+          direction is cut: the Delivery Model tiles show it, in grey. */}
       <Reveal delay={120}>
         <p className="mt-8 max-w-3xl text-sm leading-relaxed text-ink-500">
-          Built on a common canonical model with asset-specific configuration — new
-          lending asset classes are added through configuration, not a rebuild.
-          Designed to extend from user-directed workflows toward increasingly agentic
-          operation, under the same controls.
+          New asset classes are added through configuration, not a rebuild.
         </p>
       </Reveal>
     </>

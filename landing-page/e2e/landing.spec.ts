@@ -215,7 +215,9 @@ test.describe("Trakt landing page", () => {
 
     // The illustrative provenance is DOM text, not only pixels in the video.
     await expect(controls.getByText(/from documented requirement to live monitoring/i)).toBeVisible();
-    await expect(controls.getByText(/figures illustrative/i)).toBeVisible();
+    // The film burns "Illustrative · synthetic data" into every frame, so the
+    // caption no longer repeats it.
+    await expect(controls.getByText(/figures illustrative/i)).toHaveCount(0);
   });
 
   test("reduced-motion visitors see no motion until they ask for it", async ({ page }) => {
@@ -244,29 +246,21 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator("main")).not.toContainText(/instant/i);
   });
 
-  test("the lens switcher recomputes the same rows under each lens", async ({ page }) => {
+  test("the operating model is a full-width statement, not a third figure card", async ({
+    page,
+  }) => {
     const lenses = page.locator("#lenses");
     await lenses.scrollIntoViewIfNeeded();
 
     await expect(
       lenses.getByRole("heading", { name: /one portfolio truth\. every relevant lens\./i }),
     ).toBeVisible();
-    await expect(lenses).toContainText(/individually reportable and consolidated/i);
+    await expect(lenses.getByText("One model. No separate datasets to reconcile.")).toBeVisible();
 
-    // Default lens: the consolidated sponsor scope, summed from the very rows
-    // on screen — and it reconciles to the governed total to the penny.
-    await expect(lenses.getByText("£37,270,061")).toBeVisible();
-    await expect(lenses.getByText("SPV1 Sponsored Securitisation")).toBeVisible();
-    await expect(lenses.getByText("sold", { exact: true })).toBeVisible();
-
-    // Narrowing the lens recomputes the total over the same rows: the value
-    // appears twice — once on the book row, once as the recomputed total.
-    await lenses.getByRole("button", { name: "Acquired" }).click();
-    await expect(lenses.getByText("£11,974,544")).toHaveCount(2);
-    await lenses.getByRole("button", { name: "Origination" }).click();
-    await expect(lenses.getByText("£15,432,544")).toHaveCount(2);
-    await lenses.getByRole("button", { name: "Sponsor total" }).click();
-    await expect(lenses.getByText("£37,270,061")).toBeVisible();
+    // The scope card is gone: no visual, no repeated figures, no controls.
+    await expect(lenses.getByText("£37,270,061")).toHaveCount(0);
+    await expect(lenses.getByRole("button")).toHaveCount(0);
+    await expect(lenses.locator("img, video")).toHaveCount(0);
   });
 
   test("the delivery model is five static tiles, with nothing to open", async ({ page }) => {
@@ -317,11 +311,14 @@ test.describe("Trakt landing page", () => {
       await expect(governance.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
     await expect(governance.getByText(/microsoft entra id/i)).toBeVisible();
-    // Asset extensibility is an architecture claim, never a coverage claim,
-    // and the agentic direction is design intent, never live capability.
-    await expect(governance.getByText(/asset-specific configuration/i)).toBeVisible();
+    // Extensibility survives as one line answering the objection; it is an
+    // architecture claim, never a coverage claim. The agentic direction is
+    // cut — the Delivery Model tiles show it in grey instead.
+    await expect(
+      governance.getByText("New asset classes are added through configuration, not a rebuild."),
+    ).toBeVisible();
     await expect(governance).not.toContainText(/every asset class/i);
-    await expect(governance.getByText(/toward increasingly agentic operation/i)).toBeVisible();
+    await expect(governance).not.toContainText(/agentic/i);
     await expect(governance).not.toContainText(/roadmap/i);
     await expect(governance).not.toContainText(/autonomous/i);
 
@@ -366,6 +363,10 @@ test.describe("Trakt landing page", () => {
     // naming, no imitation product logos.
     await expect(intelligence.locator("span:has(> svg)")).toHaveCount(3);
     await expect(intelligence.getByText("Available today")).toBeVisible();
+    // The section's single body line: push, not pull, and governed by approval.
+    await expect(
+      intelligence.getByText("Approved risk findings are pushed to Teams."),
+    ).toBeVisible();
     // The query demo lives in section 2 — no duplicate here.
     await expect(intelligence.locator("#example")).toHaveCount(0);
     await expect(intelligence.locator("video")).toHaveCount(0);

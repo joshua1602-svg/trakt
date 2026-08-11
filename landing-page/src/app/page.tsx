@@ -86,18 +86,19 @@ export default function Page() {
 
         {/* 5 — Multiple books, vehicles and scopes. */}
         <Section id="lenses" className="pb-16 sm:pb-20">
-          <Lenses scope={meta.scope} />
+          <Lenses />
         </Section>
 
         {/* 6 — Where users reach it. Distribution only — the query demo has
             already appeared in section 2. */}
         <Section id="intelligence" className="pb-16 sm:pb-20">
           <Reveal>
+            {/* The deleted intro restated the query-demo section's own intro
+                and named the same three channels the chips below name. */}
             <SectionHeading
               id="intelligence"
               eyebrow="Portfolio intelligence"
               title="Portfolio intelligence where your team already works."
-              intro="Ask portfolio questions in Trakt, Microsoft Teams or Microsoft 365 Copilot. Every answer runs against the same governed portfolio calculations and evidence."
             />
             <DeliveryStrip />
           </Reveal>
