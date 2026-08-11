@@ -1,4 +1,6 @@
 import { DemoPlayer } from "@/components/site/DemoPlayer";
+import { LensSwitcher } from "@/components/site/LensSwitcher";
+import { Reveal } from "@/components/site/Reveal";
 import { Card, SectionHeading, cx } from "@/components/ui";
 import type { DemoScopeInfo } from "@/types/demo";
 
@@ -42,23 +44,27 @@ const OUTPUTS = [
 export function Architecture() {
   return (
     <>
-      <SectionHeading
-        id="platform"
-        eyebrow="The platform"
-        title="Build the portfolio once. Use it everywhere."
-      />
+      <Reveal>
+        <SectionHeading
+          id="platform"
+          eyebrow="The platform"
+          title="Build the portfolio once. Use it everywhere."
+        />
+      </Reveal>
 
       {/* The diagram carries the explanation — no paragraph above or below. */}
       <ol className="mt-9 grid gap-4 lg:grid-cols-3">
         {FLOW.map((step, index) => (
           <li key={step.title} className="relative">
-            <Card className="h-full">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
-                Step {index + 1}
-              </p>
-              <h3 className="mt-2 text-[15px] font-semibold text-ink-100">{step.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-400">{step.copy}</p>
-            </Card>
+            <Reveal delay={index * 60} className="h-full">
+              <Card className="h-full">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
+                  Step {index + 1}
+                </p>
+                <h3 className="mt-2 text-[15px] font-semibold text-ink-100">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-400">{step.copy}</p>
+              </Card>
+            </Reveal>
             <span
               aria-hidden="true"
               className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-peri-500 lg:-right-3 lg:bottom-auto lg:left-auto lg:top-1/2 lg:-translate-y-1/2 lg:translate-x-0"
@@ -69,22 +75,24 @@ export function Architecture() {
           </li>
         ))}
         <li>
-          <Card className="h-full">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
-              Step 3
-            </p>
-            <h3 className="mt-2 text-[15px] font-semibold text-ink-100">Every output</h3>
-            <ul className="mt-3 flex flex-wrap gap-1.5">
-              {OUTPUTS.map((output) => (
-                <li
-                  key={output}
-                  className="rounded-full border border-line bg-navy-850 px-2.5 py-1 text-[11px] font-medium text-ink-300"
-                >
-                  {output}
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <Reveal delay={120} className="h-full">
+            <Card className="h-full">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
+                Step 3
+              </p>
+              <h3 className="mt-2 text-[15px] font-semibold text-ink-100">Every output</h3>
+              <ul className="mt-3 flex flex-wrap gap-1.5">
+                {OUTPUTS.map((output) => (
+                  <li
+                    key={output}
+                    className="rounded-full border border-line bg-navy-850 px-2.5 py-1 text-[11px] font-medium text-ink-300"
+                  >
+                    {output}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </Reveal>
         </li>
       </ol>
     </>
@@ -97,8 +105,8 @@ export function Architecture() {
 
 export function ForwardControls() {
   return (
-    <div className="grid items-center gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-14">
-      <div>
+    <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-x-8">
+      <Reveal className="lg:col-span-6">
         <SectionHeading
           id="controls"
           eyebrow="Risk & controls"
@@ -108,9 +116,9 @@ export function ForwardControls() {
         <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
           Know what is breached today — and what the portfolio is moving toward.
         </p>
-      </div>
+      </Reveal>
 
-      <div>
+      <Reveal delay={60} className="lg:col-span-6">
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-peri-400">
           Risk &amp; controls demo
         </p>
@@ -127,7 +135,7 @@ export function ForwardControls() {
           caption="From documented requirement to live monitoring. Figures illustrative."
           fallback={<ControlPreview />}
         />
-      </div>
+      </Reveal>
     </div>
   );
 }
@@ -201,7 +209,7 @@ export function ControlPreview() {
               </div>
               <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-navy-850">
                 <div
-                  className={cx("h-full rounded-full", TONE_FILL[state.tone])}
+                  className={cx("animate-bar h-full rounded-full", TONE_FILL[state.tone])}
                   style={{ width: `${(state.value / CONTROL_SCALE) * 100}%` }}
                 />
                 <div
@@ -228,64 +236,19 @@ export function ControlPreview() {
 
 export function Lenses({ scope }: { scope: DemoScopeInfo }) {
   return (
-    <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
-      <SectionHeading
-        id="lenses"
-        eyebrow="Operating model"
-        title="One portfolio truth. Every relevant lens."
-        intro="Origination books, acquired portfolios and funding vehicles sit in one governed model — individually reportable and consolidated, without separate datasets to reconcile."
-      />
+    <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-x-8">
+      <Reveal className="lg:col-span-6">
+        <SectionHeading
+          id="lenses"
+          eyebrow="Operating model"
+          title="One portfolio truth. Every relevant lens."
+          intro="Origination books, acquired portfolios and funding vehicles sit in one governed model — individually reportable and consolidated, without separate datasets to reconcile."
+        />
+      </Reveal>
 
-      <LensPreview scope={scope} />
-    </div>
-  );
-}
-
-/**
- * A static recreation of the portfolio scope selector, using this platform's
- * real figures from the demo pack — the same governed books the query demo
- * answers from.
- */
-function LensPreview({ scope }: { scope: DemoScopeInfo }) {
-  return (
-    <div
-      className="rounded-2xl border border-line bg-navy-900/80 p-4 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)] sm:p-5"
-      role="img"
-      aria-label="Preview of the portfolio scope selector: consolidated view and individual governed books"
-    >
-      <p className="border-b border-line pb-3 text-xs font-medium text-ink-300">
-        Portfolio scope
-      </p>
-
-      <ul className="space-y-1.5 pt-4">
-        <li className="flex items-baseline justify-between gap-3 rounded-lg border border-peri-500/60 bg-navy-850 px-3 py-2">
-          <p className="text-[12px] font-semibold text-ink-100">Consolidated platform</p>
-          <p className="shrink-0 text-[13px] font-semibold tabular-nums text-ink-100">
-            {scope.totalBalanceDisplay}
-          </p>
-        </li>
-        {scope.books.map((book) => (
-          <li
-            key={book.id}
-            className="flex items-baseline justify-between gap-3 rounded-lg border border-line-soft bg-navy-900/60 px-3 py-2"
-          >
-            <p className="min-w-0 text-[12px] text-ink-300">
-              {book.label}
-              {book.balanceSheetStatus === "sold" ? (
-                <span className="ml-1.5 text-[10px] text-amber-400">sold</span>
-              ) : null}
-            </p>
-            <p className="shrink-0 text-[13px] font-semibold tabular-nums text-ink-200">
-              {book.balanceDisplay}
-            </p>
-          </li>
-        ))}
-      </ul>
-
-      <p className="mt-3 flex flex-wrap gap-x-2 border-t border-line-soft pt-2 text-[10px] text-ink-500">
-        <span>As at {scope.asOfDisplay}</span>
-        <span>· Synthetic portfolio</span>
-      </p>
+      <Reveal delay={60} className="lg:col-span-6">
+        <LensSwitcher scope={scope} />
+      </Reveal>
     </div>
   );
 }
@@ -375,32 +338,40 @@ const GOVERNANCE_PROPERTIES = [
 export function Governance() {
   return (
     <>
-      <SectionHeading
-        id="governance"
-        eyebrow="Governance"
-        title="Deterministic underneath. Governed throughout."
-      />
-      <p className="mt-4 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
-        Every figure is reconciled by construction rather than by comparison.
-      </p>
+      <Reveal>
+        <SectionHeading
+          id="governance"
+          eyebrow="Governance"
+          title="Deterministic underneath. Governed throughout."
+        />
+        <p className="mt-4 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
+          Every figure is reconciled by construction rather than by comparison.
+        </p>
+      </Reveal>
 
       <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {GOVERNANCE_PROPERTIES.map((property) => (
-          <Card as="li" key={property.title} className="flex flex-col">
-            <h3 className="text-[15px] font-semibold text-ink-100">{property.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-ink-400">{property.copy}</p>
-          </Card>
+        {GOVERNANCE_PROPERTIES.map((property, index) => (
+          <li key={property.title}>
+            <Reveal delay={index * 60} className="h-full">
+              <Card className="flex h-full flex-col">
+                <h3 className="text-[15px] font-semibold text-ink-100">{property.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-400">{property.copy}</p>
+              </Card>
+            </Reveal>
+          </li>
         ))}
       </ul>
 
       {/* Two short sentences, not one long one — the mobile column is
           narrow, and neither claim needs the other to stand. */}
-      <p className="mt-8 max-w-3xl text-sm leading-relaxed text-ink-500">
-        Built on a common canonical model with asset-specific configuration — new
-        lending asset classes are added through configuration, not a rebuild.
-        Designed to extend from user-directed workflows toward increasingly agentic
-        operation, under the same controls.
-      </p>
+      <Reveal delay={120}>
+        <p className="mt-8 max-w-3xl text-sm leading-relaxed text-ink-500">
+          Built on a common canonical model with asset-specific configuration — new
+          lending asset classes are added through configuration, not a rebuild.
+          Designed to extend from user-directed workflows toward increasingly agentic
+          operation, under the same controls.
+        </p>
+      </Reveal>
     </>
   );
 }

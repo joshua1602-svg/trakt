@@ -35,7 +35,9 @@ interface QueryBody {
   portfolioId?: unknown;
 }
 
-const PORTFOLIO_SCOPE = `${demoPack.client.name} · ${demoPack.portfolio.id}`;
+// The client name alone: an internal portfolio identifier is provenance for
+// the deploy gate (the meta tag), not something a prospect should be reading.
+const PORTFOLIO_SCOPE = demoPack.client.name;
 
 function usage(used: number): DemoAnswerResponse["usage"] {
   return {

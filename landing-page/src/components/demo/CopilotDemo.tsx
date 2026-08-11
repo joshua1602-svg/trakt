@@ -327,32 +327,31 @@ export function CopilotDemo({
           </ul>
 
           {/* Refusal is the differentiator against every LLM wrapper in this
-              market, so it is stated rather than footnoted. */}
+              market — its own titled block, not small print, with the example
+              prompts as first-class buttons. */}
           {meta.exampleUnsupported.length > 0 ? (
-            <div className="mt-5 border-t border-line-soft pt-4">
-              <p className="text-[15px] font-semibold text-mint-400">
+            <section
+              aria-labelledby="refusal-heading"
+              className="mt-6 rounded-xl border border-mint-400/25 bg-navy-950/40 p-4 sm:p-5"
+            >
+              <h3 id="refusal-heading" className="text-lg font-semibold tracking-tight text-mint-400">
                 Trakt declines what it cannot derive.
-              </p>
-              <p className="mt-1.5 text-sm leading-relaxed text-ink-400">
-                Try{" "}
-                {meta.exampleUnsupported.map((example, index) => (
-                  <span key={example.id}>
-                    {index > 0 ? " or " : ""}
+              </h3>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {meta.exampleUnsupported.map((example) => (
+                  <li key={example.id}>
                     <button
                       type="button"
                       disabled={busy || outOfQuestions}
                       onClick={() => onSuggested(example.id, example.label)}
-                      /* Inline in a sentence: a button centres its own wrapped
-                         lines by default, which reads as ragged at phone width. */
-                      className="text-left underline decoration-dotted underline-offset-2 hover:text-ink-200 disabled:opacity-50"
+                      className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-mint-400/50 hover:text-ink-100 disabled:opacity-50"
                     >
-                      “{example.label}”
+                      {example.label}
                     </button>
-                  </span>
-                ))}{" "}
-                to see how.
-              </p>
-            </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
         </div>
       </div>
@@ -444,11 +443,11 @@ function AnswerView({
 
       {payload.status !== "limit_reached" ? (
         <footer className="mt-4 border-t border-line-soft pt-3">
+          {/* Provenance stays lean: the as-at date and the synthetic pill live
+              once, in the portfolio header above every answer. */}
           <p className="flex flex-wrap gap-x-3 gap-y-1 break-words text-[11px] text-ink-500">
             {payload.interpreted ? <span>{payload.interpreted}</span> : null}
-            <span>As at {payload.asOfDisplay}</span>
             <span>{payload.portfolioScope}</span>
-            <span className="text-amber-400">Synthetic portfolio</span>
           </p>
 
           {payload.followUps?.length ? (

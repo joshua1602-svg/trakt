@@ -6,11 +6,13 @@ import {
   Governance,
   Lenses,
 } from "@/components/site/Content";
+import { DeliveryAccordion } from "@/components/site/DeliveryAccordion";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
 import { LeadForm } from "@/components/site/LeadForm";
 import { Nav } from "@/components/site/Nav";
 import { QueryDemo } from "@/components/site/QueryDemo";
+import { Reveal } from "@/components/site/Reveal";
 import { Section, SectionHeading, buttonStyles } from "@/components/ui";
 import { buildMeta } from "@/lib/demo-pack";
 
@@ -52,18 +54,24 @@ export default function Page() {
         {/* 2 — Demo 1: portfolio query. The only demo surface for querying,
             and the only place the synthetic-portfolio disclaimer appears. */}
         <Section id="query-demo" className="pb-16 sm:pb-20">
-          <SectionHeading
-            id="query-demo"
-            eyebrow="Portfolio query demo"
-            title="Ask the portfolio. Get a governed answer."
-            intro="Ask portfolio questions in natural language and get answers from the same governed calculations, wherever your team works. The portfolios are wholly synthetic, and the page accepts no uploads."
-          />
-          <div id="example" className="mt-8 scroll-mt-24">
-            <QueryDemo meta={meta} />
-          </div>
-          <p className="mt-4 text-[13px] font-medium text-ink-300">
-            Same question. Same calculation. Same answer.
-          </p>
+          <Reveal>
+            <SectionHeading
+              id="query-demo"
+              eyebrow="Portfolio query demo"
+              title="Ask the portfolio. Get a governed answer."
+              intro="Ask portfolio questions in natural language and get answers from the same governed calculations, wherever your team works."
+            />
+          </Reveal>
+          <Reveal delay={60}>
+            <div id="example" className="mt-8 scroll-mt-24">
+              <QueryDemo meta={meta} />
+            </div>
+          </Reveal>
+          <Reveal delay={120}>
+            <p className="mt-4 text-[13px] font-medium text-ink-300">
+              Same question. Same calculation. Same answer.
+            </p>
+          </Reveal>
         </Section>
 
         {/* 3 — How does the platform work? */}
@@ -84,17 +92,34 @@ export default function Page() {
         {/* 6 — Where users reach it. Distribution only — the query demo has
             already appeared in section 2. */}
         <Section id="intelligence" className="pb-16 sm:pb-20">
-          <SectionHeading
-            id="intelligence"
-            eyebrow="Portfolio intelligence"
-            title="Portfolio intelligence where your team already works."
-            intro="Ask portfolio questions in Trakt, Microsoft Teams or Microsoft 365 Copilot. Every answer runs against the same governed portfolio calculations and evidence."
-          />
-          <DeliveryStrip />
+          <Reveal>
+            <SectionHeading
+              id="intelligence"
+              eyebrow="Portfolio intelligence"
+              title="Portfolio intelligence where your team already works."
+              intro="Ask portfolio questions in Trakt, Microsoft Teams or Microsoft 365 Copilot. Every answer runs against the same governed portfolio calculations and evidence."
+            />
+            <DeliveryStrip />
+          </Reveal>
         </Section>
 
-        {/* 7 — Why trust the outputs? Flows straight into the CTA:
-            onboarding detail belongs on a product page, not the homepage. */}
+        {/* 6b — The delivery model in depth: the page's one horizontal
+            accordion. The chips above name the channels; these panels say
+            what each mode does, live and roadmap kept visually distinct. */}
+        <Section id="delivery" className="pb-16 sm:pb-20">
+          <Reveal>
+            <SectionHeading
+              id="delivery"
+              eyebrow="Delivery model"
+              title="Every mode reads the same governed layer."
+            />
+          </Reveal>
+          <Reveal delay={60} className="mt-9">
+            <DeliveryAccordion />
+          </Reveal>
+        </Section>
+
+        {/* 7 — Why trust the outputs? */}
         <Section id="governance" className="pb-16 sm:pb-20">
           <Governance />
         </Section>
@@ -102,8 +127,8 @@ export default function Page() {
         {/* 8 — What next? */}
         <Section id="book-a-demo" className="pb-20 sm:pb-24">
           <div className="rounded-2xl border border-line bg-navy-900/70 p-6 sm:p-9">
-            <div className="grid gap-9 lg:grid-cols-[1fr_1.05fr] lg:gap-12">
-              <div>
+            <div className="grid gap-9 lg:grid-cols-12 lg:gap-x-8">
+              <div className="lg:col-span-6">
                 <h2
                   id="book-a-demo-heading"
                   className="text-balance text-2xl font-semibold tracking-tight text-ink-100 sm:text-3xl"
@@ -118,7 +143,7 @@ export default function Page() {
                   Explore the live demo
                 </a>
               </div>
-              <div>
+              <div className="lg:col-span-6">
                 <LeadForm />
               </div>
             </div>

@@ -939,8 +939,8 @@
         "sponsor total",
         "platform total"
       ],
-      "answer": "Across three governed books as at 30 June 2026, the platform carries £27,407,089 over 84 exposures on balance sheet. Including SPV1 — originated by the sponsor, securitised and sold, with servicing, risk retention and investor reporting retained — the sponsor reports on £37,270,061 over 118 exposures. Both totals are correct; they answer different questions, so Trakt returns both rather than choosing one.",
-      "interpreted": "Balance by source portfolio; platform and sponsor scopes",
+      "answer": "Both totals are correct — they answer different questions, so Trakt returns both rather than choosing one.",
+      "interpreted": null,
       "artifacts": [
         {
           "kind": "table",
@@ -984,7 +984,8 @@
               "book": "SPV1 Sponsored Securitisation",
               "status": "Sold and derecognised; servicing and reporting retained",
               "exposures": "34",
-              "balance": "£9,862,973"
+              "balance": "£9,862,973",
+              "tooltip": "Originated by the sponsor, securitised and sold; servicing, risk retention and investor reporting retained."
             },
             {
               "book": "Platform total (warehoused)",
