@@ -387,6 +387,7 @@ def get_loans(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
             f"This tape does not carry: {', '.join(sorted(explicit_unavailable))}.")
 
     # ---- ONE vectorised selection, no per-loan lookup -------------------- #
+    inv.telemetry.scanned(len(df))
     ids = df[LOAN_ID_FIELD].astype(str)
     matched = df.loc[ids.isin(ordered_ids), present]
     by_id: Dict[str, Dict[str, Any]] = {}
@@ -422,6 +423,7 @@ def get_loans(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
         else:
             loans = [assemble_loan(loan, model, include=include) for loan in loans]
 
+    inv.telemetry.returned(len(loans))
     snapshot_id = getattr(inv.snapshot, "snapshot_id", None)
     for loan in loans:
         # A pointer, not an envelope. The detail is what explain_values is for;

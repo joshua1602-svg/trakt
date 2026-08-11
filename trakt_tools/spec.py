@@ -33,6 +33,7 @@ from trakt_core.entitlement import AuthorisedResource
 from trakt_core.envelope import SnapshotRef
 
 from .schema import SchemaError, assert_supported_schema
+from .telemetry import ToolTelemetry
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,11 @@ class ToolInvocation:
     authorised: AuthorisedResource
     snapshot: Optional[SnapshotRef] = None
     dependencies: Any = None
+    #: The one mutable thing a handler is given. Handlers record what the call
+    #: cost — rows scanned, rows returned, cache outcomes — and the executor
+    #: publishes it. Threading a return value through every helper would put the
+    #: measurement in the way of the code being measured.
+    telemetry: "ToolTelemetry" = field(default_factory=lambda: ToolTelemetry())
 
     @property
     def tenant_id(self) -> str:

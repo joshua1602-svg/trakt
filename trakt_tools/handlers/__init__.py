@@ -17,8 +17,10 @@ from trakt_core.context import SCOPE_LOAN_READ, SCOPE_RISK_READ
 
 from ..registry import register
 from ..spec import ToolSpec
+from . import analysis as _analysis
 from . import covenants as _covenants
 from . import loans as _loans
+from . import movement as _movement
 from . import provenance as _provenance
 
 register(ToolSpec(
@@ -117,4 +119,157 @@ register(ToolSpec(
     handler=_provenance.explain_value,
 ))
 
-__all__ = ["_covenants", "_loans", "_provenance"]
+# --------------------------------------------------------------------------- #
+# Aggregate analysis. These exist so an agent stops answering population
+# questions by retrieving the population: an agent given only get_loans will
+# compute a weighted-average LTV in its own context window, and that answer has
+# no governed definition, no provenance and no reproducibility. Every one of
+# these wraps an EXISTING deterministic implementation — analytics_lib for the
+# maths, the concentration and period-change engines for the rest.
+# --------------------------------------------------------------------------- #
+register(ToolSpec(
+    name="portfolio_summary",
+    version="1.0.0",
+    description=(
+        "The headline shape of a portfolio in one call: loan count, total "
+        "balance, balance-weighted average LTV and interest rate, arrears, and "
+        "the composition by status, IFRS 9 stage, region and collateral type."),
+    agent_guidance=(
+        "Start here for any book you have not seen. It answers most first "
+        "questions in a single call, and tells you which dimensions are worth "
+        "stratifying. Never compute a portfolio average by retrieving loans."),
+    input_schema=_analysis.PORTFOLIO_SUMMARY_INPUT,
+    output_schema=_analysis.PORTFOLIO_SUMMARY_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_analysis.portfolio_summary,
+))
+
+register(ToolSpec(
+    name="stratify",
+    version="1.0.0",
+    description=(
+        "Break a portfolio down by one canonical dimension: loan count, balance, "
+        "balance share and optional balance-weighted averages per category, "
+        "ordered by balance."),
+    agent_guidance=(
+        "Use this for any 'by region', 'by product', 'by stage' question. It is "
+        f"bounded to {_analysis.MAX_GROUPS} categories and says so when it "
+        "truncates. Do not retrieve loans and group them yourself — the answer "
+        "would be yours rather than Trakt's."),
+    input_schema=_analysis.STRATIFY_INPUT,
+    output_schema=_analysis.STRATIFY_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_analysis.stratify,
+))
+
+register(ToolSpec(
+    name="concentration",
+    version="1.0.0",
+    description=(
+        "How concentrated a portfolio is in one dimension: the combined balance "
+        "and count share of the top-N groups, with the contributing groups."),
+    agent_guidance=(
+        "This reports the measured SHARE, not a pass or fail. Whether a share "
+        "breaches a limit is an operator-approved covenant test — call "
+        "evaluate_covenants for that, which carries the approved threshold, its "
+        "approver and its configuration version."),
+    input_schema=_analysis.CONCENTRATION_INPUT,
+    output_schema=_analysis.CONCENTRATION_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_analysis.concentration,
+))
+
+register(ToolSpec(
+    name="rank_loans",
+    version="1.0.0",
+    description=(
+        "The N loans at the top or bottom of a metric, as identifiers and the "
+        "ranked value — without retrieving the population. Reports how much of "
+        f"the book carries the metric at all. At most {_analysis.MAX_RANK} loans."),
+    agent_guidance=(
+        "This is how you find the loans worth looking at. Rank first, then call "
+        "get_loans ONCE with the identifiers you want to investigate. Never "
+        "retrieve a population to sort it yourself."),
+    input_schema=_analysis.RANK_LOANS_INPUT,
+    output_schema=_analysis.RANK_LOANS_OUTPUT,
+    required_capability=SCOPE_LOAN_READ,
+    handler=_analysis.rank_loans,
+))
+
+register(ToolSpec(
+    name="data_completeness",
+    version="1.0.0",
+    description=(
+        "How populated each canonical field is across a portfolio: populated "
+        "count, missing count and completeness percentage, worst first."),
+    agent_guidance=(
+        "The first diligence question about any tape: what is actually there. "
+        "Use 'max_completeness_pct' to see only the gaps. A field being absent "
+        "from the tape is different from being present and empty — this "
+        "distinguishes them."),
+    input_schema=_analysis.DATA_COMPLETENESS_INPUT,
+    output_schema=_analysis.DATA_COMPLETENESS_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_analysis.data_completeness,
+))
+
+register(ToolSpec(
+    name="list_validation_exceptions",
+    version="1.0.0",
+    description=(
+        "Which canonical fields failed or warned in this snapshot's validation, "
+        "with the rules that fired and the error counts. Field-level, which is "
+        "the grain validation is recorded at."),
+    agent_guidance=(
+        "Read 'lineage_available' first. When it is false, an empty list means "
+        "the validation outcome is UNKNOWN for this snapshot — it does not mean "
+        "the tape is clean."),
+    input_schema=_analysis.LIST_VALIDATION_EXCEPTIONS_INPUT,
+    output_schema=_analysis.LIST_VALIDATION_EXCEPTIONS_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_analysis.list_validation_exceptions,
+))
+
+# --------------------------------------------------------------------------- #
+# The two follow-up questions every governed figure provokes: which loans, and
+# has it moved. Both wrap the engines the React workspace already calls.
+# --------------------------------------------------------------------------- #
+register(ToolSpec(
+    name="covenant_drillthrough",
+    version="1.0.0",
+    description=(
+        "The loans contributing to one covenant or concentration test's "
+        "numerator, with the numerator and denominator they reconcile to."),
+    agent_guidance=(
+        "Call this after evaluate_covenants reports a breach, using the same "
+        "test_id and the same as_of_run_id. Check 'reconciles': when it is "
+        "false, the population and the reported figure disagree and you must not "
+        "attribute the figure to these loans. Do not reconstruct a covenant's "
+        "population yourself — it is defined by a registered metric, not by a "
+        "field comparison."),
+    input_schema=_movement.DRILLTHROUGH_INPUT,
+    output_schema=_movement.DRILLTHROUGH_OUTPUT,
+    required_capability=SCOPE_LOAN_READ,
+    handler=_movement.covenant_drillthrough,
+))
+
+register(ToolSpec(
+    name="period_change",
+    version="1.0.0",
+    description=(
+        "What changed between two governed reporting periods: metric movements, "
+        "distribution shifts and the balance bridge, with the period resolution "
+        "that says why the two periods are comparable."),
+    agent_guidance=(
+        "Use this for any 'has it got worse', 'since last quarter' or 'what "
+        "moved' question. Trakt resolves which periods are comparable — do NOT "
+        "compare a figure from one call against one you remember from another, "
+        "because the population may have changed between them. Read "
+        "'limitations' before quoting a movement."),
+    input_schema=_movement.PERIOD_CHANGE_INPUT,
+    output_schema=_movement.PERIOD_CHANGE_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_movement.period_change,
+))
+
+__all__ = ["_analysis", "_covenants", "_loans", "_movement", "_provenance"]

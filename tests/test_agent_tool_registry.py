@@ -243,9 +243,14 @@ def test_the_catalogue_is_narrowed_to_what_this_caller_can_actually_use():
     reasons about a refusal. Telling it only what it can use is the difference
     between a tool list and a capability statement."""
     entitled = trakt_tools.catalogue(_context([SCOPE_RISK_READ]))
-    assert [t["name"] for t in entitled["tools"]] == ["evaluate_covenants"]
+    names = {t["name"] for t in entitled["tools"]}
+    # Every tool published requires exactly the capability this caller holds.
+    assert {t["required_capability"] for t in entitled["tools"]} == {SCOPE_RISK_READ}
+    assert "evaluate_covenants" in names
+    # ...and the loan:read tools are absent, because this caller cannot use them.
+    assert not (names & {"get_loans", "get_loan", "explain_values", "rank_loans"})
 
-    # Holding a DIFFERENT capability hides the tool entirely.
+    # Holding a DIFFERENT capability hides them all.
     other = trakt_tools.catalogue(_context([SCOPE_MI_QUERY]))
     assert [t["name"] for t in other["tools"]] == []
 
@@ -260,12 +265,21 @@ def test_the_catalogue_publishes_the_closed_set_of_resources():
 
 def test_the_catalogue_publishes_full_json_schemas():
     payload = trakt_tools.catalogue(_context([SCOPE_RISK_READ]))
-    entry = payload["tools"][0]
+    # Named rather than indexed: the tool list grows, and a positional assertion
+    # would break every time it does without testing anything more.
+    entry = next(t for t in payload["tools"] if t["name"] == "evaluate_covenants")
     assert entry["input_schema"]["type"] == "object"
     assert "resource" in entry["input_schema"]["properties"]
     assert entry["input_schema"]["required"] == ["resource"]
     assert entry["output_schema"]["type"] == "object"
-    assert entry["agent_guidance"]
+
+    # Every published tool, not just this one, carries the full contract.
+    for tool in payload["tools"]:
+        assert tool["input_schema"]["type"] == "object", tool["name"]
+        assert tool["output_schema"]["type"] == "object", tool["name"]
+        assert tool["agent_guidance"], tool["name"]
+        assert tool["resource_argument"] in tool["input_schema"]["required"], (
+            tool["name"])
 
 
 # --------------------------------------------------------------------------- #

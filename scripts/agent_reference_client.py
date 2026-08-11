@@ -151,16 +151,33 @@ class ScriptedProvider:
 
     name = "scripted"
 
-    def __init__(self, resource: str):
+    def __init__(self, resource: str, tool: Optional[str] = None):
         self.resource = resource
+        #: Name one tool, or leave it unset to take the first the catalogue
+        #: offers that this provider can satisfy.
+        self.tool = tool
         self._done = False
 
     def next_call(self, tools: List[Dict[str, Any]],
                   history: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if self._done or not tools:
             return None
+        # The first tool the catalogue offers that this provider can actually
+        # satisfy — one whose only required argument is the resource. Reading
+        # that off the PUBLISHED schema rather than hard-coding a tool name is
+        # the point: a scripted client with no model still discovers what it may
+        # call, and adding a tool with more required arguments cannot break it.
+        callable_tools = [
+            t for t in tools
+            if set((t.get("input_schema") or {}).get("required") or ())
+            <= {t.get("resource_argument") or "resource"}]
+        if self.tool:
+            callable_tools = [t for t in callable_tools if t["name"] == self.tool]
+        if not callable_tools:
+            return None
         self._done = True
-        return {"tool": tools[0]["name"], "arguments": {"resource": self.resource}}
+        return {"tool": callable_tools[0]["name"],
+                "arguments": {"resource": self.resource}}
 
     def summarise(self, history: List[Dict[str, Any]]) -> str:
         lines = ["Scripted run — no model was involved.", ""]
@@ -286,9 +303,10 @@ class OpenAIProvider:
         return self._final or "(the model produced no closing narrative)"
 
 
-def build_provider(name: str, *, model: Optional[str], resource: str):
+def build_provider(name: str, *, model: Optional[str], resource: str,
+                   tool: Optional[str] = None):
     if name == "scripted":
-        return ScriptedProvider(resource)
+        return ScriptedProvider(resource, tool=tool)
     if name == "anthropic":
         return AnthropicProvider(model or "claude-sonnet-4-20250514")
     if name == "openai":
@@ -355,6 +373,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                         choices=("scripted", "anthropic", "openai"))
     parser.add_argument("--model", default=None,
                         help="Provider model id. Defaults per provider.")
+    parser.add_argument("--tool", default=None,
+                        help="scripted provider only: call this tool by name "
+                             "instead of the first one the catalogue offers.")
     parser.add_argument("--token", default=os.environ.get("TRAKT_AGENT_TOKEN"),
                         help="Entra bearer token. Omit when the deployment runs "
                              "TRAKT_AGENT_AUTH_MODE=disabled.")
@@ -364,7 +385,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     api = TraktAgentAPI(args.base_url, token=args.token)
     provider = build_provider(args.provider, model=args.model,
-                              resource=args.resource)
+                              resource=args.resource, tool=args.tool)
     record = run(api, provider, args.resource)
 
     if args.json:

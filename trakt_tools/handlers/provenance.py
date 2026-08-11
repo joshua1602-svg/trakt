@@ -383,6 +383,9 @@ def explain_values(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
     columns = ([LOAN_ID_FIELD]
                + [f for f in wanted_fields if f != LOAN_ID_FIELD]
                + [f for f in extra if f not in wanted_fields and f != LOAN_ID_FIELD])
+    inv.telemetry.scanned(len(df))
+    inv.telemetry.cached("lineage_index",
+                         "hit" if index is not None else "miss")
     ids = df[LOAN_ID_FIELD].astype(str)
     matched = df.loc[ids.isin(wanted_loans), columns]
 
@@ -422,6 +425,7 @@ def explain_values(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
                                       snapshot, resource_key,
                                       derivation=derivation))
 
+    inv.telemetry.returned(len(explanations))
     return {
         "resource": resource_key,
         "explanations": explanations,

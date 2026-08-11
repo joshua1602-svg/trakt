@@ -184,11 +184,11 @@ def test_an_external_agent_completes_the_whole_loop(live_server, caplog):
     # --- discover -------------------------------------------------------- #
     catalogue = api.list_tools()
     names = [t["name"] for t in catalogue["tools"]]
-    assert names == ["evaluate_covenants"]
+    assert "evaluate_covenants" in names
     assert catalogue["organisation_id"] == AGENT_ORG
     assert catalogue["resources"]["risk:read"] == [PORTFOLIO_A.key]
 
-    tool = catalogue["tools"][0]
+    tool = next(t for t in catalogue["tools"] if t["name"] == "evaluate_covenants")
     assert tool["input_schema"]["required"] == ["resource"]
     assert tool["version"]
 
@@ -254,7 +254,8 @@ def test_the_scripted_provider_completes_the_workflow_with_no_model(live_server)
     """
     client = _load_client_module()
     api = client.TraktAgentAPI(live_server)
-    provider = client.ScriptedProvider(PORTFOLIO_A.key)
+    provider = client.ScriptedProvider(PORTFOLIO_A.key,
+                                       tool="evaluate_covenants")
 
     record = client.run(api, provider, PORTFOLIO_A.key)
 

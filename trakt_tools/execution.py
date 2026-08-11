@@ -64,6 +64,7 @@ from trakt_core.resource import ResourceCatalogue
 from . import registry as registry_mod
 from .schema import validate
 from .spec import ToolInvocation, ToolSpec
+from .telemetry import ToolTelemetry
 
 logger = logging.getLogger("trakt_tools.execution")
 
@@ -109,6 +110,11 @@ class ToolDependencies:
     #: the governed output.
     lineage_index: Any = None
     lineage_index_path: Any = None
+    #: Test seams for the two engine-wrapping tools, for the same reason as
+    #: ``covenant_evaluator``: the governance ordering must be provable without a
+    #: portfolio on disk. Production leaves both unset.
+    drillthrough_evaluator: Any = None
+    period_change_analyser: Any = None
 
 
 def build_dependencies(
@@ -121,6 +127,8 @@ def build_dependencies(
     loan_frame_resolver: Any = None,
     lineage_index: Any = None,
     lineage_index_path: Any = None,
+    drillthrough_evaluator: Any = None,
+    period_change_analyser: Any = None,
 ) -> ToolDependencies:
     """Construct the dependency set for one execution.
 
@@ -144,6 +152,8 @@ def build_dependencies(
         loan_frame_resolver=loan_frame_resolver,
         lineage_index=lineage_index,
         lineage_index_path=lineage_index_path,
+        drillthrough_evaluator=drillthrough_evaluator,
+        period_change_analyser=period_change_analyser,
     )
 
 
@@ -334,8 +344,10 @@ def execute_governed_tool(
         notes=(approval.reason,) if approval.fixture else ())
 
     # ---- 6. the deterministic handler ------------------------------------- #
+    telemetry = ToolTelemetry(tool=spec.name)
     invocation = ToolInvocation(context=context, authorised=authorised,
-                                snapshot=snapshot, dependencies=deps)
+                                snapshot=snapshot, dependencies=deps,
+                                telemetry=telemetry)
     try:
         payload = spec.handler(args, invocation)
     except TraktError as err:
@@ -363,6 +375,13 @@ def execute_governed_tool(
 
     # ---- 7. envelope ------------------------------------------------------ #
     warnings = tuple(str(w) for w in (payload.get("warnings") or ()))
+    # What the call cost, published rather than only logged: a client agent
+    # cannot read Trakt's logs, and an agent that cannot see what its last call
+    # cost has no way to choose a cheaper next one.
+    payload["_telemetry"] = telemetry.emit(
+        duration_ms=int((time.monotonic() - t0) * 1000),
+        tenant_id=context.tenant_id, resource=resource_key or "",
+        request_id=context.request_id)
     result = GovernedResult(
         capability=capability,
         status=STATUS_SUCCESS,

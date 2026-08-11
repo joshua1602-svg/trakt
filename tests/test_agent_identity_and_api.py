@@ -346,10 +346,14 @@ def test_get_tools_publishes_the_schemas_and_the_permitted_resources(client):
     assert response.status_code == 200
     payload = response.json()
 
-    names = [t["name"] for t in payload["tools"]]
-    assert names == ["evaluate_covenants"]
+    names = {t["name"] for t in payload["tools"]}
+    assert "evaluate_covenants" in names
+    # Narrowed to this principal's single capability: nothing needing loan:read
+    # is offered to a caller that cannot use it.
+    assert {t["required_capability"] for t in payload["tools"]} == {SCOPE_RISK_READ}
+    assert not (names & {"get_loans", "explain_values", "rank_loans"})
 
-    tool = payload["tools"][0]
+    tool = next(t for t in payload["tools"] if t["name"] == "evaluate_covenants")
     assert tool["required_capability"] == SCOPE_RISK_READ
     assert tool["version"]
     assert tool["input_schema"]["required"] == ["resource"]

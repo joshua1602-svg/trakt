@@ -66,6 +66,197 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/concentration:
+    post:
+      operationId: invoke_concentration
+      summary: 'How concentrated a portfolio is in one dimension: the combined balance and count share
+        of the top-N groups, with the contributing groups'
+      description: 'How concentrated a portfolio is in one dimension: the combined balance and count share
+        of the top-N groups, with the contributing groups.
+
+
+        This reports the measured SHARE, not a pass or fail. Whether a share breaches a limit is an operator-approved
+        covenant test — call evaluate_covenants for that, which carries the approved threshold, its approver
+        and its configuration version.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How concentrated a portfolio is in one dimension: the top-N groups'' combined
+                share of balance and count.'
+              properties:
+                resource: &id001
+                  type: string
+                  description: The portfolio resource to analyse, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                dimension:
+                  type: string
+                  description: What to measure concentration in, e.g. 'borrower_identifier', 'geographic_region_collateral'.
+                top_n:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  description: How many leading groups to combine.
+                  default: 10
+                filters: &id006
+                  type:
+                  - object
+                  - 'null'
+                  description: 'Optional equality filters as {canonical_field: value} or {canonical_field:
+                    [values]}. Applied before aggregation.'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - dimension
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/covenant_drillthrough:
+    post:
+      operationId: invoke_covenant_drillthrough
+      summary: The loans contributing to one covenant or concentration test's numerator, with the numerator
+        and denominator they reconcile to
+      description: 'The loans contributing to one covenant or concentration test''s numerator, with the
+        numerator and denominator they reconcile to.
+
+
+        Call this after evaluate_covenants reports a breach, using the same test_id and the same as_of_run_id.
+        Check ''reconciles'': when it is false, the population and the reported figure disagree and you
+        must not attribute the figure to these loans. Do not reconstruct a covenant''s population yourself
+        — it is defined by a registered metric, not by a field comparison.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The loans contributing to ONE covenant or concentration test's numerator. Use
+                this after evaluate_covenants tells you a test is breached or close to its limit.
+              properties:
+                resource: &id005
+                  type: string
+                  description: The resource the test was evaluated against, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                test_id:
+                  type: string
+                  description: The test to drill into, as returned in evaluate_covenants' tests[].test_id.
+                as_of_run_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional governed run. Omit for the current approved reporting position.
+                    Use the SAME value you passed to evaluate_covenants, or the two will not reconcile.
+                  default: null
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  description: Rows to return, at most 500.
+                  default: 100
+              additionalProperties: false
+              required:
+              - resource
+              - test_id
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/data_completeness:
+    post:
+      operationId: invoke_data_completeness
+      summary: 'How populated each canonical field is across a portfolio: populated count, missing count
+        and completeness percentage, worst first'
+      description: 'How populated each canonical field is across a portfolio: populated count, missing
+        count and completeness percentage, worst first.
+
+
+        The first diligence question about any tape: what is actually there. Use ''max_completeness_pct''
+        to see only the gaps. A field being absent from the tape is different from being present and empty
+        — this distinguishes them.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How populated the canonical fields are across a portfolio. The first diligence
+                question about any tape: what is actually there.'
+              properties:
+                resource: *id001
+                fields:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical fields to report on. Omit for every field the tape carries.
+                  default: null
+                max_completeness_pct:
+                  type:
+                  - number
+                  - 'null'
+                  description: Report only fields populated at or below this percentage — the gaps, rather
+                    than the whole tape.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/agent/tools/evaluate_covenants:
     post:
       operationId: invoke_evaluate_covenants
@@ -151,7 +342,7 @@ paths:
               description: Return the evidence behind ONE value. For several values call explain_values
                 once instead.
               properties:
-                resource: &id001
+                resource: &id002
                   type: string
                   description: The resource the values were read from.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -207,7 +398,7 @@ paths:
               description: 'Return the evidence behind SEVERAL values in one call. This is the primitive:
                 to justify more than one figure, call this once rather than explain_value repeatedly.'
               properties:
-                resource: *id001
+                resource: *id002
                 requests:
                   type: array
                   minItems: 1
@@ -259,7 +450,7 @@ paths:
               description: Retrieve ONE loan you are already investigating. For several loans call get_loans
                 once instead — it is the same work in one request.
               properties:
-                resource: &id002
+                resource: &id003
                   type: string
                   description: The resource holding the loans, as '{tenant}/{kind}/{resource_id}'. Call
                     GET /v1/agent/tools to see the resources you may name.
@@ -267,7 +458,7 @@ paths:
                 loan_id:
                   type: string
                   description: The loan identifier.
-                fields: &id003
+                fields: &id004
                   type:
                   - array
                   - 'null'
@@ -339,7 +530,7 @@ paths:
               description: 'Retrieve several loans in ONE call. This is the primitive: to look at more
                 than one loan, call this once rather than get_loan repeatedly.'
               properties:
-                resource: *id002
+                resource: *id003
                 loan_ids:
                   type: array
                   items:
@@ -348,7 +539,7 @@ paths:
                   maxItems: 500
                   description: Loan identifiers, at most 500 per call. Results are returned in the order
                     requested.
-                fields: *id003
+                fields: *id004
                 shape:
                   type: string
                   enum:
@@ -373,6 +564,316 @@ paths:
               required:
               - resource
               - loan_ids
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/list_validation_exceptions:
+    post:
+      operationId: invoke_list_validation_exceptions
+      summary: Which canonical fields failed or warned in this snapshot's validation, with the rules that
+        fired and the error counts
+      description: 'Which canonical fields failed or warned in this snapshot''s validation, with the rules
+        that fired and the error counts. Field-level, which is the grain validation is recorded at.
+
+
+        Read ''lineage_available'' first. When it is false, an empty list means the validation outcome
+        is UNKNOWN for this snapshot — it does not mean the tape is clean.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Which canonical fields failed validation in this snapshot, with the rules that
+                failed and how many errors each raised.
+              properties:
+                resource: *id001
+                status:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                    enum:
+                    - failed
+                    - warning
+                    - passed
+                    - not_validated
+                  description: Which validation outcomes to return. Omit for failures and warnings only.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/period_change:
+    post:
+      operationId: invoke_period_change
+      summary: 'What changed between two governed reporting periods: metric movements, distribution shifts
+        and the balance bridge, with the period resolution that says why the two periods are comparable'
+      description: 'What changed between two governed reporting periods: metric movements, distribution
+        shifts and the balance bridge, with the period resolution that says why the two periods are comparable.
+
+
+        Use this for any ''has it got worse'', ''since last quarter'' or ''what moved'' question. Trakt
+        resolves which periods are comparable — do NOT compare a figure from one call against one you
+        remember from another, because the population may have changed between them. Read ''limitations''
+        before quoting a movement.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: What changed between two governed reporting periods, and why. Trakt resolves
+                which periods are comparable — do not compare figures you gathered from separate calls
+                yourself.
+              properties:
+                resource: *id005
+                fields:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical fields to analyse. Omit for the portfolio overview, which selects
+                    the fields that moved.
+                  default: null
+                as_of_run_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional end run. Omit for the current position.
+                  default: null
+                include_bridge:
+                  type: boolean
+                  description: Include the balance bridge — how the opening balance became the closing
+                    one (redemptions, additions, amortisation).
+                  default: true
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/portfolio_summary:
+    post:
+      operationId: invoke_portfolio_summary
+      summary: 'The headline shape of a portfolio in one call: loan count, total balance, balance-weighted
+        average LTV and interest rate, arrears, and the composition by status, IFRS 9 stage, region and
+        collateral type'
+      description: 'The headline shape of a portfolio in one call: loan count, total balance, balance-weighted
+        average LTV and interest rate, arrears, and the composition by status, IFRS 9 stage, region and
+        collateral type.
+
+
+        Start here for any book you have not seen. It answers most first questions in a single call, and
+        tells you which dimensions are worth stratifying. Never compute a portfolio average by retrieving
+        loans.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'The headline shape of a whole portfolio in ONE call: size, balance, weighted
+                averages, arrears and stage mix.'
+              properties:
+                resource: *id001
+                filters: *id006
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/rank_loans:
+    post:
+      operationId: invoke_rank_loans
+      summary: The N loans at the top or bottom of a metric, as identifiers and the ranked value — without
+        retrieving the population
+      description: 'The N loans at the top or bottom of a metric, as identifiers and the ranked value
+        — without retrieving the population. Reports how much of the book carries the metric at all. At
+        most 200 loans.
+
+
+        This is how you find the loans worth looking at. Rank first, then call get_loans ONCE with the
+        identifiers you want to investigate. Never retrieve a population to sort it yourself.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Find the N loans at the top or bottom of a metric WITHOUT retrieving the population.
+                Returns identifiers and the ranked value; follow up with one get_loans call for the ones
+                that matter.
+              properties:
+                resource: *id001
+                metric:
+                  type: string
+                  description: The canonical field to rank by, e.g. 'current_loan_to_value'.
+                direction:
+                  type: string
+                  enum:
+                  - highest
+                  - lowest
+                  description: Which end of the distribution.
+                  default: highest
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  description: How many loans to return (at most 200).
+                  default: 20
+                filters: *id006
+                include_fields:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Extra canonical fields to carry on each ranked loan. Keep it short — this
+                    is a shortlist, not a retrieval.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - metric
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/stratify:
+    post:
+      operationId: invoke_stratify
+      summary: 'Break a portfolio down by one canonical dimension: loan count, balance, balance share
+        and optional balance-weighted averages per category, ordered by balance'
+      description: 'Break a portfolio down by one canonical dimension: loan count, balance, balance share
+        and optional balance-weighted averages per category, ordered by balance.
+
+
+        Use this for any ''by region'', ''by product'', ''by stage'' question. It is bounded to 200 categories
+        and says so when it truncates. Do not retrieve loans and group them yourself — the answer would
+        be yours rather than Trakt''s.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Break a portfolio down by ONE dimension and return balance and count per category.
+                Use this instead of retrieving loans and grouping them yourself.
+              properties:
+                resource: *id001
+                dimension:
+                  type: string
+                  description: The canonical field to group by, e.g. 'geographic_region_collateral', 'account_status'.
+                weighted_metrics:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical fields to report as balance-weighted averages per category, e.g.
+                    ['current_loan_to_value'].
+                  default: null
+                filters: *id006
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  description: Maximum categories to return (at most 200).
+                  default: 50
+              additionalProperties: false
+              required:
+              - resource
+              - dimension
       responses:
         '200':
           description: The governed result.
@@ -460,7 +961,7 @@ components:
           - 'null'
         error:
           oneOf:
-          - &id004
+          - &id007
             type: object
             description: A governed failure. Branch on `code`, never on `message`.
             properties:
@@ -498,7 +999,7 @@ components:
       - status
       - request_id
       - tenant_id
-    TraktError: *id004
+    TraktError: *id007
     ToolDeclaration:
       type: object
       properties:
@@ -527,20 +1028,20 @@ components:
   responses:
     InvalidArguments:
       description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
-      content: &id005
+      content: &id008
         application/json:
           schema:
             $ref: '#/components/schemas/GovernedResult'
     Unauthorized:
       description: The bearer token is missing, invalid or expired.
-      content: *id005
+      content: *id008
     Forbidden:
       description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
         RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
-      content: *id005
+      content: *id008
     UnknownTool:
       description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
-      content: *id005
+      content: *id008
     Unavailable:
       description: The agent API or the governed data source is not available. Retryable.
-      content: *id005
+      content: *id008
