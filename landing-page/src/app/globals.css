@@ -50,6 +50,12 @@
  *           of any kind · anything that is neither synthetic nor a
  *           refusal
  *
+ *   EXCEPTION — interface previews. Inside a static depiction of product
+ *   UI (the control preview in the risk section), the product's own RAG
+ *   semantics apply: mint marks a passing evaluation, amber a warning
+ *   state, rose a projected breach. The preview is provenance-labelled
+ *   "Illustrative", so the page's own token meanings are not diluted.
+ *
  * Green and amber are complements, not a scale: green marks what has
  * been proven, amber marks where the demonstration stops. Neither ever
  * appears on a CTA, which stays periwinkle so both keep their meaning.

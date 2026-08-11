@@ -49,7 +49,7 @@ export default function OpengraphImage() {
               letterSpacing: -1.8,
             }}
           >
-            Portfolio intelligence.
+            One governed view.
           </div>
           <div
             style={{
@@ -60,16 +60,16 @@ export default function OpengraphImage() {
               letterSpacing: -1.8,
             }}
           >
-            Wherever you work.
+            Every lending portfolio.
           </div>
           <div style={{ color: "#b8c0d6", fontSize: 26, marginTop: 26, maxWidth: 880 }}>
-            Trusted answers, automated reporting and governed workflows for specialist
-            lending.
+            Monitoring, forecasting, covenant controls and reporting — from one
+            governed portfolio layer.
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 14 }}>
-          {["Microsoft 365 Copilot", "Teams", "Trakt Workspace", "Automated delivery"].map(
+          {["Portfolio MI", "Forecasting", "Risk & covenants", "Reporting", "M365 Copilot"].map(
             (channel) => (
               <div
                 key={channel}

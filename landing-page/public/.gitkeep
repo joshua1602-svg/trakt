@@ -1,6 +1,15 @@
 # Static assets served at the site root.
 #
-# Empty today. The demo video and its poster frame go here when the final asset
-# exists — see README.md § "Replacing the demo video". This file keeps the
-# directory in git so the Dockerfile's `COPY public ./public` succeeds on a
-# fresh clone.
+# controls-demo.webm / controls-demo.mp4 / controls-demo-poster.png — the
+# Risk & Controls demo loop, rendered by `demo-video`. WebM (VP9) is listed
+# first for Chromium/Firefox; the MP4 (H.264) covers Safari and iOS:
+#
+#   cd ../demo-video
+#   node scripts/render.mjs --preset=controls --preset=controls-webm
+#   node scripts/still-controls.mjs
+#   cp out/controls-demo.mp4 out/controls-demo.webm \
+#      out/controls-demo-poster.png ../landing-page/public/
+#
+# The composition lives at demo-video/src/landing/ControlsDemo.tsx and uses
+# the landing page's tokens. Regenerate both files together — the poster is a
+# frame of the same render, so it can never show something the loop does not.

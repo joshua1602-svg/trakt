@@ -79,7 +79,7 @@ describe("Hero", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: /one governed portfolio dataset\. every book, every report\./i,
+        name: /one governed view of your lending portfolios\./i,
       }),
     ).toBeInTheDocument();
     // The strongest sentence on the page leads, rather than being buried.
@@ -114,7 +114,7 @@ describe("Nav", () => {
   it("exposes the required destinations", () => {
     render(<Nav />);
     const nav = screen.getByRole("navigation", { name: /primary/i });
-    for (const label of ["Capabilities", "Delivery", "How it works", "Example"]) {
+    for (const label of ["Platform", "Controls", "Onboarding", "Intelligence"]) {
       expect(within(nav).getByRole("link", { name: label })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: /book a demo/i })).toBeInTheDocument();

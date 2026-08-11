@@ -1,10 +1,13 @@
 import { CopilotDemo } from "@/components/demo/CopilotDemo";
 import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
-  CapabilityStack,
-  DeliveryModel,
-  Lifecycle,
-  OperatingModel,
+  Architecture,
+  DeliveryStrip,
+  ForwardControls,
+  Governance,
+  Lenses,
+  Onboarding,
+  ReportingBand,
 } from "@/components/site/Content";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
@@ -22,9 +25,10 @@ import { buildMeta } from "@/lib/demo-pack";
  * client-side fetch and no layout shift. Interaction beyond that goes through
  * `/api/demo/*`.
  *
- * Seven sections, in the order a sceptical institutional reader asks their
- * questions: what is it, what does it do, how do I get it, how does it work,
- * when do I use it, show me, talk to me.
+ * Nine sections, in the order a sceptical institutional reader asks their
+ * questions: what is it, how does it fit together, what does it control, how
+ * do I get onto it, how does it scale across books, show me, why can I rely on
+ * it, what does it produce, talk to me.
  */
 export default function Page() {
   const meta = buildMeta();
@@ -45,41 +49,53 @@ export default function Page() {
           </Section>
         </div>
 
-        {/* 2 — Capabilities */}
-        <Section id="capabilities" className="pb-16 sm:pb-20">
-          <CapabilityStack />
+        {/* 2 — The platform: data + documents → governed layer → outputs */}
+        <Section id="platform" className="pb-16 sm:pb-20">
+          <Architecture />
         </Section>
 
-        {/* 3 — Delivery model */}
-        <Section id="delivery" className="pb-16 sm:pb-20">
-          <DeliveryModel />
+        {/* 3 — Controls and forward risk */}
+        <Section id="controls" className="pb-16 sm:pb-20">
+          <ForwardControls />
         </Section>
 
-        {/* 4 — How it works */}
-        <Section id="how-it-works" className="pb-16 sm:pb-20">
-          <OperatingModel />
+        {/* 4 — Governed onboarding */}
+        <Section id="onboarding" className="pb-16 sm:pb-20">
+          <Onboarding />
         </Section>
 
-        {/* 5 — Where it applies */}
-        <Section id="lifecycle" className="pb-16 sm:pb-20">
-          <Lifecycle />
+        {/* 5 — Multi-portfolio lenses */}
+        <Section id="lenses" className="pb-16 sm:pb-20">
+          <Lenses scope={meta.scope} />
         </Section>
 
-        {/* 6 — Example. The only demo surface on the page, and the only place
-            the synthetic-portfolio disclaimer appears. */}
-        <Section id="example" className="pb-16 sm:pb-20">
+        {/* 6 — Portfolio intelligence. The only demo surface on the page, and
+            the only place the synthetic-portfolio disclaimer appears. The
+            inner #example anchor is the hero CTA's landing point. */}
+        <Section id="intelligence" className="pb-16 sm:pb-20">
           <SectionHeading
-            id="example"
-            eyebrow="Example"
-            title="Ask a portfolio question. Get a governed answer."
-            intro="Three governed books across two reporting periods, answered by the deterministic engine that serves the workspace and Microsoft 365 Copilot. The portfolios are wholly synthetic, and the page accepts no uploads."
+            id="intelligence"
+            eyebrow="Portfolio intelligence"
+            title="Portfolio intelligence where your team already works."
+            intro="Ask portfolio questions in natural language — in the Trakt workspace, Microsoft Teams, or through Microsoft 365 Copilot. Move from a question to governed portfolio evidence without rebuilding the analysis. The portfolios are wholly synthetic, and the page accepts no uploads."
           />
-          <div className="mt-8">
+          <DeliveryStrip />
+          <div id="example" className="mt-8 scroll-mt-24">
             <CopilotDemo meta={meta} />
           </div>
         </Section>
 
-        {/* 7 — Contact */}
+        {/* 7 — Governance and platform properties */}
+        <Section id="governance" className="pb-16 sm:pb-20">
+          <Governance />
+        </Section>
+
+        {/* 8 — Reporting as an output, not the identity */}
+        <Section id="reporting" className="pb-16 sm:pb-20">
+          <ReportingBand />
+        </Section>
+
+        {/* 9 — Contact */}
         <Section id="book-a-demo" className="pb-20 sm:pb-24">
           <div className="rounded-2xl border border-line bg-navy-900/70 p-6 sm:p-9">
             <div className="grid gap-9 lg:grid-cols-[1fr_1.05fr] lg:gap-12">
@@ -91,7 +107,7 @@ export default function Page() {
                   See Trakt applied to your operating model
                 </h2>
                 <p className="mt-4 text-[15px] leading-relaxed text-ink-300">
-                  We will demonstrate Trakt against your own portfolio data, reporting
+                  We will demonstrate Trakt against your own portfolios, funding
                   requirements and Microsoft 365 environment.
                 </p>
               </div>

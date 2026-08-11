@@ -17,6 +17,7 @@ import React from "react";
 import { Composition } from "remotion";
 
 import Film from "./Film";
+import ControlsDemo, { CONTROLS_DEMO } from "./landing/ControlsDemo";
 import { FPS, totalFrames } from "./timeline";
 import theme from "./theme";
 
@@ -41,6 +42,17 @@ export const RemotionRoot: React.FC = () => (
       width={theme.layout.square.width}
       height={theme.layout.square.height}
       defaultProps={{ layout: "square" as const }}
+    />
+    {/* The landing page's Risk & Controls loop — its own theme (the landing
+        page's tokens, not the film's), registered here to reuse the render
+        pipeline. See src/landing/ControlsDemo.tsx. */}
+    <Composition
+      id={CONTROLS_DEMO.id}
+      component={ControlsDemo}
+      durationInFrames={CONTROLS_DEMO.duration}
+      fps={CONTROLS_DEMO.fps}
+      width={CONTROLS_DEMO.width}
+      height={CONTROLS_DEMO.height}
     />
   </>
 );

@@ -62,6 +62,14 @@ describe("resolveQuestion — period-on-period", () => {
     expect(result.kind).toBe("intent");
     if (result.kind === "intent") expect(result.id).toBe("annex_exceptions");
   });
+
+  it("routes the regime-agnostic suggested question to the same intent", () => {
+    // The homepage chip is regime-neutral; the capability underneath is not
+    // reduced — both phrasings resolve to the same reconciliation.
+    const result = resolveQuestion("show the current reporting validation exceptions");
+    expect(result.kind).toBe("intent");
+    if (result.kind === "intent") expect(result.id).toBe("annex_exceptions");
+  });
 });
 
 describe("resolveQuestion — controlled refusals", () => {

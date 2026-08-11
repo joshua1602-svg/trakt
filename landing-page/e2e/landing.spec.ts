@@ -16,11 +16,11 @@ test.describe("Trakt landing page", () => {
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: /one governed portfolio dataset\. every book, every report\./i,
+        name: /one governed view of your lending portfolios\./i,
       }),
     ).toBeVisible();
     await expect(
-      page.getByText(/turns loan tapes, servicing extracts, valuations and funding data/i),
+      page.getByText(/connects loan data, documents and funding requirements/i),
     ).toBeVisible();
     await expect(
       page.getByText(/reconciled by construction rather than by comparison/i),
@@ -103,62 +103,159 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator('a[href*=".pptx"], a[href*=".csv"], a[href*="blob.core"]')).toHaveCount(0);
   });
 
-  test("the ingestion claim leads, and the tiles below are peers", async ({ page }) => {
-    const capabilities = page.locator("#capabilities");
-    await capabilities.scrollIntoViewIfNeeded();
+  test("the platform section explains the layer and its outputs", async ({ page }) => {
+    const platform = page.locator("#platform");
+    await platform.scrollIntoViewIfNeeded();
 
-    // Lifted out of the grid: it is the reason the others are possible, and
-    // comparative emphasis inside the grid fails on a phone.
-    await expect(capabilities).toContainText(/each reportable on its own and in aggregate/i);
     await expect(
-      capabilities.getByRole("heading", { name: "Capabilities on one governed layer" }),
+      platform.getByRole("heading", { name: /build the portfolio once\. use it everywhere\./i }),
     ).toBeVisible();
-
-    const names = [
-      "Portfolio analytics and monitoring",
-      "Management reporting",
+    await expect(platform.getByText("Data and documents", { exact: true })).toBeVisible();
+    await expect(
+      platform.getByText("One governed portfolio layer", { exact: true }),
+    ).toBeVisible();
+    // Reporting appears as two chips among six peer outputs — an output of the
+    // layer, no longer the page's identity.
+    for (const output of [
+      "Portfolio MI",
+      "Forecasting",
+      "Risk & covenant controls",
       "Investor reporting",
       "Regulatory reporting",
-      "Governance and audit",
-    ];
-    for (const name of names) {
-      await expect(capabilities.getByRole("heading", { name, level: 3 })).toBeVisible();
+      "AI & Copilot interaction",
+    ]) {
+      await expect(platform.getByText(output, { exact: true })).toBeVisible();
     }
-    await expect(capabilities.getByRole("heading", { level: 3 })).toHaveCount(names.length);
-
-    // "Illustrative capabilities" hedged every tile; it is gone.
-    await expect(capabilities.getByText(/illustrative/i)).toHaveCount(0);
   });
 
-  test("delivery modes separate what ships from what is planned", async ({ page }) => {
-    const delivery = page.locator("#delivery");
-    await delivery.scrollIntoViewIfNeeded();
+  test("the controls section carries the forward-risk claim and stays honest", async ({
+    page,
+  }) => {
+    const controls = page.locator("#controls");
+    await controls.scrollIntoViewIfNeeded();
 
-    await expect(delivery.getByText("Available today")).toBeVisible();
-    for (const name of [
-      "Managed service",
-      "Trakt Agent workspace",
-      "Microsoft 365 Copilot and Teams",
+    await expect(
+      controls.getByRole("heading", {
+        name: /turn portfolio requirements into live controls\./i,
+      }),
+    ).toBeVisible();
+    // The differentiator: three evaluation bases, not a single status.
+    await expect(controls.getByText(/what the portfolio is moving toward/i)).toBeVisible();
+    // Activation is a human decision; the path is visible.
+    await expect(controls.getByText("Reviewed", { exact: true })).toBeVisible();
+
+    // The demo loop mounts once the section approaches the viewport: muted,
+    // looping, inline, and served with its poster so nothing shifts.
+    const video = controls.locator("video");
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute("poster", /controls-demo-poster/);
+    await expect(video).toHaveAttribute("loop", /.*/);
+    await expect(video).toHaveAttribute("playsinline", /.*/);
+    // The illustrative provenance is DOM text, not only pixels in the video.
+    await expect(controls.getByText(/figures illustrative/i)).toBeVisible();
+  });
+
+  test("reduced-motion visitors get the static control preview, not the video", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    const controls = page.locator("#controls");
+    await controls.scrollIntoViewIfNeeded();
+
+    await expect(controls.locator("video")).toHaveCount(0);
+    // Real DOM text — the same end state the loop resolves to.
+    await expect(controls.getByText("Funded book", { exact: true })).toBeVisible();
+    await expect(controls.getByText("Expected forecast", { exact: true })).toBeVisible();
+    await expect(
+      controls.getByText("Including full pipeline", { exact: true }),
+    ).toBeVisible();
+    await expect(controls.getByText(/projected breach horizon: nov 2026/i)).toBeVisible();
+    await expect(controls.getByText("Illustrative", { exact: true })).toBeVisible();
+  });
+
+  test("onboarding is a governed sequence ending in a live portfolio", async ({ page }) => {
+    const onboarding = page.locator("#onboarding");
+    await onboarding.scrollIntoViewIfNeeded();
+
+    await expect(
+      onboarding.getByRole("heading", {
+        name: /from source files to a live portfolio — under governance\./i,
+      }),
+    ).toBeVisible();
+    for (const step of [
+      "Source data and documents",
+      "Assisted interpretation",
+      "Governed configuration",
+      "Live portfolio",
     ]) {
-      await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
+      await expect(onboarding.getByRole("heading", { name: step, level: 3 })).toBeVisible();
     }
+    // The outcome claim is repeatability, not a speed guarantee.
+    await expect(onboarding.getByText(/repeatable process as additional portfolios/i)).toBeVisible();
+    await expect(onboarding).not.toContainText(/instant/i);
+  });
 
-    // Roadmap is labelled as roadmap. Neither item is a shipped route today:
-    // both are reserved channels in trakt_core/context.py.
-    await expect(delivery.getByText("Roadmap")).toBeVisible();
-    for (const name of ["Enterprise agent deployment", "Agent-to-agent integration"]) {
-      await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
+  test("the lens section shows one truth across governed books", async ({ page }) => {
+    const lenses = page.locator("#lenses");
+    await lenses.scrollIntoViewIfNeeded();
+
+    await expect(
+      lenses.getByRole("heading", { name: /one portfolio truth\. every relevant lens\./i }),
+    ).toBeVisible();
+    await expect(lenses).toContainText(/each reportable on its own and in aggregate/i);
+    await expect(lenses.getByText("Consolidated platform", { exact: true })).toBeVisible();
+    await expect(lenses.getByText("SPV1 Sponsored Securitisation")).toBeVisible();
+    await expect(lenses.getByText("sold", { exact: true })).toBeVisible();
+  });
+
+  test("governance separates what ships from what is planned", async ({ page }) => {
+    const governance = page.locator("#governance");
+    await governance.scrollIntoViewIfNeeded();
+
+    await expect(
+      governance.getByRole("heading", {
+        name: /deterministic underneath\. governed throughout\./i,
+      }),
+    ).toBeVisible();
+    for (const name of [
+      "Deterministic calculation",
+      "Reviewed configuration",
+      "Traceable outputs",
+      "Client separation",
+    ]) {
+      await expect(governance.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
+    // Asset extensibility is an architecture claim, never a coverage claim.
+    await expect(governance.getByText(/asset-specific configuration/i)).toBeVisible();
+    await expect(governance).not.toContainText(/every asset class/i);
+    // The agentic direction is a quiet design-intent sentence, not a roadmap
+    // block — and it is worded as direction, never as live capability.
+    await expect(
+      governance.getByText(/toward increasingly agentic operation/i),
+    ).toBeVisible();
+    await expect(governance).not.toContainText(/roadmap/i);
+    await expect(governance).not.toContainText(/autonomous/i);
+  });
 
-    // No timer trigger or cron exists in the repository, so nothing claims
-    // "scheduled" delivery as a platform capability.
-    await expect(delivery).not.toContainText(/scheduled/i);
-    await expect(delivery).toContainText(/calculated once and distributed/i);
+  test("reporting is a band of outputs, not the identity", async ({ page }) => {
+    const reporting = page.locator("#reporting");
+    await reporting.scrollIntoViewIfNeeded();
 
-    const model = page.locator("#how-it-works");
-    await expect(model.getByText("Source data and documents")).toBeVisible();
-    await expect(model.getByText("Trakt governed data layer")).toBeVisible();
-    await expect(model.getByText("Analytics and business rules")).toBeVisible();
+    await expect(
+      reporting.getByRole("heading", {
+        name: /the portfolio truth that runs the business also reports it\./i,
+      }),
+    ).toBeVisible();
+    for (const output of [
+      "Management reporting",
+      "Investor & funding-partner packs",
+      "Regulatory submissions",
+    ]) {
+      await expect(reporting.getByText(output, { exact: true })).toBeVisible();
+    }
+    // Regime names stay off the homepage; they anchor an asset class.
+    await expect(reporting).not.toContainText(/annex/i);
   });
 
   test("the lead form validates, then accepts a complete submission", async ({ page }) => {
@@ -182,12 +279,25 @@ test.describe("Trakt landing page", () => {
     await expect(cta.getByRole("status")).toContainText(/thank you/i);
   });
 
+  test("the intelligence channels read at a glance, each with its glyph", async ({ page }) => {
+    const intelligence = page.locator("#intelligence");
+    await intelligence.scrollIntoViewIfNeeded();
+
+    for (const channel of ["Trakt workspace", "Microsoft Teams", "Microsoft 365 Copilot"]) {
+      await expect(intelligence.getByText(channel, { exact: true })).toBeVisible();
+    }
+    // Three channel chips, each carrying a small neutral glyph — labels do the
+    // naming, no imitation product logos.
+    await expect(intelligence.locator("span:has(> svg)")).toHaveCount(3);
+    await expect(intelligence.getByText("Available today")).toBeVisible();
+  });
+
   test("the synthetic-data disclaimer is stated exactly once, in the example", async ({ page }) => {
     const disclaimer = page.getByText(
       /The portfolios are wholly synthetic, and the page accepts no uploads/,
     );
     await expect(disclaimer).toHaveCount(1);
-    await expect(page.locator("#example").getByText(
+    await expect(page.locator("#intelligence").getByText(
       /The portfolios are wholly synthetic, and the page accepts no uploads/,
     )).toBeVisible();
 
@@ -365,9 +475,9 @@ test.describe("mobile navigation", () => {
 
     const menu = page.locator("#mobile-nav");
     await expect(menu).toBeVisible();
-    await menu.getByRole("link", { name: "Capabilities" }).click();
+    await menu.getByRole("link", { name: "Platform" }).click();
 
-    await expect(page).toHaveURL(/#capabilities$/);
+    await expect(page).toHaveURL(/#platform$/);
     await expect(menu).toBeHidden();
   });
 });

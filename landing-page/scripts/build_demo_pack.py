@@ -1192,9 +1192,15 @@ def _annex_exceptions(engine: Engine, as_of_display: str) -> Dict[str, Any]:
 
     return {
         "id": "annex_exceptions",
-        "label": "Show the current Annex 2 validation exceptions.",
+        # The suggested-question label is regime-agnostic: the homepage stays
+        # asset-class and regime neutral, while the answer itself remains the
+        # engine's genuine regulatory reconciliation. Typed regime-specific
+        # questions still resolve here via the phrase list below.
+        "label": "Show the current reporting validation exceptions.",
         "category": "governance",
         "phrases": [
+            "reporting validation exceptions", "reporting exceptions",
+            "current reporting exceptions",
             "annex 2 validation exceptions", "annex 2 exceptions", "validation exceptions",
             "annex exceptions", "regulatory exceptions", "esma exceptions",
             "what is blocking the submission", "submission blocked", "annex 2",

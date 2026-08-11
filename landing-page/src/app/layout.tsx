@@ -7,8 +7,9 @@ import "./globals.css";
 
 const TITLE = "Trakt | Governed Portfolio Intelligence";
 const DESCRIPTION =
-  "Trakt transforms fragmented portfolio data into trusted analytics, automated " +
-  "reporting and governed workflows across Copilot, Teams and the Trakt workspace.";
+  "Trakt connects portfolio data, documents and funding requirements into one " +
+  "governed layer — powering monitoring, forecasting, covenant controls, reporting " +
+  "and portfolio Q&A for specialist lenders.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicConfig.siteUrl),
@@ -77,7 +78,7 @@ const structuredData = {
       name: "Trakt",
       url: publicConfig.siteUrl,
       description:
-        "Governed portfolio operating, analytics and reporting layer for specialist lending.",
+        "Governed portfolio platform for specialist lending: monitoring, forecasting, covenant controls and reporting from one governed layer.",
     },
     {
       "@type": "SoftwareApplication",
