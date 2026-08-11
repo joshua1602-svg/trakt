@@ -18,9 +18,9 @@ import type { DemoScopeInfo } from "@/types/demo";
  */
 
 const PROOF_POINTS = [
-  "Deterministic engine — same question, same number, every channel",
-  "Traceable lineage — every published figure ties back to source",
-  "Client-isolated environments and controlled data handling",
+  "One governed portfolio model",
+  "Deterministic, traceable calculations",
+  "Reporting, controls and AI from the same data",
 ] as const;
 
 export function Hero({ scope }: { scope: DemoScopeInfo }) {
@@ -34,14 +34,13 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           One governed view of your lending portfolios.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-200">
-          Trakt connects loan data, documents and funding requirements into a single
-          governed layer — then runs monitoring, forecasting, covenant controls,
-          reporting and portfolio Q&amp;A from it.
+          Connect loan data, documents and funding requirements once. Trakt turns them
+          into live portfolio monitoring, forecasting, controls and reporting.
         </p>
 
-        <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
-          Every figure is reconciled by construction rather than by comparison.
-        </p>
+        {/* The reconciliation line now leads the governance section — too
+            abstract for a first screen, exactly right as the proof beneath
+            the page's claims. */}
 
         {/* Chips, not cards: on a phone these stack as three tight lines, so the
             reader takes all three in without reading prose. Borders appear only
@@ -61,7 +60,7 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a
-            href="#example"
+            href="#query-demo"
             onClick={() => track("hero_demo_click")}
             className={buttonStyles.primary}
           >

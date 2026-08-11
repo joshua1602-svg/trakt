@@ -82,16 +82,16 @@ describe("Hero", () => {
         name: /one governed view of your lending portfolios\./i,
       }),
     ).toBeInTheDocument();
-    // The strongest sentence on the page leads, rather than being buried.
-    expect(
-      screen.getByText(/reconciled by construction rather than by comparison/i),
-    ).toBeInTheDocument();
-    for (const proof of [/deterministic engine/i, /traceable lineage/i, /client-isolated/i]) {
+    for (const proof of [
+      /one governed portfolio model/i,
+      /deterministic, traceable calculations/i,
+      /reporting, controls and ai from the same data/i,
+    ]) {
       expect(screen.getByText(proof)).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: /explore the live demo/i })).toHaveAttribute(
       "href",
-      "#example",
+      "#query-demo",
     );
     expect(screen.getByRole("link", { name: /book a portfolio walkthrough/i })).toHaveAttribute(
       "href",
@@ -114,7 +114,7 @@ describe("Nav", () => {
   it("exposes the required destinations", () => {
     render(<Nav />);
     const nav = screen.getByRole("navigation", { name: /primary/i });
-    for (const label of ["Platform", "Controls", "Onboarding", "Intelligence"]) {
+    for (const label of ["Demo", "Platform", "Risk & Controls", "Intelligence", "Governance"]) {
       expect(within(nav).getByRole("link", { name: label })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: /book a demo/i })).toBeInTheDocument();

@@ -46,7 +46,18 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return data;
 }
 
-export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
+export function CopilotDemo({
+  meta,
+  initialQuestion,
+}: {
+  meta: DemoMetaResponse;
+  /**
+   * Optional scripted opening: asked once when the component mounts, so the
+   * query-demo section starts from the user's question rather than an empty
+   * surface. Reset does not replay it.
+   */
+  initialQuestion?: { id: string; label: string };
+}) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -114,6 +125,23 @@ export function CopilotDemo({ meta }: { meta: DemoMetaResponse }) {
     },
     [],
   );
+
+  /**
+   * The scripted opening. Deferred a tick so the effect body sets no state
+   * synchronously; the ref keeps it one-shot, so Reset never replays it and
+   * it consumes exactly one session question.
+   */
+  const initialAskedRef = useRef(false);
+  useEffect(() => {
+    if (!initialQuestion || initialAskedRef.current) return;
+    const id = window.setTimeout(() => {
+      if (initialAskedRef.current) return;
+      initialAskedRef.current = true;
+      markOpened();
+      void ask({ questionId: initialQuestion.id }, initialQuestion.label);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [initialQuestion, ask, markOpened]);
 
   const requestReport = useCallback(async (reportId: string, label: string) => {
     setBusy(true);
