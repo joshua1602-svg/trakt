@@ -7,10 +7,10 @@ import { buttonStyles, cx } from "@/components/ui";
 import { track } from "@/lib/analytics";
 
 const LINKS = [
-  { href: "#capabilities", label: "Capabilities" },
-  { href: "#delivery", label: "Delivery" },
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#example", label: "Example" },
+  { href: "#platform", label: "Platform" },
+  { href: "#controls", label: "Controls" },
+  { href: "#onboarding", label: "Onboarding" },
+  { href: "#intelligence", label: "Intelligence" },
 ] as const;
 
 export function Nav() {

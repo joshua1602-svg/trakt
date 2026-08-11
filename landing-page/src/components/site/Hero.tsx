@@ -31,11 +31,12 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           Trakt for specialist lending
         </p>
         <h1 className="text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-100 sm:text-5xl">
-          One governed portfolio dataset. Every book, every report.
+          One governed view of your lending portfolios.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-200">
-          Trakt turns loan tapes, servicing extracts, valuations and funding data into
-          one governed model.
+          Trakt connects loan data, documents and funding requirements into a single
+          governed layer — then runs monitoring, forecasting, covenant controls,
+          reporting and portfolio Q&amp;A from it.
         </p>
 
         <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
