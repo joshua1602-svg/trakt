@@ -31,9 +31,20 @@ periods (`synthetic_demo/output/multibook/…`, built by
 
 Anyone editing page copy should add a row here, or delete one.
 
-The page is nine sections, in this order: value proposition · platform ·
-controls & forward risk · governed onboarding · lenses · portfolio
-intelligence (the example) · governance & platform · reporting band · contact.
+**Pass 4 was a clarity refactor, not a repositioning.** Body copy was cut
+roughly 45%; each concept is now explained once; and the page carries two
+deliberate, labelled, user-started demos — the query demo (section 2) and
+the controls demo (section 4). Neither autoplays and neither loops silently:
+`QueryDemo.tsx` gates the interactive demo behind a start affordance, and
+`DemoPlayer.tsx` gives the controls film poster → play → pause/replay →
+"Watch again". The reporting band and the standalone onboarding section were
+removed from the narrative — their claims survive in the platform output
+chips and the onboarding disclosure below.
+
+The page is eight narrative sections plus a disclosure, in this order:
+value proposition · portfolio query demo · platform · risk & controls (the
+controls demo) · operating model · portfolio intelligence (distribution) ·
+governance · onboarding disclosure · contact.
 
 ---
 
@@ -41,7 +52,7 @@ intelligence (the example) · governance & platform · reporting band · contact
 
 | Copy | Class | Evidence |
 |---|---|---|
-| Platform · Controls · Onboarding · Intelligence · Book a demo | Positioning | — |
+| Demo · Platform · Risk & Controls · Intelligence · Governance · Book a demo | Positioning | — |
 
 ---
 
@@ -50,28 +61,42 @@ intelligence (the example) · governance & platform · reporting band · contact
 | Copy | Class | Evidence |
 |---|---|---|
 | "One governed view of your lending portfolios." | Positioning | The operating-layer claim, plural deliberately: multi-book is the differentiator. Leads on the governed layer rather than on reporting or on AI — both are outputs. |
-| "Trakt connects loan data, documents and funding requirements into a single governed layer — then runs monitoring, forecasting, covenant controls, reporting and portfolio Q&A from it." | Evidenced | Layer: ingest→canonical→validate→output pipeline (`engine/orchestrator/trakt_run.py`, gates in `README.md`). Monitoring: `mi_agent/risk_monitor/`, `frontend/mi-agent-ui/`. Forecasting: `mi_agent_api/pipeline_prep.py`, `forecast_bridge.py`, `evolution.py`. Covenant controls: `mi_agent/concentration_tests/`, `config/risk/concentration_test_library.yaml`. Reporting: `mi_agent_pptx/`, `engine/gate_5_delivery/`. Q&A: `mi_agent/mi_query_executor.py`, `deploy/copilot-agent/`. Funding requirements → controls: `mi_agent/risk_monitor/schedule8_extractor.py` + `config/clients/client_001/risk_limits_extracted.yaml`. |
-| "Every figure is reconciled by construction rather than by comparison." | Evidenced | One analytical implementation behind every channel (`mi_agent_api/mi_service.py`); parity asserted by `mi_agent_api/tests/test_channel_parity.py`. |
-| Proof point: "Deterministic engine — same question, same number, every channel" | Evidenced | Deterministic parser + executor (`mi_agent/llm_query_parser.py` deterministic path, `mi_agent/mi_query_executor.py`); parity tested as above; demo-pack reproducibility asserted by `tests/demo_pack_reproducible_test.py`. |
-| Proof point: "Traceable lineage — every published figure ties back to source" | Evidenced | `engine/gate_2_transform/lineage_tracker.py` (Gate 2.5), the committed gate reports, `out/run_manifest.json`. |
-| Proof point: "Client-isolated environments and controlled data handling" | Deployment | One deployment per client (`docs/copilot_v1_implementation.md` § "Tenancy"); tenant authorisation enforced in the platform core (`trakt_core/tenancy.py`, `tests/test_governance_context_and_tenancy.py`); HMAC-signed, server-redeemed document delivery (`mi_agent_api/copilot_actions.py`). |
+| "Connect loan data, documents and funding requirements once. Trakt turns them into live portfolio monitoring, forecasting, controls and reporting." | Evidenced | Layer: ingest→canonical→validate→output pipeline (`engine/orchestrator/trakt_run.py`, gates in `README.md`). Monitoring: `mi_agent/risk_monitor/`, `frontend/mi-agent-ui/`. Forecasting: `mi_agent_api/pipeline_prep.py`, `forecast_bridge.py`, `evolution.py`. Covenant controls: `mi_agent/concentration_tests/`, `config/risk/concentration_test_library.yaml`. Reporting: `mi_agent_pptx/`, `engine/gate_5_delivery/`. Funding requirements → controls: `mi_agent/risk_monitor/schedule8_extractor.py` + `config/clients/client_001/risk_limits_extracted.yaml`. "Live" means continuously monitored against the current book — never "real-time"; the pipeline is batch and snapshot-based. |
+| Proof point: "One governed portfolio model" | Evidenced | `trakt_core/portfolio.py` registry and scope resolution; the canonical model in `config/system/fields_registry.yaml`. |
+| Proof point: "Deterministic, traceable calculations" | Evidenced | Deterministic parser + executor (`mi_agent/llm_query_parser.py` deterministic path, `mi_agent/mi_query_executor.py`); channel parity (`mi_agent_api/tests/test_channel_parity.py`); lineage (`engine/gate_2_transform/lineage_tracker.py`). |
+| Proof point: "Reporting, controls and AI from the same data" | Evidenced | One analytical implementation behind every output (`mi_agent_api/mi_service.py`); decks render from the same MI payloads (`mi_agent_pptx/mi_api.py`); controls evaluate the same governed frame (`mi_agent/concentration_tests/`). |
+| **Moved out of the hero:** "Every figure is reconciled by construction rather than by comparison." | Evidenced | Now leads §7 Governance — too abstract for a first screen, exactly right as the proof beneath the trust claims. Same evidence: `mi_agent_api/mi_service.py`, `test_channel_parity.py`. |
 | Interface preview showing three books, a platform total and a sponsor total | Evidenced | Rendered from `data/demo-pack.json`. Unchanged from Pass 2. |
 | Preview footer "Deterministic · As at … · Synthetic portfolio" | Demonstration | A provenance label travelling with the figures. |
 
 ---
 
-## 2. Platform — "Build the portfolio once. Use it everywhere."
+## 2. Portfolio query demo — "Ask the portfolio. Get a governed answer."
 
-Replaces the Pass-2 "How it works" flow and the capability grid's identity.
-The governed layer is deliberately not a tile: it is the frame the outputs sit
-on, which makes the "not another output beside your spreadsheets" point
-structurally.
+Demo 1 of two. The interactive demo moved here from the intelligence section:
+the page shows the product before explaining it. User-started — nothing runs
+until the visitor presses "Watch query demo".
+
+| Copy | Class | Evidence |
+|---|---|---|
+| "Ask portfolio questions in natural language and get answers from the same governed calculations, wherever your team works." | Evidenced | `mi_agent/mi_query_executor.py` + `mi_agent/interpreter/`; channel parity `test_channel_parity.py`; surfaces evidenced in §6. |
+| The scripted opening: starting the demo asks "Show the funded balance by book." | Demonstration | `QueryDemo.tsx` mounts `CopilotDemo` with `initialQuestion` (the `balance_by_book` intent); one-shot, consumes one session question, never replays on Reset. The visitor sees query → governed answer from frame zero. |
+| The poster before start | Demonstration | A non-interactive replica of the demo surface carrying the real synthetic scope (client, books, exposure count, as-at date) from `data/demo-pack.json`. |
+| "Same question. Same calculation. Same answer." | Evidenced | `mi_agent_api/mi_service.py` single implementation; `test_channel_parity.py`. |
+| "The portfolios are wholly synthetic, and the page accepts no uploads." | Demonstration | True by construction — no upload endpoint exists. **Single instance on the page**, moved here with the demo it describes. |
+| Everything inside the interactive demo (answers, refusals, report previews, session counter) | Evidenced / Demonstration | Unchanged — see the Pass-2 appendix, which remains accurate for the demo surface. |
+
+---
+
+## 3. Platform — "Build the portfolio once. Use it everywhere."
+
+The diagram carries the explanation — Pass 4 removed the surrounding
+paragraphs; the "lenses on the same truth" idea lives once, in §5.
 
 | Copy | Class | Evidence |
 |---|---|---|
 | Data and documents → one governed portfolio layer → every output | Evidenced | The gate sequence in `README.md` and `engine/orchestrator/trakt_run.py`; document intake via `engine/onboarding_agent/file_classifier.py` and `document_extractor.py` (text/markdown; PDF/DOCX is a stated placeholder, so the page never claims a file format). |
-| Output chips: Portfolio MI · Forecasting · Risk & covenant controls · Investor reporting · Regulatory reporting · AI & Copilot interaction | Evidenced | Respectively: `analytics/`, `frontend/mi-agent-ui/`; `mi_agent_api/pipeline_prep.py` + `evolution.py` + `forecast_bridge.py`; `mi_agent/concentration_tests/` + `mi_agent/risk_monitor/`; `configs/pptx/investor_pack.yaml` + `mi_agent_api/decks.py`; `config/regime/` + `engine/gate_5_delivery/`; `deploy/copilot-agent/` + `mi_agent_api/copilot_actions.py`. |
-| "Management, investor, risk and regulatory views are lenses on the same truth — never separate versions of it." | Evidenced | Single analytical implementation (`mi_agent_api/mi_service.py`); deck slides render from the same MI payloads as the dashboard (`mi_agent_pptx/mi_api.py`). |
+| Output chips: Portfolio MI · Forecasting · Risk & covenant controls · Investor reporting · Regulatory reporting · AI & Copilot | Evidenced | Respectively: `analytics/`, `frontend/mi-agent-ui/`; `mi_agent_api/pipeline_prep.py` + `evolution.py` + `forecast_bridge.py`; `mi_agent/concentration_tests/` + `mi_agent/risk_monitor/`; `configs/pptx/investor_pack.yaml` + `mi_agent_api/decks.py`; `config/regime/` + `engine/gate_5_delivery/`; `deploy/copilot-agent/` + `mi_agent_api/copilot_actions.py`. These chips also carry the reporting claims of the retired reporting band — management, investor and regulatory outputs from one layer, with regime names still off the homepage. |
 
 ---
 
@@ -82,11 +107,13 @@ compressed all of this into the words "limit monitoring".
 
 | Copy | Class | Evidence |
 |---|---|---|
-| "Trakt structures concentration and covenant requirements from facility documentation into controls your team reviews and activates." | Evidenced | `mi_agent/risk_monitor/schedule8_extractor.py` — deterministic extraction of structured limits (category, value, direction, unit, source snippet, confidence, `needs_review`) from a concentration-limit schedule; committed output `config/clients/client_001/risk_limits_extracted.yaml` (15 limits, 1 flagged for review); tested by `tests/concentration_tests/test_schedule_8.py`. Review/approval before activation: operator-approved `ActiveConfiguration` (`mi_agent/concentration_tests/store.py`, `tests/concentration_tests/test_governance.py`) and the OCC approval workflow (`operations_control/engine.py`). **Deliberate wording:** "structures … for review", never "AI reads your contracts" — extraction is deterministic, text-based and human-reviewed; PDF/DOCX parsing is a placeholder. |
+| "Structure covenant and concentration requirements once. Trakt monitors them against the funded book, forecast and pipeline — showing today's position and emerging breaches." | Evidenced | `mi_agent/risk_monitor/schedule8_extractor.py` — deterministic extraction of structured limits (category, value, direction, unit, source snippet, confidence, `needs_review`) from a concentration-limit schedule; committed output `config/clients/client_001/risk_limits_extracted.yaml` (15 limits, 1 flagged for review); tested by `tests/concentration_tests/test_schedule_8.py`. Review/approval before activation: operator-approved `ActiveConfiguration` (`mi_agent/concentration_tests/store.py`, `tests/concentration_tests/test_governance.py`) and the OCC approval workflow (`operations_control/engine.py`). **Deliberate wording:** "structures … for review", never "AI reads your contracts" — extraction is deterministic, text-based and human-reviewed; PDF/DOCX parsing is a placeholder. |
 | "Every active control is evaluated three ways — against the funded book, against the expected forecast, and against the full pipeline" | Evidenced | `mi_agent/concentration_tests/forward.py` evaluates each approved test in three explicitly-labelled states: `funded`, `expected_forecast` (pipeline weighted by governed completion probability), `full_pipeline` (labelled a stress, never a prediction). Surfaced in `frontend/mi-agent-ui/src/components/risk/ConcentrationDetailPanel.tsx`, `mi_agent_pptx/concentration.py` and the Teams insight cards. |
 | "…with the projected breach horizon when a limit is approaching." | Evidenced | `expected_breach_horizon` and `pipeline_drivers` in `mi_agent/concentration_tests/forward.py`; `identify_emerging_risks`. |
 | "Know what is breached today — and what the portfolio is moving toward." | Positioning | The commercial statement of the three-state evaluation above. Carries the green accent as the page's key forward-risk claim. |
-| Path chips: Documented requirement → Structured control → Reviewed → Active | Evidenced | The extractor → review → approved-configuration → evaluation chain above. Activation is a human decision; the page keeps the review step visible. |
+| The requirement → reviewed → active lifecycle | Evidenced | The extractor → review → approved-configuration → evaluation chain above. **Pass 4 removed the static path-chips row**: the lifecycle is carried inside the demo itself (its review/activation scene), so it is not stated twice. Activation remains visibly a human decision in the film. |
+| Demo heading: "See a portfolio requirement become a live control." · caption "From documented requirement to live monitoring. Figures illustrative." | Positioning / Illustrative | The demo component's own label ("Risk & controls demo") and caption; the illustrative provenance stays in DOM text as well as in the film's burned-in stamp. |
+| **Demo behaviour: user-started, never autoplaying, never looping** | Demonstration | `DemoPlayer.tsx`: poster + "Watch controls demo" overlay (`~18 sec`), play/pause/restart controls, a progress bar, and a "Watch again" overlay on completion. `preload="none"` — the asset costs nothing until requested. Reduced-motion visitors see no motion they did not ask for; the static `ControlPreview` renders only if no source is playable. |
 | Control preview: Geographic concentration ≤ 30% — Funded 24.1% Pass · Expected forecast 28.7% Warning · Including full pipeline 31.4% Projected breach · horizon Nov 2026 · Single obligor 6.2% Pass | Illustrative | The **workflow** depicted is live (rows above); the **figures** are not engine output and the card is labelled "Illustrative" on the page. This is the single sanctioned exception to "every number on the page comes from the engine" — see the Excluded list. Inside this product depiction the product's RAG semantics apply (mint pass / amber warning / rose projected breach) — documented in `app/globals.css`. |
 
 ### The demo loop (`/controls-demo.webm` + `/controls-demo.mp4`)
@@ -112,15 +139,18 @@ same end state.
 
 ---
 
-## 4. Governed onboarding
+## 4. Onboarding — a compact disclosure, out of the main narrative
 
-New in Pass 3. The Pass-2 page gave onboarding one lifecycle card.
+Pass 4 demoted the standalone onboarding section: it substantially duplicated
+the platform architecture. What remains is a `<details>` disclosure
+("How onboarding works") near the foot of the page with four terse steps —
+Source data · Assisted mapping · Team review · Live portfolio — and no
+prose claims beyond them. The evidence underneath is unchanged:
 
 | Copy | Class | Evidence |
 |---|---|---|
-| "Trakt's onboarding agent interprets source tapes and documentation and proposes mappings and configuration; your team reviews before anything activates." | Evidenced | `engine/onboarding_agent/` (60 modules): LLM-assisted mapping under a deterministic-first policy (`llm_assisted_mapping.py`, `llm_policy.py`, `tests` incl. `test_onboarding_deterministic_first.py`, `test_onboarding_llm_cost_policy.py`), mapping review queue and mapping memory; `agents/onboarding_agent.py`. Human review and governed activation: `operations_control/` — workflow engine, onboarding case management, approval before `activate()`, publication, recovery — with its own deployed API and React UI (`frontend/operations-control-ui/`, `.github/workflows/deploy-occ-frontend.yml`) and 17 test modules under `tests/operations_control/`. |
-| Steps: Source data and documents → Assisted interpretation → Governed configuration → Live portfolio | Evidenced | The chain above; "Nothing reaches the governed layer unapproved" is the OCC approval gate (`tests/operations_control/test_onboarding.py`, `test_publication.py`). |
-| "Less manual configuration, controlled interpretation of requirements, and a repeatable process as additional portfolios are added." | Positioning | Outcome statement of the evidenced chain. **Deliberately softened:** no speed guarantee, no "instant onboarding", no claim that each portfolio is faster than the last — repeatability is the claim the repository supports (`synthetic_onboarding_pack/`, `simulation/` multi-client configs). |
+| Steps: Source data ("Tapes and documents, as they arrive.") · Assisted mapping ("Mappings and configuration proposed.") · Team review ("Approved before anything activates.") · Live portfolio ("Monitored and reportable with every other book.") | Evidenced | `engine/onboarding_agent/` (60 modules): LLM-assisted mapping under a deterministic-first policy (`llm_assisted_mapping.py`, `llm_policy.py`, `tests` incl. `test_onboarding_deterministic_first.py`, `test_onboarding_llm_cost_policy.py`), mapping review queue and mapping memory; `agents/onboarding_agent.py`. Human review and governed activation: `operations_control/` — workflow engine, onboarding case management, approval before `activate()`, publication, recovery — with its own deployed API and React UI (`frontend/operations-control-ui/`, `.github/workflows/deploy-occ-frontend.yml`) and 17 test modules under `tests/operations_control/`. |
+| **Not claimed:** speed guarantees | Excluded | No "instant onboarding", no "automatic", no per-portfolio speed escalation — asserted by the e2e suite. |
 | **Not claimed:** conversational onboarding | Excluded | The OCC Agent (`operations_control/occ_agent/`, 24 modules) is built and tested but not production-enabled — `docs/occ_agent/01_operating_process_implementation.md` §11 lists eleven preconditions and notes the live adapter has never been exercised. The page says "onboarding agent", true of the mapping agent that ships. |
 
 ---
@@ -129,7 +159,7 @@ New in Pass 3. The Pass-2 page gave onboarding one lifecycle card.
 
 | Copy | Class | Evidence |
 |---|---|---|
-| "Any number of books — direct originations, acquired back books, sponsored securitisations — held in one governed model, each reportable on its own and in aggregate." | Evidenced (with one qualification) | `trakt_core/portfolio.py`: `PortfolioRegistry`, `resolve_scope()`, `resolve_capabilities()`, `ScopeCoverage`. Scope rendering: `frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx`; aggregation: `mi_agent_api/datasets.py`. **Qualification (unchanged from Pass 2):** the shipped type vocabulary is `direct`/`acquired`; a securitisation vehicle is a further governed type the model already holds (`PortfolioRegistry.types()`), and `spv` is a declared field role in `config/risk/concentration_test_library.yaml` with `spv_id` a monitored dimension in `config/mi/risk_monitor.yaml`. The claim is about the model, not a vehicle-specific feature. |
+| "Origination books, acquired portfolios and funding vehicles sit in one governed model — individually reportable and consolidated, without separate datasets to reconcile." | Evidenced (with one qualification) | `trakt_core/portfolio.py`: `PortfolioRegistry`, `resolve_scope()`, `resolve_capabilities()`, `ScopeCoverage`. Scope rendering: `frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx`; aggregation: `mi_agent_api/datasets.py`. **Qualification (unchanged from Pass 2):** the shipped type vocabulary is `direct`/`acquired`; a securitisation vehicle is a further governed type the model already holds (`PortfolioRegistry.types()`), and `spv` is a declared field role in `config/risk/concentration_test_library.yaml` with `spv_id` a monitored dimension in `config/mi/risk_monitor.yaml`. The claim is about the model, not a vehicle-specific feature. |
 | "…capability and coverage disclosed per scope." | Evidenced | `ScopeCoverage` / `CapabilityState` disclosure in `trakt_core/portfolio.py`; `PortfolioScopeBanner.tsx`. |
 | Lens preview: Consolidated platform + three governed books with balances | Evidenced | Rendered from `data/demo-pack.json` — the same books and figures as the hero preview and the interactive example, so the page carries one platform in one vocabulary. |
 
@@ -142,12 +172,11 @@ disclaimer appears.
 
 | Copy | Class | Evidence |
 |---|---|---|
-| "Ask portfolio questions in natural language — in the Trakt workspace, Microsoft Teams, or through Microsoft 365 Copilot. Move from a question to governed portfolio evidence without rebuilding the analysis." | Evidenced | `mi_agent/mi_query_executor.py` + `mi_agent/interpreter/`; `deploy/copilot-agent/` (declarative agent, Teams app manifest) + `mi_agent_api/copilot_actions.py`; `mi_agent_api/teams_bot.py` (Bot Framework endpoint, JWKS-validated, fail-closed). The intro deliberately no longer restates determinism — §7 carries it once, and "Trakt declines what it cannot derive" remains visible inside the interactive demo itself. |
+| "Ask portfolio questions in Trakt, Microsoft Teams or Microsoft 365 Copilot. Every answer runs against the same governed portfolio calculations and evidence." | Evidenced | `mi_agent/mi_query_executor.py` + `mi_agent/interpreter/`; `deploy/copilot-agent/` (declarative agent, Teams app manifest) + `mi_agent_api/copilot_actions.py`; `mi_agent_api/teams_bot.py` (Bot Framework endpoint, JWKS-validated, fail-closed). **This section is distribution only** — the query demo itself lives in §2, so nothing is demonstrated twice. |
 | Suggested question: "Show the current reporting validation exceptions." | Evidenced | Regime-agnostic label for the `annex_exceptions` intent (`scripts/build_demo_pack.py`): the homepage surface stays regime-neutral while the answer remains the engine's genuine Annex reconciliation, and typed regime-specific questions still resolve via the intent's phrase list (`tests/intents.test.ts`). |
 | "Approved risk findings can also be delivered proactively into Teams." | Evidenced | `trakt_notifications/` (19 modules: `cards.py`, `teams_client.py`, `outbox.py`, `delivery.py`, `trigger.py`, `recipients.py`); approval writes intent, a worker delivers, dedup/supersession by deterministic batch id; timer-driven outbox drain (`function_app.py:83`); tests under `tests/notifications/` incl. `test_end_to_end.py`; `docs/teams_proactive_notifications.md`. **Corrects Pass 2**, which asserted no bot, no cards, no proactive messaging. |
-| Delivery strip: "Available today — Trakt workspace · Microsoft Teams · Microsoft 365 Copilot", each chip carrying a small glyph | Evidenced | Workspace: `frontend/mi-agent-ui/src/components/`. Teams/Copilot: as above. The former delivery-model section, reduced to its substance; roadmap channels moved to §7; managed-service substance (recurring production with no user interaction) is carried by the reporting band (`apps/blob_trigger_app`, `mi_agent_pptx/cli.py`). **Icon note:** the glyphs are neutral strokes in the page's own icon style (window / people / chat-with-spark) — the repository holds no Microsoft brand assets and the page deliberately does not imitate Microsoft logos; the text labels carry the product names. |
-| "The portfolios are wholly synthetic, and the page accepts no uploads." | Demonstration | True by construction — no upload endpoint exists; the pack is the only data source. **Single instance on the page.** |
-| Everything inside the interactive demo (answers, refusals, report previews, session counter) | Evidenced / Demonstration | Unchanged from Pass 2 — see the Pass-2 appendix below, which remains accurate for the demo surface. |
+| Delivery strip: "Available today — Trakt workspace · Microsoft Teams · Microsoft 365 Copilot", each chip carrying a small glyph | Evidenced | Workspace: `frontend/mi-agent-ui/src/components/`. Teams/Copilot: as above. The former delivery-model section, reduced to its substance; managed-service substance (recurring production with no user interaction) is carried by the platform output chips (`apps/blob_trigger_app`, `mi_agent_pptx/cli.py`). **Icon note:** the glyphs are neutral strokes in the page's own icon style (window / people / chat-with-spark) — the repository holds no Microsoft brand assets and the page deliberately does not imitate Microsoft logos; the text labels carry the product names. |
+| *(The interactive demo, its disclaimer and its suggested questions now live in §2 — this section carries distribution only.)* | — | — |
 
 ---
 
@@ -155,26 +184,36 @@ disclaimer appears.
 
 | Copy | Class | Evidence |
 |---|---|---|
-| "AI in Trakt interprets, navigates and accelerates — it never writes your numbers." | Evidenced | LLM use is confined to natural-language → `MIQuerySpec` parsing (shown only the semantic catalogue, never raw data: `mi_agent/llm_query_parser.py`, `mi_agent/interpreter/`) and onboarding mapping suggestion/review (`engine/onboarding_agent/llm_*`). All calculation is deterministic (`mi_workflows/engine.py`: "no I/O, no LLM"); narratives are template-driven (`mi_agent_api/insight_generators.py`). |
-| "Deterministic calculation — same question, same number, every channel — parity-tested." | Evidenced | `mi_agent_api/mi_service.py`, `test_channel_parity.py`. |
-| "Reviewed configuration — approved by people before activation, and changes are governed." | Evidenced | `operations_control/engine.py` approval/publication; `apps/blob_trigger_app/approvals.py`; operator-approved `ActiveConfiguration` for risk limits; `tests/test_approval_policy.py`. |
-| "Traceable outputs — lineage from source header to published figure, with validation evidence and reproducible runs." | Evidenced | `engine/gate_2_transform/lineage_tracker.py`, `exception_db.py` (hash-chained), `export_audit_pack.py`, `tests/test_repin_deterministic.py`. |
-| "Client separation — isolated behind Microsoft Entra ID, with tenant authorisation enforced in the platform core." | Deployment + Evidenced | Entra: `mi_agent_api/copilot_auth.py` (defaults to `entra`, 503 unconfigured), `mi_agent_api/auth.py`. Core enforcement: `trakt_core/tenancy.py` — tenant from `ExecutionContext` only, never the request; `TENANT_MISMATCH` / `PORTFOLIO_NOT_AUTHORISED` before any read; `tests/test_governance_context_and_tenancy.py`, `tests/operations_control/test_tenancy.py`. **Wording note:** "controlled separation between organisations on a common platform" — never "multi-tenant SaaS". `config/tenancy.yaml` does not exist; production deployments are single-tenant per client by design. |
+Pass 4 compressed this section to four one-line cards plus the relocated
+reconciliation proof — the long paragraph forms repeated claims already made
+elsewhere. The evidence underneath each card is unchanged.
+
+| Copy | Class | Evidence |
+|---|---|---|
+| Lead line: "Every figure is reconciled by construction rather than by comparison." | Evidenced | Relocated from the hero. `mi_agent_api/mi_service.py` single implementation; `mi_agent_api/tests/test_channel_parity.py`. |
+| Card — Deterministic: "Same calculation, every channel." | Evidenced | `mi_agent_api/mi_service.py`, `test_channel_parity.py`; deterministic parser/executor (`mi_agent/mi_query_executor.py`). LLM use remains confined to interpretation and mapping suggestion (`mi_agent/llm_query_parser.py`, `engine/onboarding_agent/llm_*`); calculation is deterministic (`mi_workflows/engine.py`: "no I/O, no LLM"). |
+| Card — Traceable: "Every published figure ties back to source." | Evidenced | `engine/gate_2_transform/lineage_tracker.py`, `exception_db.py` (hash-chained), `export_audit_pack.py`, `tests/test_repin_deterministic.py`. |
+| Card — Controlled: "Configuration is reviewed before activation." | Evidenced | `operations_control/engine.py` approval/publication; `apps/blob_trigger_app/approvals.py`; operator-approved `ActiveConfiguration` for risk limits; `tests/test_approval_policy.py`. |
+| Card — Isolated: "Client environments and authorisation are separated behind Microsoft Entra ID." | Deployment + Evidenced | Entra: `mi_agent_api/copilot_auth.py` (defaults to `entra`, 503 unconfigured), `mi_agent_api/auth.py`. Core enforcement: `trakt_core/tenancy.py` — tenant from `ExecutionContext` only, never the request; `TENANT_MISMATCH` / `PORTFOLIO_NOT_AUTHORISED` before any read; `tests/test_governance_context_and_tenancy.py`, `tests/operations_control/test_tenancy.py`. **Wording note:** "controlled separation between organisations on a common platform" — never "multi-tenant SaaS". `config/tenancy.yaml` does not exist; production deployments are single-tenant per client by design. |
 | "Built for specialist lending portfolios on a common canonical model with asset-specific configuration — designed so new lending asset classes are added through configuration and verified through the same pipeline, not by rebuilding the platform." | Evidenced (architecture), deliberately not a coverage claim | `docs/asset_class_hardening_framework.md` + `simulation/` (40 files): equity release, bridge and asset/equipment finance generated and driven through the real Gate 1 → MI → risk pathway, seeded determinism enforced in CI (`.github/workflows/hardening-smoke.yml`); key finding: no new canonical fields required (`config/system/fields_registry.yaml` `portfolio_type` + `--extra-aliases-dir` overlays). **The page claims the architecture, never the classes**: no non-equity-release production client exists and regulatory delivery remains two regimes. |
 | "Designed to extend from user-directed workflows toward increasingly agentic operation, within the same governed control framework." | Positioning (future direction, worded as design intent) | Replaces the former explicit ROADMAP block — a roadmap list read as product documentation, not enterprise marketing. The underlying direction is real but unshipped: `trakt_core/context.py` reserved channels `CHANNEL_ENTERPRISE_AGENT` / `CHANNEL_AGENT_TO_AGENT`; `docs/governed_capability_architecture.md` documents the adapter shape; only a test fixture exists. "Designed to extend … toward" claims nothing live, and the e2e suite asserts the section contains neither "roadmap" nor "autonomous". |
 
 ---
 
-## 8. Reporting band
+## 8. Reporting band — removed in Pass 4
 
-Deliberately a band, not a marquee: reporting is an output of the governed
-layer, no longer the page's identity. Three former capability tiles live here.
-
-| Copy | Class | Evidence |
-|---|---|---|
-| "Recurring packs and submissions are generated from the same governed layer — field-validated, submission-ready and traceable to source." | Evidenced | `mi_agent_pptx/` + `configs/pptx/investor_pack.yaml` + `mi_agent_api/decks.py`; regime projection and delivery `engine/gate_4_projection/`, `gate_4b_delivery/`, `gate_5_delivery/xml_builder_*` validated against committed XSDs; recurring production via `apps/blob_trigger_app` and CLI/API invocation. **Wording note:** *recurring*, with an evidenced timer trigger now in the repository (`function_app.py:83`) — the Pass-2 "no cron anywhere" rationale is retired, but scheduling of client reporting remains a deployment arrangement, so the page still does not promise "scheduled" as a platform feature. |
-| Chips: Management reporting · Investor & funding-partner packs · Regulatory submissions · Bespoke analysis | Evidenced | As above, plus `analytics/mi_prep.py`, `analytics_lib/stratify.py`, `mi_agent_api/temporal_compare.py`. |
-| **No regime names on the homepage** | Positioning | ESMA Annex 2 / Annex 12 are the delivered regimes but anchor an asset class and a jurisdiction; they belong on product pages. Gate 5 refuses undelivered annexes with a governed message rather than crashing. |
+The band restated what the platform section's output chips already claim
+(management, investor and regulatory outputs from one layer), so it was
+removed to cut repetition. The underlying evidence is unchanged and now
+attaches to the §3 chips: `mi_agent_pptx/` + `configs/pptx/investor_pack.yaml`
++ `mi_agent_api/decks.py`; regime projection and delivery in
+`engine/gate_4_projection/`, `gate_4b_delivery/`, `gate_5_delivery/`
+validated against committed XSDs; recurring production via
+`apps/blob_trigger_app` and CLI/API invocation. **Still true and still
+enforced:** no regime names on the homepage (ESMA annexes anchor an asset
+class and jurisdiction; they belong on product pages), and the page says
+*recurring*, never "scheduled", because client scheduling remains a
+deployment arrangement.
 
 ---
 
@@ -182,7 +221,7 @@ layer, no longer the page's identity. Three former capability tiles live here.
 
 | Copy | Class | Evidence |
 |---|---|---|
-| "See Trakt applied to your operating model" | Positioning | An offer to demonstrate, not a capability claim. |
+| "See your portfolio through one governed view." | Positioning | The closing restatement of the hero proposition; an offer to demonstrate, not a capability claim. |
 | "We will demonstrate Trakt against your own portfolios, funding requirements and Microsoft 365 environment." | Positioning | Microsoft 365 integration is evidenced (`deploy/copilot-agent/`); funding-requirement interpretation is evidenced (`schedule8_extractor.py`). |
 | Lead form fields and the no-marketing-list commitment | Deployment | Unchanged from Pass 2 — `src/lib/lead-validation.ts`, `src/lib/leads.ts`; see README § "Who owns incoming leads". |
 | Footer: audience line and copyright | Positioning | The audience the brief specifies. |

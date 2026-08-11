@@ -1,4 +1,3 @@
-import { CopilotDemo } from "@/components/demo/CopilotDemo";
 import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
   Architecture,
@@ -6,14 +5,14 @@ import {
   ForwardControls,
   Governance,
   Lenses,
-  Onboarding,
-  ReportingBand,
+  OnboardingDisclosure,
 } from "@/components/site/Content";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
 import { LeadForm } from "@/components/site/LeadForm";
 import { Nav } from "@/components/site/Nav";
-import { Section, SectionHeading } from "@/components/ui";
+import { QueryDemo } from "@/components/site/QueryDemo";
+import { Section, SectionHeading, buttonStyles } from "@/components/ui";
 import { buildMeta } from "@/lib/demo-pack";
 
 /**
@@ -25,10 +24,12 @@ import { buildMeta } from "@/lib/demo-pack";
  * client-side fetch and no layout shift. Interaction beyond that goes through
  * `/api/demo/*`.
  *
- * Nine sections, in the order a sceptical institutional reader asks their
- * questions: what is it, how does it fit together, what does it control, how
- * do I get onto it, how does it scale across books, show me, why can I rely on
- * it, what does it produce, talk to me.
+ * The narrative, in the order a first-time visitor asks their questions:
+ * what is it → show me (query demo) → how does it work → what does it control
+ * (controls demo) → how does it scale across books → where do users reach it →
+ * why trust it → what next. Two demos, both user-started, never autoplaying:
+ * first the visitor interrogates the portfolio, then they watch Trakt monitor
+ * that same portfolio.
  */
 export default function Page() {
   const meta = buildMeta();
@@ -42,60 +43,68 @@ export default function Page() {
       <Nav />
 
       <main id="main">
-        {/* 1 — Value proposition */}
+        {/* 1 — What is Trakt? */}
         <div id="top" className="pt-28 pb-16 sm:pt-32 sm:pb-20">
           <Section id="product">
             <Hero scope={meta.scope} />
           </Section>
         </div>
 
-        {/* 2 — The platform: data + documents → governed layer → outputs */}
+        {/* 2 — Demo 1: portfolio query. The only demo surface for querying,
+            and the only place the synthetic-portfolio disclaimer appears. */}
+        <Section id="query-demo" className="pb-16 sm:pb-20">
+          <SectionHeading
+            id="query-demo"
+            eyebrow="Portfolio query demo"
+            title="Ask the portfolio. Get a governed answer."
+            intro="Ask portfolio questions in natural language and get answers from the same governed calculations, wherever your team works. The portfolios are wholly synthetic, and the page accepts no uploads."
+          />
+          <div id="example" className="mt-8 scroll-mt-24">
+            <QueryDemo meta={meta} />
+          </div>
+          <p className="mt-4 text-[13px] font-medium text-ink-300">
+            Same question. Same calculation. Same answer.
+          </p>
+        </Section>
+
+        {/* 3 — How does the platform work? */}
         <Section id="platform" className="pb-16 sm:pb-20">
           <Architecture />
         </Section>
 
-        {/* 3 — Controls and forward risk */}
+        {/* 4 — Risk & controls, with Demo 2. */}
         <Section id="controls" className="pb-16 sm:pb-20">
           <ForwardControls />
         </Section>
 
-        {/* 4 — Governed onboarding */}
-        <Section id="onboarding" className="pb-16 sm:pb-20">
-          <Onboarding />
-        </Section>
-
-        {/* 5 — Multi-portfolio lenses */}
+        {/* 5 — Multiple books, vehicles and scopes. */}
         <Section id="lenses" className="pb-16 sm:pb-20">
           <Lenses scope={meta.scope} />
         </Section>
 
-        {/* 6 — Portfolio intelligence. The only demo surface on the page, and
-            the only place the synthetic-portfolio disclaimer appears. The
-            inner #example anchor is the hero CTA's landing point. */}
+        {/* 6 — Where users reach it. Distribution only — the query demo has
+            already appeared in section 2. */}
         <Section id="intelligence" className="pb-16 sm:pb-20">
           <SectionHeading
             id="intelligence"
             eyebrow="Portfolio intelligence"
             title="Portfolio intelligence where your team already works."
-            intro="Ask portfolio questions in natural language — in the Trakt workspace, Microsoft Teams, or through Microsoft 365 Copilot. Move from a question to governed portfolio evidence without rebuilding the analysis. The portfolios are wholly synthetic, and the page accepts no uploads."
+            intro="Ask portfolio questions in Trakt, Microsoft Teams or Microsoft 365 Copilot. Every answer runs against the same governed portfolio calculations and evidence."
           />
           <DeliveryStrip />
-          <div id="example" className="mt-8 scroll-mt-24">
-            <CopilotDemo meta={meta} />
-          </div>
         </Section>
 
-        {/* 7 — Governance and platform properties */}
+        {/* 7 — Why trust the outputs? */}
         <Section id="governance" className="pb-16 sm:pb-20">
           <Governance />
         </Section>
 
-        {/* 8 — Reporting as an output, not the identity */}
-        <Section id="reporting" className="pb-16 sm:pb-20">
-          <ReportingBand />
+        {/* Implementation, out of the main narrative. */}
+        <Section id="onboarding" className="pb-16 sm:pb-20">
+          <OnboardingDisclosure />
         </Section>
 
-        {/* 9 — Contact */}
+        {/* 8 — What next? */}
         <Section id="book-a-demo" className="pb-20 sm:pb-24">
           <div className="rounded-2xl border border-line bg-navy-900/70 p-6 sm:p-9">
             <div className="grid gap-9 lg:grid-cols-[1fr_1.05fr] lg:gap-12">
@@ -104,12 +113,15 @@ export default function Page() {
                   id="book-a-demo-heading"
                   className="text-balance text-2xl font-semibold tracking-tight text-ink-100 sm:text-3xl"
                 >
-                  See Trakt applied to your operating model
+                  See your portfolio through one governed view.
                 </h2>
                 <p className="mt-4 text-[15px] leading-relaxed text-ink-300">
                   We will demonstrate Trakt against your own portfolios, funding
                   requirements and Microsoft 365 environment.
                 </p>
+                <a href="#query-demo" className={`${buttonStyles.secondary} mt-6`}>
+                  Explore the live demo
+                </a>
               </div>
               <div>
                 <LeadForm />
