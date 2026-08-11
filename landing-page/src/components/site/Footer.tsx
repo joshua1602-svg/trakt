@@ -2,8 +2,8 @@ import { TraktWordmark } from "@/components/site/TraktWordmark";
 
 export function Footer() {
   return (
-    <footer className="border-t border-line px-5 py-10 sm:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+    <footer className="border-t border-line px-5 py-10 sm:px-8 lg:px-12">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-2.5">
           <TraktWordmark size={22} />
         </div>

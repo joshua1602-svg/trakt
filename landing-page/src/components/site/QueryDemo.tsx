@@ -55,6 +55,7 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
             contrast: it should read as a screenshot of working software. */}
         <div
           aria-hidden="true"
+          data-poster-content
           className="pointer-events-none flex select-none flex-col gap-4 p-4 sm:p-5"
         >
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line bg-navy-850/80 px-4 py-3">
@@ -101,17 +102,22 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
             </div>
           </div>
 
-          {/* The refusal block is deliberately absent: it is a live section
-              of its own below, and a still of the same words directly above
-              it would read as duplication. This band is the plate's room. */}
-          <div className="h-24" />
         </div>
+
+        {/* The refusal block is deliberately absent from the replica: it is a
+            live section of its own below, and a still of the same words would
+            read as duplication. This band is the plate's room, kept outside
+            the content wrapper so the plate provably covers nothing. */}
+        <div className="h-28" />
 
         {/* Backing behind the control only, so the still stays crisp — and
             low in the frame, over the reserved band rather than the content
             a skimming reader is trying to take in. */}
-        <div className="absolute inset-x-0 bottom-0 flex justify-center pb-5">
-          <div className="rounded-2xl border border-line bg-navy-950/90 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
+        <div
+          data-plate="query"
+          className="absolute inset-x-0 bottom-0 flex justify-center pb-5"
+        >
+          <div className="rounded-2xl border border-line bg-navy-950 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
             {/* demo_open fires from the demo itself when the scripted opening
                 question runs, so starting is counted exactly once. */}
             <button type="button" onClick={() => setStarted(true)} className={buttonStyles.primary}>

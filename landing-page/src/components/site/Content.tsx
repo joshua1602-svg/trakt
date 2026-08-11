@@ -121,7 +121,7 @@ export function ForwardControls() {
           eyebrow="Risk & controls"
           title="Turn portfolio requirements into live controls."
         />
-        <p className="mt-4 max-w-2xl text-[15px] font-medium leading-relaxed text-mint-400">
+        <p className="mt-4 max-w-[72ch] text-[15px] font-medium leading-relaxed text-mint-400">
           Know what is breached today — and what the portfolio is moving toward.
         </p>
       </Reveal>
@@ -400,7 +400,7 @@ export function Governance() {
           eyebrow="Governance"
           title="Deterministic underneath. Governed throughout."
         />
-        <p className="mt-4 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
+        <p className="mt-4 max-w-[72ch] text-[15px] font-medium leading-relaxed text-mint-400">
           Every figure is reconciled by construction rather than by comparison.
         </p>
       </Reveal>
@@ -421,7 +421,7 @@ export function Governance() {
       {/* One line, answering the extensibility objection. The agentic
           direction is cut: the Delivery Model tiles show it, in grey. */}
       <Reveal delay={120}>
-        <p className="mt-8 max-w-3xl text-sm leading-relaxed text-ink-500">
+        <p className="mt-8 max-w-[72ch] text-sm leading-relaxed text-ink-500">
           New asset classes are added through configuration, not a rebuild.
         </p>
       </Reveal>

@@ -25,7 +25,7 @@ export function RefusalSection({ meta }: { meta: DemoMetaResponse }) {
         eyebrow="Boundaries"
         title="Trakt declines what it cannot derive."
       />
-      <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-300">
+      <p className="mt-4 max-w-[72ch] text-[15px] leading-relaxed text-ink-300">
         Ask either of these and watch it refuse, with the reason.
       </p>
       <ul className="mt-6 flex flex-wrap gap-2.5">

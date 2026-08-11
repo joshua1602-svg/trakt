@@ -90,7 +90,7 @@ export function Nav() {
           : "border-transparent bg-transparent",
       )}
     >
-      <nav aria-label="Primary" className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+      <nav aria-label="Primary" className="mx-auto flex h-16 w-full max-w-[1600px] items-center justify-between px-5 sm:px-8 lg:px-12">
         <a href="#top" className="flex items-center gap-2.5" aria-label="Trakt — home">
           <TraktWordmark />
         </a>
@@ -143,7 +143,7 @@ export function Nav() {
           ref={menuRef}
           className="border-t border-line bg-navy-950/97 md:hidden"
         >
-          <ul className="mx-auto max-w-6xl px-5 py-3">
+          <ul className="mx-auto w-full max-w-[1600px] px-5 py-3 sm:px-8 lg:px-12">
             {LINKS.map((link) => (
               <li key={link.href}>
                 <a

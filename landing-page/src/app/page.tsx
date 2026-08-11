@@ -142,7 +142,7 @@ export default function Page() {
                 >
                   See your portfolio through one governed view.
                 </h2>
-                <p className="mt-4 text-[15px] leading-relaxed text-ink-300">
+                <p className="mt-4 max-w-[72ch] text-[15px] leading-relaxed text-ink-300">
                   We will demonstrate Trakt against your own portfolios, funding
                   requirements and Microsoft 365 environment.
                 </p>

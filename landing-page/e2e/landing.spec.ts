@@ -459,6 +459,56 @@ test.describe("Trakt landing page", () => {
       .toEqual([]);
   });
 
+  /**
+   * The play plate must never cover the demo's argument.
+   *
+   * The controls rows live inside the poster image, so they have no DOM boxes
+   * to measure. The poster is a 1200x960 still rendered into a 5:4 frame with
+   * no crop, so the mapping is exact: the control card — its three rows, their
+   * percentages and the breach horizon — ends at ~77% of the frame height.
+   * The plate must therefore start below 78%, or below the frame entirely.
+   * Asserted at all three widths because it has twice been checked by eye.
+   */
+  test("the play plate never covers the control rows or the breach horizon", async ({
+    page,
+  }) => {
+    for (const width of [1440, 834, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator("#controls").scrollIntoViewIfNeeded();
+
+      const frame = await page.locator("#controls video").boundingBox();
+      const plate = await page.locator('[data-plate="controls"]').boundingBox();
+      expect(frame, `no video frame at ${width}`).not.toBeNull();
+      expect(plate, `no play plate at ${width}`).not.toBeNull();
+      if (!frame || !plate) continue;
+
+      const safeTop = frame.y + frame.height * 0.78;
+      expect(
+        plate.y,
+        `the plate intrudes into the control rows at ${width}px`,
+      ).toBeGreaterThanOrEqual(safeTop);
+    }
+  });
+
+  test("the query plate covers none of its poster's content", async ({ page }) => {
+    for (const width of [1440, 834, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator("#example").scrollIntoViewIfNeeded();
+
+      const content = await page.locator("[data-poster-content]").boundingBox();
+      const plate = await page.locator('[data-plate="query"]').boundingBox();
+      expect(content, `no poster content at ${width}`).not.toBeNull();
+      expect(plate, `no query plate at ${width}`).not.toBeNull();
+      if (!content || !plate) continue;
+
+      // The replica reserves a band beneath its content; the plate sits in it.
+      expect(
+        plate.y,
+        `the query plate overlaps the poster content at ${width}px`,
+      ).toBeGreaterThanOrEqual(content.y + content.height);
+    }
+  });
+
   test("has no horizontal overflow and one h1", async ({ page }) => {
     await expect(page.locator("h1")).toHaveCount(1);
     const overflow = await page.evaluate(
