@@ -13,10 +13,11 @@
         "warning": "ND_BRANCH_PATH_INCONSISTENT"
       }
     ],
-    "parser_version": "annex2-normalizer/1.0.0",
+    "parser_version": "annex2-normalizer/1.1.0",
     "scope": {
       "asset_branch": "ResdtlRealEsttLn/PrfrmgLn",
       "cancellation_rows": "excluded",
+      "nd_schema_cross_check": "enabled",
       "performance": "PRF",
       "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04",
       "sheet": "DRAFT1auth.099.001.04",
@@ -31,6 +32,7 @@
         "artefact_id": "esma_annex2_message_workbook",
         "artefact_sha256": "983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b",
         "byte_size": 9678838,
+        "criticality": "gating",
         "effective_date": "UNKNOWN",
         "external_version": "1.3.1",
         "publication_date": "2021-06-11",
@@ -45,6 +47,7 @@
         "artefact_id": "esma_annex2_reporting_instructions",
         "artefact_sha256": "",
         "byte_size": 0,
+        "criticality": "corroborating",
         "effective_date": "UNKNOWN",
         "external_version": "UNKNOWN",
         "publication_date": "UNKNOWN",
@@ -59,6 +62,7 @@
         "artefact_id": "esma_annex2_sample_message",
         "artefact_sha256": "64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e",
         "byte_size": 17899,
+        "criticality": "corroborating",
         "effective_date": "UNKNOWN",
         "external_version": "UNKNOWN",
         "publication_date": "UNKNOWN",
@@ -73,6 +77,7 @@
         "artefact_id": "esma_annex2_xml_schema",
         "artefact_sha256": "48e587ec5905ab322eb98e52a9989ed65194d3a1fd20f3f55aac33a7d492ab1c",
         "byte_size": 835477,
+        "criticality": "gating",
         "effective_date": "UNKNOWN",
         "external_version": "1.3.0",
         "publication_date": "UNKNOWN",
@@ -100,10 +105,11 @@
         "warning": "ND_BRANCH_PATH_INCONSISTENT"
       }
     ],
-    "parser_version": "annex2-normalizer/1.0.0",
+    "parser_version": "annex2-normalizer/1.1.0",
     "scope": {
       "asset_branch": "ResdtlRealEsttLn/PrfrmgLn",
       "cancellation_rows": "excluded",
+      "nd_schema_cross_check": "enabled",
       "performance": "PRF",
       "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04",
       "sheet": "DRAFT1auth.099.001.04",
@@ -118,6 +124,7 @@
         "artefact_id": "esma_annex2_message_workbook",
         "artefact_sha256": "983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b",
         "byte_size": 9678838,
+        "criticality": "gating",
         "effective_date": "UNKNOWN",
         "external_version": "1.3.1",
         "publication_date": "2021-06-11",
@@ -132,6 +139,7 @@
         "artefact_id": "esma_annex2_reporting_instructions",
         "artefact_sha256": "",
         "byte_size": 0,
+        "criticality": "corroborating",
         "effective_date": "UNKNOWN",
         "external_version": "UNKNOWN",
         "publication_date": "UNKNOWN",
@@ -146,6 +154,7 @@
         "artefact_id": "esma_annex2_sample_message",
         "artefact_sha256": "64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e",
         "byte_size": 17899,
+        "criticality": "corroborating",
         "effective_date": "UNKNOWN",
         "external_version": "UNKNOWN",
         "publication_date": "UNKNOWN",
@@ -160,6 +169,7 @@
         "artefact_id": "esma_annex2_xml_schema",
         "artefact_sha256": "3f4ed4e0030d0fbf41f40095e474013cee64a706afebd285765788dd09458d3a",
         "byte_size": 820742,
+        "criticality": "gating",
         "effective_date": "UNKNOWN",
         "external_version": "1.3.0",
         "publication_date": "UNKNOWN",
@@ -173,7 +183,8 @@
     ],
     "spec_version": "auth.099.001.04 / workbook 1.3.1 + candidate schema"
   },
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
+  "corroborating_source_status": "SOURCE_CHECK_FAILED",
   "deltas": [
     {
       "change_type": "ENUM_CHANGED",
@@ -256,6 +267,7 @@
     "mutating_writes": "none — Stage 1 is observational",
     "source_manifest": "/home/user/trakt/config/regulatory_watch/esma_annex2_sources.yaml"
   },
+  "gating_source_status": "SOURCE_CHANGED",
   "generated_at": "2026-01-01T00:00:00Z",
   "impacts": [
     {
@@ -410,6 +422,7 @@
   "regulatory_delta_count": 1,
   "source_status": "SOURCE_CHECK_FAILED",
   "spec_status": "SPEC_CHANGED",
+  "specification_current": "no",
   "unresolved": [
     {
       "code": "RREC8",
@@ -438,6 +451,22 @@
       "side": "candidate",
       "spec_version": "auth.099.001.04 / workbook 1.3.1 + candidate schema",
       "unresolved_attributes": []
+    }
+  ],
+  "unverified_sources": [
+    {
+      "artefact_id": "esma_annex2_reporting_instructions",
+      "criticality": "corroborating",
+      "detail": "no local copy vendored and retrieval is disabled",
+      "retrieval_status": "SOURCE_CHECK_FAILED",
+      "side": "baseline"
+    },
+    {
+      "artefact_id": "esma_annex2_reporting_instructions",
+      "criticality": "corroborating",
+      "detail": "no local copy vendored and retrieval is disabled",
+      "retrieval_status": "SOURCE_CHECK_FAILED",
+      "side": "candidate"
     }
   ]
 }

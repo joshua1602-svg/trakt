@@ -17,7 +17,9 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from .contracts import ARTEFACT_TYPES, SourceArtefact, UNKNOWN
+from .contracts import (
+    ARTEFACT_TYPES, CRITICALITIES, GATING, SourceArtefact, UNKNOWN,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,6 +57,14 @@ class SourceManifest:
     def of_type(self, artefact_type: str) -> List[SourceArtefact]:
         return [a for a in self.artefacts if a.artefact_type == artefact_type]
 
+    def of_criticality(self, criticality: str) -> List[SourceArtefact]:
+        return [a for a in self.artefacts if a.criticality == criticality]
+
+    @property
+    def gating_artefacts(self) -> List[SourceArtefact]:
+        """Artefacts the normalized specification is derived from."""
+        return self.of_criticality(GATING)
+
     @property
     def allowed_urls(self) -> List[str]:
         return sorted({a.source_url for a in self.artefacts if a.source_url})
@@ -79,6 +89,7 @@ class SourceManifest:
             "retrieval_enabled": self.retrieval_enabled,
             "allowlist_only": self.allowlist_only,
             "path": self.path,
+            "gating_artefacts": [a.artefact_id for a in self.gating_artefacts],
             "artefacts": [a.to_dict() for a in self.artefacts],
         }
 
@@ -146,12 +157,21 @@ def load_manifest(path: Optional[Path] = None) -> SourceManifest:
         url = str(entry.get("source_url") or "")
         if url and not url.startswith("https://"):
             raise ManifestError(f"{where}: source_url must be https://: {url}")
+        # Criticality is REQUIRED and explicit: whether a source gates the
+        # "specification is current" claim is a control decision, never a
+        # default that quietly decides itself.
+        criticality = str(_require(entry, "criticality", where))
+        if criticality not in CRITICALITIES:
+            raise ManifestError(
+                f"{where}: criticality must be one of {sorted(CRITICALITIES)}, "
+                f"got '{criticality}'")
 
         artefacts.append(SourceArtefact(
             artefact_id=artefact_id,
             authority=a_authority,
             regime=a_regime,
             artefact_type=a_type,
+            criticality=criticality,
             title=str(entry.get("title") or ""),
             external_version=str(entry.get("external_version") or UNKNOWN),
             source_url=url,

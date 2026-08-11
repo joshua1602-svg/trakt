@@ -406,3 +406,61 @@ def test_spec_change_dominates_a_failed_source_check(rows, codelists):
                                             SOURCE_CHECK_FAILED)
     assert overall_status(SOURCE_CHECK_FAILED, SPEC_CHANGED) == \
         REGULATORY_SPEC_CHANGED
+
+
+# --------------------------------------------------------------------------- #
+# 12. Secondary value leaves must not be invisible to FORMAT_CHANGED
+# --------------------------------------------------------------------------- #
+#
+# A monetary field publishes TWO typed leaves: Val/Amt (the amount) and Val/Sgn
+# (the sign indicator). Comparing only the primary leaf would let a type change
+# on the second pass undetected. 19 of the 104 in-scope codes have this shape,
+# including every balance in the report.
+
+def test_a_type_change_on_a_secondary_value_leaf_is_detected(baseline, rows,
+                                                             codelists):
+    sgn = next(r for r in fx.rows_for(rows, "RREL73")
+               if r.path.endswith("/Sgn"))
+    mutated = fx.edit_rows(rows, "RREL73", lambda r: r.path == sgn.path,
+                           data_type="PlusOrMinusIndicator2",
+                           pattern="xs:string")
+    candidate = fx.build_spec(mutated, codelists, spec_version="B")
+    delta = _only(compare(baseline, candidate), "RREL73", FORMAT_CHANGED)
+    old_types = [leaf["data_type"] for leaf in delta.old_value["value_leaves"]]
+    new_types = [leaf["data_type"] for leaf in delta.new_value["value_leaves"]]
+    assert old_types == ["ActiveOrHistoricCurrencyAndAmount",
+                         "PlusOrMinusIndicator"]
+    assert new_types == ["ActiveOrHistoricCurrencyAndAmount",
+                         "PlusOrMinusIndicator2"]
+    # The primary leaf is untouched, so this is precisely the case that the
+    # data_type/format_pattern pair alone could not see.
+    assert "data_type" not in delta.new_value
+
+
+def test_relocating_an_element_is_not_reported_as_a_format_change(baseline,
+                                                                  rows,
+                                                                  codelists):
+    """value_leaves are keyed RELATIVE to the element, so a move is a move."""
+    old = fx.element_row(rows, "RREL73").path
+    new = old.rsplit("/", 1)[0] + "/AllctdLossAmt"
+    candidate = fx.build_spec(fx.move_code_path(rows, "RREL73", old, new),
+                              codelists, spec_version="B")
+    deltas = compare(baseline, candidate)
+    assert [(d.code, d.change_type) for d in deltas] == \
+        [("RREL73", XML_PATH_CHANGED)]
+
+
+def test_adding_a_value_leaf_is_a_format_change(baseline, rows, codelists):
+    import dataclasses
+    amt = next(r for r in fx.rows_for(rows, "RREL73")
+               if r.path.endswith("/Amt"))
+    extra = dataclasses.replace(
+        amt, row_number=max(r.row_number for r in rows) + 1,
+        path=amt.path.rsplit("/", 1)[0] + "/Ccy",
+        xml_tag="Ccy", data_type="ActiveOrHistoricCurrencyCode",
+        pattern="xs:string")
+    candidate = fx.build_spec(list(rows) + [extra], codelists,
+                              spec_version="B")
+    delta = _only(compare(baseline, candidate), "RREL73", FORMAT_CHANGED)
+    assert len(delta.new_value["value_leaves"]) == \
+        len(delta.old_value["value_leaves"]) + 1

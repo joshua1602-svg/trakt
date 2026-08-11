@@ -1,42 +1,52 @@
 # ESMA Annex 2 Regulatory Watch — ESMA_Annex2
 
-*Generated 2026-01-01T00:00:00Z · report contract v1.0.0 · Stage 1, observational only — no active configuration was modified.*
+*Generated 2026-01-01T00:00:00Z · report contract v1.1.0 · Stage 1, observational only — no active configuration was modified.*
 
-**Outcome: `REGULATORY_SPEC_CHANGED`** — source `SOURCE_CHECK_FAILED`, parsed specification `SPEC_CHANGED`. 1 regulatory delta(s), 3 implementation impact(s).
+**Outcome: `REGULATORY_SPEC_CHANGED`** — is the implemented machine-readable Annex 2 specification current? **NO**
+
+- gating sources: `SOURCE_CHANGED` · corroborating sources: `SOURCE_CHECK_FAILED`
+- parsed specification: `SPEC_CHANGED`
+- 1 regulatory delta(s), 3 implementation impact(s)
 
 ## 1. Baseline source / version
 
 - **Spec version:** `auth.099.001.04 / workbook 1.3.1`
 - **Fields parsed:** 104
-- **Normalizer:** `annex2-normalizer/1.0.0`
-- **Scope:** {"asset_branch": "ResdtlRealEsttLn/PrfrmgLn", "cancellation_rows": "excluded", "performance": "PRF", "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04", "sheet": "DRAFT1auth.099.001.04", "templates": ["ALL", "RRE"]}
+- **Normalizer:** `annex2-normalizer/1.1.0`
+- **Scope:** {"asset_branch": "ResdtlRealEsttLn/PrfrmgLn", "cancellation_rows": "excluded", "nd_schema_cross_check": "enabled", "performance": "PRF", "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04", "sheet": "DRAFT1auth.099.001.04", "templates": ["ALL", "RRE"]}
 
-| artefact | external version | sha256 | status | retrieved |
+| artefact | criticality | external version | sha256 | status |
 | --- | --- | --- | --- | --- |
-| `esma_annex2_message_workbook` | 1.3.1 | `983e33c851a6621a…` | OK | 2026-01-01T00:00:00Z |
-| `esma_annex2_reporting_instructions` | UNKNOWN | `—` | SOURCE_CHECK_FAILED — no local copy vendored and retrieval is disabled | 2026-01-01T00:00:00Z |
-| `esma_annex2_sample_message` | UNKNOWN | `64e30a51b1019acb…` | OK | 2026-01-01T00:00:00Z |
-| `esma_annex2_xml_schema` | 1.3.0 | `48e587ec5905ab32…` | OK | 2026-01-01T00:00:00Z |
+| `esma_annex2_message_workbook` | **gating** | 1.3.1 | `983e33c851a6621a…` | OK |
+| `esma_annex2_reporting_instructions` | corroborating | UNKNOWN | `—` | SOURCE_CHECK_FAILED — no local copy vendored and retrieval is disabled |
+| `esma_annex2_sample_message` | corroborating | UNKNOWN | `64e30a51b1019acb…` | OK |
+| `esma_annex2_xml_schema` | **gating** | 1.3.0 | `48e587ec5905ab32…` | OK |
 
 ## 2. Candidate source / version
 
 - **Spec version:** `auth.099.001.04 / workbook 1.3.1 + candidate schema`
 - **Fields parsed:** 104
-- **Normalizer:** `annex2-normalizer/1.0.0`
-- **Scope:** {"asset_branch": "ResdtlRealEsttLn/PrfrmgLn", "cancellation_rows": "excluded", "performance": "PRF", "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04", "sheet": "DRAFT1auth.099.001.04", "templates": ["ALL", "RRE"]}
+- **Normalizer:** `annex2-normalizer/1.1.0`
+- **Scope:** {"asset_branch": "ResdtlRealEsttLn/PrfrmgLn", "cancellation_rows": "excluded", "nd_schema_cross_check": "enabled", "performance": "PRF", "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04", "sheet": "DRAFT1auth.099.001.04", "templates": ["ALL", "RRE"]}
 
-| artefact | external version | sha256 | status | retrieved |
+| artefact | criticality | external version | sha256 | status |
 | --- | --- | --- | --- | --- |
-| `esma_annex2_message_workbook` | 1.3.1 | `983e33c851a6621a…` | OK | 2026-01-01T00:00:00Z |
-| `esma_annex2_reporting_instructions` | UNKNOWN | `—` | SOURCE_CHECK_FAILED — no local copy vendored and retrieval is disabled | 2026-01-01T00:00:00Z |
-| `esma_annex2_sample_message` | UNKNOWN | `64e30a51b1019acb…` | OK | 2026-01-01T00:00:00Z |
-| `esma_annex2_xml_schema` | 1.3.0 | `3f4ed4e0030d0fbf…` | OK | 2026-01-01T00:00:00Z |
+| `esma_annex2_message_workbook` | **gating** | 1.3.1 | `983e33c851a6621a…` | OK |
+| `esma_annex2_reporting_instructions` | corroborating | UNKNOWN | `—` | SOURCE_CHECK_FAILED — no local copy vendored and retrieval is disabled |
+| `esma_annex2_sample_message` | corroborating | UNKNOWN | `64e30a51b1019acb…` | OK |
+| `esma_annex2_xml_schema` | **gating** | 1.3.0 | `3f4ed4e0030d0fbf…` | OK |
 
 ## 3. Did the authoritative source content change?
 
-**`SOURCE_CHECK_FAILED`**
+- **Gating sources** (the specification is derived from these): `SOURCE_CHANGED`
+- **Corroborating sources** (tracked, nothing derived from them): `SOURCE_CHECK_FAILED`
 
-> At least one authoritative source could not be checked. This is **not** evidence that the regime is current.
+Unverified sources:
+
+- `esma_annex2_reporting_instructions` (corroborating, baseline) — SOURCE_CHECK_FAILED: no local copy vendored and retrieval is disabled
+- `esma_annex2_reporting_instructions` (corroborating, candidate) — SOURCE_CHECK_FAILED: no local copy vendored and retrieval is disabled
+
+> A **corroborating** source is unverified. No compared attribute is derived from it, so it does not change the determination about the machine-readable specification — but the obligation it carries has not been reviewed by this run.
 
 - baseline source digest: `esma_annex2_message_workbook:983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b|esma_annex2_reporting_instructions:|esma_annex2_sample_message:64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e|esma_annex2_xml_schema:48e587ec5905ab322eb98e52a9989ed65194d3a1fd20f3f55aac33a7d492ab1c`
 - candidate source digest: `esma_annex2_message_workbook:983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b|esma_annex2_reporting_instructions:|esma_annex2_sample_message:64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e|esma_annex2_xml_schema:3f4ed4e0030d0fbf41f40095e474013cee64a706afebd285765788dd09458d3a`

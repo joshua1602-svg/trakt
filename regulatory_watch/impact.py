@@ -34,7 +34,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import (
+    Any, Callable, Dict, List, Optional, Sequence, Set, Tuple,
+)
 
 import yaml
 
@@ -213,311 +215,569 @@ def _scan_test_references(root: Path) -> Dict[str, List[str]]:
 
 
 # --------------------------------------------------------------------------- #
-# Per-change-type assessment
+# The decision table
+# --------------------------------------------------------------------------- #
+#
+# Impact assessment is a CONTROLLED DECISION TABLE, not procedural code. Each
+# entry below is one auditable row:
+#
+#     regulatory delta -> Trakt component -> impact status -> rationale
+#
+# Two boundaries are structural rather than conventional:
+#
+# 1. **Factual comparison stays separate from implementation judgement.** The
+#    comparator establishes WHAT the authority changed; nothing in this module
+#    can create, suppress or reword a delta. This module only answers "given
+#    that fact, which Trakt component is likely affected".
+#
+# 2. **No status authorises an automatic change.** Every status is advisory and
+#    names a location for a human to inspect. ``CONFIG_CHANGE_REQUIRED`` means
+#    "a person must change this config", never "the watch may".
+#
+# Conservatism rule applied throughout: where the evidence does not decide the
+# answer, the row resolves to MANUAL_REVIEW_REQUIRED. NO_IMPLEMENTATION_CHANGE
+# is reserved for cases where Trakt demonstrably holds nothing that depends on
+# the changed attribute.
+
+
+@dataclass(frozen=True)
+class Context:
+    """Everything a decision row is allowed to look at, computed once."""
+
+    delta: SpecDelta
+    code: str
+    registry: Optional[Dict[str, Any]]          # fields_registry regime entry
+    rule: Optional[Dict[str, Any]]              # annex2_delivery_rules entry
+    path_entry: Optional[Dict[str, Any]]        # annex2_field_xsd_path_map
+    in_order: bool                              # esma_code_order / structure
+    order_position: Optional[int]
+    in_universe: bool                           # annex2_field_universe
+    tests: List[str]                            # concrete referencing paths
+    enum_maps: Dict[str, Any]
+    enum_targets: Set[str]
+
+    @property
+    def validators(self) -> Dict[str, Any]:
+        return (self.rule or {}).get("validators") or {}
+
+    @property
+    def configured_nd(self) -> Set[str]:
+        return set((self.rule or {}).get("nd_allowed") or [])
+
+    def old(self, key: str, default: Any = None) -> Any:
+        return (self.delta.old_value or {}).get(key, default)
+
+    def new(self, key: str, default: Any = None) -> Any:
+        return (self.delta.new_value or {}).get(key, default)
+
+
+#: A decision returns (status, rationale, current_implementation), or None to
+#: emit no finding for that component at all.
+Decision = Optional[Tuple[str, str, Any]]
+
+
+@dataclass(frozen=True)
+class Row:
+    """One row of the decision table."""
+
+    component: str
+    locations: Tuple[str, ...]
+    decide: Callable[[Context], Decision]
+
+
+def _no_change(rationale: str, current: Any = None) -> Decision:
+    return NO_IMPLEMENTATION_CHANGE, rationale, current
+
+
+# --------------------------------------------------------------------------- #
+# FIELD_ADDED — the authority publishes a code Trakt has never seen
+# --------------------------------------------------------------------------- #
+# Note the conservatism: pre-existing configuration for a NEWLY PUBLISHED code
+# is not reassurance. That config was written before the authority published
+# the definition, so it cannot have been written against it. Those rows resolve
+# to MANUAL_REVIEW_REQUIRED, never NO_IMPLEMENTATION_CHANGE.
+
+def _added_registry(c: Context) -> Decision:
+    if c.registry:
+        return (MANUAL_REVIEW_REQUIRED,
+                "the registry already maps this code, but the mapping predates "
+                "the authority publishing it — confirm the canonical field "
+                "still matches the published definition", c.registry)
+    return (CONFIG_CHANGE_REQUIRED,
+            "a newly published Annex 2 code needs a canonical field mapping "
+            "before it can be projected", None)
+
+
+def _added_order(c: Context) -> Decision:
+    if c.in_order:
+        return (MANUAL_REVIEW_REQUIRED,
+                "the code ordering already lists this code; confirm its "
+                "position matches the newly published sequence",
+                {"configured_position": c.order_position})
+    return (CONFIG_CHANGE_REQUIRED,
+            "a new code absent from the ESMA code ordering would be emitted "
+            "out of sequence or not at all", {"in_code_order": False})
+
+
+def _added_xml(c: Context) -> Decision:
+    if c.path_entry:
+        return (MANUAL_REVIEW_REQUIRED,
+                "an XSD path is already mapped for this code; confirm it "
+                "matches the newly published path",
+                c.path_entry.get("xml_path"))
+    return (XML_CHANGE_REQUIRED,
+            "a new code needs an XSD path before the XML builder can place it",
+            None)
+
+
+def _added_nd(c: Context) -> Decision:
+    current = {"delivery_rule": bool(c.rule),
+               "in_field_universe": c.in_universe,
+               "regulatory_nd_allowed": c.new("nd_allowed")}
+    if c.rule:
+        return (MANUAL_REVIEW_REQUIRED,
+                "a delivery rule already exists for this newly published code; "
+                "its ND envelope was not written against the published "
+                "definition and must be reconciled with it", current)
+    return (CONFIG_CHANGE_REQUIRED,
+            "the ND envelope for a new code is undefined until a delivery rule "
+            "records it", current)
+
+
+def _added_tests(c: Context) -> Decision:
+    return (TEST_CHANGE_REQUIRED,
+            "a newly published code has no Annex 2 coverage"
+            if not c.tests else
+            "Annex 2 tests already reference this newly published code; "
+            "confirm they assert the published definition",
+            {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# FIELD_REMOVED — the authority withdraws a code Trakt may still emit
 # --------------------------------------------------------------------------- #
 
-def _finding(delta: SpecDelta, component: str, status: str,
-             locations: Sequence[str], current: Any, rationale: str
-             ) -> ImpactFinding:
-    return ImpactFinding(
-        delta_id=delta.delta_id, code=delta.code,
-        change_type=delta.change_type, component=component, status=status,
-        locations=list(locations), current_implementation=current,
-        rationale=rationale)
+def _removed_registry(c: Context) -> Decision:
+    if c.registry:
+        return (CONFIG_CHANGE_REQUIRED,
+                "the registry maps a code the authority no longer publishes",
+                c.registry)
+    return _no_change("the registry does not map this code")
 
 
-def _test_locations(index: TraktImplementationIndex, code: str) -> List[str]:
-    return index.test_references.get(code, [])
+def _removed_order(c: Context) -> Decision:
+    if c.in_order:
+        return (CONFIG_CHANGE_REQUIRED,
+                "the code ordering still emits a withdrawn code",
+                {"configured_position": c.order_position})
+    return _no_change("the code ordering does not list this code")
+
+
+def _removed_nd(c: Context) -> Decision:
+    current = {"delivery_rule": bool(c.rule), "in_field_universe": c.in_universe}
+    if c.rule or c.in_universe:
+        return (CONFIG_CHANGE_REQUIRED,
+                "delivery/ND configuration exists for a withdrawn code", current)
+    return _no_change("no ND configuration for this code", current)
+
+
+def _removed_xml(c: Context) -> Decision:
+    if c.path_entry:
+        return (XML_CHANGE_REQUIRED,
+                "the XSD path map still targets a withdrawn code",
+                c.path_entry.get("xml_path"))
+    return _no_change("no XSD path mapped for this code")
+
+
+def _removed_tests(c: Context) -> Decision:
+    if not c.tests:
+        return None
+    return (TEST_CHANGE_REQUIRED,
+            "Annex 2 tests/fixtures assert a withdrawn code",
+            {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# ND_PERMISSION_CHANGED — the permitted ND set moved
+# --------------------------------------------------------------------------- #
+
+def _nd_lost(c: Context) -> List[str]:
+    """Configured ND values the authority no longer permits."""
+    return sorted(c.configured_nd - set(c.new("nd_allowed") or []))
+
+
+def _nd_behaviour(c: Context) -> Decision:
+    lost = _nd_lost(c)
+    current = {"configured_nd_allowed": sorted(c.configured_nd),
+               "in_field_universe": c.in_universe, "no_longer_permitted": lost}
+    if lost:
+        return (CONFIG_CHANGE_REQUIRED,
+                f"configured ND value(s) {lost} are no longer permitted by the "
+                f"authority", current)
+    if c.rule or c.in_universe:
+        return (MANUAL_REVIEW_REQUIRED,
+                "the permitted ND set moved but the configured envelope stays "
+                "within it; the derived field universe still needs "
+                "regenerating and the widened options may be usable", current)
+    return _no_change("no ND configuration exists for this code", current)
+
+
+def _nd_validation(c: Context) -> Decision:
+    if not _nd_lost(c):
+        return None
+    return (VALIDATION_CHANGE_REQUIRED,
+            "regime validation would accept an ND value the authority no "
+            "longer permits", (c.rule or {}).get("nd_allowed"))
+
+
+def _nd_tests(c: Context) -> Decision:
+    if not _nd_lost(c) or not c.tests:
+        return None
+    return (TEST_CHANGE_REQUIRED,
+            "Annex 2 fixtures/tests pin the previous ND envelope",
+            {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# ENUM_CHANGED — the authoritative code list moved
+# --------------------------------------------------------------------------- #
+
+def _enum_broken(c: Context) -> List[str]:
+    """Configured enum TARGETS the authority has withdrawn."""
+    withdrawn = set(c.old("enum_values") or []) - set(c.new("enum_values") or [])
+    return sorted(c.enum_targets & withdrawn)
+
+
+def _enum_mapping(c: Context) -> Decision:
+    broken = _enum_broken(c)
+    if broken:
+        return (CONFIG_CHANGE_REQUIRED,
+                f"configured enum target(s) {broken} were withdrawn from the "
+                f"authoritative code list", c.enum_maps or None)
+    if c.enum_maps:
+        return (MANUAL_REVIEW_REQUIRED,
+                "the authoritative code list moved; existing targets remain "
+                "valid but the mapping may need extending", c.enum_maps)
+    return _no_change("no enum mapping is configured for this code")
+
+
+def _enum_validation(c: Context) -> Decision:
+    if not _enum_broken(c):
+        return None
+    return (VALIDATION_CHANGE_REQUIRED,
+            "projection would emit a code the schema no longer allows",
+            c.enum_maps or None)
+
+
+def _enum_tests(c: Context) -> Decision:
+    if not _enum_broken(c) or not c.tests:
+        return None
+    return (TEST_CHANGE_REQUIRED,
+            "Annex 2 tests/fixtures assert a withdrawn enum value",
+            {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# FORMAT_CHANGED — data type / pattern / value-leaf shape moved
+# --------------------------------------------------------------------------- #
+
+def _format_validation(c: Context) -> Decision:
+    if c.validators:
+        return (VALIDATION_CHANGE_REQUIRED,
+                "a configured format validator is pinned to the previous "
+                "format", c.validators)
+    if c.registry or c.rule:
+        return (MANUAL_REVIEW_REQUIRED,
+                "no format validator is configured; confirm the projected "
+                "value still satisfies the new format", None)
+    return _no_change("no delivery rule or registry mapping for this code")
+
+
+def _format_registry(c: Context) -> Decision:
+    if not c.registry:
+        return None
+    return (CONFIG_CHANGE_REQUIRED,
+            "the registry declares a format for the mapped canonical field",
+            c.registry)
+
+
+def _format_tests(c: Context) -> Decision:
+    if not c.tests:
+        return None
+    return (TEST_CHANGE_REQUIRED,
+            "Annex 2 fixtures carry values in the previous format",
+            {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# MANDATORY_STATUS_CHANGED — presence obligation moved
+# --------------------------------------------------------------------------- #
+
+def _mandatory_validation(c: Context) -> Decision:
+    current = {"mandatory": (c.rule or {}).get("mandatory"),
+               "enforce_presence": (c.rule or {}).get("enforce_presence")}
+    if c.rule:
+        return (VALIDATION_CHANGE_REQUIRED,
+                "the delivery rule pins presence enforcement for this code",
+                current)
+    return (MANUAL_REVIEW_REQUIRED,
+            "no delivery rule exists; presence enforcement for this code is "
+            "undefined and must be decided", current)
+
+
+def _mandatory_registry(c: Context) -> Decision:
+    if not c.registry:
+        return None
+    return (CONFIG_CHANGE_REQUIRED,
+            "the registry records a regime priority for this code", c.registry)
+
+
+def _mandatory_tests(c: Context) -> Decision:
+    if not c.tests:
+        return None
+    return (TEST_CHANGE_REQUIRED,
+            "Annex 2 tests assert the previous mandatory status",
+            {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# XML_PATH_CHANGED — the element moved in the message tree
+# --------------------------------------------------------------------------- #
+
+def _path_xml(c: Context) -> Decision:
+    if c.path_entry:
+        return (XML_CHANGE_REQUIRED,
+                "the mapped XSD path no longer matches the authoritative path",
+                c.path_entry.get("xml_path"))
+    return (MANUAL_REVIEW_REQUIRED,
+            "no XSD path is mapped for this code; confirm the builder is "
+            "unaffected", None)
+
+
+def _path_delivery_rule(c: Context) -> Decision:
+    semantic = (c.rule or {}).get("workbook_semantic")
+    if not semantic:
+        return None
+    return (CONFIG_CHANGE_REQUIRED,
+            "the delivery rule pins a workbook leaf token derived from the "
+            "previous path", semantic)
+
+
+def _path_tests(c: Context) -> Decision:
+    if not c.tests:
+        return None
+    return (TEST_CHANGE_REQUIRED,
+            "Annex 2 XML tests assert the previous element path",
+            {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# MULTIPLICITY_CHANGED — cardinality moved
+# --------------------------------------------------------------------------- #
+
+def _multiplicity_xml(c: Context) -> Decision:
+    if c.path_entry:
+        return (XML_CHANGE_REQUIRED,
+                "the path map records a cardinality for this code; a repeating "
+                "or newly optional element changes how the builder emits it",
+                c.path_entry.get("cardinality"))
+    return (MANUAL_REVIEW_REQUIRED,
+            "cardinality moved for a code with no mapped path; confirm the "
+            "builder is unaffected", None)
+
+
+def _multiplicity_tests(c: Context) -> Decision:
+    if not c.tests:
+        return None
+    return (TEST_CHANGE_REQUIRED,
+            "Annex 2 fixtures encode one occurrence per record and would not "
+            "exercise the new cardinality", {"existing_references": c.tests})
+
+
+# --------------------------------------------------------------------------- #
+# ORDER_CHANGED — the authoritative field sequence moved
+# --------------------------------------------------------------------------- #
+
+def _order_config(c: Context) -> Decision:
+    current = {"in_code_order": c.in_order,
+               "configured_position": c.order_position}
+    if c.in_order:
+        return (CONFIG_CHANGE_REQUIRED,
+                "the configured ESMA code ordering no longer matches the "
+                "authoritative sequence; XSD sequence validation would reject "
+                "it", current)
+    # A code Trakt does not emit cannot mis-order Trakt's output: the relative
+    # order of the codes that ARE configured is unaffected by it moving.
+    return _no_change("this code is not in the configured ordering, so its "
+                      "position cannot affect the emitted sequence", current)
+
+
+def _order_xml(c: Context) -> Decision:
+    if not c.path_entry:
+        return None
+    return (XML_CHANGE_REQUIRED,
+            "element sequence is driven by the code ordering at build time",
+            c.path_entry.get("sequence_order"))
+
+
+# --------------------------------------------------------------------------- #
+# VALIDATION_RULE_CHANGED — the published rule text moved
+# --------------------------------------------------------------------------- #
+
+def _validation_rule(c: Context) -> Decision:
+    if c.validators:
+        return (VALIDATION_CHANGE_REQUIRED,
+                "a configured validator implements the previous rule text",
+                c.validators)
+    if c.rule or c.registry:
+        return (MANUAL_REVIEW_REQUIRED,
+                "no validator is configured for this code; confirm whether the "
+                "changed rule needs implementing", None)
+    return _no_change("no delivery rule or registry mapping for this code")
+
+
+# --------------------------------------------------------------------------- #
+# FIELD_DESCRIPTION_CHANGED — wording only
+# --------------------------------------------------------------------------- #
+
+def _description_only(c: Context) -> Decision:
+    return _no_change(
+        "wording only: no projected value, ND behaviour, enum, path, "
+        "cardinality or validator depends on the description text (the "
+        "derived field universe carries it for reference)", c.registry)
+
+
+# --------------------------------------------------------------------------- #
+# The table itself
+# --------------------------------------------------------------------------- #
+
+IMPACT_RULES: Dict[str, Tuple[Row, ...]] = {
+    FIELD_ADDED: (
+        Row(COMPONENT_FIELD_REGISTRY, (P_REGISTRY,), _added_registry),
+        Row(COMPONENT_CODE_ORDER, (P_CODE_ORDER, P_MODEL_STRUCTURE),
+            _added_order),
+        Row(COMPONENT_XML_MAPPING, (P_XSD_PATH_MAP,), _added_xml),
+        Row(COMPONENT_ND_BEHAVIOUR, (P_DELIVERY_RULES, P_FIELD_UNIVERSE),
+            _added_nd),
+        Row(COMPONENT_TESTS, (), _added_tests),
+    ),
+    FIELD_REMOVED: (
+        Row(COMPONENT_FIELD_REGISTRY, (P_REGISTRY,), _removed_registry),
+        Row(COMPONENT_CODE_ORDER, (P_CODE_ORDER, P_MODEL_STRUCTURE),
+            _removed_order),
+        Row(COMPONENT_ND_BEHAVIOUR, (P_DELIVERY_RULES, P_FIELD_UNIVERSE),
+            _removed_nd),
+        Row(COMPONENT_XML_MAPPING, (P_XSD_PATH_MAP,), _removed_xml),
+        Row(COMPONENT_TESTS, (), _removed_tests),
+    ),
+    ND_PERMISSION_CHANGED: (
+        Row(COMPONENT_ND_BEHAVIOUR, (P_DELIVERY_RULES, P_FIELD_UNIVERSE),
+            _nd_behaviour),
+        Row(COMPONENT_VALIDATION, (P_DELIVERY_RULES,), _nd_validation),
+        Row(COMPONENT_TESTS, (), _nd_tests),
+    ),
+    ENUM_CHANGED: (
+        Row(COMPONENT_ENUM_MAPPING, (P_ENUM_MAPPING, P_DELIVERY_RULES),
+            _enum_mapping),
+        Row(COMPONENT_VALIDATION, (P_DELIVERY_RULES,), _enum_validation),
+        Row(COMPONENT_TESTS, (), _enum_tests),
+    ),
+    FORMAT_CHANGED: (
+        Row(COMPONENT_VALIDATION, (P_DELIVERY_RULES,), _format_validation),
+        Row(COMPONENT_FIELD_REGISTRY, (P_REGISTRY,), _format_registry),
+        Row(COMPONENT_TESTS, (), _format_tests),
+    ),
+    MANDATORY_STATUS_CHANGED: (
+        Row(COMPONENT_VALIDATION, (P_DELIVERY_RULES,), _mandatory_validation),
+        Row(COMPONENT_FIELD_REGISTRY, (P_REGISTRY,), _mandatory_registry),
+        Row(COMPONENT_TESTS, (), _mandatory_tests),
+    ),
+    XML_PATH_CHANGED: (
+        Row(COMPONENT_XML_MAPPING, (P_XSD_PATH_MAP,), _path_xml),
+        Row(COMPONENT_ND_BEHAVIOUR, (P_DELIVERY_RULES,), _path_delivery_rule),
+        Row(COMPONENT_TESTS, (), _path_tests),
+    ),
+    MULTIPLICITY_CHANGED: (
+        Row(COMPONENT_XML_MAPPING, (P_XSD_PATH_MAP,), _multiplicity_xml),
+        Row(COMPONENT_TESTS, (), _multiplicity_tests),
+    ),
+    ORDER_CHANGED: (
+        Row(COMPONENT_CODE_ORDER, (P_CODE_ORDER, P_MODEL_STRUCTURE),
+            _order_config),
+        Row(COMPONENT_XML_MAPPING, (P_XSD_PATH_MAP,), _order_xml),
+    ),
+    VALIDATION_RULE_CHANGED: (
+        Row(COMPONENT_VALIDATION, (P_DELIVERY_RULES,), _validation_rule),
+    ),
+    FIELD_DESCRIPTION_CHANGED: (
+        Row(COMPONENT_FIELD_REGISTRY, (P_FIELD_UNIVERSE,), _description_only),
+    ),
+}
+
+
+# --------------------------------------------------------------------------- #
+# Execution
+# --------------------------------------------------------------------------- #
+
+def _context(delta: SpecDelta, index: TraktImplementationIndex) -> Context:
+    code = delta.code
+    return Context(
+        delta=delta,
+        code=code,
+        registry=index.registry_by_code.get(code),
+        rule=index.delivery_rules.get(code),
+        path_entry=index.xsd_path_map.get(code),
+        in_order=(code in index.code_order
+                  or code in index.model_structure_order),
+        order_position=(index.code_order.index(code)
+                        if code in index.code_order else None),
+        in_universe=code in index.universe,
+        tests=index.test_references.get(code, []),
+        enum_maps=index.enum_map_for(code),
+        enum_targets=index.configured_enum_targets(code),
+    )
 
 
 def _assess_one(delta: SpecDelta, index: TraktImplementationIndex
                 ) -> List[ImpactFinding]:
-    code = delta.code
+    rows = IMPACT_RULES.get(delta.change_type)
+    if rows is None:
+        # An unmapped change type is never silently ignored.
+        return [ImpactFinding(
+            delta_id=delta.delta_id, code=delta.code,
+            change_type=delta.change_type, component=COMPONENT_FIELD_REGISTRY,
+            status=MANUAL_REVIEW_REQUIRED, locations=[],
+            current_implementation=None,
+            rationale=(f"no impact rule is defined for change type "
+                       f"'{delta.change_type}'"))]
+
+    context = _context(delta, index)
     out: List[ImpactFinding] = []
-
-    registry = index.registry_by_code.get(code)
-    rule = index.delivery_rules.get(code)
-    path_entry = index.xsd_path_map.get(code)
-    in_order = code in index.code_order or code in index.model_structure_order
-    in_universe = code in index.universe
-    tests = _test_locations(index, code)
-
-    ct = delta.change_type
-
-    # ------------------------------------------------------------------ #
-    if ct == FIELD_ADDED:
-        out.append(_finding(
-            delta, COMPONENT_FIELD_REGISTRY,
-            NO_IMPLEMENTATION_CHANGE if registry else CONFIG_CHANGE_REQUIRED,
-            [P_REGISTRY], registry,
-            "a newly published Annex 2 code needs a canonical field mapping "
-            "before it can be projected"
-            if not registry else
-            "the registry already maps this code to a canonical field"))
-        out.append(_finding(
-            delta, COMPONENT_CODE_ORDER,
-            NO_IMPLEMENTATION_CHANGE if in_order else CONFIG_CHANGE_REQUIRED,
-            [P_CODE_ORDER, P_MODEL_STRUCTURE],
-            {"in_code_order": in_order},
-            "a new code absent from the ESMA code ordering would be emitted "
-            "out of sequence or not at all"))
-        out.append(_finding(
-            delta, COMPONENT_XML_MAPPING,
-            NO_IMPLEMENTATION_CHANGE if path_entry else XML_CHANGE_REQUIRED,
-            [P_XSD_PATH_MAP], (path_entry or {}).get("xml_path"),
-            "a new code needs an XSD path before the XML builder can place it"))
-        new_nd = (delta.new_value or {}).get("nd_allowed")
-        out.append(_finding(
-            delta, COMPONENT_ND_BEHAVIOUR,
-            NO_IMPLEMENTATION_CHANGE if rule else CONFIG_CHANGE_REQUIRED,
-            [P_DELIVERY_RULES, P_FIELD_UNIVERSE],
-            {"delivery_rule": bool(rule), "in_field_universe": in_universe,
-             "regulatory_nd_allowed": new_nd},
-            "the ND envelope for a new code is undefined until a delivery rule "
-            "records it"))
-        out.append(_finding(
-            delta, COMPONENT_TESTS, TEST_CHANGE_REQUIRED, tests or list(TEST_GLOBS),
-            {"existing_references": tests},
-            "a newly published code has no Annex 2 coverage"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == FIELD_REMOVED:
-        out.append(_finding(
-            delta, COMPONENT_FIELD_REGISTRY,
-            CONFIG_CHANGE_REQUIRED if registry else NO_IMPLEMENTATION_CHANGE,
-            [P_REGISTRY], registry,
-            "the registry maps a code the authority no longer publishes"
-            if registry else "the registry does not map this code"))
-        out.append(_finding(
-            delta, COMPONENT_CODE_ORDER,
-            CONFIG_CHANGE_REQUIRED if in_order else NO_IMPLEMENTATION_CHANGE,
-            [P_CODE_ORDER, P_MODEL_STRUCTURE], {"in_code_order": in_order},
-            "the code ordering still emits a withdrawn code"
-            if in_order else "the code ordering does not list this code"))
-        out.append(_finding(
-            delta, COMPONENT_ND_BEHAVIOUR,
-            CONFIG_CHANGE_REQUIRED if (rule or in_universe)
-            else NO_IMPLEMENTATION_CHANGE,
-            [P_DELIVERY_RULES, P_FIELD_UNIVERSE],
-            {"delivery_rule": bool(rule), "in_field_universe": in_universe},
-            "delivery/ND configuration exists for a withdrawn code"
-            if (rule or in_universe) else "no ND configuration for this code"))
-        out.append(_finding(
-            delta, COMPONENT_XML_MAPPING,
-            XML_CHANGE_REQUIRED if path_entry else NO_IMPLEMENTATION_CHANGE,
-            [P_XSD_PATH_MAP], (path_entry or {}).get("xml_path"),
-            "the XSD path map still targets a withdrawn code"
-            if path_entry else "no XSD path mapped for this code"))
-        if tests:
-            out.append(_finding(
-                delta, COMPONENT_TESTS, TEST_CHANGE_REQUIRED, tests,
-                {"existing_references": tests},
-                "Annex 2 tests/fixtures assert a withdrawn code"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == ND_PERMISSION_CHANGED:
-        new_nd = set((delta.new_value or {}).get("nd_allowed") or [])
-        configured = set((rule or {}).get("nd_allowed") or [])
-        now_impermissible = sorted(configured - new_nd)
-        status = (CONFIG_CHANGE_REQUIRED if now_impermissible
-                  else (MANUAL_REVIEW_REQUIRED if (rule or in_universe)
-                        else NO_IMPLEMENTATION_CHANGE))
-        out.append(_finding(
-            delta, COMPONENT_ND_BEHAVIOUR, status,
-            [P_DELIVERY_RULES, P_FIELD_UNIVERSE],
-            {"configured_nd_allowed": sorted(configured),
-             "in_field_universe": in_universe,
-             "no_longer_permitted": now_impermissible},
-            (f"configured ND value(s) {now_impermissible} are no longer "
-             f"permitted by the authority") if now_impermissible else
-            ("the permitted ND set moved but the configured envelope stays "
-             "within it; the derived field universe still needs regenerating")))
-        if now_impermissible:
-            out.append(_finding(
-                delta, COMPONENT_VALIDATION, VALIDATION_CHANGE_REQUIRED,
-                [P_DELIVERY_RULES], (rule or {}).get("nd_allowed"),
-                "regime validation would accept an ND value the authority "
-                "no longer permits"))
-            if tests:
-                out.append(_finding(
-                    delta, COMPONENT_TESTS, TEST_CHANGE_REQUIRED, tests,
-                    {"existing_references": tests},
-                    "Annex 2 fixtures/tests pin the previous ND envelope"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == ENUM_CHANGED:
-        old_values = set((delta.old_value or {}).get("enum_values") or [])
-        new_values = set((delta.new_value or {}).get("enum_values") or [])
-        removed = old_values - new_values
-        configured_targets = index.configured_enum_targets(code)
-        broken = sorted(configured_targets & removed)
-        maps = index.enum_map_for(code)
-        if broken:
-            status = CONFIG_CHANGE_REQUIRED
-            rationale = (f"configured enum target(s) {broken} were withdrawn "
-                         f"from the authoritative code list")
-        elif maps:
-            status = MANUAL_REVIEW_REQUIRED
-            rationale = ("the authoritative code list moved; existing targets "
-                         "remain valid but the mapping may need extending")
-        else:
-            status = NO_IMPLEMENTATION_CHANGE
-            rationale = "no enum mapping is configured for this code"
-        out.append(_finding(delta, COMPONENT_ENUM_MAPPING, status,
-                            [P_ENUM_MAPPING, P_DELIVERY_RULES], maps or None,
-                            rationale))
-        if broken:
-            out.append(_finding(
-                delta, COMPONENT_VALIDATION, VALIDATION_CHANGE_REQUIRED,
-                [P_DELIVERY_RULES], maps or None,
-                "projection would emit a code the schema no longer allows"))
-            if tests:
-                out.append(_finding(
-                    delta, COMPONENT_TESTS, TEST_CHANGE_REQUIRED, tests,
-                    {"existing_references": tests},
-                    "Annex 2 tests/fixtures assert a withdrawn enum value"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == FORMAT_CHANGED:
-        validators = (rule or {}).get("validators") or {}
-        out.append(_finding(
-            delta, COMPONENT_VALIDATION,
-            VALIDATION_CHANGE_REQUIRED if validators else
-            (MANUAL_REVIEW_REQUIRED if registry else NO_IMPLEMENTATION_CHANGE),
-            [P_DELIVERY_RULES], validators or None,
-            "a configured format validator is pinned to the previous format"
-            if validators else
-            "no format validator is configured; confirm the projected value "
-            "still satisfies the new format"))
-        if registry:
-            out.append(_finding(
-                delta, COMPONENT_FIELD_REGISTRY, CONFIG_CHANGE_REQUIRED,
-                [P_REGISTRY], registry,
-                "the registry declares a format for the mapped canonical field"))
-        if tests:
-            out.append(_finding(
-                delta, COMPONENT_TESTS, TEST_CHANGE_REQUIRED, tests,
-                {"existing_references": tests},
-                "Annex 2 fixtures carry values in the previous format"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == MANDATORY_STATUS_CHANGED:
-        out.append(_finding(
-            delta, COMPONENT_VALIDATION,
-            VALIDATION_CHANGE_REQUIRED if rule else MANUAL_REVIEW_REQUIRED,
-            [P_DELIVERY_RULES],
-            {"mandatory": (rule or {}).get("mandatory"),
-             "enforce_presence": (rule or {}).get("enforce_presence")},
-            "the delivery rule pins presence enforcement for this code"
-            if rule else
-            "no delivery rule exists; presence enforcement is undefined"))
-        if registry:
-            out.append(_finding(
-                delta, COMPONENT_FIELD_REGISTRY, CONFIG_CHANGE_REQUIRED,
-                [P_REGISTRY], registry,
-                "the registry records a regime priority for this code"))
-        if tests:
-            out.append(_finding(
-                delta, COMPONENT_TESTS, TEST_CHANGE_REQUIRED, tests,
-                {"existing_references": tests},
-                "Annex 2 tests assert the previous mandatory status"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == XML_PATH_CHANGED:
-        out.append(_finding(
-            delta, COMPONENT_XML_MAPPING,
-            XML_CHANGE_REQUIRED if path_entry else MANUAL_REVIEW_REQUIRED,
-            [P_XSD_PATH_MAP], (path_entry or {}).get("xml_path"),
-            "the mapped XSD path no longer matches the authoritative path"
-            if path_entry else
-            "no XSD path is mapped for this code; confirm the builder is "
-            "unaffected"))
-        if (rule or {}).get("workbook_semantic"):
-            out.append(_finding(
-                delta, COMPONENT_ND_BEHAVIOUR, CONFIG_CHANGE_REQUIRED,
-                [P_DELIVERY_RULES], rule.get("workbook_semantic"),
-                "the delivery rule pins a workbook leaf token derived from the "
-                "previous path"))
-        if tests:
-            out.append(_finding(
-                delta, COMPONENT_TESTS, TEST_CHANGE_REQUIRED, tests,
-                {"existing_references": tests},
-                "Annex 2 XML tests assert the previous element path"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == MULTIPLICITY_CHANGED:
-        out.append(_finding(
-            delta, COMPONENT_XML_MAPPING,
-            XML_CHANGE_REQUIRED if path_entry else MANUAL_REVIEW_REQUIRED,
-            [P_XSD_PATH_MAP], (path_entry or {}).get("cardinality"),
-            "the path map records a cardinality for this code"
-            if path_entry else
-            "cardinality moved for a code with no mapped path; confirm the "
-            "builder is unaffected"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == ORDER_CHANGED:
-        out.append(_finding(
-            delta, COMPONENT_CODE_ORDER,
-            CONFIG_CHANGE_REQUIRED if in_order else NO_IMPLEMENTATION_CHANGE,
-            [P_CODE_ORDER, P_MODEL_STRUCTURE],
-            {"in_code_order": in_order,
-             "configured_position": (index.code_order.index(code)
-                                     if code in index.code_order else None)},
-            "the configured ESMA code ordering no longer matches the "
-            "authoritative sequence; XSD sequence validation would reject it"
-            if in_order else "this code is not in the configured ordering"))
-        if path_entry:
-            out.append(_finding(
-                delta, COMPONENT_XML_MAPPING, XML_CHANGE_REQUIRED,
-                [P_XSD_PATH_MAP], (path_entry or {}).get("sequence_order"),
-                "element sequence is driven by the code ordering at build time"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == VALIDATION_RULE_CHANGED:
-        validators = (rule or {}).get("validators") or {}
-        out.append(_finding(
-            delta, COMPONENT_VALIDATION,
-            VALIDATION_CHANGE_REQUIRED if validators else
-            (MANUAL_REVIEW_REQUIRED if (rule or registry)
-             else NO_IMPLEMENTATION_CHANGE),
-            [P_DELIVERY_RULES], validators or None,
-            "a configured validator implements the previous rule text"
-            if validators else
-            "no validator is configured for this code; confirm whether the "
-            "changed rule needs implementing"))
-        return out
-
-    # ------------------------------------------------------------------ #
-    if ct == FIELD_DESCRIPTION_CHANGED:
-        out.append(_finding(
-            delta, COMPONENT_FIELD_REGISTRY, NO_IMPLEMENTATION_CHANGE,
-            [P_FIELD_UNIVERSE], registry,
-            "wording only: no projected value, ND behaviour, enum, path or "
-            "validator depends on the description text (the derived field "
-            "universe carries it for reference)"))
-        return out
-
-    # Unknown change type: never silently ignored.
-    out.append(_finding(
-        delta, COMPONENT_FIELD_REGISTRY, MANUAL_REVIEW_REQUIRED, [],
-        None, f"no impact rule is defined for change type '{ct}'"))
+    for row in rows:
+        decision = row.decide(context)
+        if decision is None:
+            continue
+        status, rationale, current = decision
+        locations = list(row.locations)
+        if row.component == COMPONENT_TESTS:
+            # Concrete referencing paths only; never glob patterns.
+            locations = list(context.tests)
+        out.append(ImpactFinding(
+            delta_id=delta.delta_id, code=delta.code,
+            change_type=delta.change_type, component=row.component,
+            status=status, locations=locations,
+            current_implementation=current, rationale=rationale))
     return out
 
 
 def assess(deltas: Sequence[SpecDelta],
            index: Optional[TraktImplementationIndex] = None,
            repo_root: Optional[Path] = None) -> List[ImpactFinding]:
-    """Map every delta onto the Trakt components it likely affects."""
+    """Map every delta onto the Trakt components it likely affects.
+
+    Read-only and advisory. No status this returns authorises the watch to
+    change anything; each names a location for a human to inspect.
+    """
     idx = index or TraktImplementationIndex.load(repo_root)
     out: List[ImpactFinding] = []
     for delta in deltas:
@@ -535,3 +795,15 @@ def assess(deltas: Sequence[SpecDelta],
         out.extend(findings)
     out.sort(key=lambda f: (f.code, f.change_type, f.component, f.status))
     return out
+
+
+def decision_table() -> List[Dict[str, Any]]:
+    """The table as data, for documentation and for the report's evidence."""
+    return [
+        {"change_type": change_type,
+         "component": row.component,
+         "locations": list(row.locations),
+         "decision": row.decide.__name__}
+        for change_type in sorted(IMPACT_RULES)
+        for row in IMPACT_RULES[change_type]
+    ]

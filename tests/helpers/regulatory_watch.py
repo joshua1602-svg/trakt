@@ -19,7 +19,9 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from regulatory_watch import PARSER_VERSION
 from regulatory_watch.annex2_spec import RawRow, normalize
-from regulatory_watch.contracts import NormalizedSpec, SourceSnapshot
+from regulatory_watch.contracts import (
+    GATING, NormalizedSpec, SOURCE_CHECK_FAILED, SourceSnapshot,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "regulatory_watch"
@@ -66,23 +68,23 @@ def build_spec(rows: Optional[Sequence[RawRow]] = None,
 
 
 def snapshot(sha256: str, artefact_id: str = WORKBOOK_ARTEFACT,
-             *, byte_size: int = 1024,
+             *, byte_size: int = 1024, criticality: str = GATING,
              retrieved_at: str = "2026-01-01T00:00:00Z") -> SourceSnapshot:
     """A deterministic OK snapshot with a caller-chosen digest."""
     return SourceSnapshot(
         artefact_id=artefact_id, sha256=sha256, byte_size=byte_size,
         retrieved_at=retrieved_at, snapshot_path=f"/snapshots/{sha256[:8]}",
-        parser_version=PARSER_VERSION, external_version="test",
-        retrieval_status="OK")
+        parser_version=PARSER_VERSION, criticality=criticality,
+        external_version="test", retrieval_status="OK")
 
 
 def failed_snapshot(artefact_id: str = WORKBOOK_ARTEFACT,
-                    detail: str = "source unavailable") -> SourceSnapshot:
-    from regulatory_watch.contracts import SOURCE_CHECK_FAILED
+                    detail: str = "source unavailable",
+                    criticality: str = GATING) -> SourceSnapshot:
     return SourceSnapshot(
         artefact_id=artefact_id, sha256="", byte_size=0,
         retrieved_at="2026-01-01T00:00:00Z", snapshot_path="",
-        parser_version=PARSER_VERSION,
+        parser_version=PARSER_VERSION, criticality=criticality,
         retrieval_status=SOURCE_CHECK_FAILED, retrieval_detail=detail)
 
 

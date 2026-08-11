@@ -13,14 +13,24 @@ The JSON shape is stable and additive:
       "baseline": {},
       "candidate": {},
       "source_status": "SOURCE_CHANGED",
+      "gating_source_status": "SOURCE_CHANGED",
+      "corroborating_source_status": "SOURCE_CHECK_FAILED",
+      "unverified_sources": [],
+      "outcome": "REGULATORY_SPEC_CHANGED",
+      "specification_current": "no",
       "regulatory_delta_count": 0,
       "implementation_impact_count": 0,
       "deltas": []
     }
 
-with ``spec_status``, ``outcome``, ``impacts``, ``unresolved`` and ``evidence``
-alongside. ``generated_at`` is supplied by the caller so a report can be
-byte-reproduced.
+with ``spec_status``, ``impacts``, ``unresolved`` and ``evidence`` alongside.
+``generated_at`` is supplied by the caller so a report can be byte-reproduced.
+
+``outcome`` is decided by the GATING sources only; a corroborating source that
+could not be verified is always listed in ``unverified_sources`` and shown in
+the Markdown, but does not by itself withhold the determination.
+``specification_current`` is the unambiguous headline — ``yes`` only when every
+gating source was verified and no regulatory delta exists.
 """
 
 from __future__ import annotations
@@ -32,6 +42,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from . import REPORT_CONTRACT_VERSION
 from .comparator import spec_status, unresolved_items
 from .contracts import (
+    GATING,
     ImpactFinding,
     MANUAL_REVIEW_REQUIRED,
     NO_IMPLEMENTATION_CHANGE,
@@ -40,7 +51,8 @@ from .contracts import (
     SpecDelta,
     WatchReport,
     overall_status,
-    source_status_for,
+    specification_current,
+    split_source_status,
 )
 
 
@@ -62,6 +74,7 @@ def _spec_summary(spec: NormalizedSpec) -> Dict[str, Any]:
                 "external_version": s.external_version,
                 "publication_date": s.publication_date,
                 "effective_date": s.effective_date,
+                "criticality": s.criticality,
                 "source_status": s.source_status,
                 "retrieval_status": s.retrieval_status,
                 "retrieval_detail": s.retrieval_detail,
@@ -78,8 +91,9 @@ def build_report(baseline: NormalizedSpec, candidate: NormalizedSpec,
                  generated_at: str,
                  evidence: Optional[Dict[str, Any]] = None) -> WatchReport:
     """Assemble the Stage 1 report from already-computed parts."""
-    src = source_status_for(baseline.snapshots, candidate.snapshots)
+    split = split_source_status(baseline.snapshots, candidate.snapshots)
     spec = spec_status(deltas, baseline, candidate)
+    outcome = overall_status(split["gating"], spec)
     actionable = [i for i in impacts if i.status != NO_IMPLEMENTATION_CHANGE]
 
     return WatchReport(
@@ -88,9 +102,13 @@ def build_report(baseline: NormalizedSpec, candidate: NormalizedSpec,
         generated_at=generated_at,
         baseline=_spec_summary(baseline),
         candidate=_spec_summary(candidate),
-        source_status=src,
+        source_status=split["combined"],
+        gating_source_status=split["gating"],
+        corroborating_source_status=split["corroborating"],
+        unverified_sources=split["unverified"],
         spec_status=spec,
-        outcome=overall_status(src, spec),
+        outcome=outcome,
+        specification_current=specification_current(outcome),
         regulatory_delta_count=len(deltas),
         implementation_impact_count=len(actionable),
         deltas=[d.to_dict() for d in deltas],
@@ -110,16 +128,18 @@ def to_json(report: WatchReport) -> str:
 # --------------------------------------------------------------------------- #
 
 def _source_table(summary: Dict[str, Any]) -> List[str]:
-    lines = ["| artefact | external version | sha256 | status | retrieved |",
+    lines = ["| artefact | criticality | external version | sha256 | status |",
              "| --- | --- | --- | --- | --- |"]
     for s in summary.get("sources", []):
         digest = s["artefact_sha256"]
+        crit = s.get("criticality", GATING)
         lines.append(
-            f"| `{s['artefact_id']}` | {s['external_version']} | "
+            f"| `{s['artefact_id']}` | "
+            f"{'**gating**' if crit == GATING else crit} | "
+            f"{s['external_version']} | "
             f"`{digest[:16] + '…' if digest else '—'}` | "
             f"{s['retrieval_status']}"
-            f"{' — ' + s['retrieval_detail'] if s['retrieval_detail'] else ''} "
-            f"| {s['retrieved_at']} |")
+            f"{' — ' + s['retrieval_detail'] if s['retrieval_detail'] else ''} |")
     if len(lines) == 2:
         lines.append("| _none_ | | | | |")
     return lines
@@ -143,10 +163,15 @@ def to_markdown(report: WatchReport) -> str:
                f"v{r.contract_version} · Stage 1, observational only — no "
                f"active configuration was modified.*")
     out.append("")
-    out.append(f"**Outcome: `{r.outcome}`** — source `{r.source_status}`, "
-               f"parsed specification `{r.spec_status}`. "
-               f"{r.regulatory_delta_count} regulatory delta(s), "
-               f"{r.implementation_impact_count} implementation impact(s).")
+    out.append(f"**Outcome: `{r.outcome}`** — "
+               f"is the implemented machine-readable Annex 2 specification "
+               f"current? **{r.specification_current.upper()}**")
+    out.append("")
+    out.append(f"- gating sources: `{r.gating_source_status}` · "
+               f"corroborating sources: `{r.corroborating_source_status}`")
+    out.append(f"- parsed specification: `{r.spec_status}`")
+    out.append(f"- {r.regulatory_delta_count} regulatory delta(s), "
+               f"{r.implementation_impact_count} implementation impact(s)")
     out.append("")
 
     # 1 + 2. baseline / candidate
@@ -172,11 +197,31 @@ def to_markdown(report: WatchReport) -> str:
     # 3. source content change
     out.append("## 3. Did the authoritative source content change?")
     out.append("")
-    out.append(f"**`{r.source_status}`**")
+    out.append(f"- **Gating sources** (the specification is derived from "
+               f"these): `{r.gating_source_status}`")
+    out.append(f"- **Corroborating sources** (tracked, nothing derived from "
+               f"them): `{r.corroborating_source_status}`")
     out.append("")
-    if r.source_status == SOURCE_CHECK_FAILED:
-        out.append("> At least one authoritative source could not be checked. "
-                   "This is **not** evidence that the regime is current.")
+    if r.gating_source_status == SOURCE_CHECK_FAILED:
+        out.append("> A **gating** source could not be checked. This is "
+                   "**not** evidence that the regime is current, and the "
+                   "run cannot resolve to `CURRENT`.")
+        out.append("")
+    if r.unverified_sources:
+        out.append("Unverified sources:")
+        out.append("")
+        for s in r.unverified_sources:
+            out.append(f"- `{s['artefact_id']}` ({s['criticality']}, "
+                       f"{s['side']}) — {s['retrieval_status']}"
+                       f"{': ' + s['detail'] if s.get('detail') else ''}")
+        if r.corroborating_source_status == SOURCE_CHECK_FAILED \
+                and r.gating_source_status != SOURCE_CHECK_FAILED:
+            out.append("")
+            out.append("> A **corroborating** source is unverified. No "
+                       "compared attribute is derived from it, so it does not "
+                       "change the determination about the machine-readable "
+                       "specification — but the obligation it carries has not "
+                       "been reviewed by this run.")
         out.append("")
     out.append(f"- baseline source digest: `{r.baseline.get('source_digest') or '—'}`")
     out.append(f"- candidate source digest: `{r.candidate.get('source_digest') or '—'}`")
@@ -187,7 +232,8 @@ def to_markdown(report: WatchReport) -> str:
     out.append("")
     out.append(f"**`{r.spec_status}`**")
     out.append("")
-    if r.source_status == "SOURCE_CHANGED" and r.spec_status == "SPEC_UNCHANGED":
+    if r.gating_source_status == "SOURCE_CHANGED" \
+            and r.spec_status == "SPEC_UNCHANGED":
         out.append("> The authoritative bytes differ but no Annex 2 "
                    "requirement moved. A source hash change is not, by itself, "
                    "a regulatory change.")

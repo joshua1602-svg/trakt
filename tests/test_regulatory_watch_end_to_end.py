@@ -31,11 +31,13 @@ from regulatory_watch.contracts import (                         # noqa: E402
     ARTEFACT_DISCLOSURE_WORKBOOK,
     ARTEFACT_XML_SCHEMA,
     CHANGE_TYPES,
+    CURRENT,
     IMPACT_STATUSES,
     REGULATORY_SPEC_CHANGED,
     SOURCE_CHECK_FAILED,
     SOURCE_CHANGED,
     SOURCE_CHANGED_SPEC_UNCHANGED,
+    SOURCE_UNCHANGED,
     SPEC_CHANGED,
     SPEC_UNCHANGED,
     WATCH_INCONCLUSIVE,
@@ -295,10 +297,20 @@ def test_cli_snapshot_then_compare(tmp_path):
     payload = json.loads(
         (run_dir / "esma_annex2_regulatory_watch.json").read_text("utf-8"))
     assert payload["regulatory_delta_count"] == 0
-    # One allowlisted source is not vendored, so the run is explicitly
-    # inconclusive rather than "no change".
-    assert payload["source_status"] == SOURCE_CHECK_FAILED
-    assert payload["outcome"] == WATCH_INCONCLUSIVE
+    # Both GATING sources verified and identical -> the machine-readable
+    # specification is current. The technical reporting instructions are
+    # corroborating and unvendored: reported as unverified, but they do not
+    # withhold the determination.
+    assert payload["gating_source_status"] == SOURCE_UNCHANGED
+    assert payload["corroborating_source_status"] == SOURCE_CHECK_FAILED
+    assert payload["source_status"] == SOURCE_CHECK_FAILED   # still surfaced
+    assert payload["outcome"] == CURRENT
+    assert payload["specification_current"] == "yes"
+    unverified = {u["artefact_id"] for u in payload["unverified_sources"]}
+    assert unverified == {"esma_annex2_reporting_instructions"}
+    markdown = (run_dir / "esma_annex2_regulatory_watch.md").read_text("utf-8")
+    assert "esma_annex2_reporting_instructions" in markdown
+    assert "corroborating" in markdown
 
 
 def test_cli_refuses_a_corrupt_candidate_workbook(tmp_path):
@@ -355,3 +367,123 @@ def test_the_watch_package_never_writes_to_config():
         for line_no, line in enumerate(text.splitlines(), start=1):
             if writers.search(line) and "config/" in line:
                 raise AssertionError(f"{module.name}:{line_no}: {line.strip()}")
+
+
+# --------------------------------------------------------------------------- #
+# Source criticality — the Stage 1 control model
+# --------------------------------------------------------------------------- #
+
+def test_every_artefact_declares_an_explicit_criticality():
+    from regulatory_watch.contracts import CRITICALITIES
+    manifest = load_manifest()
+    assert all(a.criticality in CRITICALITIES for a in manifest.artefacts)
+
+
+def test_criticality_is_required_not_defaulted(tmp_path):
+    from regulatory_watch.manifest import ManifestError
+    path = tmp_path / "nocrit.yaml"
+    path.write_text(
+        "manifest:\n  manifest_id: x\n  regime: ESMA_Annex2\n"
+        "  authority: ESMA\nartefacts:\n"
+        "  - artefact_id: a\n    authority: ESMA\n    regime: ESMA_Annex2\n"
+        "    artefact_type: xml_schema\n", encoding="utf-8")
+    with pytest.raises(ManifestError) as exc:
+        load_manifest(path)
+    assert "criticality" in str(exc.value)
+
+
+def test_an_unknown_criticality_is_rejected(tmp_path):
+    from regulatory_watch.manifest import ManifestError
+    path = tmp_path / "badcrit.yaml"
+    path.write_text(
+        "manifest:\n  manifest_id: x\n  regime: ESMA_Annex2\n"
+        "  authority: ESMA\nartefacts:\n"
+        "  - artefact_id: a\n    authority: ESMA\n    regime: ESMA_Annex2\n"
+        "    artefact_type: xml_schema\n    criticality: nice_to_have\n",
+        encoding="utf-8")
+    with pytest.raises(ManifestError) as exc:
+        load_manifest(path)
+    assert "criticality must be one of" in str(exc.value)
+
+
+def test_exactly_the_derived_artefacts_are_gating():
+    """Gating == the artefacts the normalized specification is derived from.
+
+    The workbook supplies structure, paths, multiplicity and rule text; the XSD
+    supplies enumerations and ND vocabularies. Nothing the comparator compares
+    comes from the sample message or the reporting instructions.
+    """
+    from regulatory_watch.contracts import CORROBORATING, GATING
+    manifest = load_manifest()
+    gating = {a.artefact_id for a in manifest.gating_artefacts}
+    assert gating == {"esma_annex2_message_workbook",
+                      "esma_annex2_xml_schema"}
+    corroborating = {a.artefact_id
+                     for a in manifest.of_criticality(CORROBORATING)}
+    assert corroborating == {"esma_annex2_sample_message",
+                             "esma_annex2_reporting_instructions"}
+    # Every artefact declaring a normalizer is gating; the converse too.
+    for artefact in manifest.artefacts:
+        if artefact.parser:
+            assert artefact.criticality == GATING, artefact.artefact_id
+        else:
+            assert artefact.criticality == CORROBORATING, artefact.artefact_id
+
+
+def test_snapshots_carry_criticality_through_to_the_report(tmp_path):
+    manifest = load_manifest()
+    store = SnapshotStore(root=tmp_path / "snap", regime=manifest.regime)
+    snaps = snapshot_manifest(store, manifest.artefacts, _REPO,
+                              "2026-01-01T00:00:00Z", PARSER_VERSION)
+    by_id = {s.artefact_id: s for s in snaps}
+    assert by_id["esma_annex2_message_workbook"].criticality == "gating"
+    assert by_id["esma_annex2_reporting_instructions"].criticality == \
+        "corroborating"
+
+
+def test_specification_current_is_unambiguous_for_every_outcome():
+    from regulatory_watch.contracts import (
+        OUTCOMES, REGULATORY_SPEC_CHANGED, SPEC_CHANGE_UNDETERMINED,
+        SPEC_CURRENT_NO, SPEC_CURRENT_UNKNOWN, SPEC_CURRENT_YES,
+        specification_current,
+    )
+    expected = {
+        CURRENT: SPEC_CURRENT_YES,
+        SOURCE_CHANGED_SPEC_UNCHANGED: SPEC_CURRENT_YES,
+        REGULATORY_SPEC_CHANGED: SPEC_CURRENT_NO,
+        SPEC_CHANGE_UNDETERMINED: SPEC_CURRENT_UNKNOWN,
+        WATCH_INCONCLUSIVE: SPEC_CURRENT_UNKNOWN,
+    }
+    assert set(expected) == set(OUTCOMES)
+    for outcome, answer in expected.items():
+        assert specification_current(outcome) == answer
+
+
+def test_a_gating_failure_is_never_reported_as_current(index):
+    report = _run([fx.snapshot("a" * 64)], [fx.failed_snapshot()],
+                  lambda r, c: (r, c), index, "2026-01-01T00:00:00Z")
+    assert report.gating_source_status == SOURCE_CHECK_FAILED
+    assert report.outcome == WATCH_INCONCLUSIVE
+    assert report.specification_current == "unknown"
+    markdown = to_markdown(report)
+    assert "A **gating** source could not be checked" in markdown
+
+
+def test_a_corroborating_failure_is_reported_without_withholding(index):
+    from regulatory_watch.contracts import CORROBORATING
+    report = _run(
+        [fx.snapshot("a" * 64),
+         fx.failed_snapshot("esma_annex2_reporting_instructions",
+                            criticality=CORROBORATING)],
+        [fx.snapshot("a" * 64),
+         fx.failed_snapshot("esma_annex2_reporting_instructions",
+                            criticality=CORROBORATING)],
+        lambda r, c: (r, c), index, "2026-01-01T00:00:00Z")
+    assert report.outcome == CURRENT
+    assert report.specification_current == "yes"
+    assert report.corroborating_source_status == SOURCE_CHECK_FAILED
+    assert report.source_status == SOURCE_CHECK_FAILED   # still surfaced
+    markdown = to_markdown(report)
+    assert "corroborating" in markdown
+    assert "esma_annex2_reporting_instructions" in markdown
+    assert "has not been reviewed by this run" in markdown

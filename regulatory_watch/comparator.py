@@ -57,11 +57,17 @@ class ComparatorError(ValueError):
 #: every attribute behind it was actually parsed on both sides.
 ATTRIBUTES_BY_CHANGE_TYPE: Dict[str, Tuple[str, ...]] = {
     FIELD_DESCRIPTION_CHANGED: ("label", "description"),
-    FORMAT_CHANGED: ("data_type", "format_pattern"),
+    # value_leaves keys each typed leaf RELATIVE to the element node, so a
+    # relocation is not a format change and a type change on a secondary leaf
+    # (e.g. the Sgn of a monetary Val/Amt pair) is not invisible.
+    FORMAT_CHANGED: ("data_type", "format_pattern", "value_leaves"),
     MANDATORY_STATUS_CHANGED: ("mandatory",),
     ND_PERMISSION_CHANGED: ("nd_allowed",),
     ENUM_CHANGED: ("enum_type", "enum_values"),
-    XML_PATH_CHANGED: ("xml_path", "xml_tag", "value_paths"),
+    # Absolute value_paths are deliberately NOT compared here: they move
+    # whenever the element moves, which xml_path already reports, and their
+    # leaf-level content is covered by value_leaves under FORMAT_CHANGED.
+    XML_PATH_CHANGED: ("xml_path", "xml_tag"),
     MULTIPLICITY_CHANGED: ("multiplicity",),
     VALIDATION_RULE_CHANGED: ("validation_rules",),
 }

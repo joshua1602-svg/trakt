@@ -20,6 +20,7 @@
 #   artefact_type      disclosure_template_workbook | xml_schema |
 #                      validation_rules | reporting_instructions |
 #                      sample_message
+#   criticality        gating | corroborating  (REQUIRED — see below)
 #   title              human label
 #   external_version   the authority's own version label, where published
 #   source_url         the primary ESMA URL (allowlist entry)
@@ -31,6 +32,38 @@
 #
 # UNKNOWN is used wherever a value is not deterministically available from the
 # artefact itself. It is never inferred.
+#
+# ---------------------------------------------------------------------
+# SOURCE CRITICALITY — the Stage 1 control model
+# ---------------------------------------------------------------------
+# Stage 1 answers one question: has the MACHINE-READABLE Annex 2
+# specification changed — the field set, data types, formats, ND
+# permissions, enumerations, XML paths, multiplicity, ordering and published
+# validation rules that Trakt projects to?
+#
+#   gating        Every attribute the comparator compares is DERIVED from
+#                 this artefact. If it cannot be verified, the derived
+#                 specification cannot be trusted, so the run resolves to
+#                 WATCH_INCONCLUSIVE and the "specification is current"
+#                 claim is withheld. Failure here is disqualifying.
+#
+#   corroborating Authoritative and worth tracking, but NO compared
+#                 attribute is derived from it. A failure is always listed
+#                 in the report's unverified_sources and shown in the
+#                 Markdown, but it cannot by itself retract or create a
+#                 determination about the machine-readable specification.
+#
+# Criticality is a REQUIRED field. It is stated per artefact rather than
+# defaulted, so classifying a source as non-gating is always a visible,
+# reviewable decision.
+#
+# RESIDUAL RISK, stated explicitly: a corroborating source can still carry a
+# real obligation change — most obviously the technical reporting
+# instructions, whose narrative guidance can alter how a field must be
+# POPULATED without the workbook or XSD moving a single byte. Stage 1 does
+# not model interpretation, so it does not claim to detect that. "CURRENT"
+# means the machine-readable specification is current; it does not mean
+# every ESMA obligation has been reviewed.
 # =====================================================================
 
 manifest:
@@ -63,6 +96,11 @@ artefacts:
     authority: ESMA
     regime: ESMA_Annex2
     artefact_type: disclosure_template_workbook
+    # GATING: field codes, labels, definitions, XML paths, multiplicity,
+    # data types, patterns, validation-rule text and field ordering are all
+    # derived from this sheet. Nothing the comparator compares survives
+    # without it.
+    criticality: gating
     title: >-
       DRAFT1auth.099.001.04 non-ABCP Underlying Exposure Report — reporting
       templates and XML mapping workbook
@@ -87,6 +125,11 @@ artefacts:
     authority: ESMA
     regime: ESMA_Annex2
     artefact_type: xml_schema
+    # GATING: the workbook references code lists and ND justification
+    # vocabularies BY NAME only. Enumerations and per-field ND permissions
+    # exist nowhere else, and the schema is also the cross-check that keeps
+    # the workbook's ND rows honest (see SchemaNdModel).
+    criticality: gating
     title: DRAFT1auth.099.001.04 XML schema
     external_version: "1.3.0"
     source_url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions
@@ -108,6 +151,10 @@ artefacts:
     authority: ESMA
     regime: ESMA_Annex2
     artefact_type: sample_message
+    # CORROBORATING: hash-tracked only. Stage 1 never derives a requirement
+    # from an example message, so a change to it cannot change the parsed
+    # specification — but it is worth seeing that ESMA re-issued it.
+    criticality: corroborating
     title: DRAFT1auth.099.001.04 non-ABCP Underlying Exposure Report sample XML
     external_version: UNKNOWN
     source_url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions
@@ -129,6 +176,15 @@ artefacts:
     authority: ESMA
     regime: ESMA_Annex2
     artefact_type: reporting_instructions
+    # CORROBORATING: authoritative, and NOT vendored here. It carries
+    # narrative guidance on how fields must be populated; it does not define
+    # the field set, types, ND permissions, enumerations, paths,
+    # multiplicity or ordering that Stage 1 normalizes and compares. It is
+    # therefore reported as an unverified source on every run — visibly, in
+    # both outputs — without gating the machine-readable determination.
+    # Vendoring it (or enabling retrieval) is the way to close this gap; the
+    # residual interpretation risk is recorded in the Stage 1 limitations.
+    criticality: corroborating
     title: ESMA securitisation reporting — technical reporting instructions
     external_version: UNKNOWN
     source_url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions

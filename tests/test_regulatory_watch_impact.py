@@ -117,7 +117,11 @@ def test_field_added_requires_config_order_xml_and_tests(index):
     assert _statuses(findings, COMPONENT_ND_BEHAVIOUR) == \
         {CONFIG_CHANGE_REQUIRED}
     assert _statuses(findings, COMPONENT_TESTS) == {TEST_CHANGE_REQUIRED}
-    assert all(f.locations for f in findings)
+    # Every config/XML finding names concrete files. The tests finding names
+    # none, because nothing references a code the authority has just published
+    # — locations carry real paths only, never glob patterns.
+    assert all(f.locations for f in findings if f.component != COMPONENT_TESTS)
+    assert not any("*" in loc for f in findings for loc in f.locations)
 
 
 def test_field_removed_flags_every_component_that_still_holds_the_code(index):
@@ -305,3 +309,146 @@ def test_the_impact_pass_does_not_modify_any_active_config(index):
     after = {p: hashlib.sha256((_REPO / p).read_bytes()).hexdigest()
              for p in CONFIG_FILES}
     assert before == after
+
+
+# --------------------------------------------------------------------------- #
+# The decision table as a controlled artefact
+# --------------------------------------------------------------------------- #
+
+def test_every_change_type_has_an_explicit_rule_set():
+    """No change type may fall through to procedural default behaviour."""
+    from regulatory_watch.contracts import CHANGE_TYPES
+    from regulatory_watch.impact import IMPACT_RULES
+    assert set(IMPACT_RULES) == set(CHANGE_TYPES)
+
+
+def test_the_decision_table_is_well_formed():
+    from regulatory_watch.contracts import CHANGE_TYPES, COMPONENTS
+    from regulatory_watch.impact import decision_table
+    rows = decision_table()
+    assert rows
+    for row in rows:
+        assert row["change_type"] in CHANGE_TYPES
+        assert row["component"] in COMPONENTS
+        assert row["decision"]
+    # One row per (change type, component): no component decided twice.
+    keys = [(r["change_type"], r["component"]) for r in rows]
+    assert len(keys) == len(set(keys)), \
+        [k for k in keys if keys.count(k) > 1]
+
+
+def test_every_reachable_decision_is_a_published_status_with_a_rationale(index):
+    """Exercise every row against present-and-absent configuration.
+
+    RREL1 is fully configured (registry, delivery rule, validators, path map,
+    test references); RREL9999 is configured nowhere. Between them every branch
+    of every decision is reached.
+    """
+    from regulatory_watch.contracts import CHANGE_TYPES
+    payloads = {
+        "old": {"nd_allowed": ["ND5"], "enum_values": ["A", "B"],
+                "format_pattern": "a", "data_type": "x", "mandatory": "optional",
+                "multiplicity": "[1..1]", "xml_path": "/a", "position": 1,
+                "validation_rules": ["r"], "label": "l", "description": "d"},
+        "new": {"nd_allowed": [], "enum_values": ["A"], "format_pattern": "b",
+                "data_type": "y", "mandatory": "mandatory",
+                "multiplicity": "[1..n]", "xml_path": "/b", "position": 5,
+                "validation_rules": [], "label": "L", "description": "D"},
+    }
+    for code in ("RREL1", "RREL9999"):
+        for change_type in CHANGE_TYPES:
+            findings = assess(
+                [_delta(code, change_type, payloads["old"], payloads["new"])],
+                index=index)
+            assert findings, (code, change_type)
+            for f in findings:
+                assert f.status in IMPACT_STATUSES, (code, change_type, f)
+                assert f.rationale.strip(), (code, change_type, f)
+                assert f.delta_id == f"{code}:{change_type}"
+
+
+def test_no_impact_status_implies_an_automatic_change(index):
+    """Statuses direct a HUMAN. None of them authorises the watch to act."""
+    from regulatory_watch.contracts import CHANGE_TYPES
+    banned = ("automatically", "auto-apply", "will be applied", "we will fix",
+              "applied for you", "promoted")
+    for change_type in CHANGE_TYPES:
+        for f in assess([_delta("RREL1", change_type,
+                                {"nd_allowed": ["ND5"], "enum_values": ["A"],
+                                 "format_pattern": "a", "mandatory": "optional",
+                                 "multiplicity": "[1..1]", "xml_path": "/a",
+                                 "validation_rules": ["r"], "label": "l",
+                                 "description": "d", "position": 1},
+                                {"nd_allowed": [], "enum_values": [],
+                                 "format_pattern": "b", "mandatory": "mandatory",
+                                 "multiplicity": "[0..1]", "xml_path": "/b",
+                                 "validation_rules": [], "label": "L",
+                                 "description": "D", "position": 2})],
+                        index=index):
+            lowered = f.rationale.lower()
+            assert not any(phrase in lowered for phrase in banned), f
+
+
+def test_ambiguous_cases_resolve_to_manual_review_not_a_guessed_change(index):
+    """Where the evidence does not decide, the answer is MANUAL_REVIEW.
+
+    Each case below is one where Trakt holds *something* related but not the
+    thing the delta touches, so a config instruction would be a guess.
+    """
+    cases = [
+        # format moved, but no format validator is configured for RREL69
+        ("RREL69", FORMAT_CHANGED, {"format_pattern": "a"},
+         {"format_pattern": "b"}, COMPONENT_VALIDATION),
+        # rule text moved, but no validator implements it
+        ("RREL69", "VALIDATION_RULE_CHANGED", {"validation_rules": ["x"]},
+         {"validation_rules": ["y"]}, COMPONENT_VALIDATION),
+        # ND widened: the configured envelope is still legal, so no instruction
+        ("RREC9", ND_PERMISSION_CHANGED, {"nd_allowed": ["ND5"]},
+         {"nd_allowed": ["ND1", "ND5"]}, COMPONENT_ND_BEHAVIOUR),
+        # enum grew: existing targets survive, extending is a judgement
+        ("RREL42", ENUM_CHANGED, {"enum_values": ["FXRL"]},
+         {"enum_values": ["FXRL", "NEWC"]}, COMPONENT_ENUM_MAPPING),
+    ]
+    for code, change_type, old, new, component in cases:
+        findings = assess([_delta(code, change_type, old, new)], index=index)
+        statuses = _statuses(findings, component)
+        assert statuses == {MANUAL_REVIEW_REQUIRED}, (code, change_type,
+                                                      statuses)
+
+
+def test_pre_existing_config_for_a_newly_published_code_is_review_not_clean(
+        index):
+    """Config that predates the authority publishing a code is not evidence.
+
+    RREL1 is fully configured. If the authority "adds" RREL1, that config was
+    written before the published definition existed, so it must be reconciled —
+    NO_IMPLEMENTATION_CHANGE would be unjustified comfort.
+    """
+    findings = assess([_delta("RREL1", FIELD_ADDED,
+                              new={"label": "Unique Identifier",
+                                   "xml_path": "/x", "mandatory": "mandatory",
+                                   "nd_allowed": []})], index=index)
+    assert NO_IMPLEMENTATION_CHANGE not in {f.status for f in findings}
+    assert _statuses(findings, COMPONENT_FIELD_REGISTRY) == \
+        {MANUAL_REVIEW_REQUIRED}
+    assert _statuses(findings, COMPONENT_ND_BEHAVIOUR) == \
+        {MANUAL_REVIEW_REQUIRED}
+
+
+def test_multiplicity_change_reaches_tests_as_well_as_xml(index):
+    findings = assess([_delta("RREL42", "MULTIPLICITY_CHANGED",
+                              {"multiplicity": "[1..1]"},
+                              {"multiplicity": "[1..n]"})], index=index)
+    assert _statuses(findings, COMPONENT_XML_MAPPING) == {XML_CHANGE_REQUIRED}
+    assert _statuses(findings, COMPONENT_TESTS) == {TEST_CHANGE_REQUIRED}
+
+
+def test_impact_never_creates_suppresses_or_rewords_a_delta(index):
+    """The factual comparison is upstream and untouched by this module."""
+    delta = _delta("RREC9", ND_PERMISSION_CHANGED, {"nd_allowed": ["ND5"]},
+                   {"nd_allowed": []})
+    before = delta.to_dict()
+    findings = assess([delta], index=index)
+    assert delta.to_dict() == before, "assess() mutated the delta"
+    assert {f.delta_id for f in findings} == {delta.delta_id}
+    assert {f.change_type for f in findings} == {delta.change_type}

@@ -87,9 +87,10 @@ yields **104** Annex 2 codes.
 | attribute | derivation |
 | --- | --- |
 | `xml_path` | the element node: the longest common ancestor of the code's **value** rows (the ND branch is a sibling for a few codes, so it is excluded from this calculation) |
-| `value_paths` | every published path under the element node, excluding `NoDataOptn` |
+| `value_paths` | every published path under the element node, excluding `NoDataOptn` (evidence only; not compared) |
+| `value_leaves` | every typed leaf as `{relative_path, data_type, pattern}`, keyed **relative** to the element node |
 | `data_type` / `format_pattern` | the first value leaf in sheet order carrying a `DATA TYPE / CODE` |
-| `nd_allowed` | the **union** of the XSD enumerations of every published `NoData` leaf under the code's `NoDataOptn` branch(es); `[]` when the workbook publishes no ND branch |
+| `nd_allowed` | the **union** of the XSD enumerations of every published `NoData` leaf under the code's `NoDataOptn` branch(es), **cross-checked against the schema's own definition**; `[]` when neither publishes an ND branch |
 | `enum_values` | the XSD enumeration of the value leaf's code-list type |
 | `mandatory` | minimum occurrence of the element node's multiplicity |
 | `validation_rules` | verbatim `Validation rule` cells, de-duplicated in sheet order |
@@ -99,6 +100,45 @@ Nothing is inferred. An attribute that cannot be derived is set to `UNKNOWN`
 and named in `SpecField.unresolved`; any delta touching it is downgraded to
 `review-required`, and a comparison over a spec with unresolved attributes can
 never report `SPEC_UNCHANGED`.
+
+### Why the ND union rule is correct (not merely agreed-with)
+
+`NoDataOptn` is never a bare element. In the schema it is always typed as one
+of three complex types, and every one of them is an **`xs:choice`** whose
+branches are the alternative ways of populating a single ND slot:
+
+| choice type | branches | permitted ND set |
+| --- | --- | --- |
+| `NoDataJustification1Choice` | `NoData: Justification1Code {ND1,ND2,ND3,ND5}` or `NoData4: NoDataFour1` | ND1–ND5 |
+| `NoDataJustification4Choice` | `NoData: Justification2Code {ND1,ND2,ND3}` or `NoData4: NoDataFour1` | ND1–ND4 |
+| `NoDataJustification3Choice` | `NoData: Justification3Code {ND5}` | ND5 |
+
+`NoDataFour1` is an `xs:sequence` of `(Dt: ISODate, NoData:
+Justification4Code {ND4})` — ND4 means *"data collected but will only be
+available from `<date>`"*, which is why that branch carries a date. It is a
+branch of the choice, not a separate field.
+
+Over a choice, **the union of the branch value sets IS the permitted value
+set**. The union rule is therefore the schema's own semantics, not a heuristic
+that happens to fit.
+
+Distribution across the 104 in-scope codes: 41 × `Justification1Choice`,
+17 × `Justification4Choice`, 29 × `Justification3Choice`, 17 with no
+`NoDataOptn` branch at all.
+
+### The schema cross-check (why this stays true on a future artefact)
+
+Agreement with today's configuration proves today's answer. It cannot prove the
+*method* survives a future workbook — and the workbook does contain errors (see
+RREC8/RREL80 below). So `SchemaNdModel` resolves each derived element path
+against the real XSD element tree and independently computes the permitted ND
+set. On disagreement the run **fails closed**: `nd_allowed` becomes unresolved
+with an `ND_SCHEMA_DISAGREEMENT` warning, and neither source is trusted. An
+element path the schema does not define raises `XSD_PATH_UNRESOLVED`.
+
+On the vendored artefacts the cross-check is clean for all 104 codes, and it
+simultaneously proves the *element-path* derivation: every path the normalizer
+derived is a path the schema defines.
 
 ### Independent corroboration
 
@@ -114,19 +154,41 @@ reproduces the documented fact that RREL18 / RREL28 / RREC22 carry no XML path
 
 ## 4. Statuses
 
+**Source criticality** — `gating` · `corroborating`. Declared **per artefact**
+in the manifest and **required**, so classifying a source as non-gating is
+always a visible decision. Gating = the normalized specification is derived from
+it (the workbook and the XSD). Corroborating = authoritative and tracked, but no
+compared attribute comes from it (the sample message, the reporting
+instructions).
+
 **Source** — `SOURCE_UNCHANGED` · `SOURCE_CHANGED` · `SOURCE_CHECK_FAILED` ·
-`SOURCE_MISSING`
+`SOURCE_MISSING`, reported separately for gating and corroborating sources plus
+a `combined` (strictest) value.
 
 **Specification** — `SPEC_UNCHANGED` · `SPEC_CHANGED` · `SPEC_UNDETERMINED`
 
-**Outcome** — `NO_CHANGE_DETECTED` · `SOURCE_CHANGED_SPEC_UNCHANGED` ·
+**Outcome** — `CURRENT` · `SOURCE_CHANGED_SPEC_UNCHANGED` ·
 `REGULATORY_SPEC_CHANGED` · `SPEC_CHANGE_UNDETERMINED` · `WATCH_INCONCLUSIVE`
 
+**`specification_current`** — `yes` / `no` / `unknown`. The unambiguous
+headline, independent of which outcome fired. It is a claim about the
+**machine-readable** specification only.
+
+Semantics:
+
+* `CURRENT` only when **every gating source is verified** and no regulatory
+  delta exists;
+* `REGULATORY_SPEC_CHANGED` whenever a deterministic delta exists — reported
+  even if a gating source is unverified, since an unchecked source can only add
+  findings, never retract a confirmed one;
+* `WATCH_INCONCLUSIVE` when a **gating** source cannot be verified, or parsing
+  is indeterminate;
+* a **corroborating** failure is always listed in `unverified_sources`, shown in
+  the Markdown, and raises the `combined` source status — but does not withhold
+  the machine-readable determination.
+
 A hash change alone is never a regulatory change: source-byte comparison and
-parsed-requirement comparison are separate axes and are both reported. A failed
-source check can never resolve to `NO_CHANGE_DETECTED` or
-`SOURCE_CHANGED_SPEC_UNCHANGED`. A confirmed spec change is still reported when
-another source is unchecked — an unchecked source can only add findings.
+parsed-requirement comparison are separate axes and both are reported.
 
 **Change types** — `FIELD_ADDED`, `FIELD_REMOVED`, `FIELD_DESCRIPTION_CHANGED`,
 `FORMAT_CHANGED`, `MANDATORY_STATUS_CHANGED`, `ND_PERMISSION_CHANGED`,
@@ -169,11 +231,16 @@ comparison was refused (regime or parser-version mismatch).
    such difference has been invented. What *is* replayed is ESMA's own
    published change log (see below). A real historical snapshot can be dropped
    in as a normalized-spec JSON with **no comparator change**.
-2. **The technical reporting instructions are not vendored.** Every run
-   therefore reports `SOURCE_CHECK_FAILED` for that artefact and resolves to
-   `WATCH_INCONCLUSIVE` unless a spec change is confirmed. This is accurate,
-   not a defect: Trakt genuinely cannot assert that source is current. Vendoring
-   it (or enabling retrieval) removes the condition.
+2. **The technical reporting instructions are not vendored, and are classified
+   corroborating.** Nothing the comparator compares is derived from them, so
+   they cannot decide the machine-readable determination — but they *can* carry
+   a real obligation change: narrative guidance on how a field must be
+   *populated* can move without the workbook or XSD changing a byte. Stage 1
+   does not model interpretation and does not claim to detect that. Every run
+   lists the artefact in `unverified_sources` and says so in the Markdown.
+   Vendoring it (or enabling retrieval) closes the gap. **`CURRENT` means the
+   machine-readable specification is current; it does not mean every ESMA
+   obligation has been reviewed.**
 3. **The vendored artefacts are ESMA DRAFTs** (`DRAFT1auth`, namespace
    `urn:esma:xsd:DRAFT1auth.099.001.04`). The watch compares what the repo
    actually relies on; confirming the final published auth.099.001.04 package
@@ -184,10 +251,15 @@ comparison was refused (regime or parser-version mismatch).
    *sibling* of the value branch (`.../Lien/NoDataOptn` vs `.../LienVal/Lien`).
    The normalizer resolves both correctly and emits a
    `ND_BRANCH_PATH_INCONSISTENT` warning.
-5. **One real metadata conflict between ESMA workbooks.** RREC2's label is
-   "New Underlying Exposure Identifier" in the message workbook and
-   "Underlying Exposure Identifier" in the committed field universe. Asserted in
-   the tests so a *new* divergence fails.
+5. **One real metadata conflict between ESMA workbooks, fully explained.**
+   ESMA publishes two multi-code cells — `RREL1|RREC1` and `RREL3|RREC2` — where
+   the collateral section cross-references the same element as the exposure
+   section. A shared cell carries one `RTS Field name`, so RREC2 inherits
+   RREL3's label ("New Underlying Exposure Identifier") while the template
+   workbook names it "Underlying Exposure Identifier". Consequence: a label
+   change on RREL3 would also raise `FIELD_DESCRIPTION_CHANGED` on RREC2. Both
+   codes genuinely map to that element, so this is accurate, not a defect.
+   Asserted in the tests so a *new* divergence fails.
 6. **Scope is the performing residential branch only.** Non-performing (`NPRF`)
    and other asset classes are out of Stage 1 scope, matching the live pathway.
 7. **The XSD is normalized only for code lists and namespace.** Full schema
@@ -217,6 +289,19 @@ ESMA ships its amendment history inside the workbook
   **not reconstructible**, never guessed.
 
 ---
+
+### Impact assessment is a controlled decision table
+
+`regulatory_watch/impact.py` is a declarative table — one auditable row per
+(change type, component) — rather than procedural branching, so the control can
+be reviewed as data. `decision_table()` renders it. Two boundaries are
+structural: the comparator's factual output cannot be created, suppressed or
+reworded by the impact pass, and **no status authorises an automatic change** —
+every status names a location for a human. Where the evidence does not decide,
+the row resolves to `MANUAL_REVIEW_REQUIRED`; `NO_IMPLEMENTATION_CHANGE` is
+reserved for cases where Trakt demonstrably holds nothing that depends on the
+changed attribute. Configuration that *predates* the authority publishing a code
+is treated as review-required, never as reassurance.
 
 ## 7. What Stage 1 deliberately does not do
 

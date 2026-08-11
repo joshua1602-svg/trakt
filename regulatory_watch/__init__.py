@@ -34,10 +34,10 @@ from __future__ import annotations
 #: Bumped whenever the normalizer's output shape or derivation rules change.
 #: Recorded on every snapshot and every normalized spec so a stored spec can
 #: never be silently compared across incompatible parser generations.
-PARSER_VERSION = "annex2-normalizer/1.0.0"
+PARSER_VERSION = "annex2-normalizer/1.1.0"
 
 #: Bumped whenever the JSON report contract changes.
-REPORT_CONTRACT_VERSION = "1.0.0"
+REPORT_CONTRACT_VERSION = "1.1.0"
 
 REGIME = "ESMA_Annex2"
 

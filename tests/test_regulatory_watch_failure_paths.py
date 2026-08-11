@@ -31,16 +31,22 @@ from regulatory_watch.annex2_spec import (                     # noqa: E402
 )
 from regulatory_watch.comparator import compare, spec_status   # noqa: E402
 from regulatory_watch.contracts import (                       # noqa: E402
-    NO_CHANGE_DETECTED,
+    CURRENT,
     REVIEW_REQUIRED,
+    CORROBORATING,
     SOURCE_CHECK_FAILED,
     SOURCE_MISSING,
+    SOURCE_UNCHANGED,
+    SPEC_CURRENT_UNKNOWN,
+    SPEC_CURRENT_YES,
     SPEC_UNCHANGED,
     SPEC_UNDETERMINED,
     SourceArtefact,
     WATCH_INCONCLUSIVE,
     overall_status,
     source_status_for,
+    specification_current,
+    split_source_status,
 )
 from regulatory_watch.manifest import (                        # noqa: E402
     ManifestError, load_manifest,
@@ -77,20 +83,66 @@ def test_missing_local_artefact_is_source_check_failed(tmp_path):
     assert snap.sha256 == ""
 
 
-def test_a_failed_source_check_can_never_report_no_change(rows, codelists):
+def test_a_failed_gating_source_check_can_never_report_current(rows,
+                                                               codelists):
     baseline = fx.build_spec(rows, codelists, spec_version="A",
                              snapshots=[fx.snapshot("a" * 64)])
     candidate = fx.build_spec(rows, codelists, spec_version="B",
                               snapshots=[fx.failed_snapshot()])
     deltas = compare(baseline, candidate)
-    src = source_status_for(baseline.snapshots, candidate.snapshots)
+    split = split_source_status(baseline.snapshots, candidate.snapshots)
     spec = spec_status(deltas, baseline, candidate)
     assert deltas == []
-    assert src == SOURCE_CHECK_FAILED
+    assert split["gating"] == SOURCE_CHECK_FAILED
     assert spec == SPEC_UNCHANGED           # the parsed slice really is equal
-    outcome = overall_status(src, spec)
+    outcome = overall_status(split["gating"], spec)
     assert outcome == WATCH_INCONCLUSIVE
-    assert outcome != NO_CHANGE_DETECTED
+    assert outcome != CURRENT
+    assert specification_current(outcome) == SPEC_CURRENT_UNKNOWN
+
+
+def test_a_failed_corroborating_source_does_not_withhold_the_determination(
+        rows, codelists):
+    """A corroborating failure is REPORTED but does not gate the headline.
+
+    Nothing the comparator compares is derived from a corroborating artefact,
+    so its absence cannot create or retract a determination about the
+    machine-readable specification. It must still be visible.
+    """
+    baseline = fx.build_spec(rows, codelists, spec_version="A", snapshots=[
+        fx.snapshot("a" * 64, "esma_annex2_message_workbook"),
+        fx.failed_snapshot("esma_annex2_reporting_instructions",
+                           criticality=CORROBORATING)])
+    candidate = fx.build_spec(rows, codelists, spec_version="B", snapshots=[
+        fx.snapshot("a" * 64, "esma_annex2_message_workbook"),
+        fx.failed_snapshot("esma_annex2_reporting_instructions",
+                           criticality=CORROBORATING)])
+    split = split_source_status(baseline.snapshots, candidate.snapshots)
+    assert split["gating"] == SOURCE_UNCHANGED
+    assert split["corroborating"] == SOURCE_CHECK_FAILED
+    assert split["combined"] == SOURCE_CHECK_FAILED     # still surfaced
+    assert [u["artefact_id"] for u in split["unverified"]] == [
+        "esma_annex2_reporting_instructions"] * 2
+    outcome = overall_status(split["gating"],
+                             spec_status([], baseline, candidate))
+    assert outcome == CURRENT
+    assert specification_current(outcome) == SPEC_CURRENT_YES
+
+
+def test_a_corroborating_failure_never_masks_a_gating_failure(rows,
+                                                              codelists):
+    baseline = fx.build_spec(rows, codelists, spec_version="A", snapshots=[
+        fx.failed_snapshot("esma_annex2_message_workbook"),
+        fx.failed_snapshot("esma_annex2_sample_message",
+                           criticality=CORROBORATING)])
+    candidate = fx.build_spec(rows, codelists, spec_version="B", snapshots=[
+        fx.snapshot("a" * 64, "esma_annex2_message_workbook"),
+        fx.snapshot("b" * 64, "esma_annex2_sample_message",
+                    criticality=CORROBORATING)])
+    split = split_source_status(baseline.snapshots, candidate.snapshots)
+    assert split["gating"] == SOURCE_CHECK_FAILED
+    assert overall_status(split["gating"], SPEC_UNCHANGED) == \
+        WATCH_INCONCLUSIVE
 
 
 def test_a_missing_counterpart_artefact_is_not_unchanged(rows, codelists):
@@ -349,7 +401,8 @@ def test_manifest_rejects_a_non_esma_authority(tmp_path):
         "manifest:\n  manifest_id: x\n  regime: ESMA_Annex2\n"
         "  authority: FCA\nartefacts:\n"
         "  - artefact_id: a\n    authority: FCA\n    regime: ESMA_Annex2\n"
-        "    artefact_type: xml_schema\n", encoding="utf-8")
+        "    artefact_type: xml_schema\n    criticality: gating\n",
+        encoding="utf-8")
     with pytest.raises(ManifestError) as exc:
         load_manifest(path)
     assert "unsupported authority" in str(exc.value)
@@ -361,7 +414,7 @@ def test_manifest_rejects_a_non_https_url(tmp_path):
         "manifest:\n  manifest_id: x\n  regime: ESMA_Annex2\n"
         "  authority: ESMA\nartefacts:\n"
         "  - artefact_id: a\n    authority: ESMA\n    regime: ESMA_Annex2\n"
-        "    artefact_type: xml_schema\n"
+        "    artefact_type: xml_schema\n    criticality: gating\n"
         "    source_url: http://www.esma.europa.eu/x\n", encoding="utf-8")
     with pytest.raises(ManifestError) as exc:
         load_manifest(path)
@@ -371,7 +424,7 @@ def test_manifest_rejects_a_non_https_url(tmp_path):
 def test_manifest_rejects_duplicate_artefact_ids(tmp_path):
     path = tmp_path / "dupe.yaml"
     entry = ("  - artefact_id: a\n    authority: ESMA\n    regime: ESMA_Annex2\n"
-             "    artefact_type: xml_schema\n")
+             "    artefact_type: xml_schema\n    criticality: gating\n")
     path.write_text(
         "manifest:\n  manifest_id: x\n  regime: ESMA_Annex2\n"
         "  authority: ESMA\nartefacts:\n" + entry + entry, encoding="utf-8")
@@ -386,7 +439,8 @@ def test_manifest_rejects_an_unknown_artefact_type(tmp_path):
         "manifest:\n  manifest_id: x\n  regime: ESMA_Annex2\n"
         "  authority: ESMA\nartefacts:\n"
         "  - artefact_id: a\n    authority: ESMA\n    regime: ESMA_Annex2\n"
-        "    artefact_type: press_release\n", encoding="utf-8")
+        "    artefact_type: press_release\n    criticality: gating\n",
+        encoding="utf-8")
     with pytest.raises(ManifestError) as exc:
         load_manifest(path)
     assert "unsupported artefact_type" in str(exc.value)

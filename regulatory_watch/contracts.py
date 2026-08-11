@@ -40,17 +40,41 @@ SPEC_UNDETERMINED = "SPEC_UNDETERMINED"
 
 SPEC_STATUSES = (SPEC_UNCHANGED, SPEC_CHANGED, SPEC_UNDETERMINED)
 
-# -- the three outcomes Stage 1 must be able to tell apart ------------------ #
+# -- source criticality (the Stage 1 control model) ------------------------- #
+#: GATING — the normalized Annex 2 specification is DERIVED from this artefact.
+#: If it cannot be verified, Trakt cannot assert the implemented specification
+#: is current, and the run is inconclusive.
+GATING = "gating"
+#: CORROBORATING — useful authoritative evidence, but no compared attribute is
+#: derived from it. Failure is always reported, and never silently, but it does
+#: not by itself invalidate a determination about the machine-readable
+#: specification.
+CORROBORATING = "corroborating"
+
+CRITICALITIES = (GATING, CORROBORATING)
+
+# -- the outcomes Stage 1 must be able to tell apart ------------------------ #
+#: every gating source verified, source bytes unchanged, no regulatory delta
+CURRENT = "CURRENT"
 #: bytes differ, parsed Annex 2 requirements identical
 SOURCE_CHANGED_SPEC_UNCHANGED = "SOURCE_CHANGED_SPEC_UNCHANGED"
 #: parsed Annex 2 requirements differ
 REGULATORY_SPEC_CHANGED = "REGULATORY_SPEC_CHANGED"
 #: the parser could not establish whether a material change occurred
 SPEC_CHANGE_UNDETERMINED = "SPEC_CHANGE_UNDETERMINED"
-#: nothing changed anywhere
-NO_CHANGE_DETECTED = "NO_CHANGE_DETECTED"
-#: at least one source could not be checked — explicitly not "no change"
+#: a GATING source could not be verified — explicitly not "no change"
 WATCH_INCONCLUSIVE = "WATCH_INCONCLUSIVE"
+
+OUTCOMES = (CURRENT, SOURCE_CHANGED_SPEC_UNCHANGED, REGULATORY_SPEC_CHANGED,
+            SPEC_CHANGE_UNDETERMINED, WATCH_INCONCLUSIVE)
+
+# -- is the implemented specification current? ------------------------------ #
+#: Unambiguous headline answer, independent of which outcome fired. "yes" means
+#: every gating source was verified and no regulatory delta exists; it is a
+#: claim about the MACHINE-READABLE Annex 2 specification only.
+SPEC_CURRENT_YES = "yes"
+SPEC_CURRENT_NO = "no"
+SPEC_CURRENT_UNKNOWN = "unknown"
 
 # -- delta change types ----------------------------------------------------- #
 FIELD_ADDED = "FIELD_ADDED"
@@ -180,6 +204,7 @@ class SourceArtefact:
     authority: str                       # e.g. "ESMA"
     regime: str                          # e.g. "ESMA_Annex2"
     artefact_type: str                   # one of ARTEFACT_TYPES
+    criticality: str = GATING            # gating | corroborating
     title: str = ""
     external_version: str = UNKNOWN      # ESMA's own version label, if published
     source_url: str = ""                 # primary ESMA URL (allowlist entry)
@@ -209,6 +234,7 @@ class SourceSnapshot:
     retrieved_at: str
     snapshot_path: str
     parser_version: str
+    criticality: str = GATING
     source_url: str = ""
     external_version: str = UNKNOWN
     publication_date: str = UNKNOWN
@@ -270,7 +296,11 @@ class SpecField:
     enum_values: Optional[List[str]] = None     # XSD enumeration values
     xml_tag: str = UNKNOWN
     xml_path: str = UNKNOWN                     # element-node path
-    value_paths: List[str] = field(default_factory=list)   # value leaves
+    value_paths: List[str] = field(default_factory=list)   # absolute, evidence
+    #: Every value leaf as {relative_path, data_type, pattern}, ordered. A
+    #: monetary field publishes two (``Val/Amt`` and ``Val/Sgn``); comparing
+    #: only the primary would miss a type change on the second.
+    value_leaves: List[Dict[str, str]] = field(default_factory=list)
     nd_path: str = UNKNOWN                      # NoDataOptn branch path
     validation_rules: List[str] = field(default_factory=list)
     order_index: int = -1                       # position in the source sequence
@@ -399,9 +429,13 @@ class WatchReport:
     generated_at: str
     baseline: Dict[str, Any] = field(default_factory=dict)
     candidate: Dict[str, Any] = field(default_factory=dict)
-    source_status: str = SOURCE_UNCHANGED
+    source_status: str = SOURCE_UNCHANGED          # strictest of the two below
+    gating_source_status: str = SOURCE_UNCHANGED
+    corroborating_source_status: str = SOURCE_UNCHANGED
+    unverified_sources: List[Dict[str, Any]] = field(default_factory=list)
     spec_status: str = SPEC_UNCHANGED
-    outcome: str = NO_CHANGE_DETECTED
+    outcome: str = CURRENT
+    specification_current: str = SPEC_CURRENT_YES
     regulatory_delta_count: int = 0
     implementation_impact_count: int = 0
     deltas: List[Dict[str, Any]] = field(default_factory=list)
@@ -417,24 +451,79 @@ class WatchReport:
 # Status resolution
 # --------------------------------------------------------------------------- #
 
-def overall_status(source_status: str, spec_status: str) -> str:
-    """Collapse (source, spec) into the single outcome Stage 1 reports.
+def overall_status(gating_source_status: str, spec_status: str) -> str:
+    """Collapse (gating source status, spec status) into the Stage 1 outcome.
 
-    A confirmed regulatory change is reported even when another source could
-    not be checked — an unchecked source can only add findings, never retract
-    one. Otherwise a failed source check dominates: the run can never resolve
-    to "no regulatory change" or to "source changed but spec unchanged" while
-    any authoritative source is unverified.
+    ``gating_source_status`` must be the status of the GATING sources only —
+    the artefacts the normalized specification is actually derived from. A
+    corroborating source that could not be verified is reported separately and
+    never decides this value; see :func:`split_source_status`.
+
+    A confirmed regulatory change is reported even when a gating source could
+    not be checked — an unchecked source can only add findings, never retract a
+    deterministic one. Otherwise a failed GATING check dominates: the run can
+    never resolve to ``CURRENT`` or ``SOURCE_CHANGED_SPEC_UNCHANGED`` while an
+    artefact the specification is derived from is unverified.
     """
     if spec_status == SPEC_CHANGED:
         return REGULATORY_SPEC_CHANGED
-    if source_status in (SOURCE_CHECK_FAILED, SOURCE_MISSING):
+    if gating_source_status in (SOURCE_CHECK_FAILED, SOURCE_MISSING):
         return WATCH_INCONCLUSIVE
     if spec_status == SPEC_UNDETERMINED:
         return SPEC_CHANGE_UNDETERMINED
-    if source_status == SOURCE_CHANGED:
+    if gating_source_status == SOURCE_CHANGED:
         return SOURCE_CHANGED_SPEC_UNCHANGED
-    return NO_CHANGE_DETECTED
+    return CURRENT
+
+
+def specification_current(outcome: str) -> str:
+    """Unambiguous headline: is the implemented Annex 2 specification current?
+
+    A claim about the MACHINE-READABLE specification only — the field set,
+    types, ND permissions, enumerations, XML paths, multiplicity, ordering and
+    published validation rules that Stage 1 normalizes and compares.
+    """
+    if outcome in (CURRENT, SOURCE_CHANGED_SPEC_UNCHANGED):
+        return SPEC_CURRENT_YES
+    if outcome == REGULATORY_SPEC_CHANGED:
+        return SPEC_CURRENT_NO
+    return SPEC_CURRENT_UNKNOWN
+
+
+def split_source_status(baseline: Sequence[SourceSnapshot],
+                        candidate: Sequence[SourceSnapshot],
+                        ) -> Dict[str, Any]:
+    """Source status split by criticality, plus the unverified-source list.
+
+    Returns ``{"gating": ..., "corroborating": ..., "combined": ...,
+    "unverified": [...]}``. ``combined`` is the strictest of the two and is
+    what the report shows as ``source_status``; only ``gating`` feeds
+    :func:`overall_status`.
+    """
+    def of(crit: str, snaps: Sequence[SourceSnapshot]
+           ) -> List[SourceSnapshot]:
+        return [s for s in snaps if s.criticality == crit]
+
+    gating = source_status_for(of(GATING, baseline), of(GATING, candidate))
+    corroborating_snaps = (of(CORROBORATING, baseline)
+                           + of(CORROBORATING, candidate))
+    corroborating = (source_status_for(of(CORROBORATING, baseline),
+                                       of(CORROBORATING, candidate))
+                     if corroborating_snaps else SOURCE_UNCHANGED)
+
+    severity = {SOURCE_UNCHANGED: 0, SOURCE_CHANGED: 1, SOURCE_MISSING: 2,
+                SOURCE_CHECK_FAILED: 3}
+    combined = max((gating, corroborating), key=lambda s: severity.get(s, 0))
+
+    unverified = [
+        {"artefact_id": s.artefact_id, "criticality": s.criticality,
+         "side": side, "retrieval_status": s.retrieval_status,
+         "detail": s.retrieval_detail}
+        for side, snaps in (("baseline", baseline), ("candidate", candidate))
+        for s in snaps if not s.ok
+    ]
+    return {"gating": gating, "corroborating": corroborating,
+            "combined": combined, "unverified": unverified}
 
 
 def severity_for(change_type: str) -> str:

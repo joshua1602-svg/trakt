@@ -294,6 +294,128 @@ def schema_namespace(xsd_path: Path) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Schema ND model — the authoritative definition of what ND a field permits
+# --------------------------------------------------------------------------- #
+
+class SchemaNdModel:
+    """Resolves ``<element>/NoDataOptn`` against the real XSD element tree.
+
+    The workbook publishes each field's ND branch as rows; the XSD *defines*
+    it. For two codes (RREC8 Lien, RREL80 Original Lender LEI) the workbook's
+    ``PATH`` column places the ND branch under a sibling of the value element,
+    which the schema does not agree with — so the workbook's ND rows cannot be
+    trusted unchecked on a future artefact.
+
+    This model is the independent check. Every ``NoDataOptn`` in the schema is
+    typed as one of the ``NoDataJustification*Choice`` complex types, each an
+    ``xs:choice`` whose branches are the alternative ways of populating the
+    single ND slot. The permitted ND set is therefore exactly the UNION of the
+    branch enumerations — including the nested ``NoDataFour1`` branch, an
+    ``xs:sequence`` of ``(Dt, NoData: NoDataAllowedJustification4Code)`` that
+    carries ND4 ("data will only be available from <date>", hence the date).
+
+    Returns ``None`` for a path the schema does not define, so an unresolvable
+    path is reported rather than silently treated as "no ND".
+    """
+
+    _XS = "{http://www.w3.org/2001/XMLSchema}"
+
+    def __init__(self, xsd_path: Path) -> None:
+        from lxml import etree
+        try:
+            root = etree.parse(str(xsd_path)).getroot()
+        except Exception as exc:          # noqa: BLE001
+            raise SpecParseError(
+                f"schema could not be parsed ({type(exc).__name__}): {exc}")
+        self._complex_types = {t.get("name"): t
+                               for t in root.iter(f"{self._XS}complexType")
+                               if t.get("name")}
+        self._simple_types = {t.get("name"): t
+                              for t in root.iter(f"{self._XS}simpleType")
+                              if t.get("name")}
+        self._global_elements = {
+            e.get("name"): e for e in root
+            if etree.QName(e).localname == "element" and e.get("name")}
+        self._children_cache: Dict[str, Dict[str, str]] = {}
+
+    # -- tree walking ------------------------------------------------------- #
+    def _children(self, type_name: Optional[str]) -> Dict[str, str]:
+        if not type_name:
+            return {}
+        cached = self._children_cache.get(type_name)
+        if cached is not None:
+            return cached
+        node = self._complex_types.get(type_name)
+        out: Dict[str, str] = {}
+        if node is not None:
+            for el in node.iter(f"{self._XS}element"):
+                name = el.get("name")
+                if name and name not in out:
+                    out[name] = el.get("type") or ""
+        self._children_cache[type_name] = out
+        return out
+
+    def resolve(self, path: str) -> Optional[str]:
+        """Type name of the element at ``path``, or ``None`` if undefined."""
+        parts = _split_path(path)
+        if not parts:
+            return None
+        root_el = self._global_elements.get(parts[0])
+        if root_el is None:
+            return None
+        type_name = root_el.get("type")
+        for segment in parts[1:]:
+            children = self._children(type_name)
+            if segment not in children:
+                return None
+            type_name = children[segment]
+        return type_name
+
+    def nd_allowed(self, element_path: str) -> Tuple[Optional[List[str]], str]:
+        """``(permitted ND values, detail)`` for the element at ``element_path``.
+
+        ``(None, reason)`` when the path is not defined by the schema.
+        ``([], ...)`` when the element defines no ``NoDataOptn`` branch — the
+        schema's positive statement that ND is not permitted.
+        """
+        type_name = self.resolve(element_path)
+        if type_name is None:
+            return None, f"path not defined by the schema: {element_path}"
+        children = self._children(type_name)
+        nd_type = children.get(_ND_OPT)
+        if nd_type is None:
+            return [], f"{type_name} defines no {_ND_OPT} branch"
+        values: set = set()
+        for leaf_type in self._justification_types(nd_type):
+            simple = self._simple_types.get(leaf_type)
+            if simple is None:
+                return None, (f"{nd_type} references undefined justification "
+                              f"type {leaf_type}")
+            values.update(e.get("value")
+                          for e in simple.iter(f"{self._XS}enumeration")
+                          if e.get("value") is not None)
+        if not values:
+            return None, f"{nd_type} publishes no justification values"
+        return sorted(values), f"union of the branches of {nd_type}"
+
+    def _justification_types(self, choice_type: str) -> List[str]:
+        """Every enumerated NoData leaf type reachable under a choice type."""
+        out: List[str] = []
+        for name, type_name in self._children(choice_type).items():
+            if not type_name:
+                continue
+            if type_name in self._simple_types:
+                if name == "NoData" and type_name not in out:
+                    out.append(type_name)
+            else:
+                # Nested branch (NoDataFour1): recurse for its NoData leaf.
+                for nested in self._justification_types(type_name):
+                    if nested not in out:
+                        out.append(nested)
+        return out
+
+
+# --------------------------------------------------------------------------- #
 # Normalization (pure — no I/O, so fixtures replay exactly)
 # --------------------------------------------------------------------------- #
 
@@ -350,12 +472,19 @@ def normalize(rows: Sequence[RawRow], codelists: Dict[str, List[str]],
               sheet_name: str = DEFAULT_SHEET, spec_version: str = UNKNOWN,
               scope: Optional[Dict[str, Any]] = None,
               snapshots: Optional[Sequence[SourceSnapshot]] = None,
+              schema_model: Optional["SchemaNdModel"] = None,
               parser_version: str = PARSER_VERSION) -> NormalizedSpec:
     """Build a :class:`NormalizedSpec` from extracted rows + XSD code lists.
 
     Pure and total: any code the rows cannot resolve is emitted with the
     offending attributes ``UNKNOWN`` and listed in ``unresolved``, plus a
     structured parse warning. Nothing is dropped silently.
+
+    When ``schema_model`` is supplied the workbook-derived ND permission set is
+    cross-checked against the schema's own definition. Disagreement fails
+    closed — ``nd_allowed`` becomes unresolved rather than trusting either
+    source — because a workbook that mis-tags an ND row would otherwise import
+    the wrong justification vocabulary silently.
     """
     grouped: Dict[str, List[RawRow]] = {}
     for row in rows:
@@ -417,8 +546,10 @@ def normalize(rows: Sequence[RawRow], codelists: Dict[str, List[str]],
             # The code's value rows span disjoint parts of the message tree:
             # the workbook is ambiguous, or the code has been reused. Never
             # pick one branch silently.
+            # value_leaves keys each leaf RELATIVE to the element node, so
+            # an unresolved element node makes them meaningless too.
             unresolved.extend(["xml_path", "xml_tag", "multiplicity",
-                               "mandatory"])
+                               "mandatory", "value_leaves"])
             warnings.append({
                 "code": code,
                 "warning": "AMBIGUOUS_ELEMENT_NODE",
@@ -486,6 +617,35 @@ def normalize(rows: Sequence[RawRow], codelists: Dict[str, List[str]],
             # permitted for this field.
             nd_allowed = []
 
+        # -- schema cross-check on ND ---------------------------------------- #
+        # The workbook publishes the ND rows; the XSD DEFINES the ND branch.
+        # Where they disagree, neither is trusted.
+        if schema_model is not None and not ambiguous:
+            schema_nd, schema_detail = schema_model.nd_allowed(element_path)
+            if schema_nd is None:
+                warnings.append({
+                    "code": code,
+                    "warning": "XSD_PATH_UNRESOLVED",
+                    "detail": schema_detail,
+                })
+            elif nd_allowed is not None and sorted(nd_allowed) != schema_nd:
+                nd_allowed = None
+                if "nd_allowed" not in unresolved:
+                    unresolved.append("nd_allowed")
+                warnings.append({
+                    "code": code,
+                    "warning": "ND_SCHEMA_DISAGREEMENT",
+                    "detail": (f"the workbook's ND rows and the schema "
+                               f"disagree ({schema_detail}); neither is "
+                               f"trusted"),
+                })
+            elif nd_allowed is not None:
+                provenance.append(Provenance(
+                    artefact_id=schema_artefact_id,
+                    locator=f"xsd:element/{_split_path(element_path)[-1]}"
+                            f"/{_ND_OPT}",
+                    detail=schema_detail))
+
         if nd_roots and not ambiguous and not _is_under("/" + nd_roots[0],
                                                         element_path):
             # Real inconsistency in the ESMA workbook: the ND branch is a
@@ -502,6 +662,18 @@ def normalize(rows: Sequence[RawRow], codelists: Dict[str, List[str]],
         typed = [r for r in sorted(value_rows, key=lambda r: r.row_number)
                  if r.data_type]
         primary = typed[0] if typed else None
+
+        # Every typed leaf, keyed RELATIVE to the element node. A monetary
+        # field publishes two (``Val/Amt`` and ``Val/Sgn``); comparing only the
+        # primary would miss a type change on the second. Relative keys mean a
+        # whole-element relocation does not read as a format change.
+        value_leaves = [
+            {"relative_path": (row.path[len(element_path):].lstrip("/")
+                               or "."),
+             "data_type": row.data_type,
+             "pattern": row.pattern}
+            for row in typed if _is_under(row.path, element_path)
+        ]
 
         data_type = primary.data_type if primary else UNKNOWN
         format_pattern = (primary.pattern or UNKNOWN) if primary else UNKNOWN
@@ -583,6 +755,7 @@ def normalize(rows: Sequence[RawRow], codelists: Dict[str, List[str]],
                      else (_split_path(element_path)[-1] or UNKNOWN)),
             xml_path=(UNKNOWN if ambiguous else element_path),
             value_paths=sorted({r.path for r in value_rows}),
+            value_leaves=value_leaves,
             nd_path=nd_path,
             validation_rules=_dedupe(
                 r.validation_rule for r in
@@ -629,8 +802,10 @@ def parse_annex2_spec(workbook_path: Path, xsd_path: Path, *,
         "cancellation_rows": "excluded",
         "asset_branch": "ResdtlRealEsttLn/PrfrmgLn",
         "schema_namespace": schema_namespace(xsd_path),
+        "nd_schema_cross_check": "enabled",
     }
     return normalize(rows, codelists, artefact_id=workbook_artefact_id,
                      schema_artefact_id=schema_artefact_id,
                      sheet_name=sheet_name, spec_version=spec_version,
-                     scope=scope, snapshots=snapshots)
+                     scope=scope, snapshots=snapshots,
+                     schema_model=SchemaNdModel(xsd_path))
