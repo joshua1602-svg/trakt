@@ -13,7 +13,7 @@ info:
     Trakt portfolio MI and artefact retrieval for Microsoft 365 Copilot.
     Answers come from Trakt's deterministic MI engine and published pipeline
     outputs — never from model estimation.
-  version: 2.0.0
+  version: 3.0.0
 servers:
   - url: https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net
     description: Trakt MI API (set to your deployment URL before packaging)
@@ -106,7 +106,7 @@ components:
         to the version this package was built from.
       schema:
         type: string
-        default: "2.0.0"
+        default: "3.0.0"
   securitySchemes:
     entraBearer:
       type: oauth2
