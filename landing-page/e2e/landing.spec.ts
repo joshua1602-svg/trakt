@@ -269,10 +269,7 @@ test.describe("Trakt landing page", () => {
     await expect(lenses.getByText("£37,270,061")).toBeVisible();
   });
 
-  test("the delivery accordion opens one panel at a time, under user control", async ({
-    page,
-    isMobile,
-  }) => {
+  test("the delivery model is five static tiles, with nothing to open", async ({ page }) => {
     const delivery = page.locator("#delivery");
     await delivery.scrollIntoViewIfNeeded();
 
@@ -280,50 +277,27 @@ test.describe("Trakt landing page", () => {
       delivery.getByRole("heading", { name: /every mode reads the same governed layer\./i }),
     ).toBeVisible();
 
-    if (isMobile) {
-      // Below 768px: a plain vertical stack — every panel visible, no
-      // horizontal behaviour, no expand/collapse controls.
-      for (const name of [
-        "Managed service",
-        "Trakt Agent",
-        "Copilot",
-        "Enterprise agent",
-        "Agent-to-agent",
-      ]) {
-        await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
-      }
-      await expect(delivery.getByRole("button")).toHaveCount(0);
-      return;
+    // All five modes readable in one pass, in order, at every breakpoint.
+    const names = [
+      "Managed service",
+      "Trakt Agent",
+      "Copilot",
+      "Enterprise agent",
+      "Agent-to-agent",
+    ];
+    for (const name of names) {
+      await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
+    await expect(delivery.getByRole("heading", { level: 3 })).toHaveCount(names.length);
 
-    // The horizontal accordion is the visible surface on desktop; the mobile
-    // stack coexists in the DOM behind a display toggle, so assertions scope
-    // to the accordion group.
-    const accordion = delivery.getByRole("group", { name: "Delivery modes" });
+    // Availability is stated per tile: three shipped, two roadmap.
+    await expect(delivery.getByText("Available today")).toHaveCount(3);
+    await expect(delivery.getByText("Roadmap")).toHaveCount(2);
 
-    // Panel 1 open on load, and exactly one panel is ever expanded.
-    await expect(accordion.getByText(/recurring reporting, regulatory output/i)).toBeVisible();
-
-    // Selecting another spine moves the expansion — never all-collapsed.
-    await accordion.getByRole("button", { name: "Copilot" }).click();
-    await expect(accordion.getByText(/inside the tools your teams already use/i)).toBeVisible();
-    await expect(accordion.getByText(/recurring reporting, regulatory output/i)).toHaveCount(0);
-
-    // Roadmap panels expand too, and stay labelled as roadmap in grey.
-    await accordion.getByRole("button", { name: "Agent-to-agent" }).click();
-    await expect(accordion.getByText(/consulting the governed layer directly/i)).toBeVisible();
-    await expect(accordion.getByText("Roadmap", { exact: true })).toBeVisible();
-
-    // Arrow keys move between panels.
-    await accordion.getByRole("button", { name: "Enterprise agent" }).focus();
-    await page.keyboard.press("ArrowLeft");
-    const focused = await page.evaluate(
-      () =>
-        document.activeElement?.getAttribute("aria-label") ??
-        document.activeElement?.textContent ??
-        "",
-    );
-    expect(focused).toMatch(/copilot/i);
+    // No expand/collapse interaction anywhere in the section.
+    await expect(delivery.getByRole("button")).toHaveCount(0);
+    await expect(delivery.locator("details")).toHaveCount(0);
+    await expect(delivery.locator("[aria-expanded]")).toHaveCount(0);
   });
 
   test("governance makes four claims once, with the reconciliation proof", async ({ page }) => {

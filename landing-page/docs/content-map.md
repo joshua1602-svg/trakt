@@ -219,21 +219,23 @@ elsewhere. The evidence underneath each card is unchanged.
 
 ---
 
-## 6b. Delivery model — the horizontal accordion
+## 6b. Delivery model — five static tiles
 
-Added in Pass 5 by explicit direction: the page's one horizontal accordion,
-panel 1 open on load, never all-collapsed, arrow-key navigable, and a plain
-vertical stack below 768px (`DeliveryAccordion.tsx`). Panel copy is reused
-verbatim from the delivery-model claims recorded in earlier passes; the
-live/roadmap split keeps its accent meaning (mint shipped, grey not).
+Five modes, one line each, in a static grid (5 columns desktop / 2 tablet /
+1 mobile). **Pass 6 replaced the horizontal accordion** added in Pass 5: the
+page is a vertical scroll and carries no expand/collapse interaction, so the
+whole section is legible in one pass. Copy is trimmed from the ledger-
+evidenced delivery claims; the live/roadmap split keeps its accent meaning
+(mint shipped, grey not). No client JavaScript — `DeliveryModes` in
+`Content.tsx` is a server component.
 
-| Panel | Class | Evidence |
+| Tile | Class | Evidence |
 |---|---|---|
-| Managed service — "Recurring reporting, regulatory output and governance artefacts, produced with no user interaction." (Available today) | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. |
-| Trakt Agent — "The full analytical environment: dashboards, charting, drill-through and portfolio investigation." (Available today) | Evidenced | `frontend/mi-agent-ui/src/components/`. |
-| Copilot — "Portfolio questions and artefact requests inside the tools your teams already use." (Available today) | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py`. |
-| Enterprise agent — "Trakt running inside a client's own agent estate." (Roadmap, grey) | Roadmap | `trakt_core/context.py` `CHANNEL_ENTERPRISE_AGENT` reserved; test fixture only. Labelled Roadmap on the page — reintroduced here by explicit direction, still never mixed with live capability. |
-| Agent-to-agent — "Upstream and downstream systems consulting the governed layer directly." (Roadmap, grey) | Roadmap | `CHANNEL_AGENT_TO_AGENT` reserved; outbound Teams delivery exists (`trakt_notifications/`), agent callback does not. |
+| Managed service — "Recurring reporting and governance artefacts, produced with no user interaction." (Available today) | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. |
+| Trakt Agent — "The full analytical environment: dashboards, charting and drill-through." (Available today) | Evidenced | `frontend/mi-agent-ui/src/components/`. |
+| Copilot — "Portfolio questions inside the tools your teams already use." (Available today) | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py`. |
+| Enterprise agent — "Trakt running inside a client's own agent estate." (Roadmap, grey) | Roadmap | `trakt_core/context.py` `CHANNEL_ENTERPRISE_AGENT` reserved; test fixture only. Labelled Roadmap on the page, never mixed with live capability. |
+| Agent-to-agent — "Upstream and downstream systems consulting the layer directly." (Roadmap, grey) | Roadmap | `CHANNEL_AGENT_TO_AGENT` reserved; outbound Teams delivery exists (`trakt_notifications/`), agent callback does not. |
 
 ---
 

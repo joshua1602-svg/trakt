@@ -321,6 +321,80 @@ export function DeliveryStrip() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Delivery model — five static tiles                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Five delivery modes, stated once each. A static row: no expand, no
+ * collapse, no keyboard handling — the whole section is legible in one pass,
+ * which is the point. Mint marks what ships; grey marks what does not.
+ */
+const DELIVERY_MODES = [
+  {
+    name: "Managed service",
+    copy: "Recurring reporting and governance artefacts, produced with no user interaction.",
+    available: true,
+  },
+  {
+    name: "Trakt Agent",
+    copy: "The full analytical environment: dashboards, charting and drill-through.",
+    available: true,
+  },
+  {
+    name: "Copilot",
+    copy: "Portfolio questions inside the tools your teams already use.",
+    available: true,
+  },
+  {
+    name: "Enterprise agent",
+    copy: "Trakt running inside a client's own agent estate.",
+    available: false,
+  },
+  {
+    name: "Agent-to-agent",
+    copy: "Upstream and downstream systems consulting the layer directly.",
+    available: false,
+  },
+] as const;
+
+export function DeliveryModes() {
+  return (
+    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {DELIVERY_MODES.map((mode, index) => (
+        <li key={mode.name}>
+          <Reveal delay={index * 60} className="h-full">
+            <Card
+              className={cx(
+                "flex h-full flex-col",
+                mode.available ? "border-mint-400/25" : "border-line-soft bg-navy-900/40",
+              )}
+            >
+              <p
+                className={cx(
+                  "text-[11px] font-semibold uppercase tracking-wider",
+                  mode.available ? "text-mint-400" : "text-ink-500",
+                )}
+              >
+                {mode.available ? "Available today" : "Roadmap"}
+              </p>
+              <h3
+                className={cx(
+                  "mt-2 text-[15px] font-semibold",
+                  mode.available ? "text-ink-100" : "text-ink-300",
+                )}
+              >
+                {mode.name}
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-400">{mode.copy}</p>
+            </Card>
+          </Reveal>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Governance                                                                 */
 /* -------------------------------------------------------------------------- */
 

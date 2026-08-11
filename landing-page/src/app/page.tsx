@@ -1,12 +1,12 @@
 import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
   Architecture,
+  DeliveryModes,
   DeliveryStrip,
   ForwardControls,
   Governance,
   Lenses,
 } from "@/components/site/Content";
-import { DeliveryAccordion } from "@/components/site/DeliveryAccordion";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
 import { LeadForm } from "@/components/site/LeadForm";
@@ -103,9 +103,8 @@ export default function Page() {
           </Reveal>
         </Section>
 
-        {/* 6b — The delivery model in depth: the page's one horizontal
-            accordion. The chips above name the channels; these panels say
-            what each mode does, live and roadmap kept visually distinct. */}
+        {/* 6b — The delivery model: five modes, stated once each, live and
+            roadmap kept visually distinct. Static — nothing to open. */}
         <Section id="delivery" className="pb-16 sm:pb-20">
           <Reveal>
             <SectionHeading
@@ -114,9 +113,9 @@ export default function Page() {
               title="Every mode reads the same governed layer."
             />
           </Reveal>
-          <Reveal delay={60} className="mt-9">
-            <DeliveryAccordion />
-          </Reveal>
+          <div className="mt-9">
+            <DeliveryModes />
+          </div>
         </Section>
 
         {/* 7 — Why trust the outputs? */}
