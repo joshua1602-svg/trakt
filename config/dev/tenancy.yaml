@@ -1,0 +1,25 @@
+# Development tenant registry — WHOSE DATA is served.
+#
+# Wire it with TRAKT_TENANCY_CONFIG=config/dev/tenancy.yaml.
+#
+# The reason to have this file at all in development: without it the deployment
+# is single-tenant and the tenant owns ANY well-formed selector inside its own
+# namespace (authorise_portfolio_access rule 3 is inert). That is a documented
+# and acceptable production shape today, but it is the wrong thing to develop an
+# agent surface against — the whole point of the proof is that a boundary
+# refuses, so the boundary has to be switched on.
+
+tenants:
+
+  ERE:
+    display_name: Equity Release Europe
+    # Used when a caller names no portfolio.
+    default_portfolio: ERE
+    # `ERE` itself means the consolidated platform canonical across all of the
+    # tenant's source portfolios.
+    portfolios:
+      - ERE
+      - direct_001
+      - acquired_001
+    portfolio_patterns:
+      - '^(direct|acquired)_\d{3}$'

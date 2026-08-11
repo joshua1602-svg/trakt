@@ -1,0 +1,287 @@
+# GENERATED FILE — do not edit by hand.
+#
+# Built from the Trakt agent tool registry by
+# scripts/build_agent_openapi.py. Add or change a tool in
+# trakt_tools/handlers/, then regenerate.
+#
+# tests/test_agent_openapi_document.py fails when this file is stale.
+#
+# Set servers[0].url to the deployment base URL before handing this to a
+# client.
+openapi: 3.0.3
+info:
+  title: Trakt Agent Tools
+  version: 1.0.0
+  description: 'Governed, deterministic credit capabilities for an external AI agent.
+
+
+    Every figure these tools return is computed by Trakt from governed data under an operator-approved
+    definition, and carries the snapshot and configuration provenance needed to trust it. Never compute
+    a portfolio figure yourself — call a tool.
+
+
+    Authorisation is per resource. An agent holds capabilities against named resources and nothing else;
+    a resource it is not granted is refused identically to one that does not exist.'
+servers:
+- url: https://trakt-mi-api.example.azurewebsites.net
+  description: Set to your deployment URL before use.
+security:
+- entraBearer: []
+paths:
+  /v1/agent/tools:
+    get:
+      operationId: listTraktTools
+      summary: List the Trakt tools this identity may call
+      description: 'Returns the tool catalogue narrowed to the capabilities this agent''s grants confer,
+        each with its JSON Schema, plus the closed set of resource references it may name. Call this first:
+        it removes any need to guess an identifier.'
+      responses:
+        '200':
+          description: The authorised tool catalogue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ToolDeclaration'
+                  tool_count:
+                    type: integer
+                  resources:
+                    type: object
+                    description: capability -> the resource references this agent may use it against.
+                  organisation_id:
+                    type:
+                    - string
+                    - 'null'
+                  tenant_id:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/evaluate_covenants:
+    post:
+      operationId: invoke_evaluate_covenants
+      summary: Evaluate the operator-approved concentration and covenant tests for a portfolio resource
+      description: 'Evaluate the operator-approved concentration and covenant tests for a portfolio resource.
+        Returns each test''s current value, threshold, operator, utilisation, headroom, breach amount,
+        status and movement against the prior governed reporting period, plus the configuration version
+        and approver that produced them.
+
+
+        Use this to find out whether a book is within its concentration limits and covenants, and by how
+        much. Every number is computed by Trakt from governed data under an operator-approved definition
+        — never estimate or recompute one yourself. Check ''source'': only ''approved_configuration''
+        is operator-approved.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Evaluate the operator-approved concentration and covenant tests for one authorised
+                resource.
+              properties:
+                resource:
+                  type: string
+                  description: The resource to evaluate, as '{tenant}/{kind}/{resource_id}' — for example
+                    'ERE/source_portfolio/direct_001'. Call GET /v1/agent/tools to see the resources you
+                    may name.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                as_of_run_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional governed run to evaluate as at. Omit for the current approved
+                    reporting position.
+                  default: null
+                category:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional category filter, e.g. 'geographic'. Omit for every active test.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  securitySchemes:
+    entraBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Microsoft Entra client-credentials token. The calling application's service principal
+        must be assigned the Trakt agent app role, and its directory must be registered as a Trakt organisation.
+  schemas:
+    GovernedResult:
+      type: object
+      description: The stable envelope every tool returns. `result` carries the tool's own output; everything
+        else is the governance context needed to trust it.
+      properties:
+        capability:
+          type: string
+          example: tool.evaluate_covenants
+        schema_version:
+          type: string
+          example: 1.1.0
+        status:
+          type: string
+          enum:
+          - success
+          - partial_success
+          - blocked
+          - error
+          description: '`blocked` means governance refused (permission or policy). `error` means the capability
+            could not produce an answer. The two are different situations for an autonomous caller: do
+            not retry a `blocked` call.'
+        request_id:
+          type: string
+        correlation_id:
+          type:
+          - string
+          - 'null'
+          description: Echoes the inbound X-Correlation-Id.
+        tenant_id:
+          type: string
+        portfolio_id:
+          type:
+          - string
+          - 'null'
+          description: The resource reference this call named.
+        snapshot:
+          type:
+          - object
+          - 'null'
+          description: 'Which governed dataset answered: label, snapshot id, content hash, reporting date.'
+        result:
+          type:
+          - object
+          - 'null'
+        warnings:
+          type: array
+          items:
+            type: string
+        policy:
+          type: object
+          description: What governance decided.
+        provenance:
+          type:
+          - object
+          - 'null'
+        audit:
+          type:
+          - object
+          - 'null'
+        error:
+          oneOf:
+          - &id001
+            type: object
+            description: A governed failure. Branch on `code`, never on `message`.
+            properties:
+              code:
+                type: string
+                description: Stable machine-readable error code.
+              message:
+                type: string
+              category:
+                type: string
+                enum:
+                - authentication
+                - authorisation
+                - input
+                - policy
+                - data
+                - capability
+                - infrastructure
+              retryable:
+                type: boolean
+                description: Whether waiting and retrying could help.
+              request_id:
+                type: string
+              details:
+                type: object
+            required:
+            - code
+            - message
+            - category
+            - retryable
+          - type: 'null'
+      required:
+      - capability
+      - schema_version
+      - status
+      - request_id
+      - tenant_id
+    TraktError: *id001
+    ToolDeclaration:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        agent_guidance:
+          type: string
+        required_capability:
+          type: string
+        resource_argument:
+          type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+      required:
+      - name
+      - version
+      - description
+      - required_capability
+      - input_schema
+  responses:
+    InvalidArguments:
+      description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
+      content: &id002
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GovernedResult'
+    Unauthorized:
+      description: The bearer token is missing, invalid or expired.
+      content: *id002
+    Forbidden:
+      description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
+        RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
+      content: *id002
+    UnknownTool:
+      description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
+      content: *id002
+    Unavailable:
+      description: The agent API or the governed data source is not available. Retryable.
+      content: *id002

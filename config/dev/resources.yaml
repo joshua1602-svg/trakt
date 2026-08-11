@@ -1,0 +1,56 @@
+# Development resource catalogue — WHAT can be permissioned.
+#
+# Registering a resource grants nobody anything. This file says what a boundary
+# IS; config/dev/entitlements.yaml says who may cross it.
+#
+# Wire it with TRAKT_RESOURCES_CONFIG=config/dev/resources.yaml.
+
+resources:
+
+  # ---------------------------------------------------------------------
+  # PORTFOLIO A — the book the Sprint 1 test agent is entitled to.
+  #
+  # source_portfolio_id is mandatory on every onboarded row, so this axis can
+  # always carry a boundary. That is why the proof uses it.
+  # ---------------------------------------------------------------------
+  - tenant_id: ERE
+    kind: source_portfolio
+    resource_id: direct_001
+    display_label: ERE Direct Originations (Portfolio A)
+    source_portfolio_ids: [direct_001]
+
+  # ---------------------------------------------------------------------
+  # PORTFOLIO B — registered, real, and NOT granted to the test agent.
+  #
+  # Its presence here is the point: the negative half of the exit test needs a
+  # resource that genuinely exists, so that "refused because not granted" and
+  # "refused because it does not exist" can be shown to be indistinguishable.
+  # ---------------------------------------------------------------------
+  - tenant_id: ERE
+    kind: source_portfolio
+    resource_id: acquired_001
+    display_label: Acquired Portfolio 1 (Portfolio B)
+    source_portfolio_ids: [acquired_001]
+
+  # The whole book, written down deliberately — the only way whole-book access
+  # can be reached. Not granted to the test agent.
+  - tenant_id: ERE
+    kind: portfolio
+    resource_id: ere_total
+    display_label: ERE — all books
+    whole_tenant_book: true
+
+  # An SPV this data cannot separate. Registered so it can be NAMED, audited and
+  # refused by name; marked unpartitionable so a grant over it is rejected at
+  # config load rather than confusingly at request time.
+  #
+  # Do not "fix" this by pointing it at the enclosing source portfolio — that
+  # would hand a future SPV II funder the whole book.
+  - tenant_id: ERE
+    kind: spv
+    resource_id: spv_ii
+    display_label: SPV II
+    unpartitionable: true
+    unpartitionable_reason: >-
+      SPV II holds part of a source portfolio and the supplied tape carries no
+      SPV attribution, so its rows cannot be separated from the rest of the book.

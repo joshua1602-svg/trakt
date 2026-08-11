@@ -1,0 +1,61 @@
+# Development entitlements — MAY THEY?
+#
+#     organisation  ×  resource  ×  capability
+#
+# Wire it with TRAKT_ENTITLEMENTS_CONFIG=config/dev/entitlements.yaml.
+#
+# Every grant is validated at load against config/dev/organisations.yaml and
+# config/dev/resources.yaml. One invalid grant rejects the WHOLE file and leaves
+# no grants active — a typo must not silently change who can see what.
+
+entitlements:
+
+  # ---------------------------------------------------------------------
+  # The Sprint 1 machine identity: risk:read on PORTFOLIO A, and nothing else.
+  #
+  # This single entry is the whole external-agent permission proof:
+  #
+  #   * Portfolio A is reachable, and only with risk:read;
+  #   * Portfolio B (ERE/source_portfolio/acquired_001) is absent from this file,
+  #     so it is refused — with the same code and message as a portfolio that
+  #     does not exist;
+  #   * ERE/portfolio/ere_total is absent, so the whole book is refused;
+  #   * mi:query is absent, so the free-form natural-language surface is refused
+  #     at the SCOPE gate before any resource is even considered — the agent's
+  #     scopes are derived from these grants, so it does not hold mi:query at all;
+  #   * artefact:generate is absent, so the agent cannot make Trakt produce and
+  #     republish an investor artefact.
+  #
+  # Widening the test agent means adding a line here. There is no other way, and
+  # no code path through which the agent can influence one.
+  - organisation_id: a2a_test_agent
+    resource: ERE/source_portfolio/direct_001
+    capabilities:
+      - risk:read
+    status: active
+    enabled: true
+    source: operator
+    approved_by: "development fixture — not an approval of anything real"
+    approved_at: "2026-08-11T00:00:00Z"
+    note: >-
+      Sprint 1 external-agent proof. Deliberately the narrowest useful grant:
+      one capability, one book, funded concentration and covenant status only.
+
+  # ---------------------------------------------------------------------
+  # The originator's own management view, for local development of the human
+  # channels. Written down like any other grant — ERE is not privileged by being
+  # the data owner; that is tenancy.yaml's business, and this file still has to
+  # say what ERE's people may do.
+  # ---------------------------------------------------------------------
+  - organisation_id: ere
+    resource: ERE/portfolio/ere_total
+    capabilities:
+      - portfolio:read
+      - mi:query
+      - risk:read
+      - forecast:read
+      - artefact:read
+    status: active
+    enabled: true
+    source: operator
+    note: Development convenience for the ERE human channels.

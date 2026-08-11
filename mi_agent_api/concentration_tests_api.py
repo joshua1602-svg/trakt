@@ -126,6 +126,46 @@ def _resolve_frames(output_root, client_id: str, to_run_id: Optional[str],
     return df, prior_df, reporting_date, prior_reporting_date, run_id
 
 
+def funded_attribution_status(output_root, client_id: str,
+                              to_run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Whether the governed funded frame can actually carry a book boundary.
+
+    ``{"available": bool, "attributed": bool, "reason": str}``.
+
+    Exists because ``mi_agent.portfolio_scope.apply_scope`` returns the frame
+    UNCHANGED when it carries no ``source_portfolio_id`` column. For the UI that
+    is a reasonable degradation — a lens that cannot narrow shows the whole book
+    and says so. For a caller whose *authorisation* is the narrowing, it is a
+    fail-open: an organisation entitled to one book would be served all of them.
+
+    So a resource-scoped caller (``trakt_tools.handlers.covenants``) asks this
+    first and refuses when the attribution is absent, rather than trusting a
+    scope that may silently not apply. ``trakt_core.resource.check_attribution``
+    states the same rule for the resource model; this is how the funded
+    concentration path answers it.
+
+    Reuses ``_resolve_frames`` rather than resolving separately, so the frame
+    inspected here is the frame the evaluation will run against.
+    """
+    from mi_agent import portfolio_scope as _portfolio_scope
+
+    try:
+        df, _prior, _rd, _prd, _run = _resolve_frames(output_root, client_id,
+                                                      to_run_id, scope=None)
+    except Exception as exc:  # noqa: BLE001 - fail closed, disclosed
+        return {"available": False, "attributed": False,
+                "reason": f"The governed funded frame could not be resolved: {exc}"}
+    if df is None or getattr(df, "empty", True):
+        return {"available": False, "attributed": False,
+                "reason": "No governed funded data is available for this client."}
+    if not _portfolio_scope.has_provenance(df):
+        return {"available": True, "attributed": False,
+                "reason": ("The governed funded tape carries no "
+                           "source_portfolio_id column, so a book boundary "
+                           "cannot be enforced on it.")}
+    return {"available": True, "attributed": True, "reason": ""}
+
+
 def _resolve_pipeline(client_id: str, to_run_id: Optional[str], scope=None
                       ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
     """The current governed pipeline frame + forecast methodology metadata.
