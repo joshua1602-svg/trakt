@@ -15,19 +15,26 @@ one-element list. There is one implementation, and
 ``tests/test_agent_loan_retrieval.py`` asserts the wrapper adds no lookup of its
 own.
 
+Two shapes, one retrieval
+-------------------------
+``shape="flat"`` returns canonical fields as one object per loan — the original
+contract, unchanged. ``shape="structured"`` groups the SAME values into the
+credit objects they belong to (loan / borrower / collateral+valuations /
+contract / performance) using ``trakt_core.entity``. Assembly reads the row
+already in hand, so a structured response costs a dictionary walk rather than
+another query, and no value is recomputed on the way.
+
 What this module does NOT do
 ---------------------------
-* **No entity assembly.** This is the retrieval primitive: a flat, typed
-  projection of canonical fields. Nesting borrower / collateral / valuations into
-  an object graph is Sprint 2 entity work and is deliberately not started here,
-  so that the *contract shape* (batch, bounded, ordered, projected) can be fixed
-  first and the *object shape* filled in without changing it.
 * **No calculation.** Every value is carried through from the canonical frame
   unchanged. A derived figure belongs in the canonical transform, where MI and
   the agent both read it.
 * **No second data path.** The frame comes from the same governed resolver the MI
   Query path uses, so a loan an agent reads and a loan the workspace shows are
   the same row of the same snapshot.
+* **No object store.** The structured shape is assembled per request from the
+  canonical row; there is no materialised rich-object database to keep in step
+  and no second answer to "what is the balance".
 """
 
 from __future__ import annotations
@@ -101,6 +108,23 @@ GET_LOANS_INPUT = object_schema(
                             "Results are returned in the order requested."),
         },
         "fields": _FIELDS_PROPERTY,
+        "shape": {
+            "type": "string",
+            "enum": ["flat", "structured"],
+            "description": (
+                "'flat' returns canonical fields as one object per loan. "
+                "'structured' groups them into the credit objects they belong "
+                "to — loan, borrower, collateral (with valuations), contract, "
+                "performance — which is usually what you want to reason about."),
+            "default": "flat",
+        },
+        "include": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["valuations"]},
+            "description": ("Repeating children to include. Only meaningful with "
+                            "shape='structured'. Omit for scalar sections only."),
+            "default": None,
+        },
     },
     required=["resource", "loan_ids"],
 )
@@ -138,6 +162,11 @@ GET_LOAN_INPUT = object_schema(
         "resource": _RESOURCE_PROPERTY,
         "loan_id": {"type": "string", "description": "The loan identifier."},
         "fields": _FIELDS_PROPERTY,
+        "shape": {"type": "string", "enum": ["flat", "structured"],
+                  "description": "See get_loans.", "default": "flat"},
+        "include": {"type": ["array", "null"],
+                    "items": {"type": "string", "enum": ["valuations"]},
+                    "description": "See get_loans.", "default": None},
     },
     required=["resource", "loan_id"],
 )
@@ -223,6 +252,38 @@ def resolve_governed_frame(inv: ToolInvocation):
     return df
 
 
+def _collateral_identity_columns() -> List[str]:
+    """The columns the collateral identity may be resolved from.
+
+    They have to survive the projection. A tape carrying ``collateral_id`` and
+    no ``collateral_identifier`` would otherwise assemble against the loan-id
+    fallback while ``explain_values`` — which pulls the identity columns for its
+    own derivation — resolved the real one, and the SAME valuation would carry
+    two ids in the two responses.
+    """
+    from trakt_core.entity import load_entity_model
+
+    model = load_entity_model()
+    spec = model.entity("collateral") if model.configured else None
+    if spec is None:
+        return ["collateral_identifier", "collateral_id"]
+    return [c for c in (spec.key, "collateral_id", spec.key_fallback) if c]
+
+
+def _valuation_observation_columns() -> List[str]:
+    """Canonical columns the declared valuation observations are read from."""
+    from trakt_core.entity import load_entity_model
+
+    model = load_entity_model()
+    spec = model.entity("valuation") if model.configured else None
+    if spec is None:
+        return []
+    out: List[str] = ["collateral_currency", "exposure_currency_denomination"]
+    for columns in spec.observation_fields.values():
+        out.extend(str(v) for v in columns.values())
+    return out
+
+
 def _scope_block(inv: ToolInvocation) -> Dict[str, Any]:
     resolved = inv.authorised.resource
     return {
@@ -300,14 +361,30 @@ def get_loans(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
               else list(DEFAULT_FIELDS))
     if LOAN_ID_FIELD not in wanted:
         wanted.insert(0, LOAN_ID_FIELD)
+    # Assembling into entities means the identity columns must survive the
+    # projection, and including valuations means the observation columns must
+    # too — otherwise the history is silently truncated to whatever the default
+    # field list happened to carry, and the collateral resolves to a fallback.
+    # Both are read from the entity model rather than hard-coded, so declaring a
+    # new observation type does not also require editing this projection.
+    extra: List[str] = []
+    if str(args.get("shape") or "flat") == "structured":
+        extra.extend(_collateral_identity_columns())
+    if "valuations" in (args.get("include") or ()):
+        extra.extend(_valuation_observation_columns())
+    if extra:
+        wanted = list(wanted) + [f for f in extra if f not in wanted]
+
     present = [f for f in wanted if f in df.columns]
     unavailable = [f for f in wanted if f not in df.columns]
     # Only an EXPLICIT request for a missing field is worth a warning; the
     # default projection is a cross-asset-class superset and is expected to be
     # partially absent on any one tape.
-    if requested_fields and unavailable:
+    explicit_unavailable = ([f for f in unavailable if f in (requested_fields or ())]
+                            if requested_fields else [])
+    if explicit_unavailable:
         warnings.append(
-            f"This tape does not carry: {', '.join(sorted(unavailable))}.")
+            f"This tape does not carry: {', '.join(sorted(explicit_unavailable))}.")
 
     # ---- ONE vectorised selection, no per-loan lookup -------------------- #
     ids = df[LOAN_ID_FIELD].astype(str)
@@ -328,15 +405,34 @@ def get_loans(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
     loans = [by_id[i] for i in ordered_ids if i in by_id]
     not_found = [i for i in ordered_ids if i not in by_id]
 
+    # ---- optional structured assembly ------------------------------------ #
+    # The SAME records, grouped into the credit objects they belong to. Nothing
+    # is recomputed and nothing is fetched again: assembly reads the row already
+    # in hand, so a structured response costs a dictionary walk, not a query.
+    shape = str(args.get("shape") or "flat")
+    include = tuple(args.get("include") or ())
+    if shape == "structured":
+        from trakt_core.entity import assemble_loan, load_entity_model
+
+        model = load_entity_model()
+        if not model.configured:
+            warnings.append(
+                "No entity model is configured, so loans are returned flat. "
+                "The values are unchanged.")
+        else:
+            loans = [assemble_loan(loan, model, include=include) for loan in loans]
+
     snapshot_id = getattr(inv.snapshot, "snapshot_id", None)
     for loan in loans:
         # A pointer, not an envelope. The detail is what explain_values is for;
         # inlining full provenance for every field of every loan would make the
         # response unusable.
+        loan_id = (loan.get(LOAN_ID_FIELD)
+                   or (loan.get("_entity_model") or {}).get("loan_id"))
         loan["_provenance_ref"] = {
             "resource": inv.authorised.resource.ref.key,
             "snapshot_id": snapshot_id,
-            "loan_id": loan.get(LOAN_ID_FIELD),
+            "loan_id": loan_id,
         }
 
     return {
@@ -359,7 +455,9 @@ def get_loan(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
     """One loan. A thin wrapper over :func:`get_loans` — no second lookup path."""
     batch = get_loans({"resource": args.get("resource"),
                        "loan_ids": [args.get("loan_id")],
-                       "fields": args.get("fields")}, inv)
+                       "fields": args.get("fields"),
+                       "shape": args.get("shape"),
+                       "include": args.get("include")}, inv)
     loans = batch["loans"]
     return {
         "resource": batch["resource"],

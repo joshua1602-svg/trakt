@@ -276,6 +276,23 @@ paths:
                   description: Canonical field names to return. Omit for a curated default projection;
                     ask for only what you need — a canonical tape carries over a hundred columns.
                   default: null
+                shape:
+                  type: string
+                  enum:
+                  - flat
+                  - structured
+                  description: See get_loans.
+                  default: flat
+                include:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                    enum:
+                    - valuations
+                  description: See get_loans.
+                  default: null
               additionalProperties: false
               required:
               - resource
@@ -332,6 +349,26 @@ paths:
                   description: Loan identifiers, at most 500 per call. Results are returned in the order
                     requested.
                 fields: *id003
+                shape:
+                  type: string
+                  enum:
+                  - flat
+                  - structured
+                  description: '''flat'' returns canonical fields as one object per loan. ''structured''
+                    groups them into the credit objects they belong to — loan, borrower, collateral (with
+                    valuations), contract, performance — which is usually what you want to reason about.'
+                  default: flat
+                include:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                    enum:
+                    - valuations
+                  description: Repeating children to include. Only meaningful with shape='structured'.
+                    Omit for scalar sections only.
+                  default: null
               additionalProperties: false
               required:
               - resource

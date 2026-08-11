@@ -1,0 +1,246 @@
+# =========================================================================
+# Minimum credit entity model — which canonical fields belong to which
+# meaningful credit object, and how those objects relate.
+# =========================================================================
+#
+# This is NOT an ontology, NOT a schema and NOT a second source of truth. The
+# flat canonical tape (config/system/fields_registry.yaml) remains the
+# analytical truth; this file is a READING of it, so that Trakt can assemble a
+# structured loan object for an agent instead of handing over 130 loose columns.
+#
+# Deliberately small. Six entities, added only where the canonical fields
+# genuinely support them:
+#
+#     loan
+#      ├── borrower       1..1 today (the tape is one row per loan)
+#      ├── collateral     1..1 today
+#      │    └── valuation 0..n   <- the ONLY repeating entity
+#      ├── contract       attribute group
+#      └── performance    attribute group
+#
+# `contract` and `performance` are marked `attribute_group: true`: they have no
+# independent identity and never repeat, so promoting them to full entities
+# would add indirection with no expressive gain. They are declared so the
+# assembled object has meaningful sections, not because they are entities.
+#
+# `valuation` is the only entity that repeats, and is the reason this file
+# exists at all: a wide row cannot carry 0..n observations. Its history lives in
+# the narrow sidecar (see config/system/valuation_selection_policy.yaml and
+# trakt_core/valuation.py); the tape keeps the CURRENT selected values for
+# analytics, MI, regulatory reporting and the deterministic calculations, which
+# are unchanged.
+#
+# ------------------------------------------------------------------------
+# How a field is assigned
+# ------------------------------------------------------------------------
+#   fields:   explicit canonical field names. Always wins.
+#   patterns: anchored regexes, applied only to fields no explicit list claims.
+#
+# A field claimed by no entity simply does not appear in the assembled object;
+# it is still in the canonical tape and still reachable through the field
+# projection on get_loans. Assignment is deliberately conservative — an
+# unassigned field is a smaller object, never a wrong one.
+#
+# A field may be claimed by exactly ONE entity. trakt_core.entity rejects a
+# model that assigns one twice, because an object where the same value appears
+# in two sections is ambiguous about which one is authoritative.
+
+version: 1
+schema_version: "1.0.0"
+
+entities:
+
+  # -------------------------------------------------------------------
+  # LOAN — the root. One row of the canonical tape is one loan.
+  # -------------------------------------------------------------------
+  loan:
+    key: loan_identifier
+    parent: null
+    cardinality: root
+    description: One credit obligation. The row identity of the canonical tape.
+    fields:
+      - loan_identifier
+      - source_portfolio_id
+      - source_portfolio_type
+      - source_portfolio_label
+      - portfolio_cohort
+      - acquisition_date
+      - seller_name
+      - reporting_date
+      - data_cut_off_date
+      - pool_addition_date
+      - exposure_currency_denomination
+      - portfolio_type
+
+  # -------------------------------------------------------------------
+  # BORROWER — 1..1 on the tape today.
+  #
+  # `borrower_identifier` is a FOREIGN KEY, not this object's own key: several
+  # loans may share a borrower, which is exactly what the concentration engine's
+  # multi-loan-borrower metrics rely on. The tape cannot express the borrower as
+  # an independent row, so the object is assembled per loan and the shared
+  # identity is carried for an agent to group on.
+  # -------------------------------------------------------------------
+  borrower:
+    key: borrower_identifier
+    key_role: foreign_key
+    references: borrower.borrower_identifier
+    parent: loan
+    cardinality: "1..1"
+    description: The obligor. Shared across loans where the tape supplies an id.
+    fields:
+      - borrower_identifier
+      - original_obligor_identifier
+      - borrower_type
+      - number_of_borrowers
+      - employment_status
+      - primary_income
+      - income_verification
+      - geographic_region_obligor
+      - borrower_jurisdiction
+      - credit_impaired_obligor
+    patterns:
+      - '^borrower_\d+_.*$'          # borrower_1_age, borrower_2_DOB, …
+      - '^(youngest|oldest)_borrower_.*$'
+
+  # -------------------------------------------------------------------
+  # COLLATERAL — 1..1 on the tape today.
+  #
+  # `collateral_id` is optional in the registry, so the assembler falls back to
+  # the loan identifier. That fallback is declared here rather than assumed in
+  # code, and it is why `valuation.collateral_id` resolves for every loan.
+  # -------------------------------------------------------------------
+  collateral:
+    key: collateral_identifier
+    key_fallback: loan_identifier
+    parent: loan
+    cardinality: "1..1"
+    description: The security. One per loan on the current tape shape.
+    fields:
+      - collateral_identifier
+      - collateral_id
+      - collateral_type
+      - collateral_currency
+      - collateral_geography
+      - geographic_region_collateral
+      - geographic_region_classification
+      - property_postcode
+      - postcode
+      - property_type
+      - occupancy_type
+      - year_of_construction
+      - number_of_bedrooms
+      - energy_performance_certificate_value
+      - lien
+      - property_rating
+
+  # -------------------------------------------------------------------
+  # VALUATION — 0..n. THE repeating entity, and the reason for this model.
+  #
+  # The canonical tape carries the CURRENT selected observation
+  # (current_valuation_*) and the original (original_valuation_*). Those stay
+  # where they are: MI, regulatory projection and the LTV derivation all read
+  # them. The full history lives in the sidecar, and the two are reconciled by
+  # the selection policy — the tape's current_* values ARE the selected
+  # observation, and explain_values says which one and under which policy.
+  # -------------------------------------------------------------------
+  valuation:
+    key: valuation_id
+    parent: collateral
+    parent_key: collateral_id
+    cardinality: "0..n"
+    repeating: true
+    description: >-
+      A dated valuation observation of one collateral asset. Repeatable: a full
+      valuation, an indexed valuation and a purchase price are three
+      observations of the same asset, not three fields of one.
+    # Observations are NOT tape columns. They come from the sidecar; these are
+    # the tape fields that describe the CURRENTLY SELECTED observation and the
+    # original, both of which the assembler also emits as observations so a
+    # deployment with no sidecar still produces a valuation history of 1-2.
+    current_observation_fields:
+      amount: current_valuation_amount
+      valuation_date: current_valuation_date
+      methodology: current_valuation_method
+      basis: current_valuation_basis
+    original_observation_fields:
+      amount: original_valuation_amount
+      valuation_date: date_of_valuation_at_securitisation
+    indexed_observation_fields:
+      amount: indexed_value
+      valuation_date: index_determination_date
+    fields:
+      - current_valuation_amount
+      - current_valuation_date
+      - current_valuation_method
+      - current_valuation_basis
+      - original_valuation_amount
+      - date_of_valuation_at_securitisation
+      - indexed_value
+      - index_determination_date
+
+  # -------------------------------------------------------------------
+  # CONTRACT — an attribute group, not an entity. No identity, never repeats.
+  # -------------------------------------------------------------------
+  contract:
+    key: null
+    attribute_group: true
+    parent: loan
+    cardinality: "1..1"
+    description: The terms of the obligation.
+    fields:
+      - origination_date
+      - maturity_date
+      - original_principal_balance
+      - current_principal_balance
+      - current_outstanding_balance
+      - original_loan_to_value
+      - current_loan_to_value
+      - indexed_loan_to_value
+      - current_interest_rate
+      - current_interest_rate_index
+      - current_interest_rate_margin
+      - interest_rate_cap
+      - interest_rate_floor
+      - interest_rate_reset_interval
+      - amortisation_type
+      - payment_frequency
+      - payment_due
+      - next_payment_date
+      - purpose
+      - loan_term
+      - protected_equity_percentage
+      - protected_equity_flag
+      - early_repayment_charge
+
+  # -------------------------------------------------------------------
+  # PERFORMANCE — an attribute group. Point-in-time state at the snapshot.
+  # -------------------------------------------------------------------
+  performance:
+    key: null
+    attribute_group: true
+    parent: loan
+    cardinality: "1..1"
+    description: How the obligation is performing at this snapshot.
+    fields:
+      - account_status
+      - arrears_balance
+      - number_of_days_in_arrears
+      - number_of_days_in_principal_arrears
+      - number_of_days_in_interest_arrears
+      - date_last_in_arrears
+      - loan_entered_arrears
+      - interest_arrears_amount
+      - default_date
+      - default_amount
+      - allocated_losses
+      - cumulative_recoveries
+      - cumulative_prepayments
+      - ifrs9_stage
+      - ifrs9_stage_current
+      - ifrs9_stage_previous
+      - internal_risk_stage
+      - internal_risk_grade
+      - probability_of_default
+      - loss_given_default
+      - exposure_at_default

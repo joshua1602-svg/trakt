@@ -1,0 +1,123 @@
+# =========================================================================
+# Valuation selection policy — WHICH observation a calculation uses, and why.
+# =========================================================================
+#
+# The distinction this file exists to make, and it is mandatory:
+#
+#   VALUATION OBSERVATIONS are FACTS.
+#       "full valuation, £300,000, 30 June 2026, Countrywide"
+#       "indexed valuation, £285,000, effective 30 June 2026, UK HPI"
+#     Both are true. Neither is "the" valuation.
+#
+#   THE SELECTION POLICY is a RULE.
+#       "for current LTV prefer an approved full valuation no older than
+#        24 months; otherwise the approved indexed valuation."
+#     This is a credit decision. It belongs in governed, versioned, deterministic
+#     configuration — never inside an agent prompt, and never inferred.
+#
+# So `explain_values(current_loan_to_value)` can answer WHY, not just WHAT:
+# which observation was selected, which were rejected and for what reason, under
+# which policy version, and by which calculation rule.
+#
+# ------------------------------------------------------------------------
+# There is no formula language here, on purpose
+# ------------------------------------------------------------------------
+# The same rule the concentration test library states: "There is no formula
+# language and no path from client text to executable code." A policy names a
+# preference ORDER over declared valuation types plus a maximum age; anything a
+# client needs beyond that is a new registered rule reviewed as code, not a new
+# expression in a YAML file.
+#
+# ------------------------------------------------------------------------
+# Versioning
+# ------------------------------------------------------------------------
+# `version` is part of the answer. Changing a preference order or an age limit
+# changes reported LTVs, so it MUST bump the version — an explanation that cited
+# "CURRENT_LTV_SELECTION@v1" must always mean the same rule.
+
+schema_version: "1.0.0"
+
+policies:
+
+  # -------------------------------------------------------------------
+  # The default: which observation backs current LTV.
+  # -------------------------------------------------------------------
+  CURRENT_LTV_SELECTION:
+    version: 1
+    description: >-
+      The valuation used as the denominator of current loan-to-value. Prefers
+      the most recent physical valuation within the age limit; falls back to an
+      indexed valuation, and finally to the purchase price.
+    # Tried in order. The first type with a qualifying observation wins; within
+    # a type the most recent `valuation_date` wins.
+    prefer:
+      - full
+      - drive_by
+      - desktop
+      - indexed
+      - avm
+      - purchase_price
+    # Months. An observation older than this is REJECTED with a stated reason,
+    # never silently used. null = no age limit for that type.
+    max_age_months:
+      full: 24
+      drive_by: 24
+      desktop: 18
+      indexed: 12
+      avm: 12
+      purchase_price: null
+    # An observation whose status is not in this list is never selected.
+    require_status:
+      - approved
+    # When nothing qualifies, say so rather than falling back to the oldest
+    # thing available. An unsupportable LTV is a finding.
+    on_no_qualifying_observation: refuse
+
+  # -------------------------------------------------------------------
+  # Indexed LTV: the indexed observation is the point, so it leads.
+  # -------------------------------------------------------------------
+  INDEXED_LTV_SELECTION:
+    version: 1
+    description: The valuation used as the denominator of indexed loan-to-value.
+    prefer:
+      - indexed
+      - avm
+      - full
+    max_age_months:
+      indexed: 12
+      avm: 12
+      full: 24
+    require_status:
+      - approved
+    on_no_qualifying_observation: refuse
+
+# ------------------------------------------------------------------------
+# Calculation rules that CONSUME a selection. Named and versioned separately,
+# because how a ratio is computed and which valuation feeds it are two decisions
+# that change for different reasons.
+# ------------------------------------------------------------------------
+calculations:
+
+  CURRENT_LTV:
+    version: 1
+    description: Current balance over the selected valuation, in percentage points.
+    numerator: current_principal_balance
+    numerator_fallback: current_outstanding_balance
+    selection_policy: CURRENT_LTV_SELECTION
+    unit: percentage_points
+    # The canonical tape already carries `current_loan_to_value`, resolved by
+    # engine/gate_2_transform/canonical_transform._resolve_ltv. This declaration
+    # does NOT recompute it — Trakt has one LTV. It names the inputs so
+    # explain_values can state how the tape's value was arrived at.
+    canonical_field: current_loan_to_value
+    recomputes: false
+
+  INDEXED_LTV:
+    version: 1
+    description: Current balance over the selected indexed valuation.
+    numerator: current_principal_balance
+    numerator_fallback: current_outstanding_balance
+    selection_policy: INDEXED_LTV_SELECTION
+    unit: percentage_points
+    canonical_field: indexed_loan_to_value
+    recomputes: false

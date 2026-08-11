@@ -174,11 +174,119 @@ def _snapshot_block(inv: ToolInvocation) -> Dict[str, Any]:
     }
 
 
+def _derivation_input_columns(available) -> List[str]:
+    """Canonical columns any governed calculation or valuation observation needs.
+
+    Resolved from configuration rather than hard-coded, so adding a calculation
+    rule does not also require editing this reader.
+    """
+    from trakt_core.entity import load_entity_model
+    from trakt_core.valuation import load_valuation_policies
+
+    wanted: List[str] = ["reporting_date", "collateral_id", "collateral_identifier",
+                         "collateral_currency", "exposure_currency_denomination"]
+    book = load_valuation_policies()
+    for rule in book.calculations.values():
+        for f in (rule.numerator, rule.numerator_fallback):
+            if f:
+                wanted.append(f)
+    model = load_entity_model()
+    spec = model.entity("valuation") if model.configured else None
+    if spec is not None:
+        for columns in spec.observation_fields.values():
+            wanted.extend(str(v) for v in columns.values())
+    seen, out = set(), []
+    for f in wanted:
+        if f in available and f not in seen:
+            seen.add(f); out.append(f)
+    return out
+
+
+def _derivation_block(canonical_field: str, row: Dict[str, Any],
+                      collateral_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """For a value backed by a governed calculation rule: which inputs, which
+    valuation observation, which selection policy, which calculation version.
+
+    This is the half that answers WHY rather than WHAT. ``current_loan_to_value``
+    is not merely "61.2 from the tape" — it is a balance over a *chosen*
+    valuation, and the choice is a credit decision made by a versioned policy
+    (:mod:`trakt_core.valuation`). Reporting the number without the choice is
+    what makes an LTV arguable.
+
+    Trakt does NOT recompute the value here (``recomputes: false``): the tape's
+    figure stands, and this states how it was arrived at. There is one LTV.
+    """
+    from trakt_core.entity import _observations_from_row, load_entity_model
+    from trakt_core.valuation import load_valuation_policies, select_valuation
+
+    book = load_valuation_policies()
+    if not book.configured:
+        return None
+    rule = book.calculation_for_field(canonical_field)
+    if rule is None:
+        return None
+
+    block: Dict[str, Any] = {
+        "calculation": rule.reference,
+        "description": rule.description,
+        "recomputed_by_trakt": rule.recomputes,
+        "unit": rule.unit,
+        "inputs": [],
+    }
+
+    numerator_field = rule.numerator if rule.numerator in row else rule.numerator_fallback
+    if numerator_field:
+        block["inputs"].append({"role": "numerator",
+                                "canonical_field": numerator_field,
+                                "value": row.get(numerator_field)})
+
+    policy = book.policy(rule.selection_policy) if rule.selection_policy else None
+    if policy is None:
+        block["selection"] = {"policy": rule.selection_policy,
+                              "resolved": False,
+                              "reason": "the named selection policy is not configured"}
+        return block
+
+    model = load_entity_model()
+    valuation_spec = model.entity("valuation") if model.configured else None
+    observations = (_observations_from_row(row, str(collateral_id), valuation_spec)
+                    if (valuation_spec is not None and collateral_id) else [])
+    result = select_valuation(observations, policy,
+                              as_of=row.get("reporting_date"))
+
+    block["selection"] = result.to_dict()
+    block["selection"]["resolved"] = result.resolved
+    block["selection"]["observations_considered"] = len(observations)
+    if result.selected is not None:
+        block["inputs"].append({
+            "role": "denominator",
+            "entity": "valuation",
+            "valuation_id": result.selected.valuation_id,
+            "valuation_type": result.selected.valuation_type,
+            "value": result.selected.amount,
+            "valuation_date": result.selected.valuation_date,
+            "source": result.selected.source,
+        })
+    return block
+
+
 def _envelope(loan_id: str, canonical_field: str, value: Any,
               entry: Any, snapshot: Dict[str, Any],
-              resource_key: str) -> Dict[str, Any]:
+              resource_key: str,
+              derivation: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """The minimum provenance envelope: value, source, dates, transformation,
     validation, calculation, evidence."""
+    if derivation is not None:
+        return {**_base_envelope(loan_id, canonical_field, value, entry,
+                                 snapshot, resource_key),
+                "derivation": derivation}
+    return _base_envelope(loan_id, canonical_field, value, entry, snapshot,
+                          resource_key)
+
+
+def _base_envelope(loan_id: str, canonical_field: str, value: Any,
+                   entry: Any, snapshot: Dict[str, Any],
+                   resource_key: str) -> Dict[str, Any]:
     return {
         "loan_id": loan_id,
         "canonical_field": canonical_field,
@@ -268,12 +376,21 @@ def explain_values(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
     wanted_fields = sorted({f for _, f in pairs if f in df.columns})
     missing_fields = sorted({f for _, f in pairs if f not in df.columns})
 
-    columns = [LOAN_ID_FIELD] + [f for f in wanted_fields if f != LOAN_ID_FIELD]
+    # A derivation needs its INPUTS as well as the asked-for value — an LTV
+    # explanation is not answerable from the LTV column alone. Pull the declared
+    # inputs of any governed calculation, plus the valuation observation columns.
+    extra = _derivation_input_columns(df.columns)
+    columns = ([LOAN_ID_FIELD]
+               + [f for f in wanted_fields if f != LOAN_ID_FIELD]
+               + [f for f in extra if f not in wanted_fields and f != LOAN_ID_FIELD])
     ids = df[LOAN_ID_FIELD].astype(str)
     matched = df.loc[ids.isin(wanted_loans), columns]
 
+    from trakt_core.entity import load_entity_model, resolve_collateral_id
+
     from .loans import _jsonable
 
+    entity_model = load_entity_model()
     rows: Dict[str, Dict[str, Any]] = {}
     for record in matched.to_dict(orient="records"):
         key = str(record.get(LOAN_ID_FIELD))
@@ -291,9 +408,19 @@ def explain_values(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
                                "reason": "no such loan in this resource"})
             continue
         entry = index.get(canonical_field) if index is not None else None
+        derivation = None
+        try:
+            # The SAME resolver the assembled loan object uses, so a valuation an
+            # explanation cites is the valuation the object showed.
+            derivation = _derivation_block(
+                canonical_field, row,
+                resolve_collateral_id(row, entity_model) or loan_id)
+        except Exception:  # noqa: BLE001 - a derivation fault must not lose the value
+            derivation = None
         explanations.append(_envelope(loan_id, canonical_field,
                                       row.get(canonical_field), entry,
-                                      snapshot, resource_key))
+                                      snapshot, resource_key,
+                                      derivation=derivation))
 
     return {
         "resource": resource_key,
