@@ -230,19 +230,13 @@ test.describe("Trakt landing page", () => {
     ).toBeVisible();
   });
 
-  test("onboarding is a compact disclosure, out of the main narrative", async ({ page }) => {
-    const onboarding = page.locator("#onboarding");
-    await onboarding.scrollIntoViewIfNeeded();
-
-    const summary = onboarding.getByText("How onboarding works");
-    await expect(summary).toBeVisible();
-    await summary.click();
-    for (const step of ["Source data", "Assisted mapping", "Team review", "Live portfolio"]) {
-      await expect(onboarding.getByRole("heading", { name: step, level: 3 })).toBeVisible();
-    }
-    // No speed guarantees, no autonomy claims.
-    await expect(onboarding).not.toContainText(/instant/i);
-    await expect(onboarding).not.toContainText(/automatic/i);
+  test("onboarding detail stays off the homepage", async ({ page }) => {
+    // No onboarding section or accordion exists on the page — the homepage
+    // makes no onboarding claims, so it can overstate none. Detail belongs
+    // on a product page.
+    await expect(page.getByText("How onboarding works")).toHaveCount(0);
+    await expect(page.locator("#onboarding")).toHaveCount(0);
+    await expect(page.locator("main")).not.toContainText(/instant/i);
   });
 
   test("the lens section shows one truth across governed books", async ({ page }) => {
@@ -284,6 +278,12 @@ test.describe("Trakt landing page", () => {
     await expect(governance.getByText(/toward increasingly agentic operation/i)).toBeVisible();
     await expect(governance).not.toContainText(/roadmap/i);
     await expect(governance).not.toContainText(/autonomous/i);
+
+    // Governance flows straight into the closing CTA — nothing sits between.
+    const nextSectionId = await page
+      .locator("#governance")
+      .evaluate((section) => section.nextElementSibling?.id ?? "");
+    expect(nextSectionId).toBe("book-a-demo");
   });
 
   test("the lead form validates, then accepts a complete submission", async ({ page }) => {

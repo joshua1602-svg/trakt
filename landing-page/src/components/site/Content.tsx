@@ -393,55 +393,14 @@ export function Governance() {
         ))}
       </ul>
 
+      {/* Two short sentences, not one long one — the mobile column is
+          narrow, and neither claim needs the other to stand. */}
       <p className="mt-8 max-w-3xl text-sm leading-relaxed text-ink-500">
         Built on a common canonical model with asset-specific configuration — new
-        lending asset classes are added through configuration, not by rebuilding the
-        platform. Designed to extend from user-directed workflows toward increasingly
-        agentic operation, within the same governed control framework.
+        lending asset classes are added through configuration, not a rebuild.
+        Designed to extend from user-directed workflows toward increasingly agentic
+        operation, under the same controls.
       </p>
     </>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Onboarding — a compact disclosure, out of the main narrative               */
-/* -------------------------------------------------------------------------- */
-
-const ONBOARDING_STEPS = [
-  { title: "Source data", copy: "Tapes and documents, as they arrive." },
-  { title: "Assisted mapping", copy: "Mappings and configuration proposed." },
-  { title: "Team review", copy: "Approved before anything activates." },
-  { title: "Live portfolio", copy: "Monitored and reportable with every other book." },
-] as const;
-
-export function OnboardingDisclosure() {
-  return (
-    <details className="group rounded-2xl border border-line bg-navy-900/60 px-5 py-4 sm:px-6">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-semibold text-ink-100 [&::-webkit-details-marker]:hidden">
-        How onboarding works
-        <span
-          aria-hidden="true"
-          className="text-peri-400 transition-transform group-open:rotate-90"
-        >
-          ›
-        </span>
-      </summary>
-      <ol className="mt-5 grid gap-4 border-t border-line-soft pt-5 sm:grid-cols-2 lg:grid-cols-4">
-        {ONBOARDING_STEPS.map((step, index) => (
-          <li key={step.title} className="flex gap-3">
-            <span
-              aria-hidden="true"
-              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line bg-navy-850 text-[11px] font-semibold tabular-nums text-peri-300"
-            >
-              {index + 1}
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-ink-100">{step.title}</h3>
-              <p className="mt-1 text-[13px] leading-relaxed text-ink-400">{step.copy}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </details>
   );
 }
