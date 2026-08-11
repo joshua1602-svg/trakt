@@ -326,32 +326,25 @@ export function CopilotDemo({
             ))}
           </ul>
 
-          {/* Refusal is the differentiator against every LLM wrapper in this
-              market — its own titled block, not small print, with the example
-              prompts as first-class buttons. */}
+          {/* The refusal claim itself now has its own section on the page —
+              inside this card it sat behind a play control, visible only as
+              text in a still. The prompts remain here as suggestions, which
+              is what they are once the demo is running. */}
           {meta.exampleUnsupported.length > 0 ? (
-            <section
-              aria-labelledby="refusal-heading"
-              className="mt-6 rounded-xl border border-mint-400/25 bg-navy-950/40 p-4 sm:p-5"
-            >
-              <h3 id="refusal-heading" className="text-lg font-semibold tracking-tight text-mint-400">
-                Trakt declines what it cannot derive.
-              </h3>
-              <ul className="mt-3 flex flex-wrap gap-2">
-                {meta.exampleUnsupported.map((example) => (
-                  <li key={example.id}>
-                    <button
-                      type="button"
-                      disabled={busy || outOfQuestions}
-                      onClick={() => onSuggested(example.id, example.label)}
-                      className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-mint-400/50 hover:text-ink-100 disabled:opacity-50"
-                    >
-                      {example.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <ul className="mt-4 flex flex-wrap gap-2">
+              {meta.exampleUnsupported.map((example) => (
+                <li key={example.id}>
+                  <button
+                    type="button"
+                    disabled={busy || outOfQuestions}
+                    onClick={() => onSuggested(example.id, example.label)}
+                    className="rounded-full border border-mint-400/30 bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-mint-400/60 hover:text-ink-100 disabled:opacity-50"
+                  >
+                    {example.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : null}
         </div>
       </div>

@@ -1,17 +1,17 @@
 import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
   Architecture,
+  DeliveryModes,
   DeliveryStrip,
   ForwardControls,
   Governance,
-  Lenses,
 } from "@/components/site/Content";
-import { DeliveryAccordion } from "@/components/site/DeliveryAccordion";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
 import { LeadForm } from "@/components/site/LeadForm";
 import { Nav } from "@/components/site/Nav";
 import { QueryDemo } from "@/components/site/QueryDemo";
+import { RefusalSection } from "@/components/site/RefusalSection";
 import { Reveal } from "@/components/site/Reveal";
 import { Section, SectionHeading, buttonStyles } from "@/components/ui";
 import { buildMeta } from "@/lib/demo-pack";
@@ -74,6 +74,14 @@ export default function Page() {
           </Reveal>
         </Section>
 
+        {/* 2b — The refusal claim, out of the demo card and into its own
+            section: behind a play control it was only ever a still. */}
+        <Section id="refusal" className="pb-16 sm:pb-20">
+          <Reveal>
+            <RefusalSection meta={meta} />
+          </Reveal>
+        </Section>
+
         {/* 3 — How does the platform work? */}
         <Section id="platform" className="pb-16 sm:pb-20">
           <Architecture />
@@ -84,28 +92,27 @@ export default function Page() {
           <ForwardControls />
         </Section>
 
-        {/* 5 — Multiple books, vehicles and scopes. */}
-        <Section id="lenses" className="pb-16 sm:pb-20">
-          <Lenses scope={meta.scope} />
-        </Section>
+        {/* The Operating Model section is gone: its claim ("no separate
+            datasets to reconcile") now sits in the platform diagram's step 2,
+            where the governed layer is actually described. */}
 
-        {/* 6 — Where users reach it. Distribution only — the query demo has
+        {/* 5 — Where users reach it. Distribution only — the query demo has
             already appeared in section 2. */}
         <Section id="intelligence" className="pb-16 sm:pb-20">
           <Reveal>
+            {/* The deleted intro restated the query-demo section's own intro
+                and named the same three channels the chips below name. */}
             <SectionHeading
               id="intelligence"
               eyebrow="Portfolio intelligence"
               title="Portfolio intelligence where your team already works."
-              intro="Ask portfolio questions in Trakt, Microsoft Teams or Microsoft 365 Copilot. Every answer runs against the same governed portfolio calculations and evidence."
             />
             <DeliveryStrip />
           </Reveal>
         </Section>
 
-        {/* 6b — The delivery model in depth: the page's one horizontal
-            accordion. The chips above name the channels; these panels say
-            what each mode does, live and roadmap kept visually distinct. */}
+        {/* 6b — The delivery model: five modes, stated once each, live and
+            roadmap kept visually distinct. Static — nothing to open. */}
         <Section id="delivery" className="pb-16 sm:pb-20">
           <Reveal>
             <SectionHeading
@@ -114,9 +121,9 @@ export default function Page() {
               title="Every mode reads the same governed layer."
             />
           </Reveal>
-          <Reveal delay={60} className="mt-9">
-            <DeliveryAccordion />
-          </Reveal>
+          <div className="mt-9">
+            <DeliveryModes />
+          </div>
         </Section>
 
         {/* 7 — Why trust the outputs? */}
@@ -135,7 +142,7 @@ export default function Page() {
                 >
                   See your portfolio through one governed view.
                 </h2>
-                <p className="mt-4 text-[15px] leading-relaxed text-ink-300">
+                <p className="mt-4 max-w-[72ch] text-[15px] leading-relaxed text-ink-300">
                   We will demonstrate Trakt against your own portfolios, funding
                   requirements and Microsoft 365 environment.
                 </p>

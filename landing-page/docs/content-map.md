@@ -41,10 +41,13 @@ the controls demo (section 4). Neither autoplays and neither loops silently:
 from the homepage — reporting claims survive in the platform output chips,
 and onboarding detail now belongs to a product page, not this one.
 
-The page is nine narrative sections, in this order: value proposition ·
-portfolio query demo · platform · risk & controls (the controls demo) ·
-operating model (the lens switcher) · portfolio intelligence (distribution) ·
-delivery model (the horizontal accordion) · governance · contact.
+**Pass 6 simplified.** The page is now eight narrative sections: value
+proposition · portfolio query demo · platform · risk & controls (the controls
+demo) · portfolio intelligence (distribution) · delivery model (five static
+tiles) · governance · contact. The horizontal accordion was replaced with a
+static tile row, body copy was halved again, the operating-model section was
+absorbed into the platform diagram, and both demo sections now share one
+shape: eyebrow, headline, one line, then the demo at full container width.
 
 **Pass 5 (grid, motion and caveat copy).** One 12-column grid across the
 two-column sections; scroll reveals (240ms ease-out, 60ms stagger, once,
@@ -94,7 +97,8 @@ until the visitor presses "Watch query demo".
 | The scripted opening: starting the demo asks "Show the funded balance by book." | Demonstration | `QueryDemo.tsx` mounts `CopilotDemo` with `initialQuestion` (the `balance_by_book` intent); one-shot, consumes one session question, never replays on Reset. The visitor sees query → governed answer from frame zero. |
 | The compressed answer: "Both totals are correct — they answer different questions, so Trakt returns both rather than choosing one." + the table | Evidenced | `_balance_by_book` in `scripts/build_demo_pack.py`; the two-totals reasoning is unchanged, the prose is one sentence. The SPV1 story ("originated by the sponsor, securitised and sold; servicing, risk retention and investor reporting retained") moved to a tooltip on the SPV1 row (`row.tooltip`, rendered by `Artifacts.tsx` with `title` + `aria-label`, keyboard-focusable). The former "interpreted" line and the dangling coverage note were removed. |
 | Answer footers carry the client name only | Demonstration | `PORTFOLIO_SCOPE` in `api/demo/query/route.ts` is `demoPack.client.name` — no internal portfolio identifier. |
-| "Trakt declines what it cannot derive." — its own titled block with the two example prompts as buttons | Evidenced | Promoted from small print (`CopilotDemo.tsx`): an `aria-labelledby` section with the refusal prompts as first-class chip buttons. Refusal paths unchanged (`src/lib/intents.ts`). |
+| "Trakt declines what it cannot derive." — **its own page section** (§2b), with the two example prompts as buttons | Evidenced | Extracted from the demo card (`RefusalSection.tsx`): inside the card it sat behind a play control and was visible only as text in a still. Pressing a prompt dispatches to `QueryDemo`, which starts the demo and asks it — so the visitor watches Trakt decline rather than being told it does. Stated once on the page; the poster replica no longer repeats it. Refusal paths unchanged (`src/lib/intents.ts`). |
+| The SPV1 row note is a real toggle, not a `title` tooltip | Demonstration | `RowNote` in `Artifacts.tsx`: a button with `aria-expanded` revealing the note inline. Native tooltips never open on touch, which made the explanation unreachable at phone width — asserted now in the mobile Playwright run. |
 | The poster before start | Demonstration | A non-interactive replica of the demo surface carrying the real synthetic scope (client, books, exposure count, as-at date) from `data/demo-pack.json`. |
 | "Same question. Same calculation. Same answer." | Evidenced | `mi_agent_api/mi_service.py` single implementation; `test_channel_parity.py`. |
 | "The portfolios are wholly synthetic, and the page accepts no uploads." | Demonstration | True by construction — no upload endpoint exists. **Single instance on the page**, moved here with the demo it describes. |
@@ -149,6 +153,7 @@ same end state.
 | Closing line: "Know where the portfolio stands today — and what it's moving toward." | Positioning | Set in the page's heading tone (`ink-100`), not the accent — the final frame reads as product UI, and the risk colours stay inside the statuses and bars. The section's own accent line above the loop is unchanged. |
 | Identified → Reviewed → Activated, with "Human review before activation — nothing goes live unapproved" | Evidenced | Operator-approved `ActiveConfiguration` (`mi_agent/concentration_tests/store.py`, `tests/concentration_tests/test_governance.py`); OCC approval workflow (`operations_control/engine.py`). Nothing in the loop activates itself. |
 | Funded book / expected forecast / full pipeline evaluation with projected breach horizon | Evidenced (capability), Illustrative (figures) | `mi_agent/concentration_tests/forward.py` — the three labelled states and `expected_breach_horizon`. The 24.1 / 28.7 / 31.4 / Nov 2026 figures are illustrative, stated in the caption ("Figures illustrative") and the burned-in stamp. |
+| **"Illustrative · synthetic data", burned into every frame — RETAINED DELIBERATELY** | Illustrative | Do not remove this in a later pass; it was proposed for removal as duplicative caveat noise and deliberately kept. It is **not** the same claim as the query demo's amber "Synthetic data" pill. The pill says the *portfolio* is synthetic while the figures are genuine engine output; this stamp says the *figures themselves* (24.1 / 28.7 / 31.4 / Nov 2026) are invented for the film. On a page whose claims are deterministic, traceable and reconciled by construction, presenting invented numbers as system output would be a real honesty cost. The `ControlPreview` fallback badge was redundant with it and is gone; this one stays. |
 | **Not depicted / not claimed** | — | No autonomous activation, no legal interpretation, no guaranteed extraction of every covenant type, no real-time refresh, no PDF/DOCX parsing (the document is shown as an extract, not a file format), no client data. |
 
 ---
@@ -174,13 +179,20 @@ conversational-onboarding claim while the OCC Agent
 
 ---
 
-## 5. Lenses — "One portfolio truth. Every relevant lens."
+## 5. Operating model — removed from the homepage
 
-| Copy | Class | Evidence |
-|---|---|---|
-| "Origination books, acquired portfolios and funding vehicles sit in one governed model — individually reportable and consolidated, without separate datasets to reconcile." | Evidenced (with one qualification) | `trakt_core/portfolio.py`: `PortfolioRegistry`, `resolve_scope()`, `resolve_capabilities()`, `ScopeCoverage`. Scope rendering: `frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx`; aggregation: `mi_agent_api/datasets.py`. **Qualification (unchanged from Pass 2):** the shipped type vocabulary is `direct`/`acquired`; a securitisation vehicle is a further governed type the model already holds (`PortfolioRegistry.types()`), and `spv` is a declared field role in `config/risk/concentration_test_library.yaml` with `spv_id` a monitored dimension in `config/mi/risk_monitor.yaml`. The claim is about the model, not a vehicle-specific feature. |
-| "…capability and coverage disclosed per scope." | Evidenced | `ScopeCoverage` / `CapabilityState` disclosure in `trakt_core/portfolio.py`; `PortfolioScopeBanner.tsx`. |
-| Lens switcher: Origination / Acquired / Sponsor total toggles over the same three book rows, recomputing the total on select | Evidenced | `LensSwitcher.tsx` — no new data: the rows are the demo pack's existing figures, excluded rows dim rather than disappear, and the total is summed client-side from the rows on screen. The sponsor-lens sum reconciles to the governed sponsor total to the penny (asserted in the pack build and now visible on the page), which demonstrates the section's claim instead of asserting it. Replaces the static scope card, which was the third appearance of the same four figures. |
+The section is gone. Its claim — "no separate datasets to reconcile" — now
+sits in the platform diagram's step 2, where the governed layer is actually
+described; the section had been making the same claim 400px further down,
+under a headline ("Every relevant lens") that promised lenses it no longer
+showed once the scope card was deleted.
+
+The underlying evidence is unchanged and still supports the step 2 line:
+`trakt_core/portfolio.py` (`PortfolioRegistry`, `resolve_scope()`,
+`ScopeCoverage`), scope rendering in
+`frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx`, and
+aggregation in `mi_agent_api/datasets.py`. The book names the section used to
+list are still visible by name in the query demo's table.
 
 ---
 
@@ -219,21 +231,23 @@ elsewhere. The evidence underneath each card is unchanged.
 
 ---
 
-## 6b. Delivery model — the horizontal accordion
+## 6b. Delivery model — five static tiles
 
-Added in Pass 5 by explicit direction: the page's one horizontal accordion,
-panel 1 open on load, never all-collapsed, arrow-key navigable, and a plain
-vertical stack below 768px (`DeliveryAccordion.tsx`). Panel copy is reused
-verbatim from the delivery-model claims recorded in earlier passes; the
-live/roadmap split keeps its accent meaning (mint shipped, grey not).
+Five modes, one line each, in a static grid (5 columns desktop / 2 tablet /
+1 mobile). **Pass 6 replaced the horizontal accordion** added in Pass 5: the
+page is a vertical scroll and carries no expand/collapse interaction, so the
+whole section is legible in one pass. Copy is trimmed from the ledger-
+evidenced delivery claims; the live/roadmap split keeps its accent meaning
+(mint shipped, grey not). No client JavaScript — `DeliveryModes` in
+`Content.tsx` is a server component.
 
-| Panel | Class | Evidence |
+| Tile | Class | Evidence |
 |---|---|---|
-| Managed service — "Recurring reporting, regulatory output and governance artefacts, produced with no user interaction." (Available today) | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. |
-| Trakt Agent — "The full analytical environment: dashboards, charting, drill-through and portfolio investigation." (Available today) | Evidenced | `frontend/mi-agent-ui/src/components/`. |
-| Copilot — "Portfolio questions and artefact requests inside the tools your teams already use." (Available today) | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py`. |
-| Enterprise agent — "Trakt running inside a client's own agent estate." (Roadmap, grey) | Roadmap | `trakt_core/context.py` `CHANNEL_ENTERPRISE_AGENT` reserved; test fixture only. Labelled Roadmap on the page — reintroduced here by explicit direction, still never mixed with live capability. |
-| Agent-to-agent — "Upstream and downstream systems consulting the governed layer directly." (Roadmap, grey) | Roadmap | `CHANNEL_AGENT_TO_AGENT` reserved; outbound Teams delivery exists (`trakt_notifications/`), agent callback does not. |
+| Managed service — "Recurring reporting and governance artefacts, produced with no user interaction." (Available today) | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. |
+| Trakt Agent — "The full analytical environment: dashboards, charting and drill-through." (Available today) | Evidenced | `frontend/mi-agent-ui/src/components/`. |
+| Copilot — "Portfolio questions inside the tools your teams already use." (Available today) | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py`. |
+| Enterprise agent — "Trakt running inside a client's own agent estate." (Roadmap, grey) | Roadmap | `trakt_core/context.py` `CHANNEL_ENTERPRISE_AGENT` reserved; test fixture only. Labelled Roadmap on the page, never mixed with live capability. |
+| Agent-to-agent — "Upstream and downstream systems consulting the layer directly." (Roadmap, grey) | Roadmap | `CHANNEL_AGENT_TO_AGENT` reserved; outbound Teams delivery exists (`trakt_notifications/`), agent callback does not. |
 
 ---
 

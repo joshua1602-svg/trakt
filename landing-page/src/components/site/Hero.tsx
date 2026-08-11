@@ -33,7 +33,7 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
         <h1 className="text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-100 sm:text-5xl">
           One governed view of your lending portfolios.
         </h1>
-        <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-200">
+        <p className="mt-5 max-w-[72ch] text-lg leading-relaxed text-ink-200">
           Connect loan data, documents and funding requirements once. Trakt turns them
           into live portfolio monitoring, forecasting, controls and reporting.
         </p>

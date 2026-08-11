@@ -6,6 +6,18 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
 }
 
+/**
+ * The one container. Every section, the navigation and the footer use these
+ * exact values, so all page content lands on the same left rail at every
+ * width: 20px gutters on a phone, 32px at tablet, 48px from `lg` up, inside
+ * a 1600px maximum.
+ */
+export const CONTAINER = "mx-auto w-full max-w-[1600px]";
+export const GUTTERS = "px-5 sm:px-8 lg:px-12";
+
+/** Prose measure. Applied to body copy, never to headings. */
+export const PROSE = "max-w-[72ch]";
+
 export function Section({
   id,
   children,
@@ -21,9 +33,9 @@ export function Section({
     <section
       id={id}
       aria-labelledby={label ? `${id}-heading` : undefined}
-      className={cx("scroll-mt-24 px-5 sm:px-8", className)}
+      className={cx("scroll-mt-24", GUTTERS, className)}
     >
-      <div className="mx-auto w-full max-w-6xl">{children}</div>
+      <div className={CONTAINER}>{children}</div>
     </section>
   );
 }
@@ -55,7 +67,7 @@ export function SectionHeading({
         {title}
       </h2>
       {intro ? (
-        <p className="mt-4 text-[15px] leading-relaxed text-ink-300">{intro}</p>
+        <p className={cx("mt-4 text-[15px] leading-relaxed text-ink-300", PROSE)}>{intro}</p>
       ) : null}
     </header>
   );

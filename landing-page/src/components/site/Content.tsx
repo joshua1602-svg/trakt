@@ -1,8 +1,6 @@
 import { DemoPlayer } from "@/components/site/DemoPlayer";
-import { LensSwitcher } from "@/components/site/LensSwitcher";
 import { Reveal } from "@/components/site/Reveal";
 import { Card, SectionHeading, cx } from "@/components/ui";
-import type { DemoScopeInfo } from "@/types/demo";
 
 /**
  * The static marketing sections: platform architecture, risk & controls
@@ -20,14 +18,21 @@ import type { DemoScopeInfo } from "@/types/demo";
 /* Platform — build the portfolio once, use it everywhere                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Step 2's body is the distinctive claim, not the duplicate one. "Mapped,
+ * validated and traceable" restated the Governance cards and was cut; this
+ * line came from the deleted Operating Model section, which made the same
+ * claim 400px further down. The diagram is where the layer is described, so
+ * this is where the claim belongs.
+ */
 const FLOW = [
   {
     title: "Data and documents",
-    copy: "Loan tapes, servicing data, valuations and facility documents.",
+    copy: "Loan tapes, servicing data, valuations, facility documents.",
   },
   {
     title: "One governed portfolio layer",
-    copy: "Mapped, validated and traceable.",
+    copy: "No separate datasets to reconcile.",
   },
 ] as const;
 
@@ -58,11 +63,10 @@ export function Architecture() {
           <li key={step.title} className="relative">
             <Reveal delay={index * 60} className="h-full">
               <Card className="h-full">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
-                  Step {index + 1}
-                </p>
-                <h3 className="mt-2 text-[15px] font-semibold text-ink-100">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-400">{step.copy}</p>
+                <h3 className="text-[15px] font-semibold text-ink-100">{step.title}</h3>
+                {step.copy ? (
+                  <p className="mt-2 text-sm leading-relaxed text-ink-400">{step.copy}</p>
+                ) : null}
               </Card>
             </Reveal>
             <span
@@ -77,10 +81,7 @@ export function Architecture() {
         <li>
           <Reveal delay={120} className="h-full">
             <Card className="h-full">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-peri-400">
-                Step 3
-              </p>
-              <h3 className="mt-2 text-[15px] font-semibold text-ink-100">Every output</h3>
+              <h3 className="text-[15px] font-semibold text-ink-100">Every output</h3>
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {OUTPUTS.map((output) => (
                   <li
@@ -103,40 +104,43 @@ export function Architecture() {
 /* Risk and controls — hosts Demo 2                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Structurally identical to the query-demo section: eyebrow, headline, one
+ * line, then the demo at full container width. Two demos presented in two
+ * different shapes reads as unfinished, so the shape is shared.
+ *
+ * The demo's own eyebrow and heading are gone — "See a portfolio requirement
+ * become a live control" restated the section headline directly above it.
+ */
 export function ForwardControls() {
   return (
-    <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-x-8">
-      <Reveal className="lg:col-span-6">
+    <>
+      <Reveal>
         <SectionHeading
           id="controls"
           eyebrow="Risk & controls"
           title="Turn portfolio requirements into live controls."
-          intro="Structure covenant and concentration requirements once. Trakt monitors them against the funded book, forecast and pipeline — showing today's position and emerging breaches."
         />
-        <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
+        <p className="mt-4 max-w-[72ch] text-[15px] font-medium leading-relaxed text-mint-400">
           Know what is breached today — and what the portfolio is moving toward.
         </p>
       </Reveal>
 
-      <Reveal delay={60} className="lg:col-span-6">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-peri-400">
-          Risk &amp; controls demo
-        </p>
-        <h3 className="mb-4 text-lg font-semibold tracking-tight text-ink-100">
-          See a portfolio requirement become a live control.
-        </h3>
-        <DemoPlayer
-          overlayLabel="Watch controls demo"
-          durationLabel="~18 sec"
-          poster="/controls-demo-poster.png"
-          webmSrc="/controls-demo.webm"
-          mp4Src="/controls-demo.mp4"
-          description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
-          caption="From documented requirement to live monitoring. Figures illustrative."
-          fallback={<ControlPreview />}
-        />
+      <Reveal delay={60}>
+        <div className="mt-8">
+          <DemoPlayer
+            overlayLabel="Watch controls demo"
+            durationLabel="~18 sec"
+            poster="/controls-demo-poster.png"
+            webmSrc="/controls-demo.webm"
+            mp4Src="/controls-demo.mp4"
+            description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
+            caption="From documented requirement to live monitoring."
+            fallback={<ControlPreview />}
+          />
+        </div>
       </Reveal>
-    </div>
+    </>
   );
 }
 
@@ -176,11 +180,8 @@ export function ControlPreview() {
       role="img"
       aria-label="Preview of a concentration control evaluated against the funded book, the expected forecast and the full pipeline"
     >
-      <p className="flex items-center justify-between border-b border-line pb-3 text-xs font-medium text-ink-300">
+      <p className="border-b border-line pb-3 text-xs font-medium text-ink-300">
         Concentration controls
-        <span className="rounded-full border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-          Illustrative
-        </span>
       </p>
 
       <div className="pt-4">
@@ -226,29 +227,6 @@ export function ControlPreview() {
           Projected breach horizon: <span className="font-semibold text-ink-100">Nov 2026</span>
         </p>
       </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Portfolio operating model                                                  */
-/* -------------------------------------------------------------------------- */
-
-export function Lenses({ scope }: { scope: DemoScopeInfo }) {
-  return (
-    <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-x-8">
-      <Reveal className="lg:col-span-6">
-        <SectionHeading
-          id="lenses"
-          eyebrow="Operating model"
-          title="One portfolio truth. Every relevant lens."
-          intro="Origination books, acquired portfolios and funding vehicles sit in one governed model — individually reportable and consolidated, without separate datasets to reconcile."
-        />
-      </Reveal>
-
-      <Reveal delay={60} className="lg:col-span-6">
-        <LensSwitcher scope={scope} />
-      </Reveal>
     </div>
   );
 }
@@ -313,10 +291,88 @@ export function DeliveryStrip() {
           {surface.name}
         </span>
       ))}
-      <span className="basis-full text-[12px] text-ink-400 sm:basis-auto">
-        Approved risk findings can also be delivered proactively into Teams.
+      {/* The section's single body line. Push, not pull — that is the claim,
+          and "approved" is what keeps it governed. */}
+      <span className="basis-full text-[12px] text-ink-300 sm:basis-auto">
+        Approved risk findings are pushed to Teams.
       </span>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Delivery model — five static tiles                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Five delivery modes, stated once each. A static row: no expand, no
+ * collapse, no keyboard handling — the whole section is legible in one pass,
+ * which is the point. Mint marks what ships; grey marks what does not.
+ */
+const DELIVERY_MODES = [
+  {
+    name: "Managed service",
+    // Longer than its neighbours on purpose: it is the only line that
+    // separates a managed service from automated software.
+    copy: "Reporting run by Trakt, not your team.",
+    available: true,
+  },
+  {
+    name: "Trakt Agent",
+    copy: "Dashboards, charting and drill-through.",
+    available: true,
+  },
+  {
+    name: "Copilot",
+    copy: "Portfolio questions inside Teams and Microsoft 365.",
+    available: true,
+  },
+  {
+    name: "Enterprise agent",
+    copy: "Trakt inside your own agent estate.",
+    available: false,
+  },
+  {
+    name: "Agent-to-agent",
+    copy: "Systems querying Trakt directly.",
+    available: false,
+  },
+] as const;
+
+export function DeliveryModes() {
+  return (
+    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {DELIVERY_MODES.map((mode, index) => (
+        <li key={mode.name}>
+          <Reveal delay={index * 60} className="h-full">
+            <Card
+              className={cx(
+                "flex h-full flex-col",
+                mode.available ? "border-mint-400/25" : "border-line-soft bg-navy-900/40",
+              )}
+            >
+              <p
+                className={cx(
+                  "text-[11px] font-semibold uppercase tracking-wider",
+                  mode.available ? "text-mint-400" : "text-ink-500",
+                )}
+              >
+                {mode.available ? "Available today" : "Roadmap"}
+              </p>
+              <h3
+                className={cx(
+                  "mt-2 text-[15px] font-semibold",
+                  mode.available ? "text-ink-100" : "text-ink-300",
+                )}
+              >
+                {mode.name}
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-400">{mode.copy}</p>
+            </Card>
+          </Reveal>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -344,7 +400,7 @@ export function Governance() {
           eyebrow="Governance"
           title="Deterministic underneath. Governed throughout."
         />
-        <p className="mt-4 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
+        <p className="mt-4 max-w-[72ch] text-[15px] font-medium leading-relaxed text-mint-400">
           Every figure is reconciled by construction rather than by comparison.
         </p>
       </Reveal>
@@ -362,14 +418,11 @@ export function Governance() {
         ))}
       </ul>
 
-      {/* Two short sentences, not one long one — the mobile column is
-          narrow, and neither claim needs the other to stand. */}
+      {/* One line, answering the extensibility objection. The agentic
+          direction is cut: the Delivery Model tiles show it, in grey. */}
       <Reveal delay={120}>
-        <p className="mt-8 max-w-3xl text-sm leading-relaxed text-ink-500">
-          Built on a common canonical model with asset-specific configuration — new
-          lending asset classes are added through configuration, not a rebuild.
-          Designed to extend from user-directed workflows toward increasingly agentic
-          operation, under the same controls.
+        <p className="mt-8 max-w-[72ch] text-sm leading-relaxed text-ink-500">
+          New asset classes are added through configuration, not a rebuild.
         </p>
       </Reveal>
     </>

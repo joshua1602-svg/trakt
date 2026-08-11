@@ -203,8 +203,12 @@ describe("CopilotDemo", () => {
     expect(screen.getByText("Synthetic data")).toBeInTheDocument();
     // The session counter stays silent this early — it is a cap, not a meter.
     expect(screen.queryByText(/questions remaining/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/trakt declines what it cannot derive/i))
-      .toBeInTheDocument();
+    // The refusal claim moved to its own page section; inside the card the
+    // unsupported prompts remain as suggestions, which is what they are here.
+    expect(screen.queryByText(/trakt declines what it cannot derive/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /how has the portfolio changed since last month/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows a clear message for an unsupported question", async () => {
