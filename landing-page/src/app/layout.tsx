@@ -96,11 +96,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-GB">
       <body>
-        {/* Gate for the scroll-reveal CSS: without JavaScript the `js` class
-            never lands, the hidden initial states never apply, and the page
-            renders complete. Inline and first so it beats the first paint of
-            any section. */}
-        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
         {children}
         <script
           type="application/ld+json"

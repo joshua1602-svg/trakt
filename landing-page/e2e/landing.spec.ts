@@ -397,6 +397,71 @@ test.describe("Trakt landing page", () => {
     ).toBeVisible();
   });
 
+  /**
+   * Opacity guards.
+   *
+   * `toBeVisible()` checks the layout box and display/visibility — it passes
+   * on an opacity-0 element. Six sections once rendered blank behind a
+   * scroll-reveal and the whole suite stayed green, so these assert the
+   * computed value directly.
+   */
+  test("every section paints: computed opacity and real text", async ({ page }) => {
+    for (const id of [
+      "query-demo",
+      "platform",
+      "controls",
+      "lenses",
+      "intelligence",
+      "delivery",
+      "governance",
+    ]) {
+      const section = page.locator(`#${id}`);
+      await section.scrollIntoViewIfNeeded();
+
+      // Polled, not sampled: the reveal transition runs 240ms plus up to
+      // 120ms of stagger, so an immediate read catches it mid-flight.
+      await expect
+        .poll(
+          () =>
+            section.evaluate((node) =>
+              Number(getComputedStyle(node.querySelector("[data-reveal]") ?? node).opacity),
+            ),
+          { message: `#${id} never reached full opacity` },
+        )
+        .toBe(1);
+
+      const text = await section.evaluate((node) => (node as HTMLElement).innerText.trim().length);
+      expect(text, `#${id} rendered no text`).toBeGreaterThan(0);
+    }
+  });
+
+  test("no revealable element anywhere is left transparent", async ({ page }) => {
+    // Deliberately broad: queries every [data-reveal] on the page rather than
+    // a known list, so anything added later is covered by default.
+    const total = await page.locator("[data-reveal]").count();
+    expect(total).toBeGreaterThan(0);
+
+    for (let index = 0; index < total; index += 1) {
+      await page.locator("[data-reveal]").nth(index).scrollIntoViewIfNeeded();
+    }
+    await page.locator("#top").scrollIntoViewIfNeeded();
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            Array.from(document.querySelectorAll("[data-reveal]"))
+              .filter((node) => Number(getComputedStyle(node).opacity) < 1)
+              .map(
+                (node) =>
+                  `${node.getAttribute("data-reveal")}: ${(node as HTMLElement).innerText.slice(0, 40)}`,
+              ),
+          ),
+        { message: "revealable content left transparent" },
+      )
+      .toEqual([]);
+  });
+
   test("has no horizontal overflow and one h1", async ({ page }) => {
     await expect(page.locator("h1")).toHaveCount(1);
     const overflow = await page.evaluate(
@@ -549,6 +614,36 @@ test.describe("Trakt landing page", () => {
     await startQueryDemo(page);
 
     expect(errors).toEqual([]);
+  });
+});
+
+/**
+ * A permanent contract, not a spot check: the page must be readable with no
+ * JavaScript at all. Motion is an enhancement; content never depends on it.
+ */
+test.describe("without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("every section still renders at full opacity", async ({ page }) => {
+    await page.goto("/");
+
+    for (const id of ["platform", "controls", "lenses", "intelligence", "delivery", "governance"]) {
+      const painted = await page.locator(`#${id}`).evaluate((node) => {
+        const target = node.querySelector("[data-reveal]") ?? node;
+        return {
+          opacity: Number(getComputedStyle(target).opacity),
+          text: (node as HTMLElement).innerText.trim().length,
+        };
+      });
+      expect(painted.opacity, `#${id} is transparent without JavaScript`).toBe(1);
+      expect(painted.text, `#${id} rendered no text without JavaScript`).toBeGreaterThan(0);
+    }
+
+    // The proposition and the closing form survive too.
+    await expect(
+      page.getByRole("heading", { level: 1, name: /one governed view of your lending portfolios\./i }),
+    ).toBeVisible();
+    await expect(page.locator("#book-a-demo")).toContainText(/see your portfolio through one governed view/i);
   });
 });
 

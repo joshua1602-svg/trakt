@@ -335,27 +335,29 @@ export function DeliveryStrip() {
 const DELIVERY_MODES = [
   {
     name: "Managed service",
-    copy: "Recurring reporting and governance artefacts, produced with no user interaction.",
+    // Longer than its neighbours on purpose: it is the only line that
+    // separates a managed service from automated software.
+    copy: "Reporting run by Trakt, not your team.",
     available: true,
   },
   {
     name: "Trakt Agent",
-    copy: "The full analytical environment: dashboards, charting and drill-through.",
+    copy: "Dashboards, charting and drill-through.",
     available: true,
   },
   {
     name: "Copilot",
-    copy: "Portfolio questions inside the tools your teams already use.",
+    copy: "Portfolio questions inside Teams and Microsoft 365.",
     available: true,
   },
   {
     name: "Enterprise agent",
-    copy: "Trakt running inside a client's own agent estate.",
+    copy: "Trakt inside your own agent estate.",
     available: false,
   },
   {
     name: "Agent-to-agent",
-    copy: "Upstream and downstream systems consulting the layer directly.",
+    copy: "Systems querying Trakt directly.",
     available: false,
   },
 ] as const;
