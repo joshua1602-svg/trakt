@@ -63,7 +63,7 @@ export function DemoPlayer({
   if (failed) return <>{fallback}</>;
 
   return (
-    <figure className="m-0">
+    <figure className="m-0 max-w-4xl">
       <div className="relative aspect-[5/4] overflow-hidden rounded-2xl border border-line bg-navy-900/80 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)]">
         <video
           ref={videoRef}
@@ -90,15 +90,18 @@ export function DemoPlayer({
         </video>
 
         {state === "idle" ? (
-          // A real scrim, not a tint: the button and its duration have to
-          // stay legible over the poster frame at any width.
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-navy-950/80 backdrop-blur-[2px]">
-            <button type="button" onClick={play} className={buttonStyles.primary}>
-              <PlayGlyph /> {overlayLabel}
-            </button>
-            {durationLabel ? (
-              <span className="text-[12px] font-medium text-ink-300">{durationLabel}</span>
-            ) : null}
+          // The still stays at full contrast and full sharpness — a global
+          // overlay made a working product look disabled. The backing is a
+          // contained plate sized to the button and its label, nothing more.
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-navy-950/90 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
+              <button type="button" onClick={play} className={buttonStyles.primary}>
+                <PlayGlyph /> {overlayLabel}
+              </button>
+              {durationLabel ? (
+                <span className="text-[12px] font-medium text-ink-300">{durationLabel}</span>
+              ) : null}
+            </div>
           </div>
         ) : null}
 

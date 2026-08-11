@@ -30,18 +30,17 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
   }
 
   return (
-    <figure className="m-0">
-      {/* Poster: a non-interactive replica of the demo surface, carrying the
-          real synthetic scope so the frame is honest before it is live. Same
-          5:4 frame as the controls demo — at its natural height the faded
-          replica read as a broken render rather than a still. */}
-      <div className="relative aspect-[5/4] overflow-hidden rounded-2xl border border-line bg-navy-900/70">
-        {/* A faithful still of the demo's pre-question state — header, ask
-            row, every suggestion, the refusal heading — so the frame fills
-            and reads as the product rather than a fragment. */}
+    <figure className="m-0 max-w-4xl">
+      {/* Takes its natural content height rather than the controls demo's 5:4
+          frame: identical ratios over different content produced a void. What
+          is shared is the treatment — max width, border, scrim and caption
+          placement — which is what reads as deliberate. */}
+      <div className="relative overflow-hidden rounded-2xl border border-line bg-navy-900/70">
+        {/* A faithful still of the demo's pre-question state, at full
+            contrast: it should read as a screenshot of working software. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none flex h-full select-none flex-col gap-4 p-4 opacity-70 sm:p-5"
+          className="pointer-events-none flex select-none flex-col gap-4 p-4 sm:p-5"
         >
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line bg-navy-850/80 px-4 py-3">
             <div>
@@ -63,7 +62,7 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
             </div>
           </div>
 
-          <div className="flex-1">
+          <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
               Try one of these
             </p>
@@ -104,17 +103,18 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
           </div>
         </div>
 
-        {/* A real scrim, not a tint: the button has to stay legible over
-            whatever sits beneath it at any width. */}
-        <div className="absolute inset-0 flex items-center justify-center bg-navy-950/80 backdrop-blur-[2px]">
-          {/* demo_open fires from the demo itself when the scripted opening
-              question runs, so starting is counted exactly once. */}
-          <button type="button" onClick={() => setStarted(true)} className={buttonStyles.primary}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M7 4l14 8-14 8z" />
-            </svg>{" "}
-            Watch query demo
-          </button>
+        {/* Backing behind the control only, so the still stays crisp. */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="rounded-2xl border border-line bg-navy-950/90 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
+            {/* demo_open fires from the demo itself when the scripted opening
+                question runs, so starting is counted exactly once. */}
+            <button type="button" onClick={() => setStarted(true)} className={buttonStyles.primary}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M7 4l14 8-14 8z" />
+              </svg>{" "}
+              Watch query demo
+            </button>
+          </div>
         </div>
       </div>
 
