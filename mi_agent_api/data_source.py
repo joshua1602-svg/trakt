@@ -329,8 +329,14 @@ def _load_active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
             "MI_AGENT_CLIENT_ID + MI_AGENT_RUN_ID, MI_AGENT_DATA_CSV, or add a "
             "synthetic_demo/**/*canonical_typed.csv file."
         )
-    raw = pd.read_csv(path, low_memory=False)
-    info: Dict[str, Any] = {"label": path.name, "path": str(path)}
+    # Through the columnar serving copy where one is usable. The CSV remains
+    # authoritative and this degrades to exactly the previous `pd.read_csv` on
+    # any failure — see mi_agent_api.serving_parquet.
+    from . import serving_parquet
+
+    raw, serving_outcome = serving_parquet.read_canonical(path)
+    info: Dict[str, Any] = {"label": path.name, "path": str(path),
+                            "serving_copy": serving_outcome}
 
     if base == "central_tape" and not _prep_disabled():
         try:
