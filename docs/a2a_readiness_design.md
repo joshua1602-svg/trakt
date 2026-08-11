@@ -78,6 +78,49 @@ will have accreted callers.
 
 ---
 
+## The intended topology
+
+    Buyer / Funder Agent
+    │
+    │  A2A            (agent ↔ agent: discovery, identity, task state)
+    ▼
+    Seller / Originator Agent
+    │
+    │  MCP            (agent ↔ tools: declaration and invocation)
+    ▼
+    Trakt
+
+Two protocols doing two different jobs, and the distinction is the point. **MCP
+is how an agent reaches tools.** **A2A is how two agents reach each other.**
+Trakt sits at the bottom and should speak the tool protocol; it should never
+become a party to the negotiation above it.
+
+Trakt's position in that diagram is also why it needs almost nothing new: the
+seller's agent is just a client agent (`docs/a2a_agent_boundary.md`), and a
+buyer's agent granted an entitlement is another one.
+
+---
+
+## The nine questions, answered against what exists
+
+| Concern | Status today | What A2A would add |
+|---|---|---|
+| **Agent discovery** | ❌ none | An agent card at a well-known URL: who this deployment is, and how to request access. Trakt currently assumes the caller already knows the endpoint. |
+| **Agent identity** | ✅ **solved** | Entra service principal → `ExecutionContext(actor_id, actor_type=service, organisation_id, channel=enterprise_agent)`. Machine identity is first-class, not a human account lent to a bot. |
+| **Capability advertisement** | ✅ **solved** | `GET /v1/agent/tools` already returns the caller-narrowed tool list *and* the closed set of resource identifiers it may name. This is exactly what a capability advertisement is. |
+| **Task / request structure** | ◐ per-call only | JSON Schema in, `GovernedResult` out — complete for one question. Missing is the *enquiry* that groups many (Gap 2). |
+| **Authentication** | ✅ **solved** | OIDC/JWKS bearer, issuer and audience validated, `Trakt.Agent` app role required, disabled mode refused in production. |
+| **Organisation ownership** | ✅ **solved** | `organisation × resource × capability`. The organisation need not own the resource — the property that makes cross-institution access a grant rather than a rewrite. |
+| **Correlation IDs** | ✅ **solved** | `X-Correlation-Id` in, threaded through `GovernedResult.correlation_id` and `AuditMetadata.correlation_id`. Both sides can join their records of the same exchange. |
+| **Long-running task state** | ❌ none | Every call is synchronous. A diligence sweep over a large book, or a referral awaiting a human, needs a task that can be polled. |
+| **Evidence references** | ✅ **solved** | `SnapshotRef` (id + content hash), `ProvenanceRef`, and `explain_values` down to the valuation observation and the policy version that selected it. |
+
+**Six of nine already hold.** The three that do not — discovery, enquiry
+grouping, long-running state — are all *additive*: none requires changing a tool
+contract, and none requires a counterparty to build.
+
+---
+
 ## The design, at the level it is safe to hold now
 
 ### The transport is HTTP with typed envelopes, and it already exists
@@ -141,6 +184,38 @@ Three of the four are buildable now and are valuable on their own — an expirin
 approved, revocable grant and an exportable evidence pack are worth having
 whether or not a counterparty ever appears. The fourth should wait, and this
 document exists so that waiting is a decision rather than an omission.
+
+---
+
+## What Sprint 2 must preserve for A2A to be addable later
+
+Five contract properties. Each is true today; each would be expensive to
+reintroduce once tools have external callers.
+
+1. **Every tool names a `resource`, and it is required.** Enforced at
+   registration (`ToolSpec.__post_init__` rejects a spec whose resource argument
+   is optional). A tool that could default its resource could not be granted
+   across organisations, because there would be nothing to grant.
+
+2. **Identity never comes from arguments.** Every input schema is closed, and
+   `trakt_tools.mcp.refuse_identity_in_arguments` makes the rule enforceable at
+   an adapter boundary rather than merely documented.
+
+3. **`correlation_id` is carried, never generated when supplied.** It is what
+   turns a sequence of calls into an enquiry later, and a Trakt that overwrote a
+   caller's correlation id would make the two sides' records unjoinable.
+
+4. **Refusals are typed and carry `retryable`.** An autonomous counterparty must
+   be able to tell "I am not allowed to ask that" from "that could not be
+   computed" without parsing prose — and must stop rather than loop on the first.
+
+5. **Every answer carries its snapshot.** A diligence answer without the dataset
+   it came from cannot be re-verified after the fact, which is the whole point of
+   the exercise.
+
+Adding a version-2 tool later is fine; a version-1 tool that silently changes
+what it means is not. `ToolSpec.version` exists from the first tool onward for
+exactly this reason.
 
 ---
 
