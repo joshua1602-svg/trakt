@@ -32,14 +32,22 @@ entitlements:
     resource: ERE/source_portfolio/direct_001
     capabilities:
       - risk:read
+      # Loan-level records and the evidence behind an individual value. A
+      # SEPARATE capability from risk:read on purpose: aggregate MI describes a
+      # book's shape, whereas this exposes individual obligations, so a
+      # counterparty may reasonably hold the first and not the second. Remove
+      # this line to see get_loans / explain_values disappear from the agent's
+      # published catalogue and be refused with SCOPE_MISSING.
+      - loan:read
     status: active
     enabled: true
     source: operator
     approved_by: "development fixture — not an approval of anything real"
     approved_at: "2026-08-11T00:00:00Z"
     note: >-
-      Sprint 1 external-agent proof. Deliberately the narrowest useful grant:
-      one capability, one book, funded concentration and covenant status only.
+      Sprint 1 external-agent proof, extended for the pre-Sprint-2 batch tools.
+      Still the narrowest useful grant: one book, read-only, no artefact
+      generation and no free-form MI query surface.
 
   # ---------------------------------------------------------------------
   # The originator's own management view, for local development of the human

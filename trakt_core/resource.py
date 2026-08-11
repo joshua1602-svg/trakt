@@ -74,6 +74,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple
 
+from . import config_cache
 from .errors import ErrorCode, TraktError
 from .portfolio import (
     FIELD_PORTFOLIO_ID,
@@ -664,6 +665,12 @@ def load_resource_catalogue(
     path = Path(config_path
                 or os.environ.get(RESOURCE_CONFIG_ENV)
                 or DEFAULT_RESOURCE_CONFIG)
+    return config_cache.get_or_load(
+        "resources", path, lambda: _load_resource_catalogue(path))
+
+
+def _load_resource_catalogue(path: Path) -> ResourceCatalogue:
+    """The uncached load. Behaviour is unchanged from before caching existed."""
     if not path.exists():
         return ResourceCatalogue((), configured=False)
 

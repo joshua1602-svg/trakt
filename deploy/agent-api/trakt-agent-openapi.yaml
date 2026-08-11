@@ -131,6 +131,228 @@ paths:
           $ref: '#/components/responses/UnknownTool'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/explain_value:
+    post:
+      operationId: invoke_explain_value
+      summary: Return the evidence behind ONE value
+      description: 'Return the evidence behind ONE value. A convenience wrapper over explain_values.
+
+
+        Use only for a single figure. To evidence several, call explain_values once instead.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Return the evidence behind ONE value. For several values call explain_values
+                once instead.
+              properties:
+                resource: &id001
+                  type: string
+                  description: The resource the values were read from.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                loan_id:
+                  type: string
+                canonical_field:
+                  type: string
+              additionalProperties: false
+              required:
+              - resource
+              - loan_id
+              - canonical_field
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/explain_values:
+    post:
+      operationId: invoke_explain_values
+      summary: 'Return the evidence behind several values: the source dataset and field, snapshot identity
+        and content hash, mapping method and version, any derivation rule, validation status, and the
+        calculation method where the value is calculated'
+      description: 'Return the evidence behind several values: the source dataset and field, snapshot
+        identity and content hash, mapping method and version, any derivation rule, validation status,
+        and the calculation method where the value is calculated. At most 500 per call.
+
+
+        Use this to justify the figures you report. It is the primitive: to evidence several values call
+        it ONCE with a list. Provenance is bound to the snapshot the value was read from, so an answer
+        always states which dataset it came from.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Return the evidence behind SEVERAL values in one call. This is the primitive:
+                to justify more than one figure, call this once rather than explain_value repeatedly.'
+              properties:
+                resource: *id001
+                requests:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                  description: Objects of {loan_id, canonical_field}, at most 500 per call. Answers are
+                    returned in the order requested.
+              additionalProperties: false
+              required:
+              - resource
+              - requests
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/get_loan:
+    post:
+      operationId: invoke_get_loan
+      summary: Retrieve ONE loan
+      description: 'Retrieve ONE loan. A convenience wrapper over get_loans — same implementation, same
+        governed frame.
+
+
+        Use only for a single loan you are already investigating. For several loans call get_loans once
+        instead.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Retrieve ONE loan you are already investigating. For several loans call get_loans
+                once instead — it is the same work in one request.
+              properties:
+                resource: &id002
+                  type: string
+                  description: The resource holding the loans, as '{tenant}/{kind}/{resource_id}'. Call
+                    GET /v1/agent/tools to see the resources you may name.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                loan_id:
+                  type: string
+                  description: The loan identifier.
+                fields: &id003
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical field names to return. Omit for a curated default projection;
+                    ask for only what you need — a canonical tape carries over a hundred columns.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - loan_id
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/get_loans:
+    post:
+      operationId: invoke_get_loans
+      summary: Retrieve several loans from a portfolio resource in one call
+      description: 'Retrieve several loans from a portfolio resource in one call. Returns a flat, typed
+        projection of canonical fields per loan, in the order requested, plus an explicit list of identifiers
+        that matched nothing. At most 500 loans per call.
+
+
+        This is the loan-retrieval primitive: to look at more than one loan, call this ONCE with a list
+        rather than calling get_loan repeatedly — it is the same work in a single request. Ask for only
+        the fields you need. For a whole portfolio do not retrieve rows at all: use stratify, concentration
+        or rank_loans, which return aggregates.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Retrieve several loans in ONE call. This is the primitive: to look at more
+                than one loan, call this once rather than get_loan repeatedly.'
+              properties:
+                resource: *id002
+                loan_ids:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                  maxItems: 500
+                  description: Loan identifiers, at most 500 per call. Results are returned in the order
+                    requested.
+                fields: *id003
+              additionalProperties: false
+              required:
+              - resource
+              - loan_ids
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     entraBearer:
@@ -201,7 +423,7 @@ components:
           - 'null'
         error:
           oneOf:
-          - &id001
+          - &id004
             type: object
             description: A governed failure. Branch on `code`, never on `message`.
             properties:
@@ -239,7 +461,7 @@ components:
       - status
       - request_id
       - tenant_id
-    TraktError: *id001
+    TraktError: *id004
     ToolDeclaration:
       type: object
       properties:
@@ -268,20 +490,20 @@ components:
   responses:
     InvalidArguments:
       description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
-      content: &id002
+      content: &id005
         application/json:
           schema:
             $ref: '#/components/schemas/GovernedResult'
     Unauthorized:
       description: The bearer token is missing, invalid or expired.
-      content: *id002
+      content: *id005
     Forbidden:
       description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
         RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
-      content: *id002
+      content: *id005
     UnknownTool:
       description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
-      content: *id002
+      content: *id005
     Unavailable:
       description: The agent API or the governed data source is not available. Retryable.
-      content: *id002
+      content: *id005

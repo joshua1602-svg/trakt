@@ -574,13 +574,43 @@ def test_resolve_entitlements_returns_nothing_without_an_organisation():
 # =========================================================================== #
 def test_the_capability_vocabulary_is_the_existing_scope_vocabulary():
     """No second vocabulary: a grant uses exactly the name the capability gates
-    on, so there is nothing to translate and nothing to drift."""
+    on, so there is nothing to translate and nothing to drift.
+
+    This deliberately asserts CONTAINMENT rather than equality. The two sets
+    answer different questions and only happened to coincide while every
+    capability was also a default:
+
+      * ``KNOWN_CAPABILITIES`` — the vocabulary a grant may be written in;
+      * ``DEFAULT_MI_SCOPES`` — what an authenticated MI user is given.
+
+    ``loan:read`` is the first capability that is in the first and not the
+    second, on purpose: aggregate MI describes a book's shape, whereas loan-level
+    access exposes individual obligations, so it is granted deliberately or not
+    at all. See ``test_loan_read_is_a_capability_but_not_a_default`` below.
+    """
     from trakt_core.context import DEFAULT_MI_SCOPES, KNOWN_CAPABILITIES
 
-    assert KNOWN_CAPABILITIES == DEFAULT_MI_SCOPES
+    assert DEFAULT_MI_SCOPES <= KNOWN_CAPABILITIES, (
+        "a default scope that is not a capability could never be granted")
     for scope in (SCOPE_PORTFOLIO_READ, SCOPE_MI_QUERY, SCOPE_ARTEFACT_GENERATE,
                   SCOPE_RISK_READ, SCOPE_FORECAST_READ):
         assert scope in KNOWN_CAPABILITIES
+
+
+def test_loan_read_is_a_capability_but_not_a_default():
+    """It can be granted to an organisation; it is not handed to every MI user.
+
+    The reasoning differs from ``risk:read`` / ``forecast:read`` above, which are
+    in the default set precisely so existing users keep what they already have.
+    No route exposes loan-level data today, so nobody loses anything by its
+    absence — and a deployment that later builds one has to decide to grant it.
+    """
+    from trakt_core.context import (
+        DEFAULT_MI_SCOPES, KNOWN_CAPABILITIES, SCOPE_LOAN_READ)
+
+    assert SCOPE_LOAN_READ in KNOWN_CAPABILITIES
+    assert SCOPE_LOAN_READ not in DEFAULT_MI_SCOPES
+    assert not ExecutionContext(tenant_id="ERE", actor_id="u").has_scope(SCOPE_LOAN_READ)
 
 
 def test_the_new_scopes_are_granted_to_existing_users():

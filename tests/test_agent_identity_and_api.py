@@ -388,7 +388,10 @@ def test_an_unauthorised_resource_is_refused_over_http_with_a_typed_code(client)
 
 
 def test_an_unknown_tool_is_a_404_with_a_typed_code(client):
-    response = client.post("/v1/agent/tools/get_loan",
+    # A name no tool will plausibly take. This test previously used `get_loan`,
+    # which has since been registered — a reminder that a placeholder name is a
+    # liability once the surface grows.
+    response = client.post("/v1/agent/tools/no_such_tool_exists",
                            json={"resource": PORTFOLIO_A.key})
     assert response.status_code == 404
     assert response.json()["error"]["code"] == ErrorCode.TOOL_NOT_FOUND

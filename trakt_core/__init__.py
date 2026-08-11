@@ -55,6 +55,7 @@ from .context import (
     CHANNEL_REACT,
     SCOPE_ARTEFACT_GENERATE,
     SCOPE_ARTEFACT_READ,
+    SCOPE_LOAN_READ,
     SCOPE_MI_QUERY,
     SCOPE_PORTFOLIO_READ,
     ExecutionContext,
@@ -161,7 +162,7 @@ __all__ = [
     "CHANNEL_REACT", "CHANNEL_COPILOT", "CHANNEL_INTERNAL",
     "CHANNEL_ENTERPRISE_AGENT", "CHANNEL_AGENT_TO_AGENT",
     "SCOPE_PORTFOLIO_READ", "SCOPE_MI_QUERY", "SCOPE_ARTEFACT_READ",
-    "SCOPE_ARTEFACT_GENERATE",
+    "SCOPE_ARTEFACT_GENERATE", "SCOPE_LOAN_READ",
     # tenancy
     "TenantRegistry", "TenantRecord", "AuthorisedPortfolio",
     "authorise_portfolio_access", "load_tenant_registry",

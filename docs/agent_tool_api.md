@@ -8,10 +8,15 @@ Audience: engineers adding a tool, and reviewers checking the security model. It
 documents the code as it is, not an intended end state.
 
 > **Status.** Sprint 1 of the A2A programme (see
-> [`a2a_architecture_readiness_review.md`](a2a_architecture_readiness_review.md)).
-> One tool is registered — `evaluate_covenants` — deliberately: the sprint's
-> question is whether the *architecture* works end to end, and one tool answers
-> it as well as fifteen would while failing faster if it does not.
+> [`a2a_architecture_readiness_review.md`](a2a_architecture_readiness_review.md)),
+> plus the pre-Sprint-2 hardening pass identified by
+> [`a2a_scalability_review.md`](a2a_scalability_review.md).
+>
+> Five tools are registered: `evaluate_covenants`, `get_loans` / `get_loan`, and
+> `explain_values` / `explain_value`. The loan and provenance pairs are one
+> implementation each — the **batch form is the primitive** and the single-item
+> form is a wrapper, because measurement showed the single-item shape costs
+> 17–27× more for the same work.
 
 ---
 
@@ -69,6 +74,35 @@ documents the code as it is, not an intended end state.
 | `trakt_tools/handlers/` | Thin wrappers over existing implementations. **No tool computes anything.** |
 | `mi_agent_api/agent_auth.py`, `agent_api.py` | The only agent modules importing FastAPI. |
 | `mi_agent/`, `analytics_lib/`, `engine/` | Domain. Untouched by this work. |
+
+### The governance registries are shared, and cached
+
+`trakt_core/config_cache.py` parses each of the five registries — organisations,
+resources, entitlements, principals, tenancy — **once per content version per
+worker** instead of once per call. It is keyed on `(path, mtime_ns, size)` with
+no TTL, so an edited file is picked up on the very next call.
+
+This is deliberately in `trakt_core` rather than reusing
+`mi_agent_api/serving_cache.py`: that module imports `trakt_core.perf`, so
+depending on it here would invert the dependency direction
+`tests/test_governance_dependency_direction.py` protects. Being standard-library
+only is also what lets a CLI, a pipeline job and a test benefit without importing
+a web stack.
+
+Every channel gains, because every channel reads the same registries:
+
+| Channel | Registries per call | Scale B (30 orgs) | Scale D (400 orgs) |
+|---|---|---|---|
+| Agent tool | organisations ×2, entitlements, resources | 239 ms → **0.09 ms** | 5,751 ms → **0.10 ms** |
+| Copilot | organisations ×2, entitlements | 151 ms → **0.07 ms** | 3,638 ms → **0.08 ms** |
+| MI Query (React) | tenancy only | 14 ms → **0.015 ms** | 298 ms → **0.02 ms** |
+
+**Configuration is cached; a decision never is.** Authorisation still runs in
+full on every request against the cached registries, and
+`ExecutionContext.entitlements` is still resolved per request and frozen — so a
+revoked grant stops working on the *next* request, not on a TTL.
+`test_a_revoked_grant_stops_working_on_the_next_request` is the assertion that
+holds that line. Kill switch: `TRAKT_CONFIG_CACHE=off`.
 
 ---
 
@@ -217,6 +251,53 @@ not part of Sprint 1.
 
 ---
 
+## 4b. Batch-first tools
+
+Two tool pairs exist, and in each the **batch form is the primitive**:
+
+| Primitive | Wrapper | Bound | Capability |
+|---|---|---|---|
+| `get_loans(resource, loan_ids[], fields?)` | `get_loan(resource, loan_id)` | 500 loans | `loan:read` |
+| `explain_values(resource, requests[])` | `explain_value(resource, loan_id, canonical_field)` | 500 values | `loan:read` |
+
+Measured in `tests/test_agent_loan_retrieval.py` and `tests/test_agent_provenance.py`:
+
+| Pattern | Single-item repeated | One batch | Improvement |
+|---|---:|---:|---:|
+| 20 loans | 72.7 ms | 4.2 ms | **17×** |
+| 30 values | 104.7 ms | 3.8 ms | **27×** |
+
+The wrappers contain no lookup of their own — a structural test asserts they
+delegate and never resolve a frame or index themselves. So there is one
+implementation per capability, and an agent that ignores the guidance and loops
+still gets correct answers, just slower.
+
+`loan:read` is a new capability in `KNOWN_CAPABILITIES` and is deliberately
+**not** in `DEFAULT_MI_SCOPES`: aggregate MI describes a book's shape, whereas
+loan-level access exposes individual obligations, so it is granted deliberately
+or not at all. No route exposes loan-level data today, so nobody loses anything
+by its absence.
+
+### The lineage index
+
+`explain_values` composes evidence from three things that already exist: the
+canonical row, the snapshot identity governance resolved, and a compact
+**per-field** lineage index written at ingestion by
+`engine/gate_2_transform/lineage_tracker.py` (`lineage_index.json`, beside the
+unchanged `field_lineage.json`).
+
+Per field, **not per cell** — mapping, transformation and validation are
+properties of a field within a snapshot, so a 130-column tape has a 130-entry
+index whatever its row count. The index is compacted from `field_lineage.json`
+rather than instrumented separately, so it cannot drift from the lineage it
+summarises.
+
+`LineageIndex.assert_binding` refuses an index naming a different tenant or
+snapshot from the one the value was read out of, and raises rather than
+degrading: provenance from the wrong snapshot is worse than none, because it is
+confidently wrong. A snapshot with no index returns `lineage_available: false`
+and states the value's origin as unknown rather than guessing it.
+
 ## 5. What an agent receives
 
 The full `GovernedResult`, serialised:
@@ -316,8 +397,9 @@ surface and not another.
 | Not built | Why |
 |---|---|
 | MCP server | The registry is ready for one (`trakt_mcp/` would read the same declarations), but REST/OpenAPI is the minimum viable interface and has a settled auth story. Sprint 2 or later. |
-| `get_loan` / `explain_value` | Sprint 2. They are the strategically important pair — value-level provenance is what turns a number into a fact — and they need the entity model first. |
-| The other ~12 proposed tools | Sprint 2, and only where there is one authoritative implementation, it can be permissioned, its inputs/outputs can be typed, and its output can be audited. |
+| The Sprint 2 **entity model** | `get_loans` returns a flat, typed projection today. Nesting borrower / collateral / valuations into an object graph is Sprint 2 — the contract shape (batch, bounded, ordered, projected) is fixed first so the object shape can be filled in without changing it. |
+| Parquet serving copy, valuation sidecar, valuation-selection policy | Sprint 2 (see the scalability review). |
+| The other ~10 proposed tools | Sprint 2, and only where there is one authoritative implementation, it can be permissioned, its inputs/outputs can be typed, and its output can be audited. |
 | `on_behalf_of` delegation | Needs an `ExecutionContext` field and an `AuditMetadata` field. Not required for a machine identity acting for an organisation. |
 | Field-level authorisation | The two-axis model (scopes ∩ per-resource grants) covers everything through the synthetic demo. |
 | Idempotency keys | No tool writes yet. Required before `raise_dd_request` and `record_decision` in Sprint 3. |

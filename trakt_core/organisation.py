@@ -72,6 +72,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple
 
+from . import config_cache
 from .errors import ErrorCode, TraktError
 
 logger = logging.getLogger("trakt_core.organisation")
@@ -353,10 +354,20 @@ def load_organisation_registry(
     because that would silently re-open a deployment that had declared itself
     closed. It also never raises, so a bad file cannot stop the process starting
     and take the React path down with it.
+
+    Parsed once per content version — see :mod:`trakt_core.config_cache`. An
+    edited file is picked up on the next call; what is memoised is the parsed
+    registry, never an authorisation decision.
     """
     path = Path(config_path
                 or os.environ.get(ORGANISATION_CONFIG_ENV)
                 or DEFAULT_ORGANISATION_CONFIG)
+    return config_cache.get_or_load(
+        "organisations", path, lambda: _load_organisation_registry(path))
+
+
+def _load_organisation_registry(path: Path) -> OrganisationRegistry:
+    """The uncached load. Behaviour is unchanged from before caching existed."""
     if not path.exists():
         return OrganisationRegistry((), configured=False)
 

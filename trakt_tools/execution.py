@@ -99,6 +99,16 @@ class ToolDependencies:
     #: ordering can be proven without a portfolio on disk. Production leaves it
     #: unset and the handler calls the real implementation.
     covenant_evaluator: Any = None
+    #: Test seam: ``() -> DataFrame`` for the governed loan frame. Production
+    #: leaves it unset and the handler resolves through
+    #: ``mi_agent_api.datasets._resolve_query_frame`` — the SAME resolver the MI
+    #: Query path uses, so an agent and the workspace read one frame.
+    loan_frame_resolver: Any = None
+    #: Test seam: an explicit :class:`trakt_core.lineage.LineageIndex`, or a path
+    #: to one. Production leaves both unset and the index is discovered beside
+    #: the governed output.
+    lineage_index: Any = None
+    lineage_index_path: Any = None
 
 
 def build_dependencies(
@@ -108,6 +118,9 @@ def build_dependencies(
     catalogue: Optional[ResourceCatalogue] = None,
     output_root: Any = None,
     covenant_evaluator: Any = None,
+    loan_frame_resolver: Any = None,
+    lineage_index: Any = None,
+    lineage_index_path: Any = None,
 ) -> ToolDependencies:
     """Construct the dependency set for one execution.
 
@@ -128,6 +141,9 @@ def build_dependencies(
         catalogue=catalogue,
         output_root=output_root,
         covenant_evaluator=covenant_evaluator,
+        loan_frame_resolver=loan_frame_resolver,
+        lineage_index=lineage_index,
+        lineage_index_path=lineage_index_path,
     )
 
 

@@ -58,6 +58,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple
 
+from . import config_cache
 from .errors import ErrorCode, TraktError
 from .organisation import normalise_directory_id, normalise_organisation_id
 
@@ -283,6 +284,12 @@ def load_principal_registry(
     path = Path(config_path
                 or os.environ.get(PRINCIPAL_CONFIG_ENV)
                 or DEFAULT_PRINCIPAL_CONFIG)
+    return config_cache.get_or_load(
+        "principals", path, lambda: _load_principal_registry(path))
+
+
+def _load_principal_registry(path: Path) -> PrincipalRegistry:
+    """The uncached load. Behaviour is unchanged from before caching existed."""
     if not path.exists():
         return PrincipalRegistry((), configured=False)
 

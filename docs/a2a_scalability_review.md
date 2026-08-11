@@ -107,6 +107,49 @@ Everything else is either already right, or a defined migration trigger.
 
 ---
 
+---
+
+## 1b. Addendum — the MI Query path, measured (pre-Sprint-2 pass)
+
+The review above measured the *agent* path. A follow-up pass traced and measured
+the **MI Query** path to answer whether the human channel shares the same
+bottlenecks. It does not share them equally, and one finding was new.
+
+**Governance:** MI Query reads exactly **one** registry per request
+(`tenancy.yaml`, via `build_dependencies`), because the React path
+(`identity.context_from_principal`) deliberately resolves no organisation and no
+entitlements. The agent path reads five and Copilot reads three. So MI Query paid
+the same *defect* at roughly one-nineteenth the cost — 14 ms at Scale B against
+239 ms, 298 ms at Scale D against 5,751 ms. All three are now sub-millisecond.
+
+**Canonical data:** MI Query does **not** re-read the CSV per request.
+`data_source._ACTIVE_CACHE` is signature-keyed (blob ETag / `path:mtime:size`)
+with a 30-second re-check: 5,802 ms cold, **0.44 ms warm** at 100k rows. Nor does
+it rebuild the prepared frame.
+
+**The new finding — `profile_dataset` is 80% of a warm MI query.** A warm
+`execute_governed_mi_query` over 100k rows cost 1,898 ms, of which only 13.6 ms
+was governance. Profiling attributes **1,701 ms to
+`mi_agent/mi_dataset_profile.py::profile_dataset`**, which calls `_non_blank_count`
+over all 78 columns of the whole frame on **every query**. The deterministic
+analytics it feeds (`execute_mi_query`) cost 326 ms; parsing cost 2.5 ms and
+routing 0.2 ms.
+
+This is the same *class* of defect as the config reload — an expensive
+derivation of an immutable frame, recomputed per request — and it has the same
+cheap fix: `serving_cache.BoundedCache` keyed on the dataset signature, which
+already exists and is already used by `pipeline_contract`. It would benefit MI
+Query, Copilot and agents identically.
+
+**Classification: Sprint 2 shared-serving improvement.** Not a correctness issue,
+not part of the three agreed pre-Sprint-2 changes, and deliberately not fixed in
+that pass to keep the commit small. It is now the **largest single avoidable
+overhead on the human path** and should be the first shared-serving item in
+Sprint 2 — ahead of the Parquet serving copy, because it is smaller and its
+benefit is immediate.
+
+---
+
 ## 2. Scalability scorecard
 
 Legend: ✅ comfortable · ⚠️ works with the stated change · ❌ blocking.
