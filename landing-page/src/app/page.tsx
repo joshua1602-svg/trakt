@@ -5,7 +5,6 @@ import {
   DeliveryStrip,
   ForwardControls,
   Governance,
-  Lenses,
 } from "@/components/site/Content";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
@@ -84,12 +83,11 @@ export default function Page() {
           <ForwardControls />
         </Section>
 
-        {/* 5 — Multiple books, vehicles and scopes. */}
-        <Section id="lenses" className="pb-16 sm:pb-20">
-          <Lenses />
-        </Section>
+        {/* The Operating Model section is gone: its claim ("no separate
+            datasets to reconcile") now sits in the platform diagram's step 2,
+            where the governed layer is actually described. */}
 
-        {/* 6 — Where users reach it. Distribution only — the query demo has
+        {/* 5 — Where users reach it. Distribution only — the query demo has
             already appeared in section 2. */}
         <Section id="intelligence" className="pb-16 sm:pb-20">
           <Reveal>

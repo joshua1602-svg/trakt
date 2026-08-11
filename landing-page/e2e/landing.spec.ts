@@ -172,11 +172,11 @@ test.describe("Trakt landing page", () => {
       }),
     ).toBeVisible();
     await expect(controls.getByText(/what the portfolio is moving toward/i)).toBeVisible();
-    await expect(
-      controls.getByRole("heading", {
-        name: /see a portfolio requirement become a live control\./i,
-      }),
-    ).toBeVisible();
+    // One heading only: the demo's own restated the section's directly above.
+    await expect(controls.getByRole("heading", { level: 2 })).toHaveCount(1);
+    await expect(controls.getByRole("heading", { level: 3 })).toHaveCount(0);
+    // Both demo sections share one shape: heading, one line, full-width demo.
+    await expect(controls.locator(".grid")).toHaveCount(0);
 
     // Idle: poster showing, nothing playing, and the element can neither
     // autoplay nor loop silently from the middle.
@@ -244,23 +244,6 @@ test.describe("Trakt landing page", () => {
     await expect(page.getByText("How onboarding works")).toHaveCount(0);
     await expect(page.locator("#onboarding")).toHaveCount(0);
     await expect(page.locator("main")).not.toContainText(/instant/i);
-  });
-
-  test("the operating model is a full-width statement, not a third figure card", async ({
-    page,
-  }) => {
-    const lenses = page.locator("#lenses");
-    await lenses.scrollIntoViewIfNeeded();
-
-    await expect(
-      lenses.getByRole("heading", { name: /one portfolio truth\. every relevant lens\./i }),
-    ).toBeVisible();
-    await expect(lenses.getByText("One model. No separate datasets to reconcile.")).toBeVisible();
-
-    // The scope card is gone: no visual, no repeated figures, no controls.
-    await expect(lenses.getByText("£37,270,061")).toHaveCount(0);
-    await expect(lenses.getByRole("button")).toHaveCount(0);
-    await expect(lenses.locator("img, video")).toHaveCount(0);
   });
 
   test("the delivery model is five static tiles, with nothing to open", async ({ page }) => {
@@ -410,7 +393,6 @@ test.describe("Trakt landing page", () => {
       "query-demo",
       "platform",
       "controls",
-      "lenses",
       "intelligence",
       "delivery",
       "governance",
@@ -627,7 +609,7 @@ test.describe("without JavaScript", () => {
   test("every section still renders at full opacity", async ({ page }) => {
     await page.goto("/");
 
-    for (const id of ["platform", "controls", "lenses", "intelligence", "delivery", "governance"]) {
+    for (const id of ["platform", "controls", "intelligence", "delivery", "governance"]) {
       const painted = await page.locator(`#${id}`).evaluate((node) => {
         const target = node.querySelector("[data-reveal]") ?? node;
         return {

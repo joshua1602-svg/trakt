@@ -41,10 +41,13 @@ the controls demo (section 4). Neither autoplays and neither loops silently:
 from the homepage — reporting claims survive in the platform output chips,
 and onboarding detail now belongs to a product page, not this one.
 
-The page is nine narrative sections, in this order: value proposition ·
-portfolio query demo · platform · risk & controls (the controls demo) ·
-operating model (the lens switcher) · portfolio intelligence (distribution) ·
-delivery model (the horizontal accordion) · governance · contact.
+**Pass 6 simplified.** The page is now eight narrative sections: value
+proposition · portfolio query demo · platform · risk & controls (the controls
+demo) · portfolio intelligence (distribution) · delivery model (five static
+tiles) · governance · contact. The horizontal accordion was replaced with a
+static tile row, body copy was halved again, the operating-model section was
+absorbed into the platform diagram, and both demo sections now share one
+shape: eyebrow, headline, one line, then the demo at full container width.
 
 **Pass 5 (grid, motion and caveat copy).** One 12-column grid across the
 two-column sections; scroll reveals (240ms ease-out, 60ms stagger, once,
@@ -174,13 +177,20 @@ conversational-onboarding claim while the OCC Agent
 
 ---
 
-## 5. Lenses — "One portfolio truth. Every relevant lens."
+## 5. Operating model — removed from the homepage
 
-| Copy | Class | Evidence |
-|---|---|---|
-| "Origination books, acquired portfolios and funding vehicles sit in one governed model — individually reportable and consolidated, without separate datasets to reconcile." | Evidenced (with one qualification) | `trakt_core/portfolio.py`: `PortfolioRegistry`, `resolve_scope()`, `resolve_capabilities()`, `ScopeCoverage`. Scope rendering: `frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx`; aggregation: `mi_agent_api/datasets.py`. **Qualification (unchanged from Pass 2):** the shipped type vocabulary is `direct`/`acquired`; a securitisation vehicle is a further governed type the model already holds (`PortfolioRegistry.types()`), and `spv` is a declared field role in `config/risk/concentration_test_library.yaml` with `spv_id` a monitored dimension in `config/mi/risk_monitor.yaml`. The claim is about the model, not a vehicle-specific feature. |
-| "…capability and coverage disclosed per scope." | Evidenced | `ScopeCoverage` / `CapabilityState` disclosure in `trakt_core/portfolio.py`; `PortfolioScopeBanner.tsx`. |
-| Lens switcher: Origination / Acquired / Sponsor total toggles over the same three book rows, recomputing the total on select | Evidenced | `LensSwitcher.tsx` — no new data: the rows are the demo pack's existing figures, excluded rows dim rather than disappear, and the total is summed client-side from the rows on screen. The sponsor-lens sum reconciles to the governed sponsor total to the penny (asserted in the pack build and now visible on the page), which demonstrates the section's claim instead of asserting it. Replaces the static scope card, which was the third appearance of the same four figures. |
+The section is gone. Its claim — "no separate datasets to reconcile" — now
+sits in the platform diagram's step 2, where the governed layer is actually
+described; the section had been making the same claim 400px further down,
+under a headline ("Every relevant lens") that promised lenses it no longer
+showed once the scope card was deleted.
+
+The underlying evidence is unchanged and still supports the step 2 line:
+`trakt_core/portfolio.py` (`PortfolioRegistry`, `resolve_scope()`,
+`ScopeCoverage`), scope rendering in
+`frontend/mi-agent-ui/src/components/PortfolioContextSelector.tsx`, and
+aggregation in `mi_agent_api/datasets.py`. The book names the section used to
+list are still visible by name in the query demo's table.
 
 ---
 

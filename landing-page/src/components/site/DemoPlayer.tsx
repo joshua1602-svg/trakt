@@ -90,7 +90,9 @@ export function DemoPlayer({
         </video>
 
         {state === "idle" ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-navy-950/50">
+          // A real scrim, not a tint: the button and its duration have to
+          // stay legible over the poster frame at any width.
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-navy-950/80 backdrop-blur-[2px]">
             <button type="button" onClick={play} className={buttonStyles.primary}>
               <PlayGlyph /> {overlayLabel}
             </button>

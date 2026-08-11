@@ -19,10 +19,11 @@ import { Card, SectionHeading, cx } from "@/components/ui";
 /* -------------------------------------------------------------------------- */
 
 /**
- * Step 2 carries no body: "mapped, validated and traceable" duplicated the
- * Governance cards, which state the same properties with evidence behind
- * them. The resulting empty middle box is a layout question, handled at
- * Stage 4 — not by restoring the copy.
+ * Step 2's body is the distinctive claim, not the duplicate one. "Mapped,
+ * validated and traceable" restated the Governance cards and was cut; this
+ * line came from the deleted Operating Model section, which made the same
+ * claim 400px further down. The diagram is where the layer is described, so
+ * this is where the claim belongs.
  */
 const FLOW = [
   {
@@ -31,7 +32,7 @@ const FLOW = [
   },
   {
     title: "One governed portfolio layer",
-    copy: null,
+    copy: "No separate datasets to reconcile.",
   },
 ] as const;
 
@@ -103,42 +104,43 @@ export function Architecture() {
 /* Risk and controls — hosts Demo 2                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Structurally identical to the query-demo section: eyebrow, headline, one
+ * line, then the demo at full container width. Two demos presented in two
+ * different shapes reads as unfinished, so the shape is shared.
+ *
+ * The demo's own eyebrow and heading are gone — "See a portfolio requirement
+ * become a live control" restated the section headline directly above it.
+ */
 export function ForwardControls() {
   return (
-    <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-x-8">
-      <Reveal className="lg:col-span-6">
-        {/* The deleted intro said what the demo shows: "structure
-            requirements once" is its first eight seconds, and the three
-            evaluation bases are its final frame. The demo is the home. */}
+    <>
+      <Reveal>
         <SectionHeading
           id="controls"
           eyebrow="Risk & controls"
           title="Turn portfolio requirements into live controls."
         />
-        <p className="mt-5 max-w-xl text-[15px] font-medium leading-relaxed text-mint-400">
+        <p className="mt-4 max-w-2xl text-[15px] font-medium leading-relaxed text-mint-400">
           Know what is breached today — and what the portfolio is moving toward.
         </p>
       </Reveal>
 
-      <Reveal delay={60} className="lg:col-span-6">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-peri-400">
-          Risk &amp; controls demo
-        </p>
-        <h3 className="mb-4 text-lg font-semibold tracking-tight text-ink-100">
-          See a portfolio requirement become a live control.
-        </h3>
-        <DemoPlayer
-          overlayLabel="Watch controls demo"
-          durationLabel="~18 sec"
-          poster="/controls-demo-poster.png"
-          webmSrc="/controls-demo.webm"
-          mp4Src="/controls-demo.mp4"
-          description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
-          caption="From documented requirement to live monitoring."
-          fallback={<ControlPreview />}
-        />
+      <Reveal delay={60}>
+        <div className="mt-8">
+          <DemoPlayer
+            overlayLabel="Watch controls demo"
+            durationLabel="~18 sec"
+            poster="/controls-demo-poster.png"
+            webmSrc="/controls-demo.webm"
+            mp4Src="/controls-demo.mp4"
+            description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
+            caption="From documented requirement to live monitoring."
+            fallback={<ControlPreview />}
+          />
+        </div>
       </Reveal>
-    </div>
+    </>
   );
 }
 
@@ -229,28 +231,6 @@ export function ControlPreview() {
         </p>
       </div>
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Portfolio operating model                                                  */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A full-width statement with no right-hand visual. The scope card was the
- * third appearance of the same four figures, and the book names it listed
- * are already visible in the query demo's table two sections above.
- */
-export function Lenses() {
-  return (
-    <Reveal>
-      <SectionHeading
-        id="lenses"
-        eyebrow="Operating model"
-        title="One portfolio truth. Every relevant lens."
-        intro="One model. No separate datasets to reconcile."
-      />
-    </Reveal>
   );
 }
 
