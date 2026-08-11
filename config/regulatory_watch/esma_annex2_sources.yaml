@@ -1,0 +1,142 @@
+# =====================================================================
+# esma_annex2_sources.yaml — authoritative ESMA Annex 2 source allowlist
+# =====================================================================
+#
+# Stage 1 ESMA Annex 2 Regulatory Watch. This file is an EXPLICIT ALLOWLIST of
+# the primary ESMA artefacts Trakt's Annex 2 implementation depends on. It is
+# NOT a crawl seed: the watch never follows links and never fetches a URL that
+# is not declared here.
+#
+# Scope is deliberately ESMA Annex 2 only (the first active Trakt client's
+# regime). No FCA, no Annex 12, no other annex.
+#
+# Reading this file changes nothing. The watch is observational: it never
+# writes to config/regime/, config/delivery/ or config/system/.
+#
+# Fields per artefact:
+#   artefact_id        stable key used by snapshots, specs and reports
+#   authority          issuing authority (must be ESMA in Stage 1)
+#   regime             ESMA_Annex2
+#   artefact_type      disclosure_template_workbook | xml_schema |
+#                      validation_rules | reporting_instructions |
+#                      sample_message
+#   title              human label
+#   external_version   the authority's own version label, where published
+#   source_url         the primary ESMA URL (allowlist entry)
+#   publication_date   ISO date, only where deterministically available
+#   effective_date     ISO date, only where deterministically available
+#   source_status      draft | final | superseded | UNKNOWN
+#   local_path         repo-relative vendored copy used as the local baseline
+#   parser             which normalizer consumes it
+#
+# UNKNOWN is used wherever a value is not deterministically available from the
+# artefact itself. It is never inferred.
+# =====================================================================
+
+manifest:
+  manifest_id: esma_annex2_stage1
+  regime: ESMA_Annex2
+  authority: ESMA
+  version: 1
+  # Retrieval is OFF by default. Stage 1 runs entirely from the vendored local
+  # baseline; enabling retrieval is an explicit operator action and a failed
+  # fetch is reported as SOURCE_CHECK_FAILED, never as "no change".
+  retrieval_enabled: false
+  allowlist_only: true
+  notes: >-
+    Primary ESMA sources only. The securitisation disclosure technical
+    standards package (reporting templates workbook + auth.099 XSD) is the
+    authoritative definition of the Annex 2 non-ABCP underlying-exposure
+    report that Trakt projects to.
+
+artefacts:
+
+  # ------------------------------------------------------------------- #
+  # PRIMARY: the ESMA message/mapping workbook for auth.099.001.04.
+  # This is the artefact the Annex 2 normalizer parses. It carries, per RTS
+  # field code: field name, message item definition, XML tag, full XML PATH,
+  # multiplicity, data type / code-list name, pattern and validation rule.
+  # The repo already treats this workbook as the authoritative crosswalk
+  # (scripts/build_annex2_field_xsd_path_map.py, gate 5 mapping specs).
+  # ------------------------------------------------------------------- #
+  - artefact_id: esma_annex2_message_workbook
+    authority: ESMA
+    regime: ESMA_Annex2
+    artefact_type: disclosure_template_workbook
+    title: >-
+      DRAFT1auth.099.001.04 non-ABCP Underlying Exposure Report — reporting
+      templates and XML mapping workbook
+    external_version: "1.3.1"
+    source_url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions
+    publication_date: "2021-06-11"      # workbook change log, version 1.3.1
+    effective_date: UNKNOWN
+    source_status: draft                # file/namespace prefix is DRAFT1auth
+    local_path: DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx
+    parser: regulatory_watch.annex2_spec
+    notes: >-
+      Sheet "DRAFT1auth.099.001.04" is the message-item table (header on row 4).
+      Sheets "Change log - Summary" and "Change log - XML path" carry ESMA's own
+      published amendment history and are parsed by regulatory_watch.changelog
+      as corroborating evidence only.
+
+  # ------------------------------------------------------------------- #
+  # PRIMARY: the XSD. Supplies the enumerations (allowed values) and the ND
+  # justification vocabularies that the workbook references by type name.
+  # ------------------------------------------------------------------- #
+  - artefact_id: esma_annex2_xml_schema
+    authority: ESMA
+    regime: ESMA_Annex2
+    artefact_type: xml_schema
+    title: DRAFT1auth.099.001.04 XML schema
+    external_version: "1.3.0"
+    source_url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions
+    publication_date: UNKNOWN
+    effective_date: UNKNOWN
+    source_status: draft
+    local_path: DRAFT1auth.099.001.04_1.3.0.xsd
+    parser: regulatory_watch.annex2_spec
+    notes: >-
+      Target namespace urn:esma:xsd:DRAFT1auth.099.001.04. Code-list simple
+      types supply enum_values; NoDataAllowedJustification{1,2,3,4}Code supply
+      the per-field ND permission sets.
+
+  # ------------------------------------------------------------------- #
+  # SUPPORTING: the vendored sample message. Not normalized into the spec;
+  # tracked so a change to it is visible as a source-level change.
+  # ------------------------------------------------------------------- #
+  - artefact_id: esma_annex2_sample_message
+    authority: ESMA
+    regime: ESMA_Annex2
+    artefact_type: sample_message
+    title: DRAFT1auth.099.001.04 non-ABCP Underlying Exposure Report sample XML
+    external_version: UNKNOWN
+    source_url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions
+    publication_date: UNKNOWN
+    effective_date: UNKNOWN
+    source_status: draft
+    local_path: DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report.xml
+    parser: ""
+    notes: >-
+      Hash-tracked only. Stage 1 does not derive requirements from a sample.
+
+  # ------------------------------------------------------------------- #
+  # DECLARED, NOT VENDORED. Present in the allowlist so its absence is an
+  # explicit, reported gap rather than an invisible one. With no local copy
+  # and retrieval disabled, the watch reports SOURCE_CHECK_FAILED for it
+  # instead of treating it as unchanged.
+  # ------------------------------------------------------------------- #
+  - artefact_id: esma_annex2_reporting_instructions
+    authority: ESMA
+    regime: ESMA_Annex2
+    artefact_type: reporting_instructions
+    title: ESMA securitisation reporting — technical reporting instructions
+    external_version: UNKNOWN
+    source_url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions
+    publication_date: UNKNOWN
+    effective_date: UNKNOWN
+    source_status: UNKNOWN
+    local_path: ""
+    parser: ""
+    notes: >-
+      Not vendored in this repository. Declared so the watch reports it as an
+      unchecked authoritative source rather than silently omitting it.

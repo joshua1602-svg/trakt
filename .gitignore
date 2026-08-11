@@ -133,3 +133,11 @@ synthetic_demo/output/multibook/*ESMA_Annex2*
 # Generated sources, canonical outputs and run summaries are reproducible from
 # the committed manifests and are never committed themselves.
 out_simulation/
+
+# --- ESMA Annex 2 Regulatory Watch (Stage 1) ---------------------------------
+# Immutable source snapshots are byte-for-byte copies of the vendored ESMA
+# artefacts (the workbook alone is ~10 MB). They are evidence for a run, not
+# repository content: the artefacts themselves are already tracked, and the
+# report JSON records each snapshot's sha256. The generated reports ARE kept.
+output/regulatory_watch/**/snapshots/
+output/regulatory_watch/**/candidate/
