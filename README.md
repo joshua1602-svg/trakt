@@ -329,6 +329,50 @@ instead writes a **companion** (`*_<regime>_provenance.csv` +
 original loan identifier — so IB / legal / rating-agency packs retain full
 traceability without contaminating the template.
 
+### ESMA Annex 2 Regulatory Watch (Stage 1, observational)
+
+`regulatory_watch/` detects whether the **authoritative ESMA Annex 2
+specification** has moved relative to what Trakt implements, preserves hashed
+evidence of the source versions, and reports both the regulatory delta and the
+likely Trakt implementation impact:
+
+```
+ESMA source allowlist → immutable snapshot (sha256) → normalized Annex 2 spec
+                      → deterministic comparator → Trakt impact → JSON + Markdown
+```
+
+```bash
+python -m regulatory_watch.cli snapshot --out-dir output/regulatory_watch/baseline
+python scripts/run_regulatory_watch_demo.py     # end-to-end demonstration
+```
+
+It is **observational only**: no active Annex 2 config is written, no regime
+version is created, no XML is generated, and no model is used in the comparison
+path. See `docs/esma_annex2_regulatory_watch.md`.
+
+**Stage 1B** (`regulatory_watch/discovery/`) adds the upstream layer Stage 1A
+cannot see: it discovers new ESMA publications from an explicit allowlist,
+deduplicates them across weekly runs, triages them for Annex 2 relevance and
+creates reviewable **regulatory-development** records:
+
+```
+ESMA publication allowlist → discovery → dedupe → relevance triage
+                           → regulatory development → optional Stage 1A linkage
+```
+
+```bash
+python -m regulatory_watch.discovery.cli discover \
+    --out-dir output/regulatory_watch/discovery \
+    --fixture-dir tests/fixtures/regulatory_watch/publications
+python scripts/run_regulatory_watch_discovery_demo.py
+```
+
+A consultation is a `POTENTIAL_FUTURE_CHANGE`; a Q&A is
+`INTERPRETATION_REVIEW_REQUIRED`; a new schema package is a
+`TECHNICAL_SPEC_CHANGE` that asks **Stage 1A** to compute the exact field
+deltas. Stage 1B never determines a field-level change itself. See
+`docs/esma_annex2_regulatory_watch_stage1b.md`.
+
 ## Annex Delivery Agent
 
 The **Annex Delivery Agent** (`engine/annex_delivery_agent/`) governs the stage
@@ -561,6 +605,22 @@ trakt/
     gate_5_delivery/
       xml_builder_investor.py        # Gate 5: ESMA XML generation + XSD validation
       xml_builder.py                 # Gate 5: Jinja2-based XML builder (regulatory)
+  regulatory_watch/                  # ESMA Annex 2 Regulatory Watch (observational)
+    manifest.py                      # Explicit ESMA source allowlist
+    retrieval.py                     # Optional, isolated source retrieval
+    snapshots.py                     # Immutable content-addressed snapshots (sha256)
+    annex2_spec.py                   # Workbook + XSD → normalized Annex 2 spec
+    changelog.py                     # ESMA's own published amendment history
+    comparator.py                    # Deterministic spec-vs-spec diff
+    impact.py                        # Delta → likely Trakt component impact
+    report.py                        # JSON (UI-agnostic) + Markdown reports
+    discovery/                       # Stage 1B: upstream ESMA publication watch
+      sources.py                     # Explicit ESMA publication allowlist
+      parsers.py                     # RSS / Atom / HTML listing parsers
+      state.py                       # Publication identity + deduplication
+      triage.py                      # Annex 2 relevance + classification
+      linkage.py                     # The Stage 1A boundary
+      pipeline.py                    # discover -> dedupe -> classify -> report
   analytics/
     streamlit_app_erm.py             # Analytics dashboard (entry point)
     mi_prep.py                       # Dashboard data preparation layer

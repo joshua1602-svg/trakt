@@ -1,0 +1,66 @@
+{
+ "note": "Verbatim xs:enumeration values from DRAFT1auth.099.001.04_1.3.0.xsd for the simple types referenced by the workbook slice.",
+ "source_artefact": "DRAFT1auth.099.001.04_1.3.0.xsd",
+ "codelists": {
+  "InterestRateType2Code": [
+   "DISC",
+   "FXRL",
+   "FLCF",
+   "FXPR",
+   "FINX",
+   "FLIF",
+   "CAPP",
+   "FLFL",
+   "FLCA",
+   "MODE",
+   "OBLS",
+   "OTHR",
+   "SWIC"
+  ],
+  "NoDataAllowedJustification1Code": [
+   "ND1",
+   "ND2",
+   "ND3",
+   "ND5"
+  ],
+  "NoDataAllowedJustification2Code": [
+   "ND1",
+   "ND2",
+   "ND3"
+  ],
+  "NoDataAllowedJustification3Code": [
+   "ND5"
+  ],
+  "NoDataAllowedJustification4Code": [
+   "ND4"
+  ],
+  "PropertyType1Code": [
+   "BIZZ",
+   "PCMM",
+   "RBGL",
+   "RHOS",
+   "RTHS",
+   "RFLT",
+   "OTHR",
+   "MULF",
+   "LAND"
+  ],
+  "SecuritisationAccountStatus1Code": [
+   "ARRE",
+   "DFLT",
+   "DTCR",
+   "DADB",
+   "NDFT",
+   "OTHR",
+   "PERF",
+   "RDMD",
+   "REBR",
+   "REDF",
+   "REOT",
+   "RERE",
+   "RESS",
+   "RARR",
+   "RNAR"
+  ]
+ }
+}

@@ -1,0 +1,141 @@
+# =====================================================================
+# esma_annex2_publication_sources.yaml — Stage 1B upstream allowlist
+# =====================================================================
+#
+# Stage 1B ESMA Annex 2 Regulatory Watch: upstream PUBLICATION discovery.
+#
+# Stage 1A watches the technical artefacts (workbook + XSD) and answers "has
+# the machine-readable Annex 2 specification changed?". It cannot see anything
+# coming: a consultation, a final report or a Q&A moves nothing in those files.
+# This allowlist is the upstream layer that does.
+#
+# This file is an EXPLICIT ALLOWLIST, not a crawl seed. The discovery layer
+# fetches exactly these URLs, follows no links, obeys no redirects to
+# off-allowlist hosts, and never touches a search engine. A URL that is not
+# declared here is refused with NOT_ALLOWLISTED.
+#
+# Scope is ESMA Annex 2 only. No FCA, no other annex, no other authority.
+#
+# Reading this file changes nothing. Stage 1B is observational: it creates
+# reviewable records, never regime changes.
+#
+# ---------------------------------------------------------------------
+# Fields per source
+# ---------------------------------------------------------------------
+#   source_id              stable key used by state, records and reports
+#   source_type            rss_feed | publication_page | landing_page
+#   url                    the official ESMA URL (https, esma.europa.eu only)
+#   parser                 rss | atom | html_listing
+#   criticality            gating | corroborating (REQUIRED — see below)
+#   enabled                false disables the source without deleting it
+#   retrieval_frequency    metadata only; weekly is sufficient for Stage 1B
+#   last_known_identifier  optional watermark for the newest item seen
+#   verified_reachable     whether anyone has actually fetched this URL
+#   title / notes          human context
+#
+# ---------------------------------------------------------------------
+# CRITICALITY — the Stage 1B control model (mirrors Stage 1A)
+# ---------------------------------------------------------------------
+#   gating         A source whose silence leaves a real blind spot. If it
+#                  cannot be checked the run reports DISCOVERY_FAILED and no
+#                  caller may read "nothing new" from it.
+#   corroborating  Extra coverage. A failure narrows the sweep and is always
+#                  reported (DISCOVERY_PARTIAL), but does not blind the run.
+#
+# ---------------------------------------------------------------------
+# REACHABILITY — READ THIS BEFORE THE FIRST LIVE RUN
+# ---------------------------------------------------------------------
+# `verified_reachable: false` on every source below is deliberate and honest.
+# The build/CI environment denies outbound access to esma.europa.eu, so NONE of
+# these endpoints has been fetched from here — their exact response shape is
+# therefore DECLARED, not confirmed. Consequences, all by design:
+#
+#   * retrieval is OFF by default (`retrieval_enabled: false`) and every test
+#     runs from committed fixtures, so nothing depends on these being right;
+#   * the parsers validate structure and fail closed with UNEXPECTED_SCHEMA
+#     rather than returning an empty item list, so a wrong guess about the
+#     response shape surfaces as a failure, never as "no new publications";
+#   * the first live run is expected to be a calibration run. Confirm each URL,
+#     set `verified_reachable: true`, and adjust `parser` if ESMA serves a
+#     different format than declared.
+#
+# Do not set `verified_reachable: true` without an actual successful fetch.
+# =====================================================================
+
+manifest:
+  manifest_id: esma_annex2_publications_stage1b
+  regime: ESMA_Annex2
+  authority: ESMA
+  version: 1
+  # Retrieval is OFF by default. Enabling it is an explicit operator action;
+  # a failed fetch is DISCOVERY_FAILED / DISCOVERY_PARTIAL, never "nothing new".
+  retrieval_enabled: false
+  allowlist_only: true
+  # Stage 1B is a weekly control. There is no polling loop and no scheduler in
+  # this package — see docs for how Stage 2 wires the existing Azure Functions
+  # timer trigger to the CLI.
+  default_frequency: weekly
+  notes: >-
+    Official ESMA publication signals only. Discovery is bounded to these URLs;
+    there is no crawling, no link-following and no search-engine use.
+
+sources:
+
+  # ------------------------------------------------------------------- #
+  # The securitisation technical-standards package page. This is the page
+  # Stage 1A's own artefact allowlist already cites as the source of the
+  # auth.099 workbook and XSD, so a change here is the single strongest
+  # upstream signal that an Annex 2 TECHNICAL_SPEC_CHANGE has landed.
+  # ------------------------------------------------------------------- #
+  - source_id: esma_securitisation_technical_standards
+    source_type: publication_page
+    url: https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions
+    parser: html_listing
+    criticality: gating
+    enabled: true
+    retrieval_frequency: weekly
+    verified_reachable: false
+    title: >-
+      Securitisation reporting technical standards — XML schema and
+      instructions
+    notes: >-
+      Same URL as the Stage 1A technical-source allowlist. A publication that
+      links here matches an allowlisted Stage 1A artefact source, which is what
+      raises MATCHES_STAGE1A_SOURCE and asks for a Stage 1A verification run.
+
+  # ------------------------------------------------------------------- #
+  # ESMA's site-wide publication feed. Broad by design: the deterministic
+  # relevance filter narrows it, and a broad feed is how a Q&A or a
+  # consultation that never touches the technical-standards page is caught.
+  # ------------------------------------------------------------------- #
+  - source_id: esma_publications_feed
+    source_type: rss_feed
+    url: https://www.esma.europa.eu/rss.xml
+    parser: rss
+    criticality: gating
+    enabled: true
+    retrieval_frequency: weekly
+    verified_reachable: false
+    title: ESMA publications feed
+    notes: >-
+      Declared as RSS. If ESMA serves Atom the parser reports
+      UNEXPECTED_SCHEMA rather than silently finding nothing; switch `parser`
+      to atom after the calibration run.
+
+  # ------------------------------------------------------------------- #
+  # The securitisation topic landing page. Corroborating: it overlaps the
+  # feed, and its value is catching items the feed categorises oddly.
+  # ------------------------------------------------------------------- #
+  - source_id: esma_securitisation_landing
+    source_type: landing_page
+    url: https://www.esma.europa.eu/esmas-activities/digital-finance-and-innovation/securitisation
+    parser: html_listing
+    criticality: corroborating
+    enabled: true
+    retrieval_frequency: weekly
+    verified_reachable: false
+    title: ESMA securitisation topic page
+    notes: >-
+      Corroborating only: everything it can surface should also reach the
+      publications feed, so its failure narrows coverage without blinding the
+      run.

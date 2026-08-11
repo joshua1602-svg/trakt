@@ -1,0 +1,472 @@
+{
+  "baseline": {
+    "field_count": 104,
+    "parse_warnings": [
+      {
+        "code": "RREC8",
+        "detail": "ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal'",
+        "warning": "ND_BRANCH_PATH_INCONSISTENT"
+      },
+      {
+        "code": "RREL80",
+        "detail": "ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd'",
+        "warning": "ND_BRANCH_PATH_INCONSISTENT"
+      }
+    ],
+    "parser_version": "annex2-normalizer/1.1.0",
+    "scope": {
+      "asset_branch": "ResdtlRealEsttLn/PrfrmgLn",
+      "cancellation_rows": "excluded",
+      "nd_schema_cross_check": "enabled",
+      "performance": "PRF",
+      "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04",
+      "sheet": "DRAFT1auth.099.001.04",
+      "templates": [
+        "ALL",
+        "RRE"
+      ]
+    },
+    "source_digest": "esma_annex2_message_workbook:983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b|esma_annex2_reporting_instructions:|esma_annex2_sample_message:64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e|esma_annex2_xml_schema:48e587ec5905ab322eb98e52a9989ed65194d3a1fd20f3f55aac33a7d492ab1c",
+    "sources": [
+      {
+        "artefact_id": "esma_annex2_message_workbook",
+        "artefact_sha256": "983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b",
+        "byte_size": 9678838,
+        "criticality": "gating",
+        "effective_date": "UNKNOWN",
+        "external_version": "1.3.1",
+        "publication_date": "2021-06-11",
+        "retrieval_detail": "",
+        "retrieval_status": "OK",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "/home/user/trakt/output/regulatory_watch/demo/snapshots/ESMA_Annex2/esma_annex2_message_workbook/983e33c851a6621a/content.xlsx",
+        "source_status": "draft",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      },
+      {
+        "artefact_id": "esma_annex2_reporting_instructions",
+        "artefact_sha256": "",
+        "byte_size": 0,
+        "criticality": "corroborating",
+        "effective_date": "UNKNOWN",
+        "external_version": "UNKNOWN",
+        "publication_date": "UNKNOWN",
+        "retrieval_detail": "no local copy vendored and retrieval is disabled",
+        "retrieval_status": "SOURCE_CHECK_FAILED",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "",
+        "source_status": "UNKNOWN",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      },
+      {
+        "artefact_id": "esma_annex2_sample_message",
+        "artefact_sha256": "64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e",
+        "byte_size": 17899,
+        "criticality": "corroborating",
+        "effective_date": "UNKNOWN",
+        "external_version": "UNKNOWN",
+        "publication_date": "UNKNOWN",
+        "retrieval_detail": "",
+        "retrieval_status": "OK",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "/home/user/trakt/output/regulatory_watch/demo/snapshots/ESMA_Annex2/esma_annex2_sample_message/64e30a51b1019acb/content.xml",
+        "source_status": "draft",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      },
+      {
+        "artefact_id": "esma_annex2_xml_schema",
+        "artefact_sha256": "48e587ec5905ab322eb98e52a9989ed65194d3a1fd20f3f55aac33a7d492ab1c",
+        "byte_size": 835477,
+        "criticality": "gating",
+        "effective_date": "UNKNOWN",
+        "external_version": "1.3.0",
+        "publication_date": "UNKNOWN",
+        "retrieval_detail": "",
+        "retrieval_status": "OK",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "/home/user/trakt/output/regulatory_watch/demo/snapshots/ESMA_Annex2/esma_annex2_xml_schema/48e587ec5905ab32/content.xsd",
+        "source_status": "draft",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      }
+    ],
+    "spec_version": "auth.099.001.04 / workbook 1.3.1"
+  },
+  "candidate": {
+    "field_count": 104,
+    "parse_warnings": [
+      {
+        "code": "RREC8",
+        "detail": "ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal'",
+        "warning": "ND_BRANCH_PATH_INCONSISTENT"
+      },
+      {
+        "code": "RREL80",
+        "detail": "ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd'",
+        "warning": "ND_BRANCH_PATH_INCONSISTENT"
+      }
+    ],
+    "parser_version": "annex2-normalizer/1.1.0",
+    "scope": {
+      "asset_branch": "ResdtlRealEsttLn/PrfrmgLn",
+      "cancellation_rows": "excluded",
+      "nd_schema_cross_check": "enabled",
+      "performance": "PRF",
+      "schema_namespace": "urn:esma:xsd:DRAFT1auth.099.001.04",
+      "sheet": "DRAFT1auth.099.001.04",
+      "templates": [
+        "ALL",
+        "RRE"
+      ]
+    },
+    "source_digest": "esma_annex2_message_workbook:983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b|esma_annex2_reporting_instructions:|esma_annex2_sample_message:64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e|esma_annex2_xml_schema:3f4ed4e0030d0fbf41f40095e474013cee64a706afebd285765788dd09458d3a",
+    "sources": [
+      {
+        "artefact_id": "esma_annex2_message_workbook",
+        "artefact_sha256": "983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b",
+        "byte_size": 9678838,
+        "criticality": "gating",
+        "effective_date": "UNKNOWN",
+        "external_version": "1.3.1",
+        "publication_date": "2021-06-11",
+        "retrieval_detail": "",
+        "retrieval_status": "OK",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "/home/user/trakt/output/regulatory_watch/demo/snapshots/ESMA_Annex2/esma_annex2_message_workbook/983e33c851a6621a/content.xlsx",
+        "source_status": "draft",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      },
+      {
+        "artefact_id": "esma_annex2_reporting_instructions",
+        "artefact_sha256": "",
+        "byte_size": 0,
+        "criticality": "corroborating",
+        "effective_date": "UNKNOWN",
+        "external_version": "UNKNOWN",
+        "publication_date": "UNKNOWN",
+        "retrieval_detail": "no local copy vendored and retrieval is disabled",
+        "retrieval_status": "SOURCE_CHECK_FAILED",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "",
+        "source_status": "UNKNOWN",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      },
+      {
+        "artefact_id": "esma_annex2_sample_message",
+        "artefact_sha256": "64e30a51b1019acbea41a77575106af982ba13b63fcd0fb826da694bd404fe7e",
+        "byte_size": 17899,
+        "criticality": "corroborating",
+        "effective_date": "UNKNOWN",
+        "external_version": "UNKNOWN",
+        "publication_date": "UNKNOWN",
+        "retrieval_detail": "",
+        "retrieval_status": "OK",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "/home/user/trakt/output/regulatory_watch/demo/snapshots/ESMA_Annex2/esma_annex2_sample_message/64e30a51b1019acb/content.xml",
+        "source_status": "draft",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      },
+      {
+        "artefact_id": "esma_annex2_xml_schema",
+        "artefact_sha256": "3f4ed4e0030d0fbf41f40095e474013cee64a706afebd285765788dd09458d3a",
+        "byte_size": 820742,
+        "criticality": "gating",
+        "effective_date": "UNKNOWN",
+        "external_version": "1.3.0",
+        "publication_date": "UNKNOWN",
+        "retrieval_detail": "",
+        "retrieval_status": "OK",
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "snapshot_path": "/home/user/trakt/output/regulatory_watch/demo/snapshots/ESMA_Annex2/esma_annex2_xml_schema/3f4ed4e0030d0fbf/content.xsd",
+        "source_status": "draft",
+        "source_url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      }
+    ],
+    "spec_version": "auth.099.001.04 / workbook 1.3.1 + candidate schema"
+  },
+  "contract_version": "1.1.0",
+  "corroborating_source_status": "SOURCE_CHECK_FAILED",
+  "deltas": [
+    {
+      "change_type": "ENUM_CHANGED",
+      "code": "RREL42",
+      "confidence": "deterministic",
+      "delta_id": "RREL42:ENUM_CHANGED",
+      "detail": "RREL42: enum_values differ",
+      "evidence": [
+        {
+          "artefact_id": "esma_annex2_message_workbook",
+          "detail": "Tp",
+          "locator": "sheet=DRAFT1auth.099.001.04;row=657"
+        },
+        {
+          "artefact_id": "esma_annex2_message_workbook",
+          "detail": "Cd",
+          "locator": "sheet=DRAFT1auth.099.001.04;row=658"
+        },
+        {
+          "artefact_id": "esma_annex2_message_workbook",
+          "detail": "NoDataOptn",
+          "locator": "sheet=DRAFT1auth.099.001.04;row=673"
+        },
+        {
+          "artefact_id": "esma_annex2_message_workbook",
+          "detail": "Tp",
+          "locator": "sheet=DRAFT1auth.099.001.04;row=657"
+        },
+        {
+          "artefact_id": "esma_annex2_message_workbook",
+          "detail": "Cd",
+          "locator": "sheet=DRAFT1auth.099.001.04;row=658"
+        },
+        {
+          "artefact_id": "esma_annex2_message_workbook",
+          "detail": "NoDataOptn",
+          "locator": "sheet=DRAFT1auth.099.001.04;row=673"
+        }
+      ],
+      "new_value": {
+        "enum_values": [
+          "CAPP",
+          "DISC",
+          "FINX",
+          "FLCA",
+          "FLCF",
+          "FLFL",
+          "FLIF",
+          "FXPR",
+          "MODE",
+          "OBLS",
+          "OTHR",
+          "SWIC"
+        ]
+      },
+      "old_value": {
+        "enum_values": [
+          "CAPP",
+          "DISC",
+          "FINX",
+          "FLCA",
+          "FLCF",
+          "FLFL",
+          "FLIF",
+          "FXPR",
+          "FXRL",
+          "MODE",
+          "OBLS",
+          "OTHR",
+          "SWIC"
+        ]
+      },
+      "severity": "MEDIUM",
+      "source_version_a": "auth.099.001.04 / workbook 1.3.1",
+      "source_version_b": "auth.099.001.04 / workbook 1.3.1 + candidate schema"
+    }
+  ],
+  "evidence": {
+    "demonstration": "candidate schema withdraws FXRL from InterestRateType2Code; the workbook is byte-identical on both sides",
+    "mutating_writes": "none — Stage 1 is observational",
+    "source_manifest": "/home/user/trakt/config/regulatory_watch/esma_annex2_sources.yaml"
+  },
+  "gating_source_status": "SOURCE_CHANGED",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "impacts": [
+    {
+      "change_type": "ENUM_CHANGED",
+      "code": "RREL42",
+      "component": "annex2_fixtures_and_tests",
+      "current_implementation": {
+        "existing_references": [
+          "tests/fixtures/annex2_delivery_ready_no_npe.csv",
+          "tests/fixtures/annex2_projected_ci.csv",
+          "tests/test_annex2_delivery_normalizer.py",
+          "tests/test_onboarding_annex2_workflow.py"
+        ]
+      },
+      "delta_id": "RREL42:ENUM_CHANGED",
+      "locations": [
+        "tests/fixtures/annex2_delivery_ready_no_npe.csv",
+        "tests/fixtures/annex2_projected_ci.csv",
+        "tests/test_annex2_delivery_normalizer.py",
+        "tests/test_onboarding_annex2_workflow.py"
+      ],
+      "rationale": "Annex 2 tests/fixtures assert a withdrawn enum value",
+      "status": "TEST_CHANGE_REQUIRED"
+    },
+    {
+      "change_type": "ENUM_CHANGED",
+      "code": "RREL42",
+      "component": "enum_mapping",
+      "current_implementation": {
+        "delivery_rule_enum_map": {
+          "CAPP": "CAPP",
+          "DISC": "DISC",
+          "FINX": "FINX",
+          "FLCA": "FLCA",
+          "FLCF": "FLCF",
+          "FLFL": "FLFL",
+          "FLIF": "FLIF",
+          "FXPR": "FXPR",
+          "FXRL": "FXRL",
+          "Fixed": "FXRL",
+          "MODE": "MODE",
+          "OBLS": "OBLS",
+          "OTHR": "OTHR",
+          "SWIC": "SWIC",
+          "fixed": "FXRL"
+        },
+        "enum_mapping_yaml": {
+          "BASE_RATE": "FLIF",
+          "CAPP": "CAPP",
+          "DISC": "DISC",
+          "DISCOUNTED": "DISC",
+          "EURIBOR": "FLIF",
+          "FINX": "FINX",
+          "FIX": "FXRL",
+          "FIXED": "FXRL",
+          "FIXED RATE": "FXRL",
+          "FLCA": "FLCA",
+          "FLCF": "FLCF",
+          "FLFL": "FLFL",
+          "FLIF": "FLIF",
+          "FLOATING": "FLIF",
+          "FXPR": "FXPR",
+          "FXRL": "FXRL",
+          "INTRODUCTORY": "DISC",
+          "LIBOR": "FLIF",
+          "MIXED": "OTHR",
+          "MODE": "MODE",
+          "OBLS": "OBLS",
+          "OTHER": "OTHR",
+          "OTHR": "OTHR",
+          "SWIC": "SWIC",
+          "TEASER": "DISC",
+          "UNKNOWN": "OTHR",
+          "VAR": "FLIF",
+          "VARIABLE": "FLIF",
+          "VARIABLE RATE": "FLIF"
+        }
+      },
+      "delta_id": "RREL42:ENUM_CHANGED",
+      "locations": [
+        "config/system/enum_mapping.yaml",
+        "config/regime/annex2_delivery_rules.yaml"
+      ],
+      "rationale": "configured enum target(s) ['FXRL'] were withdrawn from the authoritative code list",
+      "status": "CONFIG_CHANGE_REQUIRED"
+    },
+    {
+      "change_type": "ENUM_CHANGED",
+      "code": "RREL42",
+      "component": "validation_rules",
+      "current_implementation": {
+        "delivery_rule_enum_map": {
+          "CAPP": "CAPP",
+          "DISC": "DISC",
+          "FINX": "FINX",
+          "FLCA": "FLCA",
+          "FLCF": "FLCF",
+          "FLFL": "FLFL",
+          "FLIF": "FLIF",
+          "FXPR": "FXPR",
+          "FXRL": "FXRL",
+          "Fixed": "FXRL",
+          "MODE": "MODE",
+          "OBLS": "OBLS",
+          "OTHR": "OTHR",
+          "SWIC": "SWIC",
+          "fixed": "FXRL"
+        },
+        "enum_mapping_yaml": {
+          "BASE_RATE": "FLIF",
+          "CAPP": "CAPP",
+          "DISC": "DISC",
+          "DISCOUNTED": "DISC",
+          "EURIBOR": "FLIF",
+          "FINX": "FINX",
+          "FIX": "FXRL",
+          "FIXED": "FXRL",
+          "FIXED RATE": "FXRL",
+          "FLCA": "FLCA",
+          "FLCF": "FLCF",
+          "FLFL": "FLFL",
+          "FLIF": "FLIF",
+          "FLOATING": "FLIF",
+          "FXPR": "FXPR",
+          "FXRL": "FXRL",
+          "INTRODUCTORY": "DISC",
+          "LIBOR": "FLIF",
+          "MIXED": "OTHR",
+          "MODE": "MODE",
+          "OBLS": "OBLS",
+          "OTHER": "OTHR",
+          "OTHR": "OTHR",
+          "SWIC": "SWIC",
+          "TEASER": "DISC",
+          "UNKNOWN": "OTHR",
+          "VAR": "FLIF",
+          "VARIABLE": "FLIF",
+          "VARIABLE RATE": "FLIF"
+        }
+      },
+      "delta_id": "RREL42:ENUM_CHANGED",
+      "locations": [
+        "config/regime/annex2_delivery_rules.yaml"
+      ],
+      "rationale": "projection would emit a code the schema no longer allows",
+      "status": "VALIDATION_CHANGE_REQUIRED"
+    }
+  ],
+  "implementation_impact_count": 3,
+  "outcome": "REGULATORY_SPEC_CHANGED",
+  "regime": "ESMA_Annex2",
+  "regulatory_delta_count": 1,
+  "source_status": "SOURCE_CHECK_FAILED",
+  "spec_status": "SPEC_CHANGED",
+  "specification_current": "no",
+  "unresolved": [
+    {
+      "code": "RREC8",
+      "reason": "ND_BRANCH_PATH_INCONSISTENT: ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal'",
+      "side": "baseline",
+      "spec_version": "auth.099.001.04 / workbook 1.3.1",
+      "unresolved_attributes": []
+    },
+    {
+      "code": "RREL80",
+      "reason": "ND_BRANCH_PATH_INCONSISTENT: ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd'",
+      "side": "baseline",
+      "spec_version": "auth.099.001.04 / workbook 1.3.1",
+      "unresolved_attributes": []
+    },
+    {
+      "code": "RREC8",
+      "reason": "ND_BRANCH_PATH_INCONSISTENT: ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal'",
+      "side": "candidate",
+      "spec_version": "auth.099.001.04 / workbook 1.3.1 + candidate schema",
+      "unresolved_attributes": []
+    },
+    {
+      "code": "RREL80",
+      "reason": "ND_BRANCH_PATH_INCONSISTENT: ND branch '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn' is not nested under the value element '/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd'",
+      "side": "candidate",
+      "spec_version": "auth.099.001.04 / workbook 1.3.1 + candidate schema",
+      "unresolved_attributes": []
+    }
+  ],
+  "unverified_sources": [
+    {
+      "artefact_id": "esma_annex2_reporting_instructions",
+      "criticality": "corroborating",
+      "detail": "no local copy vendored and retrieval is disabled",
+      "retrieval_status": "SOURCE_CHECK_FAILED",
+      "side": "baseline"
+    },
+    {
+      "artefact_id": "esma_annex2_reporting_instructions",
+      "criticality": "corroborating",
+      "detail": "no local copy vendored and retrieval is disabled",
+      "retrieval_status": "SOURCE_CHECK_FAILED",
+      "side": "candidate"
+    }
+  ]
+}
