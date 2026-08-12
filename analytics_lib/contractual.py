@@ -259,6 +259,13 @@ class ContractualSchedule:
     interest: Tuple[float, ...] = ()
     opening_balance: float = 0.0
     balloon: float = 0.0
+    #: ``purchase_price`` (RREL34) for THIS exposure, carried on the schedule
+    #: so a caller working from schedules alone can still price it. Sprint 3
+    #: found the governed tool silently dropping it: the schedule did not
+    #: retain the price, so ``contractual_analytics`` could only produce a
+    #: yield when the caller passed an override — and a portfolio whose every
+    #: loan carried RREL34 reported ASSUMPTION_REQUIRED for all of them.
+    price_percent_of_par: Optional[float] = None
     notes: Tuple[str, ...] = ()
 
     @property
@@ -280,6 +287,7 @@ class ContractualSchedule:
             "as_of": self.as_of.isoformat() if self.as_of else None,
             "opening_balance": round(self.opening_balance, 2),
             "balloon": round(self.balloon, 2),
+            "price_percent_of_par": self.price_percent_of_par,
             "cashflows": [
                 {"date": d.isoformat(), "principal": round(p, 2),
                  "interest": round(i, 2), "total": round(p + i, 2)}
@@ -544,7 +552,8 @@ def build_schedule(loan: Mapping[str, Any], *, as_of: Optional[date] = None
             anchor_basis=anchor, frequency_months=step, as_of=cut_off,
             dates=tuple(dates), principal=tuple(principal),
             interest=tuple(interest_series), opening_balance=balance,
-            balloon=balloon, notes=tuple(notes))
+            balloon=balloon, price_percent_of_par=_as_float(loan.get(PRICE_FIELD)),
+            notes=tuple(notes))
 
     if not principal_ok:
         return _refusal(loan_id, FIELD_GAP,
@@ -575,7 +584,8 @@ def build_schedule(loan: Mapping[str, Any], *, as_of: Optional[date] = None
         anchor_basis=anchor, frequency_months=step, as_of=cut_off,
         dates=tuple(dates), principal=tuple(principal),
         interest=tuple(interest_series), opening_balance=balance,
-        balloon=balloon, notes=tuple(notes))
+        balloon=balloon, price_percent_of_par=_as_float(loan.get(PRICE_FIELD)),
+        notes=tuple(notes))
 
 
 def _fixe_principal(loan: Mapping[str, Any], balance: float, balloon: float,
@@ -860,6 +870,10 @@ def contractual_ytm(schedule: ContractualSchedule, *,
     price_pct = price_percent_of_par
     if price_pct is None and loan is not None:
         price_pct = _as_float(loan.get(PRICE_FIELD))
+    if price_pct is None:
+        # The schedule carries the exposure's own RREL34 where the tape had
+        # one, so a caller holding only schedules still prices correctly.
+        price_pct = schedule.price_percent_of_par
     if price_pct is None:
         return YtmResult(status=FIELD_GAP,
                          reason=("no purchase_price (RREL34). A price is not "

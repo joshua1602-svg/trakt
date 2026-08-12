@@ -483,11 +483,36 @@ def test_a_missing_amortisation_type_refuses_rather_than_defaulting():
 
 def test_a_missing_price_does_not_become_par():
     """Assuming par would turn every yield into the coupon and look plausible
-    doing it."""
-    schedule = build_schedule(_loan(), as_of=AS_OF)
-    result = contractual_ytm(schedule, loan=_loan(purchase_price=None))
+    doing it.
+
+    The schedule is built from the SAME priceless loan. An earlier version of
+    this test built the schedule from a priced loan and then passed a
+    priceless one to the yield, which stopped being a meaningful case once
+    Sprint 3 made the schedule carry its own RREL34: the two inputs described
+    different loans, and the schedule's price — correctly — won.
+    """
+    priceless = _loan(purchase_price=None)
+    schedule = build_schedule(priceless, as_of=AS_OF)
+    assert schedule.price_percent_of_par is None
+
+    result = contractual_ytm(schedule, loan=priceless)
     assert result.status == FIELD_GAP
     assert "not assumed to be par" in result.reason
+
+
+def test_a_schedule_carries_its_own_price_so_a_caller_need_not_refetch_it():
+    """Sprint 3 found the governed tool silently dropping RREL34: the schedule
+    did not retain it, so ``contractual_analytics`` could only price a
+    portfolio when the caller passed an override — and a 400-loan book whose
+    every loan carried a purchase price reported ASSUMPTION_REQUIRED for all
+    of them. Only executing the real path showed it."""
+    schedule = build_schedule(_loan(purchase_price=98.0), as_of=AS_OF)
+    assert schedule.price_percent_of_par == pytest.approx(98.0)
+
+    from_schedule = contractual_ytm(schedule)
+    explicit = contractual_ytm(schedule, price_percent_of_par=98.0)
+    assert from_schedule.status == SUPPORTED
+    assert from_schedule.ytm_pct == pytest.approx(explicit.ytm_pct)
 
 
 def test_the_ytm_explanation_refuses_to_claim_day_count_exactness():
