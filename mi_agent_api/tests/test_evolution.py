@@ -290,7 +290,12 @@ def test_funded_bridge_needs_two_periods(monkeypatch):
 # Cohort PROGRESSION (static pool across periods; source-portfolio + vintage)
 # --------------------------------------------------------------------------- #
 def _prog_frame(scale):
+    # A static pool is a SET OF LOAN IDENTIFIERS fixed at formation, so the frame
+    # has to carry one. Without it the service reports the formation cut alone
+    # rather than a series that only looks like one — the behaviour asserted by
+    # test_progression_without_a_loan_identifier_refuses_to_be_a_series below.
     return pd.DataFrame({
+        "loan_identifier": [f"L{i}" for i in range(6)],
         "current_outstanding_balance": [100_000 * scale] * 6,
         "current_valuation_amount": [250_000] * 6,
         "current_loan_to_value": [0.40, 0.42, 0.38, 0.55, 0.30, 0.48],
@@ -349,3 +354,64 @@ def test_cohort_progression_empty_cohort_is_controlled(monkeypatch):
         vintage="2023-Q2", grain="Q")  # acquired 2023 loans are Q1/Q3, not Q2
     assert out["available"] is False
     assert "no loans match" in out["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# The loan-key contract the static pool is built on
+# --------------------------------------------------------------------------- #
+def test_loan_id_columns_lead_with_the_platform_loan_key():
+    """The identifier this service looks for must be the one a platform canonical
+    is actually keyed on.
+
+    ``engine.platform_assembler`` accepts a canonical carrying EITHER
+    ``loan_identifier`` (the core canonical analytics identifier) OR
+    ``unique_identifier`` (ESMA Annex 2 RREL1), first present wins, and it puts
+    ``loan_identifier`` first. This service read only the regulatory name, so a
+    funded MI book with no regime projection had no identifier here at all.
+    Pinned against the assembler so the two cannot drift apart again.
+    """
+    from engine.platform_assembler import LOAN_KEY_FIELDS
+    assert evo._LOAN_ID_COLS[:len(LOAN_KEY_FIELDS)] == LOAN_KEY_FIELDS
+
+
+def test_progression_forms_a_pool_on_the_canonical_analytics_identifier(monkeypatch):
+    """A tape keyed ONLY on loan_identifier — what the assembler emits for a
+    funded book with no regime projection — still forms a static pool.
+
+    Before the fix this returned available=False with the second period reporting
+    zero loans and a zero balance: a real book rendered as one collapsing to
+    nothing, which is a wrong MI answer rather than a missing one.
+    """
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+
+    # loan_identifier only — no unique_identifier, i.e. no regime projection.
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2025-10-31", "reporting_date": "2025-10-31",
+         "df": _prog_frame(1.0), "source": "x"},
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31",
+         "df": _prog_frame(1.2), "source": "y"},
+    ])
+    out = evo.funded_cohort_progression("blob://x", "client_001")
+    assert out["available"]
+    assert [p["loanCount"] for p in out["periods"]] == [6, 6]
+    assert [p["metrics"]["funded_balance"] for p in out["periods"]] == [600_000, 720_000]
+
+
+def test_progression_without_a_loan_identifier_refuses_to_be_a_series(monkeypatch):
+    """No identifier ⇒ no static pool. The formation cut is reported and later
+    periods are empty, rather than a per-period re-filter dressed as a cohort."""
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+
+    def anonymous(scale):
+        return _prog_frame(scale).drop(columns=["loan_identifier"])
+
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2025-10-31", "reporting_date": "2025-10-31", "df": anonymous(1.0), "source": "x"},
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31", "df": anonymous(1.2), "source": "y"},
+    ])
+    out = evo.funded_cohort_progression("blob://x", "client_001")
+    assert out["periods"][-1]["loanCount"] == 0
