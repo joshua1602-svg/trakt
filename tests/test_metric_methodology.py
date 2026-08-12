@@ -32,7 +32,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from analytics_lib.history import prepayment_rate
+from analytics_lib.history import (
+    DENOM_EXPOSED,
+    DENOM_OPENING,
+    prepayment_rate,
+)
 from mi_agent.concentration_tests.library import load_library
 from mi_agent.concentration_tests.metrics import evaluate_metric
 from trakt_tools.handlers.history import _measure_functions
@@ -145,12 +149,63 @@ def test_smm_and_cpr_match_hand_arithmetic():
     assert result.cpr_pct == pytest.approx(expected_cpr, abs=1e-6)
 
 
+def test_the_smm_denominator_nets_out_scheduled_principal():
+    """The market-standard SMM denominator is the balance EXPOSED to prepayment:
+
+        SMM = unscheduled principal / (beginning balance - scheduled principal)
+
+    Scheduled principal was never available to prepay — a loan cannot prepay the
+    instalment it is contractually due to make. Sprint 2.5C found the first
+    implementation using the full opening balance, which understates the rate,
+    and understates it most on a fast-amortising book.
+    """
+    opening = pd.DataFrame({
+        "loan_identifier": ["L0"],
+        "current_principal_balance": [100_000_000.0],
+        "unscheduled_principal_collections": [0.0],
+    })
+    closing = pd.DataFrame({
+        "loan_identifier": ["L0"],
+        "current_principal_balance": [98_500_000.0],
+        "unscheduled_principal_collections": [500_000.0],
+        "regular_principal_instalment": [1_000_000.0],
+    })
+    result = prepayment_rate({"a": opening, "b": closing}, periods=["a", "b"])
+
+    period = result.per_period[0]
+    assert period["exposed_balance"] == pytest.approx(99_000_000.0)
+    assert period["denominator_basis"] == DENOM_EXPOSED
+    # 500,000 / 99,000,000 = 0.5050505%, by hand.
+    assert result.smm_pct == pytest.approx(0.505051, abs=1e-5)
+    # And it is HIGHER than the naive full-balance form (0.5%), as it must be.
+    assert result.smm_pct > 0.5
+
+
+def test_a_tape_without_scheduled_principal_says_its_denominator_is_approximate():
+    """The fallback is legitimate but must not be presented as the standard
+    measure — it understates the rate."""
+    opening = pd.DataFrame({
+        "loan_identifier": ["L0"],
+        "current_principal_balance": [100_000_000.0],
+        "unscheduled_principal_collections": [0.0],
+    })
+    closing = pd.DataFrame({
+        "loan_identifier": ["L0"],
+        "current_principal_balance": [99_500_000.0],
+        "unscheduled_principal_collections": [500_000.0],
+    })
+    result = prepayment_rate({"a": opening, "b": closing}, periods=["a", "b"])
+    assert result.per_period[0]["denominator_basis"] == DENOM_OPENING
+    assert result.smm_pct == pytest.approx(0.5, abs=1e-9)
+    assert any("APPROXIMATION" in note for note in result.notes)
+
+
 def test_cpr_is_not_smm_and_is_labelled_as_the_annualised_form():
     """Confusing the two is a factor-of-twelve error dressed as a percentage."""
     snapshots = _two_period_book(100_000_000.0, 500_000.0)
     result = prepayment_rate(snapshots, periods=list(snapshots))
     assert result.cpr_pct > result.smm_pct * 10
-    assert result.method == "OBSERVED_CPR@v1"
+    assert result.method == "OBSERVED_CPR@v2"
     assert any("annualisation" in note.lower() for note in result.notes)
 
 

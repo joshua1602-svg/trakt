@@ -171,7 +171,8 @@ def test_redemptions_remove_loans_rather_than_zeroing_them(snapshots):
 def test_the_observed_prepayment_rate_matches_the_planted_activity(snapshots):
     result = prepayment_rate(snapshots, periods=list(PERIODS))
     assert result.available
-    assert result.method == "OBSERVED_CPR@v1"
+    # v2 since Sprint 2.5C: the denominator now nets out scheduled principal.
+    assert result.method == "OBSERVED_CPR@v2"
     assert result.periods_observed == PERIOD_COUNT - 1
 
     expected_redemptions = sum(redemptions_in_period(i)
@@ -443,8 +444,13 @@ def test_an_empty_cohort_is_not_reported_as_good_performance(snapshots):
 def test_prepayment_and_loss_tools_report_their_methodology(snapshots):
     prepayment = _ok("prepayment_analysis", {"resource": PORTFOLIO_A.key},
                      snapshots)
-    assert prepayment["method"] == "OBSERVED_CPR@v1"
-    assert any("OPENING balance" in n for n in prepayment["notes"])
+    # UPDATED in Sprint 2.5C. The method identifier moved v1 -> v2 and the note
+    # changed because the DENOMINATOR changed: external verification established
+    # that the market-standard SMM divides by the beginning balance LESS
+    # scheduled principal, not by the full beginning balance. The old assertion
+    # pinned the superseded methodology.
+    assert prepayment["method"] == "OBSERVED_CPR@v2"
+    assert any("scheduled principal" in n.lower() for n in prepayment["notes"])
     assert any("none of them is prepayment" in n for n in prepayment["notes"])
 
     losses = _ok("loss_analysis", {"resource": PORTFOLIO_A.key}, snapshots)

@@ -52,6 +52,16 @@ LOAN_ID_FIELD = "loan_identifier"
 UNSCHEDULED_PRINCIPAL_FIELD = "unscheduled_principal_collections"
 REDEMPTIONS_FIELD = "redemptions_received_in_period"
 SCHEDULED_DUE_FIELD = "total_scheduled_principal_interest_due"
+#: Scheduled principal for the period. The market-standard SMM denominator is
+#: the beginning balance LESS scheduled principal — the balance actually exposed
+#: to prepayment — so this field decides whether Trakt can report the standard
+#: form or only an approximation of it.
+SCHEDULED_PRINCIPAL_FIELD = "regular_principal_instalment"
+
+#: Which denominator a reported SMM used. Published on every result, because the
+#: two differ and a reader must know which they have.
+DENOM_EXPOSED = "beginning_balance_less_scheduled_principal"
+DENOM_OPENING = "beginning_balance"
 
 LOSSES_FIELD = "allocated_losses"
 RECOVERIES_FIELD = "cumulative_recoveries"
@@ -60,8 +70,13 @@ ORIGINAL_BALANCE_FIELD = "original_principal_balance"
 
 #: Methodology identifiers, versioned because a change to any of them changes
 #: reported rates and an explanation that cited one must keep meaning it.
-SMM_METHOD = "OBSERVED_SMM@v1"
-CPR_METHOD = "OBSERVED_CPR@v1"
+#: v2 (Sprint 2.5C): the denominator changed from the full beginning balance to
+#: the beginning balance LESS scheduled principal — the market-standard exposed
+#: balance. That materially changes every reported rate, so the version bumps
+#: rather than the definition changing under a name that already meant something
+#: else. A finding that cited @v1 still means what it meant.
+SMM_METHOD = "OBSERVED_SMM@v2"
+CPR_METHOD = "OBSERVED_CPR@v2"
 LOSS_METHOD = "OBSERVED_LOSS@v1"
 RECOVERY_METHOD = "OBSERVED_RECOVERY@v1"
 SERIES_METHOD = "OBSERVED_SERIES@v1"
@@ -328,7 +343,21 @@ def prepayment_rate(
     separately because *a redeemed loan is absent from the closing tape*: the
     exit cannot be read from the frame that no longer contains it.
 
-    **Denominator** — the OPENING balance of the period, from the prior snapshot.
+    **Denominator** — the balance *exposed to prepayment*: the beginning balance
+    of the period **less scheduled principal** for that period. This is the
+    market-standard form (SIFMA; and see the review document for sources):
+
+        SMM = unscheduled principal / (beginning balance - scheduled principal)
+
+    Scheduled principal has to leave the denominator because it was never
+    available to prepay — a loan cannot prepay the instalment it is contractually
+    due to make. Including it understates the rate, and understates it most on a
+    fast-amortising book.
+
+    Where the tape carries no scheduled-principal field the denominator falls
+    back to the full beginning balance, and ``denominator_basis`` says so. That
+    variant is an approximation and is labelled as one rather than presented as
+    the standard measure.
 
     **Excluded**, deliberately and by name: scheduled amortisation, contractual
     maturity, and default-related balance reduction. None of those is
@@ -377,6 +406,19 @@ def prepayment_rate(
 
         opening_balance = float(pd.to_numeric(
             opening[BALANCE_FIELD], errors="coerce").sum())
+
+        # The exposed balance: what could actually have prepaid this period.
+        scheduled_principal = 0.0
+        if SCHEDULED_PRINCIPAL_FIELD in closing.columns:
+            scheduled_principal = float(pd.to_numeric(
+                closing[SCHEDULED_PRINCIPAL_FIELD],
+                errors="coerce").fillna(0).sum())
+        elif SCHEDULED_PRINCIPAL_FIELD in opening.columns:
+            scheduled_principal = float(pd.to_numeric(
+                opening[SCHEDULED_PRINCIPAL_FIELD],
+                errors="coerce").fillna(0).sum())
+        exposed_balance = opening_balance - scheduled_principal
+        basis = DENOM_EXPOSED if scheduled_principal else DENOM_OPENING
         unscheduled = float(pd.to_numeric(
             closing[UNSCHEDULED_PRINCIPAL_FIELD], errors="coerce").fillna(0).sum())
 
@@ -416,7 +458,7 @@ def prepayment_rate(
         exits_derived = redemption_source.startswith("derived")
 
         numerator = unscheduled + redemptions
-        smm = (numerator / opening_balance * 100.0) if opening_balance else None
+        smm = (numerator / exposed_balance * 100.0) if exposed_balance > 0 else None
         if smm is not None:
             smm_values.append(smm)
 
@@ -427,6 +469,9 @@ def prepayment_rate(
             "period": closing_period,
             "opening_period": opening_period,
             "opening_balance": round(opening_balance, 2),
+            "scheduled_principal": round(scheduled_principal, 2),
+            "exposed_balance": round(exposed_balance, 2),
+            "denominator_basis": basis,
             "unscheduled_principal": round(unscheduled, 2),
             "redemptions": round(redemptions, 2),
             "redemption_source": redemption_source,
@@ -444,10 +489,18 @@ def prepayment_rate(
     if annualise:
         cpr = (1.0 - (1.0 - mean_smm / 100.0) ** 12) * 100.0
 
+    bases = {p["denominator_basis"] for p in per_period}
     notes = [
+        ("Denominator is the beginning balance LESS scheduled principal — the "
+         "balance exposed to prepayment, which is the market-standard SMM form."
+         if bases == {DENOM_EXPOSED} else
+         "Denominator is the full beginning balance because this tape carries no "
+         f"{SCHEDULED_PRINCIPAL_FIELD!r}. That is an APPROXIMATION of the "
+         "standard SMM, which nets scheduled principal out of the exposure, and "
+         "it understates the rate — most on a fast-amortising book."),
         "Numerator is unscheduled principal"
         + (" plus full redemptions." if include_redemptions else ", excluding redemptions."),
-        "Denominator is the OPENING balance of each period.",
+
         "Scheduled amortisation, contractual maturity and default-related "
         "balance reduction are excluded — none of them is prepayment.",
     ]
