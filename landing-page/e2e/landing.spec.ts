@@ -324,6 +324,34 @@ test.describe("Trakt landing page", () => {
     await expect(delivery.locator("[aria-expanded]")).toHaveCount(0);
   });
 
+  /**
+   * Five cards is an awkward number in a grid, and it has now produced the
+   * same defect twice — a single card alone on the last row with empty cells
+   * beside it, which reads as a rendering fault rather than a wrap. Measured
+   * from the rendered boxes at every breakpoint the grid changes at, rather
+   * than trusted to the class list.
+   */
+  test("no governance card is left alone on its own row", async ({ page, viewport }) => {
+    for (const width of [1760, 1440, 1024, 834, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const rows = await page.locator("#governance ul > li").evaluateAll((nodes) => {
+        const byRow = new Map<number, number>();
+        for (const node of nodes) {
+          const top = Math.round(node.getBoundingClientRect().top);
+          byRow.set(top, (byRow.get(top) ?? 0) + 1);
+        }
+        return [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([, count]) => count);
+      });
+      const columns = Math.max(...rows);
+      const tail = rows[rows.length - 1];
+      expect(
+        columns > 1 && rows.length > 1 && tail === 1,
+        `at ${width}px the cards lay out ${rows.join("+")} — one card orphaned`,
+      ).toBe(false);
+    }
+    if (viewport) await page.setViewportSize(viewport);
+  });
+
   test("governance makes four claims once, with the reconciliation proof", async ({ page }) => {
     const governance = page.locator("#governance");
     await governance.scrollIntoViewIfNeeded();

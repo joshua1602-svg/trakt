@@ -41,6 +41,16 @@ the controls demo (section 4). Neither autoplays and neither loops silently:
 from the homepage — reporting claims survive in the platform output chips,
 and onboarding detail now belongs to a product page, not this one.
 
+**Pass 9 closeout — three fixes before merge.** The governance grid drops to a
+single column below `lg`: five cards in two columns rendered 2+2+1, leaving
+"Agent-addressable" alone at half width, which is the same rendering-fault look
+the five-column row was introduced to remove. Verified at 1760 / 1440 / 1024 /
+834 / 390 and now guarded — the orphan has appeared twice, so the e2e suite
+measures the rendered rows at every breakpoint rather than trusting the class
+list. The refusal block is tightened onto the demo it belongs to: the demo
+figure's own `max-w-4xl`, a soft rule at half the previous gap, type unchanged.
+And the agent-to-agent topology is squared up — see §6c.
+
 **Pass 9 also adopted a colour system** — one colour, one job. Recorded below
 under "The colour system", and enforced by two e2e guards. Read that section
 before changing any accent on the page.
@@ -324,6 +334,7 @@ later pass.
 | "Your agents already have somewhere to work. Give them somewhere trustworthy to get credit intelligence." | Positioning | No capability claimed. |
 | "Trakt is designed to make governed portfolio intelligence available to enterprise agents — with controlled access, deterministic calculations and evidence behind every result." | Roadmap (worded as design intent) | `trakt_core/context.py` reserved channels `CHANNEL_ENTERPRISE_AGENT` / `CHANNEL_AGENT_TO_AGENT`; `docs/governed_capability_architecture.md` documents the adapter shape; only a test fixture exists. The three qualities named are each evidenced for the live channels (tenancy `trakt_core/tenancy.py`; determinism `test_channel_parity.py`; lineage `lineage_tracker.py`) — what is unbuilt is the agent channel that would expose them. |
 | Topology: External agent —*A2A*→ Client enterprise agent —*Governed tool calls*→ Trakt | Roadmap | Three nodes on one line; protocol names appear as connector labels only, never as a claim of a shipped integration. **No vendor mark is used as an actor** — Microsoft and Copilot are surfaces Trakt is *reached through*, named in prose elsewhere, and are not parties in this exchange. The platform section owns the multi-tier stack shape; this is deliberately not a second one. |
+| **The topology is temporary, and the demo replaces it** | — | Decided in the Pass 9 closeout. When the Securitisation Readiness Agent footage exists it takes the section's one visual and the topology comes out: footage of the exchange plus a diagram of the same exchange is the duplication this page has removed three times already (Operating Model, Portfolio Intelligence, Boundaries). It was squared up anyway rather than left ragged — "temporary" is not a date, and it is the live page's only agent-to-agent visual until the render happens. Fixes: nodes and connectors are separate list items so all three nodes are `flex-1 basis-0` and share the row equally (previously each box was sized by the label beside it, and Trakt came out smallest despite being the subject); `items-stretch` so the boxes match height when "Client enterprise agent" wraps at tablet width; connector labels in sentence case and `whitespace-nowrap` so "Governed tool calls" holds one line instead of wrapping to three; Trakt keeps a full-strength `peri-500` border and a lighter panel. Measured equal at 1760 / 1440 / 1024 / 834 / 390. |
 | **Demo slot: deliberately absent** | — | The Securitisation Readiness Agent footage does not exist. A mocked still — invented agent messages, figures nobody computed — would be the one thing on the page that fabricates a capability. An empty reserved frame was built and rejected: at ~700px under a diagram it reads as broken however it is labelled, and it breaches the one-visual-per-section budget. The topology is the section's only visual until there is real footage. Do not re-add a placeholder frame. |
 
 ---

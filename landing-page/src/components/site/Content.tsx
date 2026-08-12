@@ -354,11 +354,13 @@ export function Governance() {
         </p>
       </Reveal>
 
-      {/* Five properties, so five columns once there is room for them. A
-          four-column grid left the fifth card alone on its own row with three
-          empty columns beside it — which reads as a rendering fault, not a
-          layout. Below xl the tail row is half-full rather than a lone card. */}
-      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {/* Five properties, and five is an awkward number in a grid. Five
+          columns at xl fits them on one row. Three columns at lg leaves a
+          half-full tail row, which reads as a wrap. Two columns left the fifth
+          card alone at half width with an empty cell beside it — the same
+          rendering-fault look the five-column row was introduced to remove —
+          so below lg the cards stack in a single column instead. */}
+      <ul className="mt-9 grid gap-4 lg:grid-cols-3 xl:grid-cols-5">
         {GOVERNANCE_PROPERTIES.map((property, index) => (
           <li key={property.title}>
             <Reveal delay={index * 60} className="h-full">
