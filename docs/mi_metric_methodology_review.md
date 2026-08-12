@@ -2,6 +2,12 @@
 
 *Sprint 2.5C, completed. Baseline `cdefc25` → this commit.*
 
+> **Superseded in part.** Sprint 2.5D built the contractual analytics this
+> report classified as latent, and the §11–§12 matrix was refined again in
+> doing so — `payment_due` (RREL39) makes fixed-rate FRXX and DEXX
+> deterministic, which this report had reached but not implemented. See
+> `docs/contractual_cashflow_analytics.md`.
+
 The question this sprint was reopened to answer:
 
 > **Given the core, canonical and mapped regulatory fields Trakt already holds,
