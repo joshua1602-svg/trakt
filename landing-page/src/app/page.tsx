@@ -26,11 +26,14 @@ import { buildMeta } from "@/lib/demo-pack";
  * `/api/demo/*`.
  *
  * The narrative, in the order a first-time visitor asks their questions:
- * what is it → show me (query demo) → how does it work → what does it control
- * (controls demo) → how does it scale across books → where do users reach it →
- * why trust it → what next. Two demos, both user-started, never autoplaying:
- * first the visitor interrogates the portfolio, then they watch Trakt monitor
- * that same portfolio.
+ * what is it → show me, and what will it refuse (query demo) → how does it
+ * work → how would I consume it → what does it control (controls demo) →
+ * where is it going → why trust it → what next.
+ *
+ * Delivery sits above risk & controls deliberately: a capability demonstrated
+ * before the reader knows which channel they would reach it through is a
+ * capability with nowhere to land. The two demos stay apart, each beside the
+ * claim it proves; both are user-started and neither autoplays.
  */
 export default function Page() {
   const meta = buildMeta();
@@ -72,12 +75,12 @@ export default function Page() {
               Same question. Same calculation. Same answer.
             </p>
           </Reveal>
-        </Section>
-
-        {/* 2b — The refusal claim, out of the demo card and into its own
-            section: behind a play control it was only ever a still. */}
-        <Section id="refusal" className="pb-16 sm:pb-20">
-          <Reveal>
+          {/* The refusal claim, folded back in. It is a sub-claim of this
+              demo, not a destination, and as its own section it sat in
+              adjacent territory to the agent-to-agent headline. Beneath the
+              frame it keeps heading-scale type: same function, one less
+              section, no loss of weight. */}
+          <Reveal delay={180}>
             <RefusalSection meta={meta} />
           </Reveal>
         </Section>
@@ -85,11 +88,6 @@ export default function Page() {
         {/* 3 — How does the platform work? */}
         <Section id="platform" className="pb-16 sm:pb-20">
           <Architecture />
-        </Section>
-
-        {/* 4 — Risk & controls, with Demo 2. */}
-        <Section id="controls" className="pb-16 sm:pb-20">
-          <ForwardControls />
         </Section>
 
         {/* The Operating Model section is gone: its claim ("no separate
@@ -121,6 +119,16 @@ export default function Page() {
           <div className="mt-9">
             <DeliveryModes />
           </div>
+        </Section>
+
+        {/* 4 — Risk & controls, with Demo 2. Below the delivery model by
+            design: a reader meeting a controls demo before they know how they
+            would consume Trakt at all is being shown a capability with no
+            channel to reach it through. Platform → delivery → capability and
+            its proof. The demos stay apart, each next to the claim it
+            proves — three posters in a row read as one repeated thing. */}
+        <Section id="controls" className="pb-16 sm:pb-20">
+          <ForwardControls />
         </Section>
 
         {/* 6c — Agent-to-agent. Roadmap, and its demo slot is deliberately

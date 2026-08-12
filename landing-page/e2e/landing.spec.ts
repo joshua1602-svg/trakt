@@ -452,23 +452,27 @@ test.describe("Trakt landing page", () => {
     await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
   });
 
-  test("the refusal claim is its own section, and its prompts drive the demo", async ({
+  test("the refusal claim sits inside the query demo section and drives it", async ({
     page,
   }) => {
-    const refusal = page.locator("#refusal");
-    await refusal.scrollIntoViewIfNeeded();
+    // No longer a section of its own: it is a sub-claim of the demo above it.
+    await expect(page.locator("#refusal")).toHaveCount(0);
 
-    // Stated once on the page: a live section, not a still inside the poster.
-    await expect(
-      refusal.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
-    ).toHaveCount(1);
+    const section = page.locator("#query-demo");
+    await section.scrollIntoViewIfNeeded();
+
+    // Live text at heading scale, not small print, and stated once.
+    const claim = page.getByRole("heading", {
+      name: /trakt declines what it cannot derive/i,
+    });
+    await expect(claim).toHaveCount(1);
+    await expect(section.getByRole("heading", { name: /trakt declines/i })).toBeVisible();
+    const size = await claim.evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
+    expect(size, "the refusal claim has been demoted to small print").toBeGreaterThanOrEqual(18);
 
     // Pressing a prompt starts the demo above and asks it, so the visitor
     // watches Trakt decline rather than being told that it does.
-    await refusal.getByRole("button", { name: /show me individual loan records/i }).click();
+    await section.getByRole("button", { name: /show me individual loan records/i }).click();
     const demo = page.locator("#example");
     await expect(demo.getByText(/not supported in this demonstration/i)).toBeVisible();
     await expect(demo.getByText(/will not return exposure-level records/i)).toBeVisible();
@@ -485,10 +489,9 @@ test.describe("Trakt landing page", () => {
   test("every section paints: computed opacity and real text", async ({ page }) => {
     for (const id of [
       "query-demo",
-      "refusal",
       "platform",
-      "controls",
       "delivery",
+      "controls",
       "agents",
       "governance",
     ]) {
@@ -776,7 +779,7 @@ test.describe("without JavaScript", () => {
   test("every section still renders at full opacity", async ({ page }) => {
     await page.goto("/");
 
-    for (const id of ["refusal", "platform", "controls", "delivery", "agents", "governance"]) {
+    for (const id of ["platform", "delivery", "controls", "agents", "governance"]) {
       const painted = await page.locator(`#${id}`).evaluate((node) => {
         const target = node.querySelector("[data-reveal]") ?? node;
         return {

@@ -41,6 +41,20 @@ the controls demo (section 4). Neither autoplays and neither loops silently:
 from the homepage — reporting claims survive in the platform output chips,
 and onboarding detail now belongs to a product page, not this one.
 
+**Pass 9 — section order and the Boundaries fold.** The standalone Boundaries
+section is gone; the refusal claim now sits inside the query-demo section,
+beneath the frame, above a rule and at heading scale — a sub-claim of the demo
+rather than a destination, and no longer in adjacent territory to the
+agent-to-agent headline ("Agents don't calculate the portfolio. Trakt does.").
+It is **not** small print: the e2e suite measures its computed font size and
+fails below 18px. Delivery Model moves above Risk & Controls, so the reader
+learns how they would consume Trakt before being shown a capability demo. The
+order is now: hero · portfolio query demo (with the refusal claim) · platform ·
+delivery model · risk & controls · agent-to-agent · governance · contact.
+Governance stays second to last deliberately — reassurance placed early answers
+a question the reader has not formed yet. The two demos stay apart, each beside
+the claim it proves; batched, three posters read as one repeated thing.
+
 **Pass 8 — strapline, merge, nav, CTA.** The strapline "Agentic portfolio
 intelligence. Deterministic by design." is adopted in three places and three
 only: the hero eyebrow, the site metadata, and the footer descriptor's opening
@@ -80,8 +94,8 @@ flags which appear on the desktop bar.
 
 | Copy | Class | Evidence |
 |---|---|---|
-| **Mobile menu (7, page order):** Portfolio query · Boundaries · Platform · Risk & controls · Delivery · Agent-to-agent · Governance | Positioning | — |
-| **Desktop bar (5):** Platform · Risk & controls · Delivery · Agent-to-agent · Governance | Positioning | Measured: 525px against a 589px budget at 1024, the narrowest width the bar now appears at. Portfolio query is dropped because it opens the page and the hero's primary button already points at it; Boundaries because it is a sub-claim of that demo, not a destination. Agent-to-agent is on the bar deliberately — it is the section a technical reader arrives looking for. |
+| **Mobile menu (6, page order):** Portfolio query · Platform · Delivery · Risk & controls · Agent-to-agent · Governance | Positioning | Boundaries was removed in Pass 9 with the section itself; Delivery moved above Risk & controls with the page order. |
+| **Desktop bar (5):** Platform · Delivery · Risk & controls · Agent-to-agent · Governance | Positioning | Measured: 525px against a 589px budget at 1024, the narrowest width the bar now appears at. Portfolio query is dropped because it opens the page and the hero's primary button already points at it; Boundaries is no longer a section at all. Agent-to-agent is on the bar deliberately — it is the section a technical reader arrives looking for. |
 | **Breakpoint moved `md` → `lg`** | — | At 768 the bar's contents measured 701px inside a 704px row. Between 768 and 1023 the page now uses the menu button. |
 | **Nav CTA: "Demo on your portfolio"** (was "Book a demo") | Positioning | The page carries demos of its own, so inviting a visitor to book one implied those did not count. The distinction the CTA sells is that it runs against *their* portfolio rather than the synthetic one. **The hero secondary carries the identical label and the identical anchor**, so the page offers this one destination under one name; the e2e suite asserts the two controls agree on both wording and target, because they had already drifted into three names ("Book a demo", "Book a portfolio walkthrough", "Book a tailored demonstration"). The closing CTA keeps "Book a tailored demonstration" deliberately — it sits above the form itself, where it has its own context and competes with nothing. |
 | *("Demo" as a nav label is retired: the page carries more than one, so a label naming the format rather than the section told the reader nothing.)* | — | — |
@@ -116,7 +130,7 @@ until the visitor presses "Watch query demo".
 | The scripted opening: starting the demo asks "Show the funded balance by book." | Demonstration | `QueryDemo.tsx` mounts `CopilotDemo` with `initialQuestion` (the `balance_by_book` intent); one-shot, consumes one session question, never replays on Reset. The visitor sees query → governed answer from frame zero. |
 | The compressed answer: "Both totals are correct — they answer different questions, so Trakt returns both rather than choosing one." + the table | Evidenced | `_balance_by_book` in `scripts/build_demo_pack.py`; the two-totals reasoning is unchanged, the prose is one sentence. The SPV1 story ("originated by the sponsor, securitised and sold; servicing, risk retention and investor reporting retained") moved to a tooltip on the SPV1 row (`row.tooltip`, rendered by `Artifacts.tsx` with `title` + `aria-label`, keyboard-focusable). The former "interpreted" line and the dangling coverage note were removed. |
 | Answer footers carry the client name only | Demonstration | `PORTFOLIO_SCOPE` in `api/demo/query/route.ts` is `demoPack.client.name` — no internal portfolio identifier. |
-| "Trakt declines what it cannot derive." — **its own page section** (§2b), with the two example prompts as buttons | Evidenced | Extracted from the demo card (`RefusalSection.tsx`): inside the card it sat behind a play control and was visible only as text in a still. Pressing a prompt dispatches to `QueryDemo`, which starts the demo and asks it — so the visitor watches Trakt decline rather than being told it does. Stated once on the page; the poster replica no longer repeats it. Refusal paths unchanged (`src/lib/intents.ts`). |
+| "Trakt declines what it cannot derive." — **inside this section, beneath the demo frame**, with the two example prompts as buttons | Evidenced | `RefusalSection.tsx`. It has moved twice, and both moves were corrections. It began inside the demo card, where it sat behind a play control and was visible only as text in a still. Pass 8 made it its own section (§2b), which over-promoted a sub-claim of the demo into a destination and put it in adjacent territory to the agent-to-agent headline. **Pass 9 folded it back in**, above a rule and at `h3` scale — the conclusion the demo has just earned, not a caption. Pressing a prompt dispatches `ASK_EVENT` to `QueryDemo`, which starts the demo and asks it, so the visitor watches Trakt decline rather than being told it does. Stated once on the page; the poster replica does not repeat it. Refusal paths unchanged (`src/lib/intents.ts`). **Guarded:** the e2e suite asserts `#refusal` no longer exists, that the claim appears exactly once, that a prompt still drives the demo to a refusal, and that the computed font size is ≥18px — so a later pass cannot quietly return it to small print. |
 | The SPV1 row note is a real toggle, not a `title` tooltip | Demonstration | `RowNote` in `Artifacts.tsx`: a button with `aria-expanded` revealing the note inline. Native tooltips never open on touch, which made the explanation unreachable at phone width — asserted now in the mobile Playwright run. |
 | The poster before start | Demonstration | A non-interactive replica of the demo surface carrying the real synthetic scope (client, books, exposure count, as-at date) from `data/demo-pack.json`. |
 | "Same question. Same calculation. Same answer." | Evidenced | `mi_agent_api/mi_service.py` single implementation; `test_channel_parity.py`. |

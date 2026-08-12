@@ -1,15 +1,21 @@
 "use client";
 
-import { SectionHeading } from "@/components/ui";
 import type { DemoMetaResponse } from "@/types/demo";
 
 /**
- * The refusal claim, as its own section.
+ * The refusal claim, directly beneath the query demo it belongs to.
  *
- * It used to sit inside the demo card, which put the page's strongest trust
- * claim behind a play control — visible only as text in a still. The prompts
- * stay real buttons: pressing one starts the query demo above and asks it, so
- * the visitor sees Trakt decline rather than being told that it does.
+ * It has moved twice. It began inside the demo card, which put the page's
+ * strongest trust claim behind a play control — visible only as text in a
+ * still. It then became its own section, which over-promoted a sub-claim of
+ * the demo into a destination, and put it in adjacent territory to the
+ * agent-to-agent section's "Agents don't calculate the portfolio."
+ *
+ * Now it sits under the demo frame as live text. Not small print: it keeps
+ * heading-scale type and a rule above it, so it reads as the conclusion the
+ * demo has just earned rather than as a caption. The prompts stay real
+ * buttons — pressing one starts the demo above and asks it, so the visitor
+ * watches Trakt decline rather than being told that it does.
  */
 
 /** Fired at the query demo, which starts itself and asks the question. */
@@ -19,16 +25,14 @@ export function RefusalSection({ meta }: { meta: DemoMetaResponse }) {
   if (meta.exampleUnsupported.length === 0) return null;
 
   return (
-    <>
-      <SectionHeading
-        id="refusal"
-        eyebrow="Boundaries"
-        title="Trakt declines what it cannot derive."
-      />
-      <p className="mt-4 max-w-[72ch] text-[15px] leading-relaxed text-ink-300">
+    <div className="mt-10 border-t border-line pt-8">
+      <h3 className="text-balance text-xl font-semibold tracking-tight text-ink-100 sm:text-2xl">
+        Trakt declines what it cannot derive.
+      </h3>
+      <p className="mt-3 max-w-[72ch] text-[15px] leading-relaxed text-ink-300">
         Ask either of these and watch it refuse, with the reason.
       </p>
-      <ul className="mt-6 flex flex-wrap gap-2.5">
+      <ul className="mt-5 flex flex-wrap gap-2.5">
         {meta.exampleUnsupported.map((example) => (
           <li key={example.id}>
             <button
@@ -45,6 +49,6 @@ export function RefusalSection({ meta }: { meta: DemoMetaResponse }) {
           </li>
         ))}
       </ul>
-    </>
+    </div>
   );
 }
