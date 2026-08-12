@@ -78,12 +78,18 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           >
             Explore the live demo
           </a>
+          {/* Word for word the nav button, and the same anchor. Three names for
+              one form — "Book a demo", "Book a portfolio walkthrough", "Book a
+              tailored demonstration" — made a visitor work out that they were
+              the same destination. Two controls, one offer, one label; the
+              closing CTA keeps its own wording because it sits above the form
+              itself and competes with nothing. */}
           <a
             href="#book-a-demo"
             onClick={() => track("book_demo_click", { source: "hero" })}
             className={buttonStyles.secondary}
           >
-            Book a portfolio walkthrough
+            Demo on your portfolio
           </a>
         </div>
       </div>

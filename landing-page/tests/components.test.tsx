@@ -93,7 +93,9 @@ describe("Hero", () => {
       "href",
       "#query-demo",
     );
-    expect(screen.getByRole("link", { name: /book a portfolio walkthrough/i })).toHaveAttribute(
+    // Word for word the nav button, and the same anchor — see the drift guard
+    // in the e2e suite.
+    expect(screen.getByRole("link", { name: /demo on your portfolio/i })).toHaveAttribute(
       "href",
       "#book-a-demo",
     );

@@ -49,8 +49,49 @@ test.describe("Trakt landing page", () => {
       page.getByRole("link", { name: /explore the live demo/i }).first(),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /book a portfolio walkthrough/i }),
+      page.getByRole("link", { name: /demo on your portfolio/i }).first(),
     ).toBeVisible();
+  });
+
+  /**
+   * The two controls that offer a demonstration against the visitor's own
+   * portfolio must carry the same words and point at the same place. They
+   * drifted into three separate names once already ("Book a demo", "Book a
+   * portfolio walkthrough", "Book a tailored demonstration"), which left a
+   * reader to work out that all three were one destination.
+   *
+   * The closing CTA is deliberately excluded: it sits above the form itself,
+   * where it has its own context and competes with nothing.
+   */
+  test("the nav and hero demo controls carry one label and one destination", async ({
+    page,
+    isMobile,
+  }) => {
+    if (isMobile) await page.getByRole("button", { name: /open menu/i }).click();
+
+    const controls = page.getByRole("link", { name: /demo on your portfolio/i });
+    await expect(controls).toHaveCount(2);
+
+    const seen = await controls.evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        text: (node.textContent ?? "").trim(),
+        href: node.getAttribute("href"),
+      })),
+    );
+    expect(new Set(seen.map((c) => c.text)).size, "the two controls disagree on wording").toBe(1);
+    expect(new Set(seen.map((c) => c.href)).size, "the two controls disagree on target").toBe(1);
+    expect(seen[0]?.href).toBe("#book-a-demo");
+
+    // The closing CTA keeps its own wording.
+    await expect(page.getByRole("button", { name: /book a tailored demonstration/i })).toHaveCount(1);
+
+    // Scoped to the two controls this test governs. "Book a portfolio
+    // walkthrough" still exists inside the demo, on the session-limit card
+    // (`CopilotDemo.tsx`, `ReportPreview.tsx`) — a separate label for the same
+    // anchor, deliberately left alone in this pass and recorded in the
+    // content map as an open item.
+    await expect(page.getByRole("banner").getByText(/walkthrough/i)).toHaveCount(0);
+    await expect(page.locator("#product").getByText(/walkthrough/i)).toHaveCount(0);
   });
 
   test("the hero CTA lands on the query demo, which waits to be started", async ({
