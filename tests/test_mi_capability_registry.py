@@ -457,3 +457,55 @@ def test_expected_wal_is_matched_ahead_of_contractual_wal():
         "expected_wal"
     assert match_capability("what is the weighted average life").id == \
         "contractual_wal"
+
+
+# =========================================================================== #
+# One economic definition, one calculation — the drift guard
+# =========================================================================== #
+def test_the_weighted_average_helpers_scattered_across_consumers_still_agree():
+    """Sprint 2.5E found TEN weighted-average helpers across the repository:
+    in the PowerPoint resolver, the cohorts, snapshots and evolution API
+    routes, three analytics modules, the history handler, the simulation
+    oracle and the governed metric evaluator.
+
+    Tested on a common input they currently AGREE — all use pairwise deletion,
+    differing only in rounding — so this is not a live correctness defect and
+    is reported as such rather than overstated. What it is, is ten places one
+    convention can drift, and the drift would be invisible: a missing-data
+    policy change in one of them would move a number on one screen and not
+    another.
+
+    Routing them to the shared evaluator is real work and deliberately NOT
+    done here — it is unrelated refactoring, and ``simulation.reference_truth``
+    must stay independent by design, since its whole purpose is to be an
+    oracle that does not share code with what it checks. This test pins the
+    agreement so a future divergence fails loudly instead of silently.
+    """
+    import pandas as pd
+
+    from analytics.mi_prep import weighted_average as mi_prep_wa
+    from mi_agent_api.cohorts import _weighted_avg as cohorts_wa
+    from mi_agent_api.evolution import _weighted_avg as evolution_wa
+    from mi_agent_api.snapshots import _weighted_average as snapshots_wa
+    from mi_agent_pptx.metric_resolver import _weighted_avg as pptx_wa
+
+    values = pd.Series([10.0, 20.0, None, 40.0])
+    weights = pd.Series([100.0, 200.0, 300.0, None])
+    # Pairwise deletion: rows missing EITHER term drop from both numerator and
+    # denominator. (10x100 + 20x200) / (100+200) = 16.666..., by hand.
+    expected = (10 * 100 + 20 * 200) / (100 + 200)
+    assert expected == pytest.approx(16.666667, abs=1e-6)
+
+    frame = pd.DataFrame({"x": values, "current_outstanding_balance": weights})
+
+    for label, actual in (
+            ("analytics.mi_prep", mi_prep_wa(values, weights)),
+            ("mi_agent_api.cohorts", cohorts_wa(values, weights)),
+            ("mi_agent_api.snapshots", snapshots_wa(values, weights)),
+            ("mi_agent_pptx.metric_resolver", pptx_wa(values, weights)),
+            ("mi_agent_api.evolution",
+             evolution_wa(frame, "x", "current_outstanding_balance")),
+    ):
+        assert actual == pytest.approx(expected, abs=1e-4), (
+            f"{label} disagrees with the pairwise-deletion convention every "
+            "other weighted average in the repository uses")
