@@ -279,12 +279,54 @@ different implementations.
 
 ## 10. Regression
 
-Baseline `ccbcf56`, candidate `093ee4c`, from pinned immutable worktrees.
+Baseline `ccbcf56`, candidate `8ab5d14`, each from a pinned, clean worktree,
+verified by `rev-parse` before and after and neither edited while running.
 
-*[Results inserted on completion. No neutrality claim before then.]*
+| | Baseline `ccbcf56` | Candidate `8ab5d14` | Δ |
+|---|---|---|---|
+| passed | 5,277 | 5,299 | **+22** |
+| failed | 64 | 64 | **0** |
+| errors | 13 | 13 | **0** |
+| skipped | 33 | 33 | 0 |
+| collected | 5,374 | 5,396 | +22 |
 
-The 2.5E pair (`670c404` → `ccbcf56`) is reported in
-`docs/mi_capability_registry.md` §13.
+**Full ID comparison, both directions — all four sets empty:**
+
+```
+FAILED only at baseline  : none
+FAILED only at candidate : none
+ERROR  only at baseline  : none
+ERROR  only at candidate : none
+```
+
+**The +22 is fully accounted for**, counted by collection in both worktrees:
+
+| Source | Tests |
+|---|---|
+| `tests/test_default_and_cure.py` (new file) | 19 |
+| `tests/test_mi_capability_registry.py` (27 → 30) | 3 |
+| **Total** | **22** |
+
+**Regression neutrality is claimed.** No test passing at `ccbcf56` fails at
+`8ab5d14`, no new error appears, and every additional passing test is one this
+pass wrote.
+
+**Tests changed rather than added, and why.** Four assertions in
+`test_mi_capability_registry.py` were rewritten, each because the behaviour
+they pinned was deliberately superseded:
+
+| Test | Change |
+|---|---|
+| `..._capability_that_can_never_be_available...` | `default_rate` and `cure_rate` removed from the always-refused set — their methodologies are now owned. `expected_wal` remains |
+| `..._every_state_in_the_model_is_reachable...` | `METHODOLOGY_NOT_APPROVED` is no longer reachable from the four portfolios. The state stays in the model, and the test records why removing it would be wrong |
+| `..._book_that_can_answer_is_left_to_the_ordinary_query_path` | split in two: a *generic* capability stays silent when available; an *owned KPI* names its methodology instead |
+| `..._asking_for_default_rate_admits_the_methodology_is_unowned` | replaced — the answer is now the owned methodology identifier, not a methodology refusal |
+
+Two further sweeps were run before committing, which is the direct lesson from
+the stale-OpenAPI miss in 2.5D: `mi_agent/tests` (928 passed) and a 758-test
+targeted sweep across MI Query, capability, readiness, history, OpenAPI and the
+tool registry (754 passed, 2 failed — both already failing at `3ddf7af` and in
+the 64-strong known set).
 
 ---
 
