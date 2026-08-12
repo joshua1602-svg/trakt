@@ -390,7 +390,66 @@ unchanged.
 
 ## 13. Regression
 
-*(filled in below from the full-suite comparison)*
+Full suite, both trees, same machine, same interpreter, `-p no:randomly` so
+ordering is fixed and the runs are comparable. Baseline is `584c9d1` in a
+separate worktree.
+
+| | baseline `584c9d1` | current |
+|---|---|---|
+| passed | 5,067 | **5,221** (+154) |
+| failed | 64 | **64** |
+| errors | 13 | **13** |
+| skipped | 33 | 33 |
+| subtests passed | 6 | 6 |
+| wall clock | 1,973 s | 1,981 s |
+
+**Both complete ID sets are identical**, extracted from each run, sorted,
+deduplicated and diffed in both directions:
+
+```
+failure ids: base=64  current=64
+error ids:   base=13  current=13
+
+=== NEW FAILURES ===      (empty)
+=== FIXED ===             (empty)
+=== NEW ERRORS ===        (empty)
+=== RESOLVED ERRORS ===   (empty)
+
+failure sets IDENTICAL
+error sets IDENTICAL
+```
+
+Not "the same number" — the same failures and the same errors, by identifier.
+The +154 delta is entirely new tests passing.
+
+The 64 failures and 13 errors are the same pre-existing set carried through
+Sprint 2, unrelated to this work. The 13 errors are class-level fixture errors in
+`tests/test_delivery_xml_agent_review.py` (10) and
+`tests/test_simulation_pipeline.py` (3).
+
+**Sprint 2.5 added 70 tests**, in two files:
+
+| file | tests | what it holds |
+|---|---|---|
+| `test_readiness_framework.py` | 54 | framework consistency, rule-pack authority separation, one-fact-three-rulebooks, valuation profile, regulatory tiers, governance across the new surface |
+| `test_audit_chain_concurrency.py` | 16 | real concurrent appends, the old algorithm reproduced, idempotency, bounds |
+
+**No existing test was changed.** Every Sprint 2.5 change is additive: two new
+`trakt_core` modules, one new `analytics_lib` module, one new handler module,
+one new `operations_control` module, four new configuration files, and a new
+`Storage.create_exclusive` primitive. `append_audit` gained an optional
+keyword-only `idempotency_key`, which no existing caller passes.
+
+**Two behavioural changes worth naming explicitly**, both inside `append_audit`
+and both invisible to its existing callers:
+
+1. A record is now written by exclusive create rather than overwrite. Serial
+   appends produce byte-identical output; only the concurrent case differs, and
+   it differs by not losing records.
+2. `SyntheticRunStore._hash` became a classmethod that also accepts a dict, and
+   `seq` is excluded from the hashed fields — it always was, but the exclusion is
+   now explicit, because chaining is by `prev_hash` and including the slot number
+   would make an event's hash depend on which race it won.
 
 ---
 
