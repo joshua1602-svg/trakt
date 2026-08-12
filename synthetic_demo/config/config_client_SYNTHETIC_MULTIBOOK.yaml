@@ -2,7 +2,7 @@
 # SYNTHETIC DEMONSTRATION DATA - NOT A REAL CUSTOMER
 # =====================================================================
 # Multi-book variant of config_client_SYNTHETIC_ERM.yaml, for the three-book
-# two-period demonstration dataset (synthetic_demo/input/multibook).
+# two-period demonstration dataset (synthetic_demo/multibook_input).
 #
 # Book identities mirror demo_platform.config exactly, so the film and the
 # public demonstration describe one platform in one vocabulary. Alderbridge
