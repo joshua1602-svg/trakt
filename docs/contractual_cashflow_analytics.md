@@ -424,11 +424,49 @@ the remaining cost is genuinely per-cash-flow.
 
 ## 14. Regression
 
-Baseline `3ddf7af`, candidate `7026281`, each run from a pinned, clean worktree,
-neither edited while its run executed, both verified by `rev-parse` before and
-after.
+Baseline `3ddf7af`, candidate `7026281`, each run from a pinned, clean
+worktree, verified by `rev-parse` before and after.
 
-*[Results inserted on completion — no neutrality claim is made before then.]*
+| | Baseline `3ddf7af` | Candidate `7026281` | Δ |
+|---|---|---|---|
+| passed | 5,207 | 5,245 | +38 |
+| failed | 64 | **67** | **+3** |
+| errors | 13 | 13 | 0 |
+| skipped | 33 | 33 | 0 |
+
+**The result was NOT neutral, and the three new failures were mine.**
+
+```
+FAILED only at candidate:
+  tests/test_agent_openapi_document.py::test_the_document_is_not_stale
+  tests/test_agent_openapi_document.py::test_every_registered_tool_has_a_route
+  tests/test_agent_openapi_document.py::test_each_route_publishes_the_registrys_own_schema
+
+FAILED only at baseline : none
+ERROR  only at candidate: none
+ERROR  only at baseline : none
+```
+
+**Cause.** `deploy/agent-api/trakt-agent-openapi.yaml` is *generated* from the
+tool registry and checked in. Registering `contractual_analytics` without
+running `scripts/build_agent_openapi.py` left it stale, so the tool existed on
+the Python surface and not on the HTTP one — an agent reading the published
+contract would not have found it.
+
+**Why it was missed.** The sprint ran targeted test subsets before committing
+and the full suite only afterwards, in the regression. The guard existed and
+worked; it simply was not run at the point it would have helped. This is the
+second process failure of this kind in the programme, after the stale-worktree
+one in 2.5C, and both share a shape: a check that exists, is correct, and is
+skipped because a faster subset felt sufficient.
+
+**Fixed** in `0149e20` by regenerating the document (25 tools) and recording
+the required step at the registration site in `trakt_tools/handlers/__init__.py`
+— the file someone adding a tool is already editing. The three tests pass.
+
+**Regression neutrality is therefore NOT claimed for `7026281`.** It is claimed
+for the corrected tree, and re-verified in the Sprint 2.5E regression, whose
+baseline includes this fix.
 
 ---
 
