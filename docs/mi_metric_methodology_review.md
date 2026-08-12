@@ -644,19 +644,58 @@ contained):
 
 Run under the discipline the brief requires: both trees committed and
 immutable, neither edited while its run executed, baseline from a worktree
-pinned at `cdefc25` and candidate from a worktree pinned at the delivered
-commit.
+pinned at `cdefc25` and candidate from a worktree pinned at `dada1b9`. Both
+worktrees verified clean (`git status --porcelain` empty) and verified by
+`rev-parse` *before* and *after* their runs, not merely by the command that
+created them.
 
-*The candidate run against the final tree is in flight; the comparison — totals,
-complete failure IDs, complete error IDs, and differences in both directions —
-is recorded below when it completes. **No claim of regression neutrality is made
-until then.***
+| | Baseline `cdefc25` | Candidate `dada1b9` | Δ |
+|---|---|---|---|
+| passed | 5,176 | 5,207 | **+31** |
+| failed | 64 | 64 | **0** |
+| errors | 13 | 13 | **0** |
+| skipped | 33 | 33 | 0 |
+| subtests passed | 6 | 6 | 0 |
+| collected | 5,273 | 5,304 | +31 |
+| elapsed | 2,475.35s | 2,414.76s | −60.6s |
 
-One earlier attempt is worth recording as a process finding: a `git worktree
-add -f` against an existing directory **fails silently**, and a run launched
-that way tested a stale revision while appearing to test HEAD. It was caught by
-checking `rev-parse` on the worktree rather than trusting the command that
-created it. Verifying the tree is part of the regression, not preparation for it.
+**Full ID comparison, both directions:**
+
+```
+FAILED ids present at baseline and absent at candidate  :  none
+FAILED ids present at candidate and absent at baseline  :  none
+ERROR  ids present at baseline and absent at candidate  :  none
+ERROR  ids present at candidate and absent at baseline  :  none
+```
+
+The 64 failure IDs and 13 error IDs are **identical sets**, compared by sorted
+full node ID rather than by count — a count match would survive one failure
+being traded for another, and that is the case this comparison exists to catch.
+
+**The +31 is fully accounted for, with nothing unexplained:**
+
+| Source | Tests |
+|---|---|
+| `tests/test_metric_methodology.py`, created earlier in this sprint at `7d3c05f` | 15 |
+| loss severity and the recoveries-double-count guard (this commit) | 6 |
+| `tests/test_annex12_arrears_buckets.py` (this commit) | 8 |
+| readiness framework / library agreement guards (this commit) | 2 |
+| **Total** | **31** |
+
+Confirmed by direct collection in the candidate worktree: the two changed test
+files collect 29 (21 + 8), and the readiness file's two additions make 31.
+
+**Regression neutrality is claimed, and this is the basis for it:** no test
+passing at `cdefc25` fails at `dada1b9`, no new error appears, and every
+additional passing test is a test this sprint wrote.
+
+**A process finding worth recording.** An earlier attempt tested the wrong
+revision: `git worktree add -f` against an existing directory **fails
+silently**, so a run launched that way reported on a stale commit while
+appearing to test HEAD. It was caught by checking `rev-parse` on the worktree
+rather than trusting the command that created it. Verifying which tree ran is
+part of the regression, not preparation for it — and this is the second time
+this sprint that regression discipline failed in a way the output did not show.
 
 ---
 
