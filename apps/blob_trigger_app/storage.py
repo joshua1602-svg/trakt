@@ -149,6 +149,40 @@ class Storage:
             p.write_bytes(data)
         return uri
 
+    @_observed("create_exclusive")
+    def create_exclusive(self, uri: str, text: str) -> bool:
+        """Create ``uri`` only if it does not exist. ``True`` if this call created it.
+
+        The concurrency primitive the append-only stores are built on. It is
+        deliberately *not* ``exists()`` followed by ``write_text()``: that pair
+        has a window between the check and the write in which another writer can
+        create the same URI, and both writers then believe they won.
+
+        Filesystem: ``O_CREAT | O_EXCL``, which the kernel guarantees is atomic
+        even across processes. Blob: ``overwrite=False``, which is a conditional
+        PUT server-side. Both backends have a native answer, so nothing here
+        needs a lock, a lease or a coordination service.
+        """
+        with _write_guard("create_exclusive", uri, self._backend_name):
+            p = self._local_path(uri)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            except FileExistsError:
+                return False
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(text)
+            except Exception:
+                # A partially written exclusive file is worse than none: the
+                # loser of the next race would chain onto a truncated record.
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+                raise
+        return True
+
     def upload_file(self, local_path: str | os.PathLike, uri: str) -> str:
         with _write_guard(f"upload_file<-{local_path}", uri, self._backend_name):
             p = self._local_path(uri)
@@ -232,6 +266,22 @@ class BlobStorage(Storage):
 
     def write_text(self, uri: str, text: str) -> str:
         return self.write_bytes(uri, text.encode("utf-8"))
+
+    @_observed("create_exclusive")
+    def create_exclusive(self, uri: str, text: str) -> bool:
+        """Conditional PUT: ``overwrite=False`` makes the service reject a blob
+        that already exists, which is the same guarantee ``O_CREAT | O_EXCL``
+        gives on the filesystem — evaluated at the storage account, so it holds
+        across processes, hosts and scale-out instances."""
+        with _write_guard("create_exclusive", uri, self._backend_name):
+            try:
+                self._client(uri).upload_blob(text.encode("utf-8"),
+                                              overwrite=False)
+            except Exception as exc:  # noqa: BLE001 - narrowed below
+                if type(exc).__name__ == "ResourceExistsError":
+                    return False
+                raise
+        return True
 
     def upload_file(self, local_path: str | os.PathLike, uri: str) -> str:
         with _write_guard(f"upload_file<-{local_path}", uri, self._backend_name):

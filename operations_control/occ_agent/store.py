@@ -59,7 +59,15 @@ from apps.blob_trigger_app.storage import Storage, join_uri
 
 from ..contracts import canonical_json, new_id, now_iso, stable_hash
 from ..engine import OpsError
-from ..stores import DEFAULT_OPS_CONTAINER, OpsLayout, OpsStore, _read_json, _write_json
+from ..audit_chain import append_to_chain
+from ..stores import (
+    DEFAULT_OPS_CONTAINER,
+    OpsLayout,
+    OpsStore,
+    _create_exclusive,
+    _read_json,
+    _write_json,
+)
 from .policy import (
     RUNTIME_MODE_SYNTHETIC,
     sandbox_path,
@@ -208,6 +216,13 @@ class SyntheticRunStore:
         return self._c(validate_segment(tenant, "tenant"), "agent-runs",
                        validate_case_ref(case_ref), "audit")
 
+    def audit_key_uri(self, tenant: str, case_ref: str, key: str) -> str:
+        """Idempotency markers, kept OUTSIDE the audit prefix — ``list_audit``
+        lists that prefix recursively and would read a marker back as a record."""
+        safe = "".join(c if (c.isalnum() or c in "-_.") else "_" for c in key)
+        return self._c(validate_segment(tenant, "tenant"), "agent-runs",
+                       validate_case_ref(case_ref), "audit-keys", f"{safe}.json")
+
     def case_dir(self, tenant: str, case_ref: str) -> Path:
         p = sandbox_path(self.sandbox, validate_segment(tenant, "tenant"),
                          validate_case_ref(case_ref))
@@ -291,36 +306,61 @@ class SyntheticRunStore:
                      input_reference: str = "", output_reference: str = "",
                      decision_basis: str = "",
                      execution_classification: str = EXEC_DETERMINISTIC,
-                     detail: Optional[Dict[str, Any]] = None) -> RunAuditEvent:
-        head = _read_json(self.storage,
-                          self.audit_head_uri(tenant, case_ref)) or {}
-        seq = int(head.get("seq") or 0) + 1
-        event = RunAuditEvent(
-            event_id=new_id("cae"), case_ref=case_ref, at=now_iso(),
-            actor_type=actor_type, actor_identity=actor_identity,
-            action=action, prior_state=prior_state,
-            resulting_state=resulting_state, input_reference=input_reference,
-            output_reference=output_reference, decision_basis=decision_basis,
-            runtime_mode=RUNTIME_MODE_SYNTHETIC,
-            execution_classification=execution_classification,
-            detail=detail or {}, prev_hash=head.get("record_hash") or "")
-        event.record_hash = self._hash(event)
-        _write_json(self.storage, self.audit_uri(tenant, case_ref, seq),
-                    {"seq": seq, **event.to_dict()})
-        _write_json(self.storage, self.audit_head_uri(tenant, case_ref),
-                    {"seq": seq, "record_hash": event.record_hash})
-        return event
+                     detail: Optional[Dict[str, Any]] = None,
+                     idempotency_key: str = "") -> RunAuditEvent:
+        """Append one case audit event. Safe under concurrent writers.
 
-    @staticmethod
-    def _hash(event: RunAuditEvent) -> str:
-        d = event.to_dict()
+        Sequence allocation is an atomic exclusive create rather than a
+        read-modify-write — see :mod:`operations_control.audit_chain` for why
+        the old shape lost events while still verifying.
+        """
+        at = now_iso()
+        event_id = new_id("cae")
+
+        def _build(seq: int, prev_hash: str) -> Dict[str, Any]:
+            event = RunAuditEvent(
+                event_id=event_id, case_ref=case_ref, at=at,
+                actor_type=actor_type, actor_identity=actor_identity,
+                action=action, prior_state=prior_state,
+                resulting_state=resulting_state, input_reference=input_reference,
+                output_reference=output_reference, decision_basis=decision_basis,
+                runtime_mode=RUNTIME_MODE_SYNTHETIC,
+                execution_classification=execution_classification,
+                detail=detail or {}, prev_hash=prev_hash)
+            return event.to_dict()
+
+        record, _seq, _created = append_to_chain(
+            read_json=lambda uri: _read_json(self.storage, uri),
+            create_exclusive=lambda uri, text: _create_exclusive(
+                self.storage, uri, text),
+            write_json=lambda uri, doc: _write_json(self.storage, uri, doc),
+            head_uri=self.audit_head_uri(tenant, case_ref),
+            record_uri=lambda seq: self.audit_uri(tenant, case_ref, seq),
+            build_record=_build,
+            record_hash_of=lambda rec: self._hash_dict(rec),
+            idempotency_key=idempotency_key,
+            key_uri=lambda key: self.audit_key_uri(tenant, case_ref, key))
+
+        return RunAuditEvent(**{k: v for k, v in record.items()
+                                if k in RunAuditEvent.__dataclass_fields__})
+
+    #: The fields that constitute one event's identity for hashing. `seq` is
+    #: deliberately absent: the record is chained by `prev_hash`, and including
+    #: the slot number would make an event's hash depend on which race it won.
+    _HASH_FIELDS = ("event_id", "case_ref", "at", "actor_type",
+                    "actor_identity", "action", "prior_state",
+                    "resulting_state", "input_reference", "output_reference",
+                    "decision_basis", "runtime_mode",
+                    "execution_classification", "detail", "prev_hash")
+
+    @classmethod
+    def _hash(cls, event: RunAuditEvent) -> str:
+        return cls._hash_dict(event.to_dict())
+
+    @classmethod
+    def _hash_dict(cls, record: Dict[str, Any]) -> str:
         return stable_hash(canonical_json(
-            {k: d[k] for k in ("event_id", "case_ref", "at", "actor_type",
-                               "actor_identity", "action", "prior_state",
-                               "resulting_state", "input_reference",
-                               "output_reference", "decision_basis",
-                               "runtime_mode", "execution_classification",
-                               "detail", "prev_hash")}))
+            {k: record.get(k) for k in cls._HASH_FIELDS}))
 
     def list_audit(self, tenant: str, case_ref: str) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
