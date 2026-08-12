@@ -87,13 +87,15 @@ snapshots.
 | **WA remaining term** | `maturity_date` | Yes | REG (RREL24) | No | `maturity_within_horizon_share` only | **READY, not exposed** |
 | **Concentrations (geo, borrower, top-N)** | geography, `borrower_identifier`, balance | Yes | analytics + REG | No | 17 library metrics (geography 6, borrower 6, balance 5) | **Yes — READY** |
 | **Vintage / cohort performance** | `origination_date` + any measure | Yes | REG | Yes | `cohort_comparison` | **Yes, with a caveat (§7)** |
-| **Contractual WAL — bullet / fixed amortisation** | `maturity_date`, RREL37 frequency, `regular_principal_instalment`, `balloon_amount`, RREL35 = BLLT or FIXE | Yes | REG ×5 + one analytics field | No | none | **READY, not exposed (§11)** |
-| **Contractual WAL — French / German** | the above + per-period P&I split | **Partly** | RREL35 = FRXX/DEXX | No | none | **METHODOLOGY GAP (§11)** |
-| **Contractual WAL — ERM (RREL35 = OTHR)** | — | — | — | — | — | **UNDEFINED — no contractual repayment date (§11)** |
+| **Contractual WAL — BLLT / FIXE, any rate type** | RREL30, RREL24, RREL37, RREL41 | Yes | REG ×5 (RREL41 ×3) | No | none | **LATENT DETERMINISTIC MI (§11)** |
+| **Contractual WAL — FRXX / DEXX, fixed rate** | + RREL39 instalment, RREL43 rate, RREL42 = FXRL | Yes | REG ×5 | No | none | **LATENT DETERMINISTIC MI (§11)** |
+| **Contractual WAL — FRXX / DEXX, floating or resetting** | + the future index level | **No** | RREL44–49 describe the structure, not the level | No | none | **ASSUMPTION REQUIRED (§11)** |
+| **Contractual WAL — ERM (RREL35 = OTHR)** | a repayment date that does not contractually exist | **No** | — | — | — | **MODEL REQUIRED (§11)** |
 | **Observed portfolio life / runoff** | governed snapshots | Yes | HIST | Yes | `portfolio_series` (partly) | **READY, not exposed** |
 | **Expected WAL** | the above **+ a prepayment assumption** | No | — | — | none | **ASSUMPTION-MODEL REQUIRED** |
-| **YTM — bullet / fixed amortisation** | `purchase_price` RREL34, `current_interest_rate`, balance, maturity, frequency | Yes | REG ×5 | No | none | **READY, not exposed (§12)** |
-| **YTM — French / German** | the above + per-period P&I split | **Partly** | REG ×5 | No | none | **METHODOLOGY GAP (§12)** |
+| **Contractual YTM — fixed rate (RREL42 = FXRL), any amortisation type** | RREL34 price, RREL43 rate, RREL38 frequency, RREL6 as-of, + the §11 principal series | Yes | REG ×5 | No | none | **LATENT DETERMINISTIC MI (§12)** |
+| **Contractual YTM — floating or resetting** | + the future index level | **No** | — | No | none | **ASSUMPTION REQUIRED (§12)** |
+| **Day-count-exact YTM on Annex 2** | `day_count_convention` | **No** | CREL122 — **Annex 3 only** | No | none | **FIELD GAP (§12)** |
 | **YTW** | the above **+ call/prepayment scenarios**, at note level | **No** | no tranche/note data model exists | — | none | **EXPOSURE GAP + ASSUMPTION-MODEL** |
 | **PD / LGD** | `bank_internal_loss_given_default_lgd_estimate`, `loss_given_default` | Yes, **as supplied values** | analytics layer | No | none | **READY to report, never to model** |
 | **Regulatory field readiness** | ND rules + `regime_mapping` | Yes | `annex2_field_universe.yaml` | No | `regulatory_readiness` | **Yes — READY** |
@@ -145,6 +147,21 @@ concepts MI does not read are not missing; they are unread.
 
 ## 4. Field gap vs KPI gap
 
+Five classifications, used consistently from here on. The distinction that
+matters most is between the second and the last two: *"Trakt doesn't have WAL"*
+and *"Trakt holds everything contractual WAL needs for this amortisation type
+and has not exposed the arithmetic"* are materially different statements, and
+the earlier drafts of this report ran them together.
+
+| Classification | Meaning |
+|---|---|
+| **READY** | the calculation exists and its inputs are sufficient |
+| **LATENT DETERMINISTIC MI** | every economically necessary input exists, the result is deterministic, and only the enumeration is unwritten |
+| **FIELD GAP** | a genuinely necessary contractual input is unavailable |
+| **ASSUMPTION REQUIRED** | the result depends on an unknown future variable — a floating reference rate |
+| **MODEL REQUIRED** | the meaningful result depends on behavioural assumptions — ERM mortality and redemption |
+
+
 | Metric | Classification | Why |
 |---|---|---|
 | Arrears share, DPD bands | **READY** | fields and calculation both present |
@@ -156,12 +173,14 @@ concepts MI does not read are not missing; they are unread.
 | Cure rate | **METHODOLOGY GAP** | needs an observation window, which is a choice |
 | WA seasoning / remaining term / borrower age | **METHODOLOGY GAP** | the weighted-average evaluator already exists |
 | SMM/CPR numerator on **RMBS** | **FIELD GAP, asset-class-scoped** | `unscheduled_principal_collections` is Annex 3 only |
-| Contractual WAL, bullet / fixed | **READY, not exposed** | the cash flows are an enumeration over fields already held |
-| Contractual WAL, French / German | **METHODOLOGY GAP** | Trakt receives an instalment amount, not a per-period principal series |
-| Contractual WAL, ERM (`OTHR`) | **not applicable** | no contractual repayment date exists to weight |
+| Contractual WAL, BLLT / FIXE, any rate type | **LATENT DETERMINISTIC MI** | the principal series is rate-independent and contractually fixed |
+| Contractual WAL, FRXX / DEXX, fixed rate | **LATENT DETERMINISTIC MI** | RREL39 supplies the constant instalment; the split is arithmetic |
+| Contractual WAL, FRXX / DEXX, floating or resetting | **ASSUMPTION REQUIRED** | the principal split moves with an unknown future index |
+| Contractual WAL, ERM (`OTHR`) | **MODEL REQUIRED** | repayment is contingent and undated; a legal maturity is not a WAL |
 | Expected WAL | **ASSUMPTION-MODEL REQUIRED** | out of scope by the brief |
-| YTM, bullet / fixed | **READY, not exposed** | RREL34 supplies price relative to par; cash flows as above |
-| YTM, French / German | **METHODOLOGY GAP** | same per-period decomposition as WAL |
+| Contractual YTM, any amortisation type, fixed rate (FXRL) | **LATENT DETERMINISTIC MI** | price RREL34, rate RREL43, as-of RREL6 all present |
+| Contractual YTM, floating or resetting | **ASSUMPTION REQUIRED** | future index level, not a field |
+| Day-count-exact YTM on Annex 2 | **FIELD GAP** | `day_count_convention` is CREL122 — Annex 3 only |
 | YTW | **EXPOSURE GAP** | Trakt holds no tranche or note-level data at all |
 | PD / LGD modelling | **out of scope** | supplied estimates may be reported; none may be built |
 | Submission acceptance state | **DATA GAP** | genuinely external evidence Trakt does not hold |
@@ -334,8 +353,9 @@ Metrics Trakt can calculate today from governed fields and does not expose.
 | **MEDIUM** | WA seasoning, WA remaining term, WA borrower age | RREL23, RREL24, borrower age roles | quoted in every pool summary; the evaluator already supports them |
 | **MEDIUM** | Original / indexed LTV as distinct metrics | RREC16, `indexed_loan_to_value` | roles resolve; no library metric distinguishes them from current LTV |
 | **MEDIUM** | Observed portfolio runoff / life to date | governed snapshots | the honest, assumption-free half of WAL (§11) |
-| **MEDIUM** | Contractual WAL, bullet and fixed-amortisation | `maturity_date`, RREL37, `regular_principal_instalment`, RREL41 | an enumeration, not an engine — **but rates LOW on Trakt's own ERM book, where RREL35 is `OTHR` and contractual WAL is undefined** (§11) |
-| **MEDIUM** | Loan-level YTM, same exposures | the above + `purchase_price` RREL34 | price relative to par is already Mandatory on all five annexes (§12) |
+| **MEDIUM** | Contractual WAL — BLLT / FIXE, any rate type | RREL30, RREL24, RREL37, RREL41 | the principal series is rate-independent; pure enumeration. **Rates LOW on Trakt's own ERM book, where RREL35 is `OTHR`** (§11) |
+| **MEDIUM** | Contractual WAL — FRXX / DEXX at a **fixed** rate | + RREL39, RREL43 | `payment_due` supplies the constant instalment on all five annexes; the principal split is arithmetic, not a model (§11) |
+| **MEDIUM** | Contractual YTM — any amortisation type at a fixed rate | + RREL34, RREL6 | price relative to par and the as-of date are both Mandatory-scale (§12) |
 | **LOW** | `outstanding_balance_period_*` as a received schedule | eight analytics fields | shaped like a dated balance path; **no code, no semantics, no consumer — needs a specification decision before any use** (§11) |
 | **MEDIUM** | Supplied LGD reporting | `bank_internal_loss_given_default_lgd_estimate` | reporting the originator's own estimate is not modelling; **Trakt still builds no PD/LGD** |
 | **MEDIUM** | Payment-frequency and amortisation-shape mix | RREL37, RREL35 | eligibility screens ask for these directly |
@@ -345,160 +365,180 @@ Metrics Trakt can calculate today from governed fields and does not expose.
 
 ---
 
-## 11. Weighted average life
+## 11. Weighted average life, by amortisation type
 
-An earlier draft of this section said WAL was blocked behind a "contractual
-schedule builder". That was inferred from the absence of a WAL function rather
-than established from the field universe, and re-checking the universe shows it
-was wrong in **both** directions. Trakt can compute contractual WAL directly
-today for part of the book, and no builder would ever produce one for the part
-that matters most to Trakt.
+Two earlier drafts of this section got this wrong in opposite directions. The
+first said WAL was blocked behind a "contractual schedule builder", inferred
+from the absence of a WAL function. The second split it BLLT/FIXE versus
+FRXX/DEXX and treated the latter as blocked outright. Both were too coarse,
+because **RREL35 is itself a governed field**: the contract tells Trakt what
+happens to principal, so the question is not "does a schedule exist?" but
+"given what the contract says, are the governed fields sufficient to enumerate
+the cash flows without assuming anything?"
 
-### What Trakt actually receives
+Asked that way, the answer separates cleanly — and the separator is not the
+amortisation type alone. It is the amortisation type crossed with RREL42.
 
-| Ingredient | Field | Coverage |
+### The distinction that does the work
+
+**WAL is a principal-weighted measure. It does not depend on the interest rate
+at all — unless the amortisation type makes the principal series depend on it.**
+
+- Under **BLLT** and **FIXE** the contract fixes the *principal* series
+  directly ("full principal repaid in the last instalment"; "the principal
+  amount repaid in each instalment is the same"). The rate is irrelevant to
+  WAL. A floating-rate FIXE loan has a fully determined principal schedule.
+- Under **FRXX** and **DEXX** the contract fixes the *total* instalment, so
+  `principal_t = instalment − rate_t × balance_(t−1)`. The principal series is
+  a function of the rate, and WAL inherits whatever uncertainty the rate has.
+
+YTM, by contrast, needs the interest series in every case, so it always
+inherits the rate's uncertainty.
+
+That single observation dissolves most of the supposed blocker.
+
+### What the governed fields supply
+
+Every input below is canonical, and the annex coverage is stated rather than
+assumed:
+
+| Input | Field | Annexes |
 |---|---|---|
-| Periodic principal amount | `regular_principal_instalment` | **analytics only — no regime code on any annex** |
-| Periodic interest amount | `regular_interest_instalment` | analytics only |
-| Next payment amount (P&I combined) | `payment_due` RREL39 | all five annexes — but a **scalar**, not a vector |
-| Principal payment frequency | `scheduled_principal_payment_frequency` RREL37 | all five annexes |
-| Interest payment frequency | `scheduled_interest_payment_frequency` RREL38 | all five annexes |
-| Next payment **date** | `next_payment_date` CREL104 | **Annex 3 only** |
-| Amortisation start date | `start_date_of_amortisation` CREL16 | **Annex 3 only** |
-| Payments already made | `number_of_payments_before_securitisation` RREL58 | all five annexes |
-| Maturity | `maturity_date` RREL24 | all five annexes |
-| Terminal principal | `balloon_amount` RREL41 | A2/A4/A9 — **absent from Annex 3** |
-| Amortisation shape | `amortisation_type` RREL35 | all five annexes |
-| Current period scheduled P&I | `total_scheduled_principal_interest_due` CREL123 | **Annex 3 only** |
+| Amortisation shape | `amortisation_type` RREL35 | **5** |
+| Rate type | `interest_rate_type` RREL42 | 3 (A2/A3/A4) |
+| Outstanding balance | `current_principal_balance` RREL30 | **5** |
+| Maturity | `maturity_date` RREL24 | **5** |
+| Principal frequency | `scheduled_principal_payment_frequency` RREL37 | **5** |
+| Interest frequency | `scheduled_interest_payment_frequency` RREL38 | **5** |
+| **Constant total instalment** | `payment_due` RREL39 — *"the next contractual payment due by the obligor according to the payment frequency"* | **5** |
+| Current rate | `current_interest_rate` RREL43 | **5** |
+| Terminal principal | `balloon_amount` RREL41 | 3 (**not Annex 3**) |
+| Principal grace | `principal_grace_period_end_date` RREL36 | **5** |
+| Rate reset interval | `interest_rate_reset_interval` RREL47 | **5** |
+| Rate cap / floor | `interest_rate_cap` RREL48 / `interest_rate_floor` RREL49 | **5** |
+| Next contractual rate change | `interest_revision_date_1..3` RREL51/53/55 | 2 |
+| As-of date | `data_cut_off_date` RREL6 | **5** |
+| Price relative to par | `purchase_price` RREL34 | **5** |
+| Payments already made | `number_of_payments_before_securitisation` RREL58 | **5** |
+| Per-period principal | `regular_principal_instalment` | **0 — analytics only** |
+| Day-count convention | `day_count_convention` CREL122 | **1 — Annex 3 only** |
 
-So the honest characterisation is: **Trakt receives a periodic instalment
-amount and a frequency, not a dated schedule of principal.** One amount per
-loan, not a vector by date. That distinction is what decides the question, and
-it decides it differently for each amortisation type.
+`payment_due` (RREL39) is the field the previous draft missed, and it is the
+one that matters most: for a French loan the total instalment *is* constant, so
+RREL39 **is** the constant the decomposition needs — Mandatory-scale coverage on
+all five annexes. And `regular_principal_instalment` having no regime code
+turns out not to block FIXE either, because constant principal is recoverable
+as `(balance − balloon) ÷ remaining periods`.
 
-### Whether that is sufficient depends entirely on RREL35
+> **One trap this section creates, closed here before someone falls into it.**
+> RREL39 is *principal **plus** interest*. It must never be substituted for
+> `regular_principal_instalment` in the SMM denominator (§5), which needs
+> scheduled **principal** alone. Doing so would inflate the deduction by the
+> whole interest instalment, shrink the exposed balance and overstate every
+> prepayment rate Trakt publishes. The current fallback — when
+> `regular_principal_instalment` is absent, use the full opening balance and
+> label the result an approximation — is the conservative direction and is the
+> right one to keep.
 
-The regime defines five values, and they do not behave alike:
+### The matrix
 
-| RREL35 | Definition | Principal per period | Contractual WAL from held fields? |
-|---|---|---|---|
-| **BLLT** | "full principal amount is repaid in the last instalment" | one cash flow at maturity | **Yes — directly, today.** WAL *is* the term to maturity |
-| **FIXE** | "the principal amount repaid in each instalment is the same" | constant | **Yes — directly**, where `regular_principal_instalment` is populated |
-| **FRXX** | "the total amount — principal plus interest — repaid in each instalment is the same" | **varies every period** | **No** — see below |
-| **DEXX** | "the first instalment is interest-only and the remaining instalments are constant" | varies, plus a phase change | **No** |
-| **OTHR** | — | undefined | **No — and no builder would help** |
+Rate types per RREL42: **FXRL** fixed for life; **FXPR** fixed with future
+periodic resets; **FLCF** fixed with compulsory future switch to floating;
+**FLIF / FINX / FLFL / CAPP / FLCA** floating variants; **DISC / SWIC / OBLS /
+MODE / OTHR** special forms.
 
-**For BLLT and FIXE, no builder is required and none should be written.** The
-cash flows are an enumeration: frequency from RREL37, count from the balance
-divided by the instalment (or the term), terminal amount from RREL41. That is
-arithmetic over fields already held, with no assumption anywhere in it.
-`Σ(Pᵢ·tᵢ)/ΣPᵢ` follows immediately. **This is a real capability Trakt has and
-does not expose**, and the previous draft wrongly listed it as blocked.
+| RREL35 | Rate type | Required inputs available? | Cash flows deterministic? | Contractual WAL | Contractual YTM | Exact blocker |
+|---|---|---|---|---|---|---|
+| **BLLT** | any | Yes — RREL30, RREL24 for WAL; + RREL43, RREL38, RREL34, RREL6 for YTM | **Principal: yes, unconditionally.** Interest: only if fixed | **LATENT DETERMINISTIC MI** — WAL *is* the term to maturity | **LATENT DETERMINISTIC MI** (FXRL) / **ASSUMPTION REQUIRED** (floating) | none for WAL; future index for floating YTM |
+| **FIXE** | any | Yes — RREL30, RREL37, RREL24, RREL41; instalment derivable if `regular_principal_instalment` absent | **Principal: yes, unconditionally** — constant principal is rate-independent | **LATENT DETERMINISTIC MI** | **LATENT DETERMINISTIC MI** (FXRL) / **ASSUMPTION REQUIRED** (floating) | none for WAL; future index for floating YTM |
+| **FRXX** | **FXRL** | Yes — RREL39 instalment, RREL43 rate, RREL30, RREL37, RREL24, RREL36 | **Yes** — iterate `principal_t = RREL39 − r × balance_(t−1)` | **LATENT DETERMINISTIC MI** | **LATENT DETERMINISTIC MI** | none — arithmetic only |
+| **FRXX** | FXPR / FLCF | Partly — RREL51 gives the *date* of the change, not the rate | Deterministic **only to the first revision date** | **ASSUMPTION REQUIRED** beyond RREL51 | **ASSUMPTION REQUIRED** beyond RREL51 | the reset rate at RREL51; RREL50 gives the margin, not the index |
+| **FRXX** | FLIF / FINX / FLFL / CAPP / FLCA | Rate structure known (RREL44–49), future index level not | **No** — instalment resets, and the principal split moves with it | **ASSUMPTION REQUIRED** | **ASSUMPTION REQUIRED** | the future reference index from the next reset (RREL47) onward. RREL48/49 bound it; they do not determine it |
+| **DEXX** | **FXRL** | Yes — as FRXX, plus the interest-only first period, datable from RREL23/RREL58/RREL36 | **Yes** | **LATENT DETERMINISTIC MI** | **LATENT DETERMINISTIC MI** | none — arithmetic only |
+| **DEXX** | resetting / floating | as FRXX above | No | **ASSUMPTION REQUIRED** | **ASSUMPTION REQUIRED** | as FRXX above |
+| **OTHR** — Trakt's ERM book | any | Balance, legal maturity and rate all present | **No** — repayment is contingent on death, sale or long-term care, none of which is contractually dated | **not applicable** — see below | **not applicable** | no contractual repayment date exists |
+| **OTHR** — anything else | any | unknown by construction | Unknown | **FIELD GAP** — the contract's principal behaviour is not stated | **FIELD GAP** | RREL35 = OTHR conveys no principal profile |
+| any | frequency RREL37 = `OTHR` | Frequency unknown | **No** | **FIELD GAP** | **FIELD GAP** | the payment interval itself |
 
-**For FRXX and DEXX it genuinely is insufficient, and the reason is specific.**
-Under French amortisation the constant quantity is the *total* instalment; the
-principal portion rises every period as the interest portion falls. A single
-`regular_principal_instalment` scalar cannot represent a series that changes
-each period. Recovering it means iterating
+### Two conventions to state, neither of which is an assumption about the future
 
-```
-principal_t = instalment − rate_t × balance_(t−1)
-balance_t   = balance_(t−1) − principal_t
-```
+**Payment-date anchoring on Annex 2.** Annex 2 carries no payment-date field —
+`next_payment_date` and `start_date_of_amortisation` are CREL104 and CREL16,
+Annex 3 only. Residential payment dates must be anchored either by counting
+back from `maturity_date` at RREL37 frequency, or forward from
+`origination_date` plus RREL58 payments made. Both are deterministic
+arithmetic, they can disagree by a stub period, and choosing between them is a
+**stated convention**, not a forecast. It belongs in a methodology identifier,
+not in a gap register.
 
-which is an amortisation computation, not a lookup — and it needs the rate to
-be projected, which for a variable-rate loan (`interest_rate_type` RREL42) is
-an assumption rather than a fact. **That** is the blocker, and it is narrower
-than "a schedule builder": it is the principal/interest decomposition for two
-of five amortisation types.
+**Day count.** `day_count_convention` exists only as CREL122, Annex 3. A
+**period-basis** YTM — discount at the payment frequency, annualise by it —
+needs no day-count convention and is exact on regular schedules. A
+**day-count-exact** YTM on residential does need it, and that is the one
+genuine, precisely nameable field gap in this whole section: *Annex 2 has no
+day-count convention field.*
 
-**Two timing caveats, both real and neither fatal.** Annex 2 carries **no
-payment-date field** — `next_payment_date` and `start_date_of_amortisation` are
-Annex 3 codes. For a residential loan the payment dates must be anchored from
-`maturity_date` counted back by RREL37, or from `origination_date` plus RREL58.
-Both are deterministic where the frequency is regular, and RREL37 admits
-`OTHR`, where neither is. And `regular_principal_instalment` carries no regime
-code at all, so on a purely regulatory tape it may simply be absent — in which
-case even FIXE needs the instalment derived from balance and term.
+### ERM, kept separate
 
-### The part that no builder fixes
+Three things must not be run together, and the previous draft nearly did:
 
-Trakt's primary book is equity release, and the repository already reasons this
-out in `config/asset/product_defaults_ERM.yaml`: a lifetime mortgage "rolls up
-interest and repays at death/sale ... it is **NOT** a scheduled bullet
-amortisation under the Annex 2 definition", and Trakt therefore reports it as
-`OTHR`.
-
-That is the substantive answer for the book Trakt actually holds. There are no
-contractual principal payments before an event — death, sale, entry to care —
-which is not contractually dated. **A contractual WAL for an ERM loan is not
-blocked by missing data or missing code; it is undefined.** Any ERM WAL is an
-*expected* WAL and needs mortality and voluntary-redemption assumptions, which
-is forecasting and is out of scope by the brief.
-
-### One undocumented family worth a decision
-
-Eight canonical fields — `outstanding_balance_period_1`,
-`outstanding_balance_period_2_120`, `outstanding_balance_period_121_599`,
-`outstanding_balance_period_600` and a `_date` companion for each — have the
-shape of a **received, dated projected balance path**. If a tape populates
-them, they are the closest thing to an amortisation schedule Trakt is given,
-and a WAL could be read off them directly.
-
-They also have **no regime code, no business-semantics entry, no alias, and no
-consumer anywhere in the repository**. They are declared and inert. Nothing
-should be built on them until someone states what they mean; that is a question
-for whoever specified them, not something to infer from four field names.
-
-### Summary
-
-| Question | Answer |
+| | ERM |
 |---|---|
-| Contractual WAL, bullet and fixed-amortisation exposures | **Computable now. Latent MI, not a gap** |
-| Contractual WAL, French / German amortisation | Needs a principal-interest decomposition per period, and a rate projection if variable-rate |
-| Contractual WAL, ERM (`OTHR`) | **Undefined** — no contractual repayment date exists |
-| Observed portfolio life / runoff | Computable now from governed snapshots, no assumptions |
-| Expected WAL | Assumption model. Out of scope |
+| **Contractual / legal maturity** | Exists. `maturity_date` RREL24 is populated — often a long-stop age |
+| **Contractual WAL** | **Does not exist.** There are no contractual principal payments before an undated contingent event |
+| **Expected WAL** | **MODEL REQUIRED** — mortality, morbidity, voluntary redemption |
+
+`config/asset/product_defaults_ERM.yaml` already reasons this out: a lifetime
+mortgage "rolls up interest and repays at death/sale ... it is **NOT** a
+scheduled bullet amortisation under the Annex 2 definition", and Trakt
+therefore reports `OTHR`. A legal long-stop maturity must not be pressed into
+service as a contractual WAL — it would produce a confident number that is
+wrong by decades. **No mortality modelling is proposed, and none should be
+built into Trakt MI.**
+
+### The undocumented family, unchanged
+
+`outstanding_balance_period_1 / _2_120 / _121_599 / _600`, each with a `_date`
+companion, have the shape of a received, dated balance path — which for `OTHR`
+loans would be the only route to any WAL at all. They carry no regime code, no
+semantics entry, no alias and **no consumer anywhere in the repository**.
+Whether they are a projection, a contractual schedule, or something else is a
+specification question for whoever defined them. Nothing should be built on
+them until it is answered.
 
 ---
 
 ## 12. Yield to maturity and yield to worst
 
-**YTM inherits §11 exactly, and the price term is already there.**
-`purchase_price` (RREL34) is Mandatory on all five annexes and is defined as
-*"the price, relative to par, at which the underlying exposure was purchased by
-the SSPE. Enter 100 if no discounting was applied"* — precisely the price basis
-an IRR needs, and on a percentage-of-par scale that needs no consideration
-figure.
+**YTM needs three things: a price, dated contractual principal, and dated
+contractual interest.** Taking them in turn against the governed fields:
 
-So the same split applies, for the same reason:
+| Component | Status |
+|---|---|
+| **Price** | **Present.** `purchase_price` RREL34, all five annexes, defined as *"the price, relative to par, at which the underlying exposure was purchased by the SSPE. Enter 100 if no discounting was applied"* — already a percent-of-par scale, so no cash consideration is needed |
+| **Dated contractual principal** | Exactly as §11 — unconditional for BLLT/FIXE, deterministic for fixed-rate FRXX/DEXX, assumption-dependent for resetting and floating |
+| **Dated contractual interest** | `current_interest_rate` RREL43 (all five) × balance × `scheduled_interest_payment_frequency` RREL38 (all five). Deterministic **only where the rate is contractually fixed** (RREL42 = FXRL) |
+| **Discount anchor** | **Present.** `data_cut_off_date` RREL6, all five annexes |
+| **Day-count basis** | **Present on Annex 3 only** (CREL122). Not required for a period-basis YTM; required for a day-count-exact one |
 
-- **Bullet and fixed-amortisation exposures: YTM is computable today.** Price
-  from RREL34, cash flows by enumeration, coupon from `current_interest_rate`
-  (RREL43). For a bullet loan it is a single-cash-flow discount.
-- **French and German: blocked on the same per-period decomposition**, not on
-  price and not on data.
-- **ERM (`OTHR`): the cash-flow *dates* are behavioural**, so a contractual YTM
-  is undefined for the same reason its WAL is.
+So the answer to "is something else missing?" is specific rather than general:
+**nothing is missing for a period-basis contractual YTM on a fixed-rate loan of
+any amortisation type.** The two named gaps are the Annex 2 day-count
+convention (for day-count exactness only) and the future index level (for
+floating and resetting loans, which is an assumption, not a field).
 
-One caveat worth stating before anyone quotes it: on a warehouse book bought at
-par, RREL34 is 100 for every loan and YTM collapses to the coupon. That is a
-correct answer that will look like a broken calculation.
+One caveat before anyone quotes the result: on a warehouse book bought at par,
+RREL34 is 100 for every loan and YTM collapses to the coupon. That is a correct
+answer that will be read as a broken calculation.
 
-**YTW remains an exposure gap, and for a different reason entirely.** Yield to
-worst is the minimum yield across call and prepayment scenarios, and where it
-is normally quoted it is a **note-level** measure. Trakt does not model the
+**YTW remains an exposure gap, and for an unrelated reason.** Yield to worst is
+the minimum yield across call and prepayment scenarios and, where it is
+normally quoted, it is a **note-level** measure. Trakt does not model the
 liability side: no canonical field carries a tranche or class balance, coupon,
-attachment point or paydown. The nine fields whose names mention notes,
-seniority or subordination — `noteholder_consent`, `seniority`,
-`principal_payment_allocation_to_senior_loan`,
-`restrictions_on_sale_of_subordinated_loan` and the rest — are all attributes
-of the **underlying exposure**, not of a tranche. The Annex 12 deal template's
-`cashflow_items` and `triggers_tests_events` lists are both empty. YTW is
-blocked by an entity Trakt does not model, and no field or formula fixes that.
-
-**None of these should be built on synthetic assumptions.** A YTM from an
-invented price, or a YTW from invented call dates, is worse than not having one.
+attachment point or paydown, and the nine fields whose names mention notes,
+seniority or subordination are all attributes of the **underlying exposure**.
+The Annex 12 deal template's `cashflow_items` and `triggers_tests_events` lists
+are both empty. No field or formula fixes that.
 
 ---
 
@@ -715,29 +755,68 @@ sprint's base rate is unkind: of the metrics examined closely, prepayment,
 arrears, severity, net loss and three Annex 12 bucket definitions were all
 wrong. Assuming the unexamined ones are fine is not supported by the evidence.
 
-**A 2.5D cash-flow sprint is justified, but it is smaller than the last draft
-of this document claimed.** Re-checking the field universe rather than
-inferring from the absence of a function changed the shape of it: WAL and YTM
-for bullet and fixed-amortisation exposures need no new engine at all — the
-cash flows are an enumeration over `maturity_date`, RREL37 frequency,
-`regular_principal_instalment` and `balloon_amount`. What genuinely needs
-building is narrower: the per-period principal/interest decomposition for the
-French and German amortisation types, where Trakt receives an instalment
-amount rather than a principal series.
+**Where WAL and YTM actually stand.** Re-checking against RREL35 and RREL42
+rather than inferring from the absence of a function moved most of this out of
+the gap column:
 
-Two things should be settled before that sprint rather than during it. The
-`outstanding_balance_period_*` family — eight fields with the shape of a
-received, dated balance path and no documentation, no regime code and no
-consumer — may already supply the schedule, and nobody should build one until
-that is answered. And on Trakt's own book the whole question changes: equity
-release reports `OTHR`, repays on death or sale, and has no contractual
-repayment date, so contractual WAL is undefined rather than unbuilt. The
-cash-flow sprint is worth doing for CRE and amortising residential; it is not
-what unlocks ERM.
+| Asset / amortisation case | Contractual WAL | Contractual YTM | Expected WAL / yield | Classification |
+|---|---|---|---|---|
+| **BLLT**, any rate type | **Yes** — the term to maturity | Yes if RREL42 = FXRL | n/a | **LATENT DETERMINISTIC MI** (YTM: ASSUMPTION REQUIRED if floating) |
+| **FIXE**, any rate type | **Yes** — constant principal is rate-independent | Yes if FXRL | n/a | **LATENT DETERMINISTIC MI** (YTM: ASSUMPTION REQUIRED if floating) |
+| **FRXX / DEXX**, fixed rate (FXRL) | **Yes** — iterate RREL39 against RREL43 | **Yes** | n/a | **LATENT DETERMINISTIC MI** |
+| **FRXX / DEXX**, fixed with resets (FXPR / FLCF) | To RREL51 only | To RREL51 only | needs a rate path | **ASSUMPTION REQUIRED** beyond the revision date |
+| **FRXX / DEXX**, floating (FLIF / FINX / FLFL / CAPP / FLCA) | No | No | needs a rate path | **ASSUMPTION REQUIRED** |
+| **ERM** (RREL35 = `OTHR`) | **Does not exist** | Does not exist | needs mortality / redemption | **MODEL REQUIRED** — and not to be built |
+| Any type where RREL37 = `OTHR` | No | No | — | **FIELD GAP** — the payment interval itself |
+| Day-count-exact YTM, Annex 2 | — | No | — | **FIELD GAP** — `day_count_convention` is CREL122, Annex 3 only |
 
-The Annex 12 CPR wiring is a separate, smaller item — the calculation exists,
-and only the projector's single-period input is in the way. YTW is separate
-again, and is a note-level data question rather than a methodology one.
+**1. Contractual WAL today, from existing governed fields:** BLLT and FIXE for
+*any* rate type, because their principal series is contractually fixed and
+rate-independent; and FRXX and DEXX where RREL42 = FXRL.
+
+**2. Contractual YTM today:** every amortisation type in answer 1, restricted
+to fixed-rate loans, on a period basis. Price (RREL34), rate (RREL43),
+frequency (RREL38) and as-of date (RREL6) are all Mandatory-scale on five
+annexes.
+
+**3. Only a small deterministic implementation:** all of the above. One
+schedule-enumeration function plus an IRR solver — no engine, no model, no new
+field. The heaviest case, FRXX at a fixed rate, is a single recurrence:
+`principal_t = RREL39 − r × balance_(t−1)`.
+
+**4. Genuinely missing fields:** two, and both are narrow. `day_count_convention`
+does not exist on Annex 2 (CREL122 is Annex 3), which blocks a day-count-exact
+YTM but not a period-basis one. And where RREL37 or RREL35 is `OTHR`, the
+contract's own terms are not conveyed — for those loans the gap is real.
+
+**5. Assumptions or models:** floating and resetting loans need a future index
+path (RREL48/49 bound it, RREL47/51 date it, nothing supplies it). ERM needs
+mortality and redemption behaviour and is out of scope — a legal long-stop
+maturity must never be dressed up as a contractual WAL.
+
+**6. Is "a contractual schedule builder is the blocker" still supportable? No —
+that description is now too broad and should be retired.** It conflates a
+missing calculation with missing information. The evidence says the opposite:
+for the majority of amortisation types the contractual cash flows are
+*deterministically enumerable from fields Trakt already holds*, and what remains
+unwritten is arithmetic. The genuine blockers are three specific things — the
+future index level on floating loans, the Annex 2 day-count convention, and the
+absence of any contractual repayment date on ERM — and only the last is
+structural.
+
+**What that means for a 2.5D sprint.** It is smaller than previously scoped and
+should be sequenced by asset class, not by metric. On CRE and amortising
+residential the work is one enumeration function and an IRR solver over fields
+already present. On Trakt's own ERM book it delivers nothing, because the
+question is undefined there. Two things should be settled first: what the
+undocumented `outstanding_balance_period_*` family actually contains, since it
+may already *be* the schedule; and which payment-date anchoring convention
+Annex 2 uses, since counting back from maturity and forward from origination can
+disagree by a stub period and the choice belongs in a methodology identifier.
+
+The Annex 12 CPR wiring is a separate, smaller item — the calculation exists and
+only the projector's single-period input is in the way. YTW is separate again,
+and is a note-level data question rather than a methodology one.
 
 **The observation from the last review still holds, and got stronger.** Every
 defect in this sprint was found by reading a definition next to the code that
