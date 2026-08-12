@@ -28,7 +28,14 @@ test.describe("Trakt landing page", () => {
   });
 
   test("loads with the proposition, navigation and both CTAs", async ({ page }) => {
-    await expect(page).toHaveTitle(/Trakt \| Governed Portfolio Intelligence/);
+    // The strapline is the title, verbatim — this is what a search result and
+    // a link preview surface.
+    await expect(page).toHaveTitle(
+      /Trakt \| Agentic portfolio intelligence\. Deterministic by design\./,
+    );
+    await expect(
+      page.getByText("Agentic portfolio intelligence.", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("heading", {
         level: 1,
@@ -366,26 +373,29 @@ test.describe("Trakt landing page", () => {
     await expect(cta.getByRole("status")).toContainText(/thank you/i);
   });
 
-  test("the intelligence section covers distribution without repeating the demo", async ({
+  test("delivery states each channel once, and the intelligence section is gone", async ({
     page,
   }) => {
-    const intelligence = page.locator("#intelligence");
-    await intelligence.scrollIntoViewIfNeeded();
+    // The Portfolio Intelligence section named the same surfaces as the tiles
+    // below it, in a second format. It must not come back.
+    await expect(page.locator("#intelligence")).toHaveCount(0);
+    await expect(page.getByText("Trakt workspace")).toHaveCount(0);
 
-    for (const channel of ["Trakt workspace", "Microsoft Teams", "Microsoft 365 Copilot"]) {
-      await expect(intelligence.getByText(channel, { exact: true })).toBeVisible();
+    const delivery = page.locator("#delivery");
+    await delivery.scrollIntoViewIfNeeded();
+
+    for (const mode of ["Managed service", "Trakt Agent", "Copilot", "Agent access"]) {
+      await expect(delivery.getByRole("heading", { name: mode, exact: true })).toBeVisible();
     }
-    // Three channel chips, each carrying a small neutral glyph — labels do the
-    // naming, no imitation product logos.
-    await expect(intelligence.locator("span:has(> svg)")).toHaveCount(3);
-    await expect(intelligence.getByText("Available today")).toBeVisible();
-    // The section's single body line: push, not pull, and governed by approval.
+    // The claim carried over from the deleted section: push, not pull, and
+    // governed by approval. Stated once on the page.
+    await expect(page.getByText("Approved risk findings are pushed to Teams.")).toHaveCount(1);
     await expect(
-      intelligence.getByText("Approved risk findings are pushed to Teams."),
+      delivery.getByText("Approved risk findings are pushed to Teams."),
     ).toBeVisible();
     // The query demo lives in section 2 — no duplicate here.
-    await expect(intelligence.locator("#example")).toHaveCount(0);
-    await expect(intelligence.locator("video")).toHaveCount(0);
+    await expect(delivery.locator("#example")).toHaveCount(0);
+    await expect(delivery.locator("video")).toHaveCount(0);
   });
 
   test("the synthetic disclosure is the amber pill, stated exactly once", async ({
@@ -437,7 +447,6 @@ test.describe("Trakt landing page", () => {
       "refusal",
       "platform",
       "controls",
-      "intelligence",
       "delivery",
       "agents",
       "governance",
@@ -726,7 +735,7 @@ test.describe("without JavaScript", () => {
   test("every section still renders at full opacity", async ({ page }) => {
     await page.goto("/");
 
-    for (const id of ["refusal", "platform", "controls", "intelligence", "delivery", "agents", "governance"]) {
+    for (const id of ["refusal", "platform", "controls", "delivery", "agents", "governance"]) {
       const painted = await page.locator(`#${id}`).evaluate((node) => {
         const target = node.querySelector("[data-reveal]") ?? node;
         return {
@@ -759,5 +768,25 @@ test.describe("mobile navigation", () => {
 
     await expect(page).toHaveURL(/#platform$/);
     await expect(menu).toBeHidden();
+  });
+
+  /**
+   * A permanent guard, not a spot check. A nav entry pointing at a section
+   * that has been deleted is silent — the link simply does nothing — so the
+   * menu is checked against the document rather than against a list kept in
+   * step by hand.
+   */
+  test("every menu link points at a section that exists", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /open menu/i }).click();
+
+    const hrefs = await page.locator("#mobile-nav a[href^='#']").evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLAnchorElement).getAttribute("href") ?? ""),
+    );
+    expect(hrefs.length).toBeGreaterThan(0);
+
+    for (const href of hrefs) {
+      await expect(page.locator(href), `${href} has no target on the page`).toHaveCount(1);
+    }
   });
 });

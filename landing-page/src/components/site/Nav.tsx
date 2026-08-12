@@ -6,13 +6,34 @@ import { TraktWordmark } from "@/components/site/TraktWordmark";
 import { buttonStyles, cx } from "@/components/ui";
 import { track } from "@/lib/analytics";
 
+/**
+ * Every navigable section, in page order. This is the mobile menu, where
+ * there is room to name the page in full.
+ *
+ * "Demo" is gone as a label: the page carries more than one, so a nav entry
+ * named after the format rather than the section told the reader nothing.
+ */
 const LINKS = [
-  { href: "#query-demo", label: "Demo" },
-  { href: "#platform", label: "Platform" },
-  { href: "#controls", label: "Risk & Controls" },
-  { href: "#intelligence", label: "Intelligence" },
-  { href: "#governance", label: "Governance" },
+  { href: "#query-demo", label: "Portfolio query", desktop: false },
+  { href: "#refusal", label: "Boundaries", desktop: false },
+  { href: "#platform", label: "Platform", desktop: true },
+  { href: "#controls", label: "Risk & controls", desktop: true },
+  { href: "#delivery", label: "Delivery", desktop: true },
+  { href: "#agents", label: "Agent-to-agent", desktop: true },
+  { href: "#governance", label: "Governance", desktop: true },
 ] as const;
+
+/**
+ * The desktop bar takes five of the seven. Measured at 1024 — the narrowest
+ * width the bar now appears at — these five come to 525px against a 589px
+ * budget once the wordmark and the CTA are subtracted.
+ *
+ * Portfolio query is dropped because it opens the page and the hero's own
+ * primary button already points at it; Boundaries because it is a sub-claim of
+ * that demo rather than a destination. Agent-to-agent is in the bar
+ * deliberately: it is the section a technical reader comes looking for.
+ */
+const DESKTOP_LINKS = LINKS.filter((link) => link.desktop);
 
 export function Nav() {
   const [open, setOpen] = useState(false);
@@ -71,7 +92,7 @@ export function Nav() {
 
     // Older Safari exposes MediaQueryList without addEventListener; the menu
     // still works there, it just does not auto-close on rotation.
-    const media = window.matchMedia?.("(min-width: 768px)");
+    const media = window.matchMedia?.("(min-width: 1024px)");
     const onChange = () => media?.matches && setOpen(false);
     media?.addEventListener?.("change", onChange);
 
@@ -95,8 +116,12 @@ export function Nav() {
           <TraktWordmark />
         </a>
 
-        <ul className="hidden items-center gap-7 md:flex">
-          {LINKS.map((link) => (
+        {/* `lg`, not `md`. At 768 the bar's contents came to 701px inside a
+            704px row — three pixels of slack, which is not a design and left
+            no room for either a longer CTA or a sixth section. Between 768 and
+            1023 the menu button is the correct control. */}
+        <ul className="hidden items-center gap-7 lg:flex">
+          {DESKTOP_LINKS.map((link) => (
             <li key={link.href}>
               <a
                 href={link.href}
@@ -108,13 +133,17 @@ export function Nav() {
           ))}
         </ul>
 
-        <div className="hidden md:block">
+        {/* Not "Book a demo": the page shows demos of its own, so an invitation
+            to book one reads as though those do not count. What is on offer
+            here is the same product run against the visitor's portfolio rather
+            than the synthetic one, and the label says so. */}
+        <div className="hidden lg:block">
           <a
             href="#book-a-demo"
             onClick={() => track("book_demo_click", { source: "nav" })}
             className={cx(buttonStyles.primary, "px-4 py-2 text-[13px]")}
           >
-            Book a demo
+            Demo on your portfolio
           </a>
         </div>
 
@@ -130,7 +159,7 @@ export function Nav() {
               return !value;
             })
           }
-          className="rounded-lg border border-line px-3 py-2 text-sm text-ink-200 md:hidden"
+          className="rounded-lg border border-line px-3 py-2 text-sm text-ink-200 lg:hidden"
         >
           <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
           <span aria-hidden="true">{open ? "✕" : "☰"}</span>
@@ -141,7 +170,7 @@ export function Nav() {
         <div
           id="mobile-nav"
           ref={menuRef}
-          className="border-t border-line bg-navy-950/97 md:hidden"
+          className="border-t border-line bg-navy-950/97 lg:hidden"
         >
           <ul className="mx-auto w-full max-w-[1600px] px-5 py-3 sm:px-8 lg:px-12">
             {LINKS.map((link) => (
@@ -167,7 +196,7 @@ export function Nav() {
                 }}
                 className="block py-3 text-sm font-semibold text-peri-300"
               >
-                Book a demo
+                Demo on your portfolio
               </a>
             </li>
           </ul>

@@ -8,10 +8,13 @@ export function Footer() {
           <TraktWordmark size={22} />
         </div>
         <div className="max-w-lg space-y-2 text-xs leading-relaxed text-ink-500">
+          {/* Aligned with the strapline's first half so the site runs one
+              product description, not two. The audience list is the part the
+              strapline does not carry, which is why it stays. */}
           <p>
-            Portfolio intelligence for specialist lenders, non-bank lenders,
-            private-credit managers, servicing businesses and securitisation
-            participants.
+            Agentic portfolio intelligence for specialist lenders, non-bank
+            lenders, private-credit managers, servicing businesses and
+            securitisation participants.
           </p>
           <p>© {new Date().getFullYear()} Trakt. All rights reserved.</p>
         </div>

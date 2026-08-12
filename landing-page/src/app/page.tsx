@@ -3,7 +3,6 @@ import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
   Architecture,
   DeliveryModes,
-  DeliveryStrip,
   ForwardControls,
   Governance,
 } from "@/components/site/Content";
@@ -97,29 +96,26 @@ export default function Page() {
             datasets to reconcile") now sits in the platform diagram's step 2,
             where the governed layer is actually described. */}
 
-        {/* 5 — Where users reach it. Distribution only — the query demo has
-            already appeared in section 2. */}
-        <Section id="intelligence" className="pb-16 sm:pb-20">
-          <Reveal>
-            {/* The deleted intro restated the query-demo section's own intro
-                and named the same three channels the chips below name. */}
-            <SectionHeading
-              id="intelligence"
-              eyebrow="Portfolio intelligence"
-              title="Portfolio intelligence where your team already works."
-            />
-            <DeliveryStrip />
-          </Reveal>
-        </Section>
+        {/* The Portfolio Intelligence section is gone: its channel chips named
+            the same surfaces as the delivery tiles below — "Trakt workspace"
+            and "Trakt Agent" were one thing under two names — in a second
+            format, two sections apart. Its one uncovered claim, proactive
+            Teams delivery, is now the delivery section's body line. */}
 
-        {/* 6b — The delivery model: five modes, stated once each, live and
+        {/* 6b — The delivery model: four modes, stated once each, live and
             roadmap kept visually distinct. Static — nothing to open. */}
         <Section id="delivery" className="pb-16 sm:pb-20">
           <Reveal>
+            {/* The body line is the one delivery behaviour the tiles cannot
+                carry: every tile describes somewhere a person goes to ask, and
+                this is the case where Trakt arrives without being asked. It is
+                the Teams outbox (`trakt_notifications/`), not the Copilot
+                agent, so it belongs to the section rather than to a tile. */}
             <SectionHeading
               id="delivery"
               eyebrow="Delivery model"
               title="Every mode reads the same governed layer."
+              intro="Approved risk findings are pushed to Teams."
             />
           </Reveal>
           <div className="mt-9">
