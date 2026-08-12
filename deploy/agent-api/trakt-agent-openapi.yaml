@@ -216,6 +216,91 @@ paths:
           $ref: '#/components/responses/UnknownTool'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/contractual_analytics:
+    post:
+      operationId: invoke_contractual_analytics
+      summary: Contractual weighted average life and periodic yield, derived only from terms the contract
+        fixes — amortisation type (RREL35), rate type (RREL42), frequency, maturity, balloon and price
+        (RREL34)
+      description: 'Contractual weighted average life and periodic yield, derived only from terms the
+        contract fixes — amortisation type (RREL35), rate type (RREL42), frequency, maturity, balloon
+        and price (RREL34). One schedule pass serves both metrics.
+
+
+        CONTRACTUAL, not observed: this is what the contract says will happen, not what borrowers do.
+        Read the status before the number. NOT_APPLICABLE on a lifetime mortgage is the correct answer
+        and not a gap — repayment is contingent on death or sale, so no contractual WAL exists and the
+        legal maturity must not be substituted for one. ASSUMPTION_REQUIRED means a floating rate makes
+        the answer unknowable, not that Trakt failed. Note that a bullet or fixed-amortisation loan keeps
+        its WAL even when floating, because its principal series does not depend on the rate.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Contractual weighted average life and yield, derived only from terms the contract
+                fixes. Nothing here forecasts: floating-rate exposures report ASSUMPTION_REQUIRED and
+                lifetime mortgages report NOT_APPLICABLE rather than producing a number from a legal maturity.'
+              properties:
+                resource:
+                  type: string
+                  description: The portfolio resource, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                metrics:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                    - contractual_wal
+                    - contractual_ytm_periodic
+                  description: Which metrics to return. Both are built from one schedule pass, so asking
+                    for both costs no more than asking for one.
+                  default:
+                  - contractual_wal
+                price_percent_of_par:
+                  type:
+                  - number
+                  - 'null'
+                  description: Override the price for yield, as a percentage of par on the RREL34 scale
+                    (100 = par). Omitted, each loan's own purchase_price is used and a loan without one
+                    reports FIELD_GAP rather than assuming par.
+                  default: null
+                explain_loan_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Return the full cash-flow schedule and methodology explanation for one
+                    named exposure.
+                  default: null
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/agent/tools/covenant_drillthrough:
     post:
       operationId: invoke_covenant_drillthrough
@@ -895,6 +980,90 @@ paths:
                   description: Include the balance bridge — how the opening balance became the closing
                     one (redemptions, additions, amortisation).
                   default: true
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/portfolio_capabilities:
+    post:
+      operationId: invoke_portfolio_capabilities
+      summary: 'What analytical capabilities Trakt can produce for this portfolio, and for each one it
+        cannot, the reason: UNAVAILABLE (an input is missing), NOT_APPLICABLE (economically meaningless
+        here), ASSUMPTION_REQUIRED (needs an unknown future rate), MODEL_REQUIRED (needs behavioural modelling)
+        or METHODOLOGY_NOT_APPROVED (the data exists and the definition is unsettled)'
+      description: 'What analytical capabilities Trakt can produce for this portfolio, and for each one
+        it cannot, the reason: UNAVAILABLE (an input is missing), NOT_APPLICABLE (economically meaningless
+        here), ASSUMPTION_REQUIRED (needs an unknown future rate), MODEL_REQUIRED (needs behavioural modelling)
+        or METHODOLOGY_NOT_APPROVED (the data exists and the definition is unsettled).
+
+
+        Call this FIRST. It tells you what is worth asking for before you ask, and it does not compute
+        anything, so surveying a portfolio is cheap. The five refusal states are not interchangeable:
+        UNAVAILABLE means a field could be requested from the client, NOT_APPLICABLE means no field would
+        help because the metric does not apply to this product, ASSUMPTION_REQUIRED means Trakt will not
+        guess a rate path, MODEL_REQUIRED means Trakt does not model behaviour, and METHODOLOGY_NOT_APPROVED
+        means Trakt has the data and has not settled the definition — report it as an open decision, not
+        as a gap. Every refusal carries missing_inputs or an explanation you can quote.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The analytical capabilities Trakt can produce for this portfolio, and the reason
+                for each one it cannot. Resolved from the governed data without computing any of the metrics.
+              properties:
+                resource:
+                  type: string
+                  description: The portfolio resource, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                categories:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Restrict to named categories — exposure, collateral, delinquency, prepayment,
+                    loss, pricing, cashflow, history, data_quality.
+                  default: null
+                status:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Restrict to named availability states. Asking for AVAILABLE alone gives
+                    the working set; asking for everything else gives the reasons.
+                  default: null
+                include_definition:
+                  type: boolean
+                  description: Include each capability's methodology, calculation source, unit and basis
+                    alongside its status.
+                  default: false
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
               additionalProperties: false
               required:
               - resource

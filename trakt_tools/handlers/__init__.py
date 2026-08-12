@@ -9,6 +9,18 @@ Adding a tool is: write the handler over an EXISTING implementation, declare its
 schemas, register it here. If a tool would need new calculation logic, it is not
 a tool yet — the calculation belongs in the domain, with the UI and the agent
 both calling it.
+
+Then regenerate the published contract::
+
+    python scripts/build_agent_openapi.py
+
+``deploy/agent-api/trakt-agent-openapi.yaml`` is GENERATED from this registry
+and checked in, so a new tool that is registered but not regenerated leaves the
+document stale — the tool exists on the Python surface and not on the HTTP one.
+``tests/test_agent_openapi_document.py`` catches it, and did, twice: both
+``contractual_analytics`` and ``portfolio_capabilities`` were committed without
+it, because the sprint that added them ran targeted test subsets rather than the
+whole suite.
 """
 
 from __future__ import annotations
