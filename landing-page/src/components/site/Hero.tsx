@@ -13,8 +13,8 @@ import type { DemoScopeInfo } from "@/types/demo";
  *
  * The three proof points are chips, not cards: a sceptical reader scanning for
  * "can I trust the numbers" gets all three in one row without reading prose.
- * Green marks them, and marks the reconciliation claim, because in the product
- * green means proven — see the accent note in `app/globals.css`.
+ * They carry no accent: green is system state only, and a claim is not a state
+ * — see the colour system in `app/globals.css`.
  */
 
 const PROOF_POINTS = [
@@ -57,12 +57,12 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
         {/* Chips, not cards: on a phone these stack as three tight lines, so the
             reader takes all three in without reading prose. Borders appear only
             once they sit in a row, where they separate the chips; unbordered on
-            mobile they stay a list rather than becoming a green panel. */}
+            mobile they stay a list rather than becoming a panel. */}
         <ul className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2.5">
           {PROOF_POINTS.map((point) => (
             <li
               key={point}
-              className="flex items-start gap-2 text-[13px] leading-snug text-ink-200 sm:max-w-[15rem] sm:flex-1 sm:rounded-lg sm:border sm:border-mint-400/30 sm:px-3 sm:py-2"
+              className="flex items-start gap-2 text-[13px] leading-snug text-ink-200 sm:max-w-[15rem] sm:flex-1 sm:rounded-lg sm:border sm:border-line sm:px-3 sm:py-2"
             >
               <CheckMark />
               {point}
@@ -112,7 +112,7 @@ function CheckMark() {
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
-      className="mt-0.5 shrink-0 text-mint-400"
+      className="mt-0.5 shrink-0 text-peri-300"
     >
       <path d="M20 6L9 17l-5-5" />
     </svg>
@@ -182,7 +182,7 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
 
           {/* One confirmatory provenance signal; the as-at date and the
               synthetic disclosure live once, in the demo's portfolio header. */}
-          <p className="mt-3 border-t border-line-soft pt-2 text-[10px] font-medium text-mint-400">
+          <p className="mt-3 border-t border-line-soft pt-2 text-[10px] font-medium text-ink-400">
             Deterministic
           </p>
         </div>

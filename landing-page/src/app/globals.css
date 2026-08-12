@@ -9,56 +9,63 @@
  * The scale below is carried over from frontend/mi-agent-ui/src/index.css so
  * the marketing site and the product read as one system.
  *
- * ── The green accent ────────────────────────────────────────────────
- * `mint-400` (#36c2a8) is the MI Agent's UI green, taken verbatim from
- * frontend/mi-agent-ui/src/index.css:21. In the product it marks one thing:
- * a state that has been proven — validation "Pass", a clean pipeline
- * snapshot, a risk limit inside its bound, a live deployment. This page
- * uses it for the same job and no other, so it stays a signal rather than
- * becoming a second brand colour:
+ * ── The colour system ──────────────────────────────────────────────
+ * ONE COLOUR, ONE JOB. Before this rule, green did six unrelated things —
+ * availability, pass state, claim emphasis, tick marks, a provenance label
+ * and button affordance — which is the same as signalling nothing. Each
+ * family below has exactly one role, and adding a second is a regression.
  *
- *   USE     trust proof points · "reconciled by construction" · the
- *           "Available today" label and the three delivery modes it heads ·
- *           "Trakt declines what it cannot derive" · lineage and validation
- *           markers
- *   DO NOT  primary buttons (those stay periwinkle) · body copy · eyebrows
- *           · headings · backgrounds or filled panels · roadmap items ·
- *           capability tiles (they are peers, and comparative emphasis
- *           fails on a phone where one card is visible at a time)
+ * GREEN  `mint-400` — SYSTEM STATE ONLY: pass, available, healthy.
+ *   USE     the "Available today" label and border on a delivery tile · a
+ *           passing evaluation in the control preview · the lead form's
+ *           success panel
+ *   NOT     claims or emphasis of any kind · tick marks · provenance
+ *           labels · button and chip borders · roadmap items
  *
- * Contrast on this page's navy: 8.5:1 on navy-950, 8.0:1 on navy-900 —
- * WCAG AA and AAA for normal text, so no lighter tint is derived.
+ * AMBER  `amber-400` — DISCLOSURE, and warning state.
+ *   The word is DISCLOSURE, not status: it marks something the reader is
+ *   being told about the nature of what they are looking at. Do not read it
+ *   as "notable" and colour arrears, maturity or any other portfolio
+ *   attribute with it — that is how a family drifts.
+ *   USE     the "Synthetic data" badge · a book marked sold and
+ *           derecognised (a disclosure: this one is off balance sheet) ·
+ *           the declined-answer treatment · a warning evaluation in the
+ *           control preview
+ *   NOT     errors (those are red) · emphasis
+ *
+ * RED    `rose-400` — SOMETHING IS WRONG.
+ *   Generalised from "breach only", which left form validation and request
+ *   failures with no colour at all.
+ *   USE     a breached or projected-breach limit · a rejected form input ·
+ *           a failed request
+ *   NOT     warnings (those are amber)
+ *
+ * BLUE   `peri-*` — TWO RANKS, and the rank matters.
+ *   `peri-400` is MEANING: section eyebrows, and nothing else.
+ *   `peri-300` / `peri-500` are STRUCTURE and interaction: buttons, hover
+ *   borders, progress, arrows, tick marks, node outlines.
+ *   Never reach for `peri-500` as an accent on type — it measures 5.67:1 on
+ *   navy-950, which is fine for a border and fails as body copy. A test
+ *   asserts it never becomes a text colour.
+ *
+ * WHITE  `ink-100` — EVERY CLAIM AND EMPHASIS LINE.
+ *   A claim is not a state, so it takes no accent. Where a claim needs
+ *   weight it gains it through type — the risk & controls and governance
+ *   lines are `text-lg font-medium`, not coloured.
+ *
+ * Contrast on this page's navy (950 / 900 / 850): mint 8.46 / 8.01 / 7.51,
+ * amber 8.88 / 8.41 / 7.88, rose 5.49 / 5.20 / 4.87, peri-400 7.13 / 6.75 /
+ * 6.32, ink-100 16.65 / 15.77 / 14.77. All clear WCAG AA as type.
  *
  * NOT used here: #2E7D5B (THEME.positive / rag.green in
- * frontend/mi-agent-ui/src/lib/theme.ts, mirrored in
- * mi_agent/mi_chart_factory.py). That green is tuned for chart fills and
- * reaches only 3.8:1 on navy-950 — it fails AA as type.
+ * frontend/mi-agent-ui/src/lib/theme.ts). That green is tuned for chart
+ * fills and reaches only 3.8:1 on navy-950 — it fails AA as type.
  *
- * ── The amber accent ────────────────────────────────────────────────
- * `amber-400` (#e0a93b) is the fourth token, and it is deliberate rather
- * than incidental. It is inherited from the MI Agent's own scale
- * (frontend/mi-agent-ui/src/index.css:22), where it carries the same
- * meaning, and it does exactly one job here:
- *
- *   SYNTHETIC, OR A BOUNDARY TRAKT WILL NOT CROSS.
- *
- *   USE     the "Synthetic data" / "Synthetic preview" labels · the
- *           per-answer synthetic provenance tag · a book marked sold and
- *           derecognised · the "not supported in this demonstration"
- *           treatment on a declined answer
- *   DO NOT  errors (those are rose) · warnings about quality · emphasis
- *           of any kind · anything that is neither synthetic nor a
- *           refusal
- *
- *   EXCEPTION — interface previews. Inside a static depiction of product
- *   UI (the control preview in the risk section), the product's own RAG
- *   semantics apply: mint marks a passing evaluation, amber a warning
- *   state, rose a projected breach. The preview is provenance-labelled
- *   "Illustrative", so the page's own token meanings are not diluted.
- *
- * Green and amber are complements, not a scale: green marks what has
- * been proven, amber marks where the demonstration stops. Neither ever
- * appears on a CTA, which stays periwinkle so both keep their meaning.
+ * INSIDE PRODUCT DEPICTIONS the same rules already hold: the control
+ * preview and the controls film use mint for a passing evaluation, amber
+ * for a warning and rose for a projected breach, which is the state rule
+ * exactly. The film's burned-in "Illustrative · synthetic data" stamp is
+ * amber, which is the disclosure rule exactly. Nothing needs re-rendering.
  * ------------------------------------------------------------------ */
 @theme {
   --color-navy-950: #0c1024;

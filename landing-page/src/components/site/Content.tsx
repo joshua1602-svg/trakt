@@ -121,7 +121,7 @@ export function ForwardControls() {
           eyebrow="Risk & controls"
           title="Turn portfolio requirements into live controls."
         />
-        <p className="mt-4 max-w-[72ch] text-[15px] font-medium leading-relaxed text-mint-400">
+        <p className="mt-4 max-w-[72ch] text-lg font-medium leading-relaxed text-ink-100">
           Know what is breached today — and what the portfolio is moving toward.
         </p>
       </Reveal>
@@ -176,6 +176,11 @@ const TONE_FILL = {
 export function ControlPreview() {
   return (
     <div
+      // A system-state context: the three evaluation rows are pass / warning /
+      // projected breach, which is exactly what mint, amber and rose mean.
+      // The e2e colour guard reads this attribute rather than a hard-coded
+      // selector list.
+      data-state-colour="control-preview"
       className="rounded-2xl border border-line bg-navy-900/80 p-4 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)] sm:p-5"
       role="img"
       aria-label="Preview of a concentration control evaluated against the funded book, the expected forecast and the full pipeline"
@@ -277,7 +282,11 @@ const DELIVERY_MODES = [
 
 export function DeliveryModes() {
   return (
-    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <ul
+      // A system-state context: mint marks availability, grey marks roadmap.
+      data-state-colour="delivery-availability"
+      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+    >
       {DELIVERY_MODES.map((mode, index) => (
         <li key={mode.name}>
           <Reveal delay={index * 60} className="h-full">
@@ -340,16 +349,18 @@ export function Governance() {
           eyebrow="Governance"
           title="Deterministic underneath. Governed throughout."
         />
-        <p className="mt-4 max-w-[72ch] text-[15px] font-medium leading-relaxed text-mint-400">
+        <p className="mt-4 max-w-[72ch] text-lg font-medium leading-relaxed text-ink-100">
           Every figure is reconciled by construction rather than by comparison.
         </p>
       </Reveal>
 
-      {/* Five properties, so five columns once there is room for them. A
-          four-column grid left the fifth card alone on its own row with three
-          empty columns beside it — which reads as a rendering fault, not a
-          layout. Below xl the tail row is half-full rather than a lone card. */}
-      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {/* Five properties, and five is an awkward number in a grid. Five
+          columns at xl fits them on one row. Three columns at lg leaves a
+          half-full tail row, which reads as a wrap. Two columns left the fifth
+          card alone at half width with an empty cell beside it — the same
+          rendering-fault look the five-column row was introduced to remove —
+          so below lg the cards stack in a single column instead. */}
+      <ul className="mt-9 grid gap-4 lg:grid-cols-3 xl:grid-cols-5">
         {GOVERNANCE_PROPERTIES.map((property, index) => (
           <li key={property.title}>
             <Reveal delay={index * 60} className="h-full">

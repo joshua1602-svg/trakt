@@ -324,6 +324,34 @@ test.describe("Trakt landing page", () => {
     await expect(delivery.locator("[aria-expanded]")).toHaveCount(0);
   });
 
+  /**
+   * Five cards is an awkward number in a grid, and it has now produced the
+   * same defect twice — a single card alone on the last row with empty cells
+   * beside it, which reads as a rendering fault rather than a wrap. Measured
+   * from the rendered boxes at every breakpoint the grid changes at, rather
+   * than trusted to the class list.
+   */
+  test("no governance card is left alone on its own row", async ({ page, viewport }) => {
+    for (const width of [1760, 1440, 1024, 834, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const rows = await page.locator("#governance ul > li").evaluateAll((nodes) => {
+        const byRow = new Map<number, number>();
+        for (const node of nodes) {
+          const top = Math.round(node.getBoundingClientRect().top);
+          byRow.set(top, (byRow.get(top) ?? 0) + 1);
+        }
+        return [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([, count]) => count);
+      });
+      const columns = Math.max(...rows);
+      const tail = rows[rows.length - 1];
+      expect(
+        columns > 1 && rows.length > 1 && tail === 1,
+        `at ${width}px the cards lay out ${rows.join("+")} — one card orphaned`,
+      ).toBe(false);
+    }
+    if (viewport) await page.setViewportSize(viewport);
+  });
+
   test("governance makes four claims once, with the reconciliation proof", async ({ page }) => {
     const governance = page.locator("#governance");
     await governance.scrollIntoViewIfNeeded();
@@ -452,23 +480,27 @@ test.describe("Trakt landing page", () => {
     await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
   });
 
-  test("the refusal claim is its own section, and its prompts drive the demo", async ({
+  test("the refusal claim sits inside the query demo section and drives it", async ({
     page,
   }) => {
-    const refusal = page.locator("#refusal");
-    await refusal.scrollIntoViewIfNeeded();
+    // No longer a section of its own: it is a sub-claim of the demo above it.
+    await expect(page.locator("#refusal")).toHaveCount(0);
 
-    // Stated once on the page: a live section, not a still inside the poster.
-    await expect(
-      refusal.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
-    ).toHaveCount(1);
+    const section = page.locator("#query-demo");
+    await section.scrollIntoViewIfNeeded();
+
+    // Live text at heading scale, not small print, and stated once.
+    const claim = page.getByRole("heading", {
+      name: /trakt declines what it cannot derive/i,
+    });
+    await expect(claim).toHaveCount(1);
+    await expect(section.getByRole("heading", { name: /trakt declines/i })).toBeVisible();
+    const size = await claim.evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
+    expect(size, "the refusal claim has been demoted to small print").toBeGreaterThanOrEqual(18);
 
     // Pressing a prompt starts the demo above and asks it, so the visitor
     // watches Trakt decline rather than being told that it does.
-    await refusal.getByRole("button", { name: /show me individual loan records/i }).click();
+    await section.getByRole("button", { name: /show me individual loan records/i }).click();
     const demo = page.locator("#example");
     await expect(demo.getByText(/not supported in this demonstration/i)).toBeVisible();
     await expect(demo.getByText(/will not return exposure-level records/i)).toBeVisible();
@@ -485,10 +517,9 @@ test.describe("Trakt landing page", () => {
   test("every section paints: computed opacity and real text", async ({ page }) => {
     for (const id of [
       "query-demo",
-      "refusal",
       "platform",
-      "controls",
       "delivery",
+      "controls",
       "agents",
       "governance",
     ]) {
@@ -510,6 +541,120 @@ test.describe("Trakt landing page", () => {
       const text = await section.evaluate((node) => (node as HTMLElement).innerText.trim().length);
       expect(text, `#${id} rendered no text`).toBeGreaterThan(0);
     }
+  });
+
+  /**
+   * Colour-system guards.
+   *
+   * One colour, one job. Green had drifted onto six unrelated things —
+   * availability, pass state, claim emphasis, tick marks, a provenance label
+   * and chip borders — at which point it signalled nothing. These assert the
+   * rule against the rendered page rather than against the source, so a new
+   * component cannot reintroduce the drift without failing.
+   *
+   * Colours are resolved by painting, not by string matching. Tailwind emits
+   * opacity modifiers as `oklab(… / .35)`, and Chromium reports that verbatim
+   * — so a check that looked for "rgb(54, 194, 168" passed happily while a
+   * green border sat on the refusal prompts. Filling the same colour over
+   * black and over white recovers the source channels and its alpha exactly,
+   * whatever colour space the value arrived in.
+   */
+  const MINT = [54, 194, 168]; // mint-400 #36c2a8
+  const PERI_500 = [125, 138, 198]; // peri-500 #7d8ac6
+
+  const RESOLVER = `
+    const _mk = (bg) => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 1;
+      return { x: c.getContext("2d", { willReadFrequently: true }), bg };
+    };
+    const _beds = [_mk("#000"), _mk("#fff")];
+    const resolve = (value) => {
+      const [kb, kw] = _beds.map(({ x, bg }) => {
+        x.clearRect(0, 0, 1, 1);
+        x.fillStyle = bg; x.fillRect(0, 0, 1, 1);
+        x.fillStyle = value; x.fillRect(0, 0, 1, 1);
+        return x.getImageData(0, 0, 1, 1).data;
+      });
+      const a = 1 - (kw[0] - kb[0]) / 255;
+      if (a <= 0.004) return null;
+      return [Math.round(kb[0] / a), Math.round(kb[1] / a), Math.round(kb[2] / a)];
+    };
+    const matches = (value, want) => {
+      const got = resolve(value);
+      // Painting round-trips within a channel or two; anything wider is a
+      // different colour, not rounding.
+      return Boolean(got) && got.every((c, i) => Math.abs(c - want[i]) <= 3);
+    };
+  `;
+
+  test("green marks system state and nothing else", async ({ page }) => {
+    // The allow-list is declared in the components themselves, not here: a
+    // container marks itself `data-state-colour` when what it renders is a
+    // system state. Three exist — delivery availability, the control
+    // preview's evaluation rows, and the lead form's success panel.
+    const offenders = async () =>
+      page.evaluate(
+        new Function(
+          "want",
+          `${RESOLVER}
+          const found = [];
+          for (const el of document.querySelectorAll("*")) {
+            const cs = getComputedStyle(el);
+            const hit = [
+              cs.color,
+              cs.borderTopColor,
+              cs.borderRightColor,
+              cs.borderBottomColor,
+              cs.borderLeftColor,
+              cs.backgroundColor,
+            ].some((value) => matches(value, want));
+            if (!hit) continue;
+            if (el.closest("[data-state-colour]")) continue;
+            found.push({
+              tag: el.tagName,
+              cls: (el.className?.toString?.() ?? "").slice(0, 90),
+              where: el.closest("section[id]")?.id ?? "(outside a section)",
+            });
+          }
+          return found;`,
+        ) as (want: number[]) => { tag: string; cls: string; where: string }[],
+        MINT,
+      );
+
+    expect(await offenders(), "green used outside a system-state context").toEqual([]);
+
+    // Again with the demo running: its suggestion chips and answer cards are
+    // only in the DOM after it starts, and they are exactly where the drift
+    // was — a refusal prompt bordered in green read as a success state.
+    await startQueryDemo(page);
+    expect(await offenders(), "green used outside a system-state context, demo running").toEqual([]);
+  });
+
+  test("peri-500 is a border and structural colour, never type", async ({ page }) => {
+    // 5.67:1 on navy-950 — fine behind a border, below AA as body copy. The
+    // only thing that previously kept it off type was noticing.
+    //
+    // Structural marks are allowed and are distinguishable without a
+    // judgement call: the platform diagram's arrows are glyphs carried in an
+    // `aria-hidden` span, so they are not type by the page's own account.
+    const asType = await page.evaluate(
+      new Function(
+        "want",
+        `${RESOLVER}
+        return [...document.querySelectorAll("*")]
+          .filter((el) => matches(getComputedStyle(el).color, want))
+          .filter((el) => !el.closest("[aria-hidden='true']"))
+          .filter((el) => (el.textContent ?? "").trim().length > 0)
+          .map((el) => ({
+            tag: el.tagName,
+            cls: (el.className?.toString?.() ?? "").slice(0, 90),
+            text: (el.textContent ?? "").trim().slice(0, 40),
+          }));`,
+      ) as (want: number[]) => { tag: string; cls: string; text: string }[],
+      PERI_500,
+    );
+    expect(asType, "peri-500 applied as a text colour").toEqual([]);
   });
 
   test("no revealable element anywhere is left transparent", async ({ page }) => {
@@ -776,7 +921,7 @@ test.describe("without JavaScript", () => {
   test("every section still renders at full opacity", async ({ page }) => {
     await page.goto("/");
 
-    for (const id of ["refusal", "platform", "controls", "delivery", "agents", "governance"]) {
+    for (const id of ["platform", "delivery", "controls", "agents", "governance"]) {
       const painted = await page.locator(`#${id}`).evaluate((node) => {
         const target = node.querySelector("[data-reveal]") ?? node;
         return {

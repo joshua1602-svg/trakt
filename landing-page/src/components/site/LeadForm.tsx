@@ -106,6 +106,9 @@ export function LeadForm() {
     return (
       <div
         role="status"
+        // A system-state context: the submission succeeded. Read by the e2e
+        // colour guard, which otherwise forbids mint outside a state.
+        data-state-colour="lead-success"
         className="rounded-xl border border-mint-400/35 bg-mint-400/[0.07] p-6"
       >
         <h3 className="text-base font-semibold text-ink-100">Thank you — that&apos;s with us.</h3>
