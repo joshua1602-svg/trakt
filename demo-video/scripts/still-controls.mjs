@@ -1,6 +1,10 @@
 /**
  * Render the landing controls demo's poster still.
  *
+ * From the dedicated `LandingControlsPoster` composition, not a frame of the
+ * film: the page centres its play control, and the film's closing frame puts
+ * the concentration card exactly there.
+ *
  *   node scripts/still-controls.mjs
  *
  * The poster is the loop's resolved end state (monitoring + breach horizon +
@@ -20,8 +24,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const OUT = join(ROOT, "out");
 
-/** Late enough that every element has settled, before the loop restarts. */
-const POSTER_FRAME = 530;
+/** Late enough that every spring in the poster card has settled. */
+const POSTER_FRAME = 200;
 
 const main = async () => {
   mkdirSync(OUT, { recursive: true });
@@ -30,7 +34,7 @@ const main = async () => {
   const serveUrl = await bundle({ entryPoint: join(ROOT, "src/index.ts") });
   const composition = await selectComposition({
     serveUrl,
-    id: "LandingControlsDemo",
+    id: "LandingControlsPoster",
     ...(browserExecutable ? { browserExecutable } : {}),
   });
   const output = join(OUT, "controls-demo-poster.png");

@@ -328,20 +328,19 @@ const DELIVERY_MODES = [
     available: true,
   },
   {
-    name: "Enterprise agent",
-    copy: "Trakt inside your own agent estate.",
-    available: false,
-  },
-  {
-    name: "Agent-to-agent",
-    copy: "Systems querying Trakt directly.",
+    // One roadmap tile, not two: the agent-to-agent section below shows both
+    // patterns — client-owned agents and cross-institution exchange — in a
+    // single topology, so splitting them here made the distinction twice and
+    // less well.
+    name: "Agent access",
+    copy: "Client and counterparty agents querying Trakt directly.",
     available: false,
   },
 ] as const;
 
 export function DeliveryModes() {
   return (
-    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {DELIVERY_MODES.map((mode, index) => (
         <li key={mode.name}>
           <Reveal delay={index * 60} className="h-full">
@@ -389,6 +388,10 @@ const GOVERNANCE_PROPERTIES = [
     title: "Isolated",
     copy: "Client environments and authorisation are separated behind Microsoft Entra ID.",
   },
+  {
+    title: "Agent-addressable",
+    copy: "Agents authenticate as themselves, inside tenant and portfolio boundaries, with explicit permissions.",
+  },
 ] as const;
 
 export function Governance() {
@@ -405,7 +408,11 @@ export function Governance() {
         </p>
       </Reveal>
 
-      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Five properties, so five columns once there is room for them. A
+          four-column grid left the fifth card alone on its own row with three
+          empty columns beside it — which reads as a rendering fault, not a
+          layout. Below xl the tail row is half-full rather than a lone card. */}
+      <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {GOVERNANCE_PROPERTIES.map((property, index) => (
           <li key={property.title}>
             <Reveal delay={index * 60} className="h-full">

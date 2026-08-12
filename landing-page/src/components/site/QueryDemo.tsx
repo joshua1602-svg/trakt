@@ -53,10 +53,16 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
       <div className="relative overflow-hidden rounded-2xl border border-line bg-navy-900/70">
         {/* A faithful still of the demo's pre-question state, at full
             contrast: it should read as a screenshot of working software. */}
+        {/* Two aria-hidden replica groups with the live control between
+            them, in normal flow. The control was previously absolutely
+            positioned inside the replica — which put it inside an
+            aria-hidden, pointer-events-none subtree, unreachable to a screen
+            reader and to any role query. In flow it also cannot overlap
+            either group, at any width. */}
         <div
           aria-hidden="true"
           data-poster-content
-          className="pointer-events-none flex select-none flex-col gap-4 p-4 sm:p-5"
+          className="pointer-events-none flex select-none flex-col gap-4 p-4 pb-0 sm:p-5 sm:pb-0"
         >
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line bg-navy-850/80 px-4 py-3">
             <div>
@@ -77,47 +83,13 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
               Ask Trakt
             </div>
           </div>
-
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-              Try one of these
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {meta.suggestedQuestions.map((question) => (
-                <span
-                  key={question.id}
-                  className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-xs text-ink-200"
-                >
-                  {question.label}
-                </span>
-              ))}
-              {meta.reportActions.map((action) => (
-                <span
-                  key={action.id}
-                  className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-xs font-medium text-peri-200"
-                >
-                  {action.label}
-                </span>
-              ))}
-            </div>
-          </div>
-
         </div>
 
-        {/* The refusal block is deliberately absent from the replica: it is a
-            live section of its own below, and a still of the same words would
-            read as duplication. This band is the plate's room, kept outside
-            the content wrapper so the plate provably covers nothing. */}
-        <div className="h-28" />
-
-        {/* Backing behind the control only, so the still stays crisp — and
-            low in the frame, over the reserved band rather than the content
-            a skimming reader is trying to take in. */}
-        <div
-          data-plate="query"
-          className="absolute inset-x-0 bottom-0 flex justify-center pb-5"
-        >
-          <div className="rounded-2xl border border-line bg-navy-950 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
+        <div className="flex justify-center py-8 sm:py-10">
+          <div
+            data-plate="query"
+            className="rounded-2xl border border-line bg-navy-950 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]"
+          >
             {/* demo_open fires from the demo itself when the scripted opening
                 question runs, so starting is counted exactly once. */}
             <button type="button" onClick={() => setStarted(true)} className={buttonStyles.primary}>
@@ -126,6 +98,34 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
               </svg>{" "}
               Watch query demo
             </button>
+          </div>
+        </div>
+
+        <div
+          aria-hidden="true"
+          data-poster-content
+          className="pointer-events-none select-none px-4 pb-4 sm:px-5 sm:pb-5"
+        >
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+            Try one of these
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {meta.suggestedQuestions.map((question) => (
+              <span
+                key={question.id}
+                className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-xs text-ink-200"
+              >
+                {question.label}
+              </span>
+            ))}
+            {meta.reportActions.map((action) => (
+              <span
+                key={action.id}
+                className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-xs font-medium text-peri-200"
+              >
+                {action.label}
+              </span>
+            ))}
           </div>
         </div>
       </div>

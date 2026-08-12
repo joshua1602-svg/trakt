@@ -498,9 +498,9 @@ const MonitorRow: React.FC<(typeof STATES)[number]> = ({ label, value, status, c
   );
 };
 
-const SceneMonitoring: React.FC = () => (
-  <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
-    <Panel style={{ width: 820, padding: "36px 44px" }}>
+/** The monitoring card, shared by the film's closing scene and the poster. */
+export const MonitoringCard: React.FC = () => (
+  <Panel style={{ width: 820, padding: "36px 44px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <p
           style={{
@@ -561,11 +561,14 @@ const SceneMonitoring: React.FC = () => (
           <span style={{ color: T.color.ink100, fontWeight: 600 }}>Nov 2026</span>
         </p>
       </Rise>
-    </Panel>
-    {/* The close is set in the page's heading tone, not an accent: it should
-        read as part of the product UI, with the risk colours staying inside
-        the statuses and bars above. */}
-    <Rise at={165} style={{ marginTop: 30, width: 820 }}>
+  </Panel>
+);
+
+/* The close is set in the page's heading tone, not an accent: it should read
+   as part of the product UI, with the risk colours staying inside the
+   statuses and bars above. */
+export const MonitoringKeyline: React.FC<{ at?: number }> = ({ at = 165 }) => (
+  <Rise at={at} style={{ marginTop: 30, width: 820 }}>
       <p
         style={{
           margin: 0,
@@ -579,8 +582,14 @@ const SceneMonitoring: React.FC = () => (
         Know where the portfolio stands today —
         <br />
         and what it&rsquo;s moving toward.
-      </p>
-    </Rise>
+    </p>
+  </Rise>
+);
+
+const SceneMonitoring: React.FC = () => (
+  <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
+    <MonitoringCard />
+    <MonitoringKeyline />
   </AbsoluteFill>
 );
 
@@ -588,7 +597,7 @@ const SceneMonitoring: React.FC = () => (
 /* Chrome + assembly                                                  */
 /* ------------------------------------------------------------------ */
 
-const Chrome: React.FC = () => (
+export const Chrome: React.FC = () => (
   <div
     style={{
       position: "absolute",
