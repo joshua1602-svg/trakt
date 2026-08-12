@@ -510,9 +510,16 @@ Not "the same number of failures" — the same failures, by identifier. The +198
 delta is entirely new tests passing.
 
 Test collection is clean on the current tree (5,261 collected, no collection
-errors), so the 13 errors are runtime setup/teardown errors rather than import
-failures; their count is unchanged and they were itemised separately with `-rE`
-to confirm the same set.
+errors), so the 13 errors are runtime setup errors rather than import failures.
+They were itemised separately by re-running both trees with `-rE`, and **that set
+is identical too** — 13 ids each, empty diff:
+
+```
+tests/test_delivery_xml_agent_review.py::TestXmlPreviewPolicy   (10 errors)
+tests/test_simulation_pipeline.py::TestDialectEquivalence        (3 errors)
+```
+
+Both are class-level fixture errors in files this sprint never touched.
 
 **The 64 pre-existing failures are not mine and are not new.** Two were checked
 individually against the baseline worktree during the sprint after the
