@@ -73,10 +73,22 @@ def main() -> int:
     from readiness_agent.agent import DEFAULT_MODEL, OBJECTIVE, run_assessment
 
     model = args.model or DEFAULT_MODEL
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    # Resume onto an existing file rather than overwriting it, so a second
+    # invocation adds runs instead of discarding the ones already paid for.
     records = []
-    for index in range(1, args.runs + 1):
+    if out.exists():
+        try:
+            records = json.loads(out.read_text(encoding="utf-8"))
+            print(f"resuming: {len(records)} run(s) already in {out}")
+        except (ValueError, OSError):
+            records = []
+
+    for index in range(len(records) + 1, len(records) + args.runs + 1):
         session = build_session()
-        print(f"\n=== run {index}/{args.runs} ({model}) ===", flush=True)
+        print(f"\n=== run {index} ({model}) ===", flush=True)
 
         def on_step(step: int, tool: str, _i=index) -> None:
             print(f"  step {step:2d}  {tool}", flush=True)
@@ -93,17 +105,30 @@ def main() -> int:
         record = run.to_dict()
         record["run_index"] = index
         records.append(record)
+
+        # Persist BEFORE starting the next run. The first version of this
+        # script accumulated in memory and wrote once at the end; run 5 died
+        # on an exhausted credit balance and took three completed, paid-for
+        # assessments with it. Work that costs money is persisted the moment
+        # it exists, and the write is atomic so a crash mid-write cannot
+        # corrupt the runs already banked.
+        _persist(out, records)
         print(f"  -> {run.stopped_reason}; {run.efficiency.get('total_calls')} "
               f"tool calls; {run.usage.get('input_tokens')} in / "
               f"{run.usage.get('output_tokens')} out tokens; "
-              f"{run.elapsed_s:.1f}s", flush=True)
+              f"{run.elapsed_s:.1f}s  [saved {len(records)} run(s)]",
+              flush=True)
 
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(records, indent=2, default=str),
-                   encoding="utf-8")
     print(f"\nwrote {len(records)} run(s) to {out}")
     return 0
+
+
+def _persist(out: Path, records) -> None:
+    """Write-and-rename, so an interruption never leaves a half-written file."""
+    temporary = out.with_suffix(out.suffix + ".partial")
+    temporary.write_text(json.dumps(records, indent=2, default=str),
+                         encoding="utf-8")
+    os.replace(temporary, out)
 
 
 if __name__ == "__main__":
