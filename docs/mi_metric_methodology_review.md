@@ -87,10 +87,13 @@ snapshots.
 | **WA remaining term** | `maturity_date` | Yes | REG (RREL24) | No | `maturity_within_horizon_share` only | **READY, not exposed** |
 | **Concentrations (geo, borrower, top-N)** | geography, `borrower_identifier`, balance | Yes | analytics + REG | No | 17 library metrics (geography 6, borrower 6, balance 5) | **Yes — READY** |
 | **Vintage / cohort performance** | `origination_date` + any measure | Yes | REG | Yes | `cohort_comparison` | **Yes, with a caveat (§7)** |
-| **Contractual WAL** | balance, `maturity_date`, `amortisation_type`, `scheduled_principal_payment_frequency`, `regular_principal_instalment`, `balloon_amount`, `principal_grace_period_end_date` | Yes | REG ×5 + one analytics field | No | none | **METHODOLOGY GAP (§11)** |
+| **Contractual WAL — bullet / fixed amortisation** | `maturity_date`, RREL37 frequency, `regular_principal_instalment`, `balloon_amount`, RREL35 = BLLT or FIXE | Yes | REG ×5 + one analytics field | No | none | **READY, not exposed (§11)** |
+| **Contractual WAL — French / German** | the above + per-period P&I split | **Partly** | RREL35 = FRXX/DEXX | No | none | **METHODOLOGY GAP (§11)** |
+| **Contractual WAL — ERM (RREL35 = OTHR)** | — | — | — | — | — | **UNDEFINED — no contractual repayment date (§11)** |
 | **Observed portfolio life / runoff** | governed snapshots | Yes | HIST | Yes | `portfolio_series` (partly) | **READY, not exposed** |
 | **Expected WAL** | the above **+ a prepayment assumption** | No | — | — | none | **ASSUMPTION-MODEL REQUIRED** |
-| **YTM** | `purchase_price` (RREL34), rate, balance, maturity, frequency | Yes | REG ×5 | No | none | **METHODOLOGY GAP (§12)** |
+| **YTM — bullet / fixed amortisation** | `purchase_price` RREL34, `current_interest_rate`, balance, maturity, frequency | Yes | REG ×5 | No | none | **READY, not exposed (§12)** |
+| **YTM — French / German** | the above + per-period P&I split | **Partly** | REG ×5 | No | none | **METHODOLOGY GAP (§12)** |
 | **YTW** | the above **+ call/prepayment scenarios**, at note level | **No** | no tranche/note data model exists | — | none | **EXPOSURE GAP + ASSUMPTION-MODEL** |
 | **PD / LGD** | `bank_internal_loss_given_default_lgd_estimate`, `loss_given_default` | Yes, **as supplied values** | analytics layer | No | none | **READY to report, never to model** |
 | **Regulatory field readiness** | ND rules + `regime_mapping` | Yes | `annex2_field_universe.yaml` | No | `regulatory_readiness` | **Yes — READY** |
@@ -153,9 +156,12 @@ concepts MI does not read are not missing; they are unread.
 | Cure rate | **METHODOLOGY GAP** | needs an observation window, which is a choice |
 | WA seasoning / remaining term / borrower age | **METHODOLOGY GAP** | the weighted-average evaluator already exists |
 | SMM/CPR numerator on **RMBS** | **FIELD GAP, asset-class-scoped** | `unscheduled_principal_collections` is Annex 3 only |
-| Contractual WAL | **METHODOLOGY GAP** | every input field exists; the schedule builder does not |
+| Contractual WAL, bullet / fixed | **READY, not exposed** | the cash flows are an enumeration over fields already held |
+| Contractual WAL, French / German | **METHODOLOGY GAP** | Trakt receives an instalment amount, not a per-period principal series |
+| Contractual WAL, ERM (`OTHR`) | **not applicable** | no contractual repayment date exists to weight |
 | Expected WAL | **ASSUMPTION-MODEL REQUIRED** | out of scope by the brief |
-| YTM | **METHODOLOGY GAP** | RREL34 supplies price relative to par |
+| YTM, bullet / fixed | **READY, not exposed** | RREL34 supplies price relative to par; cash flows as above |
+| YTM, French / German | **METHODOLOGY GAP** | same per-period decomposition as WAL |
 | YTW | **EXPOSURE GAP** | Trakt holds no tranche or note-level data at all |
 | PD / LGD modelling | **out of scope** | supplied estimates may be reported; none may be built |
 | Submission acceptance state | **DATA GAP** | genuinely external evidence Trakt does not hold |
@@ -328,6 +334,9 @@ Metrics Trakt can calculate today from governed fields and does not expose.
 | **MEDIUM** | WA seasoning, WA remaining term, WA borrower age | RREL23, RREL24, borrower age roles | quoted in every pool summary; the evaluator already supports them |
 | **MEDIUM** | Original / indexed LTV as distinct metrics | RREC16, `indexed_loan_to_value` | roles resolve; no library metric distinguishes them from current LTV |
 | **MEDIUM** | Observed portfolio runoff / life to date | governed snapshots | the honest, assumption-free half of WAL (§11) |
+| **MEDIUM** | Contractual WAL, bullet and fixed-amortisation | `maturity_date`, RREL37, `regular_principal_instalment`, RREL41 | an enumeration, not an engine — **but rates LOW on Trakt's own ERM book, where RREL35 is `OTHR` and contractual WAL is undefined** (§11) |
+| **MEDIUM** | Loan-level YTM, same exposures | the above + `purchase_price` RREL34 | price relative to par is already Mandatory on all five annexes (§12) |
+| **LOW** | `outstanding_balance_period_*` as a received schedule | eight analytics fields | shaped like a dated balance path; **no code, no semantics, no consumer — needs a specification decision before any use** (§11) |
 | **MEDIUM** | Supplied LGD reporting | `bank_internal_loss_given_default_lgd_estimate` | reporting the originator's own estimate is not modelling; **Trakt still builds no PD/LGD** |
 | **MEDIUM** | Payment-frequency and amortisation-shape mix | RREL37, RREL35 | eligibility screens ask for these directly |
 | **LOW** | Grace-period exposure | RREL36 | narrow, but free |
@@ -338,62 +347,158 @@ Metrics Trakt can calculate today from governed fields and does not expose.
 
 ## 11. Weighted average life
 
-Three different questions. Conflating them is how a WAL number becomes
-meaningless, so they are answered separately.
+An earlier draft of this section said WAL was blocked behind a "contractual
+schedule builder". That was inferred from the absence of a WAL function rather
+than established from the field universe, and re-checking the universe shows it
+was wrong in **both** directions. Trakt can compute contractual WAL directly
+today for part of the book, and no builder would ever produce one for the part
+that matters most to Trakt.
 
-**Contractual WAL — METHODOLOGY GAP, not a field gap.** WAL is
-`Σ(principal_i × t_i) / Σ(principal_i)`, so it needs a principal repayment
-schedule. Every input exists: `current_principal_balance` (RREL30),
-`maturity_date` (RREL24), `amortisation_type` (RREL35),
-`scheduled_principal_payment_frequency` (RREL37), `balloon_amount` (RREL41),
-`principal_grace_period_end_date` (RREL36), `current_interest_rate` (RREL43),
-and `regular_principal_instalment`. Five of the eight are Mandatory on all five
-annexes. What is missing is a schedule builder and its enum handling — French
-versus German versus bullet amortisation each produce a different curve, and
-`regular_principal_instalment` carries **no regime code**, so it is the term
-whose availability varies by tape. **Deliberately not built here**: it is a new
-calculation engine, not a metric, and the brief says to document it rather than
-expand the sprint.
+### What Trakt actually receives
 
-**Observed portfolio life / runoff — supportable today.** Governed snapshots
-already give realised amortisation. This needs no assumptions and no new
-fields, and it is the honest thing to publish first. §10, MEDIUM.
+| Ingredient | Field | Coverage |
+|---|---|---|
+| Periodic principal amount | `regular_principal_instalment` | **analytics only — no regime code on any annex** |
+| Periodic interest amount | `regular_interest_instalment` | analytics only |
+| Next payment amount (P&I combined) | `payment_due` RREL39 | all five annexes — but a **scalar**, not a vector |
+| Principal payment frequency | `scheduled_principal_payment_frequency` RREL37 | all five annexes |
+| Interest payment frequency | `scheduled_interest_payment_frequency` RREL38 | all five annexes |
+| Next payment **date** | `next_payment_date` CREL104 | **Annex 3 only** |
+| Amortisation start date | `start_date_of_amortisation` CREL16 | **Annex 3 only** |
+| Payments already made | `number_of_payments_before_securitisation` RREL58 | all five annexes |
+| Maturity | `maturity_date` RREL24 | all five annexes |
+| Terminal principal | `balloon_amount` RREL41 | A2/A4/A9 — **absent from Annex 3** |
+| Amortisation shape | `amortisation_type` RREL35 | all five annexes |
+| Current period scheduled P&I | `total_scheduled_principal_interest_due` CREL123 | **Annex 3 only** |
 
-**Expected WAL — ASSUMPTION-MODEL REQUIRED.** External sources are explicit:
-where prepayment is permitted, "the WAL cannot be computed from the
-amortization schedule alone; one must also make assumptions about the
-prepayment and default behavior". That is forecasting. Out of scope, and it
-should stay out until someone owns the assumption.
+So the honest characterisation is: **Trakt receives a periodic instalment
+amount and a frequency, not a dated schedule of principal.** One amount per
+loan, not a vector by date. That distinction is what decides the question, and
+it decides it differently for each amortisation type.
+
+### Whether that is sufficient depends entirely on RREL35
+
+The regime defines five values, and they do not behave alike:
+
+| RREL35 | Definition | Principal per period | Contractual WAL from held fields? |
+|---|---|---|---|
+| **BLLT** | "full principal amount is repaid in the last instalment" | one cash flow at maturity | **Yes — directly, today.** WAL *is* the term to maturity |
+| **FIXE** | "the principal amount repaid in each instalment is the same" | constant | **Yes — directly**, where `regular_principal_instalment` is populated |
+| **FRXX** | "the total amount — principal plus interest — repaid in each instalment is the same" | **varies every period** | **No** — see below |
+| **DEXX** | "the first instalment is interest-only and the remaining instalments are constant" | varies, plus a phase change | **No** |
+| **OTHR** | — | undefined | **No — and no builder would help** |
+
+**For BLLT and FIXE, no builder is required and none should be written.** The
+cash flows are an enumeration: frequency from RREL37, count from the balance
+divided by the instalment (or the term), terminal amount from RREL41. That is
+arithmetic over fields already held, with no assumption anywhere in it.
+`Σ(Pᵢ·tᵢ)/ΣPᵢ` follows immediately. **This is a real capability Trakt has and
+does not expose**, and the previous draft wrongly listed it as blocked.
+
+**For FRXX and DEXX it genuinely is insufficient, and the reason is specific.**
+Under French amortisation the constant quantity is the *total* instalment; the
+principal portion rises every period as the interest portion falls. A single
+`regular_principal_instalment` scalar cannot represent a series that changes
+each period. Recovering it means iterating
+
+```
+principal_t = instalment − rate_t × balance_(t−1)
+balance_t   = balance_(t−1) − principal_t
+```
+
+which is an amortisation computation, not a lookup — and it needs the rate to
+be projected, which for a variable-rate loan (`interest_rate_type` RREL42) is
+an assumption rather than a fact. **That** is the blocker, and it is narrower
+than "a schedule builder": it is the principal/interest decomposition for two
+of five amortisation types.
+
+**Two timing caveats, both real and neither fatal.** Annex 2 carries **no
+payment-date field** — `next_payment_date` and `start_date_of_amortisation` are
+Annex 3 codes. For a residential loan the payment dates must be anchored from
+`maturity_date` counted back by RREL37, or from `origination_date` plus RREL58.
+Both are deterministic where the frequency is regular, and RREL37 admits
+`OTHR`, where neither is. And `regular_principal_instalment` carries no regime
+code at all, so on a purely regulatory tape it may simply be absent — in which
+case even FIXE needs the instalment derived from balance and term.
+
+### The part that no builder fixes
+
+Trakt's primary book is equity release, and the repository already reasons this
+out in `config/asset/product_defaults_ERM.yaml`: a lifetime mortgage "rolls up
+interest and repays at death/sale ... it is **NOT** a scheduled bullet
+amortisation under the Annex 2 definition", and Trakt therefore reports it as
+`OTHR`.
+
+That is the substantive answer for the book Trakt actually holds. There are no
+contractual principal payments before an event — death, sale, entry to care —
+which is not contractually dated. **A contractual WAL for an ERM loan is not
+blocked by missing data or missing code; it is undefined.** Any ERM WAL is an
+*expected* WAL and needs mortality and voluntary-redemption assumptions, which
+is forecasting and is out of scope by the brief.
+
+### One undocumented family worth a decision
+
+Eight canonical fields — `outstanding_balance_period_1`,
+`outstanding_balance_period_2_120`, `outstanding_balance_period_121_599`,
+`outstanding_balance_period_600` and a `_date` companion for each — have the
+shape of a **received, dated projected balance path**. If a tape populates
+them, they are the closest thing to an amortisation schedule Trakt is given,
+and a WAL could be read off them directly.
+
+They also have **no regime code, no business-semantics entry, no alias, and no
+consumer anywhere in the repository**. They are declared and inert. Nothing
+should be built on them until someone states what they mean; that is a question
+for whoever specified them, not something to infer from four field names.
+
+### Summary
+
+| Question | Answer |
+|---|---|
+| Contractual WAL, bullet and fixed-amortisation exposures | **Computable now. Latent MI, not a gap** |
+| Contractual WAL, French / German amortisation | Needs a principal-interest decomposition per period, and a rate projection if variable-rate |
+| Contractual WAL, ERM (`OTHR`) | **Undefined** — no contractual repayment date exists |
+| Observed portfolio life / runoff | Computable now from governed snapshots, no assumptions |
+| Expected WAL | Assumption model. Out of scope |
 
 ---
 
 ## 12. Yield to maturity and yield to worst
 
-**YTM — METHODOLOGY GAP.** `purchase_price` (RREL34) is Mandatory on all five
-annexes and is defined as *"the price, relative to par, at which the underlying
-exposure was purchased by the SSPE. Enter 100 if no discounting was applied"*.
-That is precisely the price term an IRR needs. Combined with the same
-contractual schedule contractual WAL requires, loan-level YTM is deterministic.
-It is therefore **blocked behind the same schedule builder**, and behind one
-caveat worth stating: on a warehouse book bought at par, RREL34 is 100 for
-every loan and YTM collapses to the coupon — a true answer that would look like
-a broken calculation.
+**YTM inherits §11 exactly, and the price term is already there.**
+`purchase_price` (RREL34) is Mandatory on all five annexes and is defined as
+*"the price, relative to par, at which the underlying exposure was purchased by
+the SSPE. Enter 100 if no discounting was applied"* — precisely the price basis
+an IRR needs, and on a percentage-of-par scale that needs no consideration
+figure.
 
-**YTW — EXPOSURE GAP, and the more fundamental of the two.** Yield to worst is
-the minimum yield across every call and prepayment scenario, and at the level
-it is normally quoted it is a **note-level** measure, and Trakt does not model
-the liability side. No canonical field carries a tranche or class balance,
-coupon, attachment point or paydown. The nine fields whose names mention notes,
+So the same split applies, for the same reason:
+
+- **Bullet and fixed-amortisation exposures: YTM is computable today.** Price
+  from RREL34, cash flows by enumeration, coupon from `current_interest_rate`
+  (RREL43). For a bullet loan it is a single-cash-flow discount.
+- **French and German: blocked on the same per-period decomposition**, not on
+  price and not on data.
+- **ERM (`OTHR`): the cash-flow *dates* are behavioural**, so a contractual YTM
+  is undefined for the same reason its WAL is.
+
+One caveat worth stating before anyone quotes it: on a warehouse book bought at
+par, RREL34 is 100 for every loan and YTM collapses to the coupon. That is a
+correct answer that will look like a broken calculation.
+
+**YTW remains an exposure gap, and for a different reason entirely.** Yield to
+worst is the minimum yield across call and prepayment scenarios, and where it
+is normally quoted it is a **note-level** measure. Trakt does not model the
+liability side: no canonical field carries a tranche or class balance, coupon,
+attachment point or paydown. The nine fields whose names mention notes,
 seniority or subordination — `noteholder_consent`, `seniority`,
-`principal_payment_allocation_to_senior_loan`, `restrictions_on_sale_of_
-subordinated_loan` and the rest — are all attributes of the **underlying
-exposure**, not of a securitisation tranche. The Annex 12 deal template's
-`cashflow_items` and `triggers_tests_events` lists are both empty. YTW is not
-blocked by methodology — it is blocked by an entity Trakt does not model.
+`principal_payment_allocation_to_senior_loan`,
+`restrictions_on_sale_of_subordinated_loan` and the rest — are all attributes
+of the **underlying exposure**, not of a tranche. The Annex 12 deal template's
+`cashflow_items` and `triggers_tests_events` lists are both empty. YTW is
+blocked by an entity Trakt does not model, and no field or formula fixes that.
 
-**Neither is being built on synthetic assumptions.** A YTM produced by
-inventing a price, or a YTW produced by inventing call dates, would be worse
-than not having one.
+**None of these should be built on synthetic assumptions.** A YTM from an
+invented price, or a YTW from invented call dates, is worse than not having one.
 
 ---
 
@@ -514,8 +619,15 @@ contained):
 
 **Deliberately not implemented, with the reason:**
 
-- **WAL, YTM** — need a contractual schedule builder. A new engine, not a
-  metric. Documented in §11–§12 for follow-up.
+- **WAL and YTM for bullet and fixed-amortisation exposures** — computable
+  today from fields already held (§11), and left unbuilt only because Trakt's
+  primary book is equity release, where `amortisation_type` is `OTHR` and a
+  contractual WAL does not exist to be computed. High value on a CRE or
+  amortising residential book; near-zero on this one. Registered as latent MI
+  rather than built blind.
+- **WAL and YTM for French and German amortisation** — need a per-period
+  principal/interest decomposition, because Trakt receives an instalment
+  amount rather than a principal series. A calculation, not a field gap (§11).
 - **YTW** — needs a note-level entity Trakt does not model.
 - **Expected WAL, any PD/LGD** — assumption models. Out of scope by the brief,
   and supplied LGD values may be reported but never authored.
@@ -564,12 +676,29 @@ sprint's base rate is unkind: of the metrics examined closely, prepayment,
 arrears, severity, net loss and three Annex 12 bucket definitions were all
 wrong. Assuming the unexamined ones are fine is not supported by the evidence.
 
-**A 2.5D cash-flow sprint is justified, and it is one sprint, not two.** WAL,
-YTM and the Annex 12 CPR wiring all block on the same missing component — a
-contractual principal-schedule builder driven by `amortisation_type`,
-`scheduled_principal_payment_frequency`, `maturity_date` and `balloon_amount`.
-Build it once and three KPIs unblock. YTW does not, and should be scoped
-separately as a note-level data question.
+**A 2.5D cash-flow sprint is justified, but it is smaller than the last draft
+of this document claimed.** Re-checking the field universe rather than
+inferring from the absence of a function changed the shape of it: WAL and YTM
+for bullet and fixed-amortisation exposures need no new engine at all — the
+cash flows are an enumeration over `maturity_date`, RREL37 frequency,
+`regular_principal_instalment` and `balloon_amount`. What genuinely needs
+building is narrower: the per-period principal/interest decomposition for the
+French and German amortisation types, where Trakt receives an instalment
+amount rather than a principal series.
+
+Two things should be settled before that sprint rather than during it. The
+`outstanding_balance_period_*` family — eight fields with the shape of a
+received, dated balance path and no documentation, no regime code and no
+consumer — may already supply the schedule, and nobody should build one until
+that is answered. And on Trakt's own book the whole question changes: equity
+release reports `OTHR`, repays on death or sale, and has no contractual
+repayment date, so contractual WAL is undefined rather than unbuilt. The
+cash-flow sprint is worth doing for CRE and amortising residential; it is not
+what unlocks ERM.
+
+The Annex 12 CPR wiring is a separate, smaller item — the calculation exists,
+and only the projector's single-period input is in the way. YTW is separate
+again, and is a note-level data question rather than a methodology one.
 
 **The observation from the last review still holds, and got stronger.** Every
 defect in this sprint was found by reading a definition next to the code that
