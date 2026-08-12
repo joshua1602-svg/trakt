@@ -484,7 +484,63 @@ enforced rather than hoped for:
 
 ## 13. Regression evidence
 
-*(see §13 addendum below — filled in from the full-suite comparison)*
+Full suite, both trees, same machine, same interpreter, `-p no:randomly` so
+ordering is fixed and the two runs are comparable.
+
+| | baseline `86460f3` | current `f593dbb` |
+|---|---|---|
+| passed | 4,953 | **5,151** (+198) |
+| failed | 64 | **64** |
+| errors | 13 | **13** |
+| skipped | 33 | 33 |
+| subtests passed | 6 | 6 |
+| wall clock | 2,371 s | 2,428 s |
+
+**The complete failure-id sets are identical.** Extracted from both runs, sorted
+and deduplicated, then diffed:
+
+```
+baseline ids: 64    current ids: 64
+=== ONLY IN CURRENT (new failures) ===        (empty)
+=== ONLY IN BASELINE (fixed) ===              (empty)
+IDENTICAL failure/error id sets
+```
+
+Not "the same number of failures" — the same failures, by identifier. The +198
+delta is entirely new tests passing.
+
+Test collection is clean on the current tree (5,261 collected, no collection
+errors), so the 13 errors are runtime setup/teardown errors rather than import
+failures; their count is unchanged and they were itemised separately with `-rE`
+to confirm the same set.
+
+**The 64 pre-existing failures are not mine and are not new.** Two were checked
+individually against the baseline worktree during the sprint after the
+`analytics_lib` change, and fail identically there:
+`test_every_bucket_applies_on_full_frame` (a bucket that does not materialise on
+the full frame) and `test_no_regulatory_or_annex2_files_modified` (a guard test
+flagging `tests/test_annex2_collateral_projection.py`, a file this sprint never
+touched).
+
+**Sprint 2 added 198 tests**, in eight files:
+
+| file | tests | what it holds |
+|---|---|---|
+| `test_sprint2_credit_path.py` | 84 | entity model, valuation selection, structured loans, derivations — against planted truth |
+| `test_agent_analysis_tools.py` | 58 | the eight aggregate tools, checked against hand-stated shares |
+| `test_agent_mcp_adapter.py` | 20 | the MCP mapping, mostly negative assertions |
+| `test_serving_parquet.py` | 14 | the copy equals the CSV; every degradation path |
+| `test_analytics_stratify_vectorised.py` | 13 | the vectorised rewrite against the original as oracle |
+| `test_mi_dataset_profile_cache.py` | 9 | profile-cache identity and invalidation |
+| plus edits to `test_agent_tool_registry.py`, `test_agent_identity_and_api.py`, `test_agent_reference_client.py` | — | de-fragilised: assert the property, not the tool list |
+
+**Three Sprint 1 tests were changed rather than deleted**, and the change is
+itself an improvement: they asserted the exact tool list or indexed `tools[0]`.
+They now assert the *property* — every published tool requires the capability the
+caller holds, and `loan:read` tools are hidden from a `risk:read` caller — and
+select tools by name. The scripted reference client, which picked `tools[0]` and
+called it with only `{resource}`, now reads the published schema to find a tool
+it can actually satisfy. That is a better rule independent of this sprint.
 
 ---
 
