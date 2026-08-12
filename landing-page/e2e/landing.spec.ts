@@ -515,6 +515,120 @@ test.describe("Trakt landing page", () => {
     }
   });
 
+  /**
+   * Colour-system guards.
+   *
+   * One colour, one job. Green had drifted onto six unrelated things —
+   * availability, pass state, claim emphasis, tick marks, a provenance label
+   * and chip borders — at which point it signalled nothing. These assert the
+   * rule against the rendered page rather than against the source, so a new
+   * component cannot reintroduce the drift without failing.
+   *
+   * Colours are resolved by painting, not by string matching. Tailwind emits
+   * opacity modifiers as `oklab(… / .35)`, and Chromium reports that verbatim
+   * — so a check that looked for "rgb(54, 194, 168" passed happily while a
+   * green border sat on the refusal prompts. Filling the same colour over
+   * black and over white recovers the source channels and its alpha exactly,
+   * whatever colour space the value arrived in.
+   */
+  const MINT = [54, 194, 168]; // mint-400 #36c2a8
+  const PERI_500 = [125, 138, 198]; // peri-500 #7d8ac6
+
+  const RESOLVER = `
+    const _mk = (bg) => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 1;
+      return { x: c.getContext("2d", { willReadFrequently: true }), bg };
+    };
+    const _beds = [_mk("#000"), _mk("#fff")];
+    const resolve = (value) => {
+      const [kb, kw] = _beds.map(({ x, bg }) => {
+        x.clearRect(0, 0, 1, 1);
+        x.fillStyle = bg; x.fillRect(0, 0, 1, 1);
+        x.fillStyle = value; x.fillRect(0, 0, 1, 1);
+        return x.getImageData(0, 0, 1, 1).data;
+      });
+      const a = 1 - (kw[0] - kb[0]) / 255;
+      if (a <= 0.004) return null;
+      return [Math.round(kb[0] / a), Math.round(kb[1] / a), Math.round(kb[2] / a)];
+    };
+    const matches = (value, want) => {
+      const got = resolve(value);
+      // Painting round-trips within a channel or two; anything wider is a
+      // different colour, not rounding.
+      return Boolean(got) && got.every((c, i) => Math.abs(c - want[i]) <= 3);
+    };
+  `;
+
+  test("green marks system state and nothing else", async ({ page }) => {
+    // The allow-list is declared in the components themselves, not here: a
+    // container marks itself `data-state-colour` when what it renders is a
+    // system state. Three exist — delivery availability, the control
+    // preview's evaluation rows, and the lead form's success panel.
+    const offenders = async () =>
+      page.evaluate(
+        new Function(
+          "want",
+          `${RESOLVER}
+          const found = [];
+          for (const el of document.querySelectorAll("*")) {
+            const cs = getComputedStyle(el);
+            const hit = [
+              cs.color,
+              cs.borderTopColor,
+              cs.borderRightColor,
+              cs.borderBottomColor,
+              cs.borderLeftColor,
+              cs.backgroundColor,
+            ].some((value) => matches(value, want));
+            if (!hit) continue;
+            if (el.closest("[data-state-colour]")) continue;
+            found.push({
+              tag: el.tagName,
+              cls: (el.className?.toString?.() ?? "").slice(0, 90),
+              where: el.closest("section[id]")?.id ?? "(outside a section)",
+            });
+          }
+          return found;`,
+        ) as (want: number[]) => { tag: string; cls: string; where: string }[],
+        MINT,
+      );
+
+    expect(await offenders(), "green used outside a system-state context").toEqual([]);
+
+    // Again with the demo running: its suggestion chips and answer cards are
+    // only in the DOM after it starts, and they are exactly where the drift
+    // was — a refusal prompt bordered in green read as a success state.
+    await startQueryDemo(page);
+    expect(await offenders(), "green used outside a system-state context, demo running").toEqual([]);
+  });
+
+  test("peri-500 is a border and structural colour, never type", async ({ page }) => {
+    // 5.67:1 on navy-950 — fine behind a border, below AA as body copy. The
+    // only thing that previously kept it off type was noticing.
+    //
+    // Structural marks are allowed and are distinguishable without a
+    // judgement call: the platform diagram's arrows are glyphs carried in an
+    // `aria-hidden` span, so they are not type by the page's own account.
+    const asType = await page.evaluate(
+      new Function(
+        "want",
+        `${RESOLVER}
+        return [...document.querySelectorAll("*")]
+          .filter((el) => matches(getComputedStyle(el).color, want))
+          .filter((el) => !el.closest("[aria-hidden='true']"))
+          .filter((el) => (el.textContent ?? "").trim().length > 0)
+          .map((el) => ({
+            tag: el.tagName,
+            cls: (el.className?.toString?.() ?? "").slice(0, 90),
+            text: (el.textContent ?? "").trim().slice(0, 40),
+          }));`,
+      ) as (want: number[]) => { tag: string; cls: string; text: string }[],
+      PERI_500,
+    );
+    expect(asType, "peri-500 applied as a text colour").toEqual([]);
+  });
+
   test("no revealable element anywhere is left transparent", async ({ page }) => {
     // Deliberately broad: queries every [data-reveal] on the page rather than
     // a known list, so anything added later is covered by default.

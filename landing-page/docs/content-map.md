@@ -41,6 +41,10 @@ the controls demo (section 4). Neither autoplays and neither loops silently:
 from the homepage — reporting claims survive in the platform output chips,
 and onboarding detail now belongs to a product page, not this one.
 
+**Pass 9 also adopted a colour system** — one colour, one job. Recorded below
+under "The colour system", and enforced by two e2e guards. Read that section
+before changing any accent on the page.
+
 **Pass 9 — section order and the Boundaries fold.** The standalone Boundaries
 section is gone; the refusal claim now sits inside the query-demo section,
 beneath the frame, above a rule and at heading scale — a sub-claim of the demo
@@ -361,27 +365,85 @@ deployment arrangement.
 
 ---
 
-## The green accent
+## The colour system — a standing rule
 
-`mint-400` / `#36c2a8`, taken verbatim from
-`frontend/mi-agent-ui/src/index.css:21` — the MI Agent's UI green. In the
-product it marks a proven state; it does the same job here and no other.
+Adopted in Pass 9 after an audit found **green doing six unrelated jobs**:
+availability on the delivery tiles, pass state in the control preview, emphasis
+on two claim lines, hero tick marks, a provenance label, and the border on
+refusal prompts and demo suggestion chips. A colour with six jobs signals
+nothing. Each family below now has exactly one role; adding a second is a
+regression, not a refinement. Full rationale and contrast figures live in the
+token block at the top of `src/app/globals.css`.
 
-| Where | Why |
+| Colour | Sole role | Where it may appear |
+|---|---|---|
+| **Green** `mint-400` | **System state**: pass, available, healthy | The "Available today" label and tile border (`DeliveryModes`) · a passing evaluation in `ControlPreview` · the lead form's success panel. Nowhere else. |
+| **Amber** `amber-400` | **Disclosure**, and warning state | The "Synthetic data" badge · a book marked sold and derecognised · the declined-answer treatment · a warning evaluation in the control preview |
+| **Red** `rose-400` | **Something is wrong** | A breached or projected-breach limit · a rejected form input · a failed request |
+| **Blue** `peri-400` | **Meaning: section eyebrows only** | `SectionHeading`'s eyebrow, and the hero eyebrow carrying the strapline |
+| **Blue** `peri-300` / `peri-500` | **Structure and interaction** | Buttons, hover borders, progress bar, platform arrows, proof-point ticks, the Trakt node outline in the topology |
+| **White** `ink-100` | **Every claim and emphasis line** | The risk & controls line and the governance line, at `text-lg font-medium` |
+
+Three points that the wording has to keep, because each one is how a system
+like this drifts:
+
+1. **Amber is DISCLOSURE, not status.** "This book is off balance sheet" is a
+   disclosure — the reader is being told something about the nature of what
+   they are looking at. Written as "status", a later pass will colour arrears
+   or maturity amber and the family is gone.
+2. **The periwinkle rank matters.** `peri-400` is meaning; `peri-300` and
+   `peri-500` are structure. Never reach for `peri-500` as an accent on type:
+   it measures 5.67:1 on navy-950, which is fine behind a border and fails as
+   body copy.
+3. **A claim is not a state.** Where a claim needs weight it takes type — size,
+   weight, spacing — never an accent.
+
+**Guards** (`e2e/landing.spec.ts`), the same class as the transparency sweep:
+
+- *"green marks system state and nothing else"* — walks every element on the
+  rendered page and fails on any mint outside a container that declares itself
+  `data-state-colour`. The allow-list lives in the components, not the test.
+  Run twice: on load, and again with the query demo running, because the
+  suggestion chips and answer cards only exist after it starts.
+- *"peri-500 is a border and structural colour, never type"* — fails if
+  `peri-500` is the computed text colour of anything that is not inside an
+  `aria-hidden` subtree. The platform arrows are aria-hidden glyphs, so the
+  page's own markup separates a structural mark from type.
+
+**Both guards resolve colours by painting, not by string matching.** Tailwind
+emits opacity modifiers as `oklab(… / .35)` and Chromium reports that verbatim,
+so the first version of the green guard — which looked for `rgb(54, 194, 168`
+— passed happily while a green border still sat on the refusal prompts. Filling
+the same colour over black and over white recovers the source channels and the
+alpha whatever colour space the value arrived in. **Both guards were verified
+by reintroducing the drift and watching them fail**; a guard that has never
+failed is not known to work.
+
+**No re-render needed.** The controls film and its poster use mint for a
+passing evaluation, amber for a warning and rose for a projected breach — the
+state rule exactly — and the burned-in "Illustrative · synthetic data" stamp is
+amber, the disclosure rule exactly. The video was audited against the system
+and conflicts with none of it.
+
+---
+
+## The green accent — superseded by the colour system above
+
+Kept as a record of what changed, and of the four usages that were **removed**
+in Pass 9, so nobody restores them believing they were an oversight:
+
+| Removed | Why it went |
 |---|---|
-| The three trust proof points (tick marks; borders from `sm` upward) | Proven properties of the engine. |
-| "Every figure is reconciled by construction rather than by comparison." | The page's strongest verification claim. |
-| "Know what is breached today — and what the portfolio is moving toward." | The page's key forward-risk claim, backed by the three-state evaluation. |
-| "Available today" and the three delivery chips it heads | A shipped/not-shipped signal. Roadmap stays muted grey. |
-| "Trakt declines what it cannot derive." | A governance guarantee. |
-| "Deterministic" in the hero preview footer | A confirmatory provenance signal. |
-| "Pass" states inside the control preview | Product RAG semantics inside an interface depiction — see the amber note. |
+| Tick marks and borders on the three hero proof points | Decoration, not a state. Ticks are now `peri-300`, borders `border-line`. |
+| "Every figure is reconciled by construction rather than by comparison." | A claim, not a state. Now `ink-100` at `text-lg font-medium`. |
+| "Know what is breached today — and what the portfolio is moving toward." | Same. Weight through type, not colour. |
+| "Deterministic" in the hero preview footer | A provenance label, not a state. Now `ink-400`. |
+| Borders on the refusal prompts and the demo suggestion chips | Affordance styling. Worse than arbitrary: green on a *refusal* control read as a success state. Now `border-line` with a `peri-500` hover. |
 
-The amber token remains "synthetic, or a boundary Trakt will not cross", with
-one documented exception: inside interface previews that depict product UI,
-the product's own RAG semantics apply (amber warning, rose projected breach).
-The control preview is provenance-labelled "Illustrative" so neither meaning
-leaks into page prose. See `app/globals.css`.
+**Retained**, because each is genuinely a system state: the "Available today"
+label and tile border, the "Pass" row in the control preview, and the lead
+form's success panel. Each sits inside a container declaring
+`data-state-colour`, which is what the e2e guard reads.
 
 Contrast: 8.5:1 on `navy-950`, 8.0:1 on `navy-900` — WCAG AA/AAA. The chart
 fill green `#2E7D5B` is still never used as type (3.8:1, fails AA).

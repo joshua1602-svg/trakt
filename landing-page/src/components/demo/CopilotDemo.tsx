@@ -338,7 +338,7 @@ export function CopilotDemo({
                     type="button"
                     disabled={busy || outOfQuestions}
                     onClick={() => onSuggested(example.id, example.label)}
-                    className="rounded-full border border-mint-400/30 bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-mint-400/60 hover:text-ink-100 disabled:opacity-50"
+                    className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
                   >
                     {example.label}
                   </button>

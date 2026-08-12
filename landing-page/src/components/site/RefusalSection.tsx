@@ -42,7 +42,7 @@ export function RefusalSection({ meta }: { meta: DemoMetaResponse }) {
                   new CustomEvent(ASK_EVENT, { detail: { id: example.id, label: example.label } }),
                 );
               }}
-              className="rounded-full border border-mint-400/35 bg-navy-850 px-4 py-2 text-left text-sm text-ink-100 transition-colors hover:border-mint-400/70"
+              className="rounded-full border border-line bg-navy-850 px-4 py-2 text-left text-sm text-ink-100 transition-colors hover:border-peri-500"
             >
               {example.label}
             </button>
