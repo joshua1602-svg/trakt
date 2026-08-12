@@ -327,6 +327,19 @@ fill green `#2E7D5B` is still never used as type (3.8:1, fails AA).
 
 ---
 
+## Open items — deferred deliberately, not forgotten
+
+Work that is known, agreed and **not** to be done as a standalone pass. Each
+line names the batch it belongs to, so it ships with related work rather than
+as an isolated change.
+
+| Item | Batch it belongs to |
+|---|---|
+| **`LandingControlsPoster` vertical rhythm.** Centring the play plate meant shifting the monitoring card up and the closing keyline down, which left roughly 170px of dead space below the keyline. This is the same void problem already fixed on the query poster (which takes its natural content height rather than a fixed ratio) and should be tightened for consistency. Contained entirely in `demo-video/src/landing/ControlsPoster.tsx` — the card scale and the keyline's `at` offset. | The Remotion re-render for the **Securitisation Readiness Agent** demo. Do not render the poster twice. |
+| **The §6c agent-to-agent demo slot.** No frame, no placeholder, no "in build" line — the topology is the section's only visual, by decision. When the footage exists, the section takes a real demo the way §2 and §4 do. | The same Securitisation Readiness Agent render. |
+
+---
+
 ## Excluded — considered and deliberately not said
 
 | Not claimed | Why |
