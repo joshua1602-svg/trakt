@@ -90,7 +90,7 @@ paths:
               description: Compare a cohort against the REST of the portfolio on the same measures. Optionally
                 across periods.
               properties:
-                resource: &id005
+                resource: &id001
                   type: string
                   description: The portfolio resource, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -175,7 +175,7 @@ paths:
               description: 'How concentrated a portfolio is in one dimension: the top-N groups'' combined
                 share of balance and count.'
               properties:
-                resource: &id001
+                resource: &id002
                   type: string
                   description: The portfolio resource to analyse, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -188,7 +188,7 @@ paths:
                   maximum: 200
                   description: How many leading groups to combine.
                   default: 10
-                filters: &id007
+                filters: &id008
                   type:
                   - object
                   - 'null'
@@ -326,7 +326,7 @@ paths:
               description: The loans contributing to ONE covenant or concentration test's numerator. Use
                 this after evaluate_covenants tells you a test is breached or close to its limit.
               properties:
-                resource: &id006
+                resource: &id007
                   type: string
                   description: The resource the test was evaluated against, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -350,6 +350,70 @@ paths:
               required:
               - resource
               - test_id
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/cure_analysis:
+    post:
+      operationId: invoke_cure_analysis
+      summary: 'Observed cure rate: delinquent balance returning to CURRENT over the delinquent balance
+        able to cure at the opening'
+      description: 'Observed cure rate: delinquent balance returning to CURRENT over the delinquent balance
+        able to cure at the opening. Improvement within delinquency is reported separately and is not
+        a cure.
+
+
+        Read improved_not_cured_balance alongside the rate. A book whose loans move from 90+ to 30 days
+        has improved without curing, and reporting that as a cure would overstate the recovery. Unlike
+        the default rate this convention is Trakt''s own — ESMA defines no loan-level cure concept — so
+        say so when quoting it externally.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id003
+              type: object
+              description: Observed losses and recoveries, reported on every defensible denominator rather
+                than one chosen for you.
+              properties:
+                resource: *id001
+                months:
+                  type:
+                  - integer
+                  - 'null'
+                  minimum: 1
+                  maximum: 60
+                  default: null
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
       responses:
         '200':
           description: The governed result.
@@ -391,7 +455,7 @@ paths:
               description: 'How populated the canonical fields are across a portfolio. The first diligence
                 question about any tape: what is actually there.'
               properties:
-                resource: *id001
+                resource: *id002
                 fields:
                   type:
                   - array
@@ -410,6 +474,46 @@ paths:
               additionalProperties: false
               required:
               - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/default_analysis:
+    post:
+      operationId: invoke_default_analysis
+      summary: 'Observed default rate across governed snapshots: balance classified as defaulted DURING
+        the period over non-defaulted opening balance, annualised — ESMA''s own CDR definition — plus
+        the default stock, reported separately because it is a level and not a rate'
+      description: 'Observed default rate across governed snapshots: balance classified as defaulted DURING
+        the period over non-defaulted opening balance, annualised — ESMA''s own CDR definition — plus
+        the default stock, reported separately because it is a level and not a rate.
+
+
+        OBSERVED, not a probability of default: this is what happened. The rate and the stock are different
+        questions — a book can carry a large stock of legacy defaults and have a default rate of zero
+        — so say which you are quoting. Default is read from default_date or account_status, never inferred
+        from days past due or from a loan disappearing from the tape.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id003
       responses:
         '200':
           description: The governed result.
@@ -518,7 +622,7 @@ paths:
               description: 'Apply every configured rulebook to the same measured facts: warehouse criteria,
                 Trakt''s internal screening thresholds, and any supplied securitisation criteria.'
               properties:
-                resource: &id008
+                resource: &id009
                   type: string
                   description: The portfolio resource to assess, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -575,7 +679,7 @@ paths:
               description: Return the evidence behind ONE value. For several values call explain_values
                 once instead.
               properties:
-                resource: &id002
+                resource: &id004
                   type: string
                   description: The resource the values were read from.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -631,7 +735,7 @@ paths:
               description: 'Return the evidence behind SEVERAL values in one call. This is the primitive:
                 to justify more than one figure, call this once rather than explain_value repeatedly.'
               properties:
-                resource: *id002
+                resource: *id004
                 requests:
                   type: array
                   minItems: 1
@@ -683,7 +787,7 @@ paths:
               description: Retrieve ONE loan you are already investigating. For several loans call get_loans
                 once instead — it is the same work in one request.
               properties:
-                resource: &id003
+                resource: &id005
                   type: string
                   description: The resource holding the loans, as '{tenant}/{kind}/{resource_id}'. Call
                     GET /v1/agent/tools to see the resources you may name.
@@ -691,7 +795,7 @@ paths:
                 loan_id:
                   type: string
                   description: The loan identifier.
-                fields: &id004
+                fields: &id006
                   type:
                   - array
                   - 'null'
@@ -763,7 +867,7 @@ paths:
               description: 'Retrieve several loans in ONE call. This is the primitive: to look at more
                 than one loan, call this once rather than get_loan repeatedly.'
               properties:
-                resource: *id003
+                resource: *id005
                 loan_ids:
                   type: array
                   items:
@@ -772,7 +876,7 @@ paths:
                   maxItems: 500
                   description: Loan identifiers, at most 500 per call. Results are returned in the order
                     requested.
-                fields: *id004
+                fields: *id006
                 shape:
                   type: string
                   enum:
@@ -837,7 +941,7 @@ paths:
               description: Which canonical fields failed validation in this snapshot, with the rules that
                 failed and how many errors each raised.
               properties:
-                resource: *id001
+                resource: *id002
                 status:
                   type:
                   - array
@@ -890,32 +994,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              description: Observed losses and recoveries, reported on every defensible denominator rather
-                than one chosen for you.
-              properties:
-                resource: *id005
-                months:
-                  type:
-                  - integer
-                  - 'null'
-                  minimum: 1
-                  maximum: 60
-                  default: null
-                from_period:
-                  type:
-                  - string
-                  - 'null'
-                  default: null
-                to_period:
-                  type:
-                  - string
-                  - 'null'
-                  default: null
-              additionalProperties: false
-              required:
-              - resource
+            schema: *id003
       responses:
         '200':
           description: The governed result.
@@ -959,7 +1038,7 @@ paths:
                 which periods are comparable — do not compare figures you gathered from separate calls
                 yourself.
               properties:
-                resource: *id006
+                resource: *id007
                 fields:
                   type:
                   - array
@@ -1111,7 +1190,7 @@ paths:
               description: How named measures have moved across governed snapshots. One call covers every
                 measure and every period.
               properties:
-                resource: *id005
+                resource: *id001
                 measures:
                   type:
                   - array
@@ -1191,8 +1270,8 @@ paths:
               description: 'The headline shape of a whole portfolio in ONE call: size, balance, weighted
                 averages, arrears and stage mix.'
               properties:
-                resource: *id001
-                filters: *id007
+                resource: *id002
+                filters: *id008
               additionalProperties: false
               required:
               - resource
@@ -1238,7 +1317,7 @@ paths:
               description: Observed prepayment and redemption, from the canonical unscheduled-principal
                 field. Never inferred from balance movement.
               properties:
-                resource: *id005
+                resource: *id001
                 months:
                   type:
                   - integer
@@ -1310,7 +1389,7 @@ paths:
                 Returns identifiers and the ranked value; follow up with one get_loans call for the ones
                 that matter.
               properties:
-                resource: *id001
+                resource: *id002
                 metric:
                   type: string
                   description: The canonical field to rank by, e.g. 'current_loan_to_value'.
@@ -1327,7 +1406,7 @@ paths:
                   maximum: 200
                   description: How many loans to return (at most 200).
                   default: 20
-                filters: *id007
+                filters: *id008
                 include_fields:
                   type:
                   - array
@@ -1385,7 +1464,7 @@ paths:
               description: 'The Securitisation Readiness Framework: what a first-pass review assesses,
                 which of it Trakt can measure deterministically, and which tool supplies each fact.'
               properties:
-                resource: *id008
+                resource: *id009
                 category:
                   type:
                   - string
@@ -1442,7 +1521,7 @@ paths:
               description: 'Measure one or more framework facts using the governed concentration-test
                 metric library. Batch-first: ask for several in one call.'
               properties:
-                resource: *id008
+                resource: *id009
                 requests:
                   type: array
                   minItems: 1
@@ -1506,7 +1585,7 @@ paths:
                 of the regime''s required loan-level fields, separating hard blockers from fields that
                 may report a No-Data value.'
               properties:
-                resource: *id008
+                resource: *id009
                 regime:
                   type: string
                   description: The disclosure regime. ESMA Annex 2 is the loan-level template.
@@ -1559,7 +1638,7 @@ paths:
               description: Break a portfolio down by ONE dimension and return balance and count per category.
                 Use this instead of retrieving loans and grouping them yourself.
               properties:
-                resource: *id001
+                resource: *id002
                 dimension:
                   type: string
                   description: The canonical field to group by, e.g. 'geographic_region_collateral', 'account_status'.
@@ -1572,7 +1651,7 @@ paths:
                   description: Canonical fields to report as balance-weighted averages per category, e.g.
                     ['current_loan_to_value'].
                   default: null
-                filters: *id007
+                filters: *id008
                 limit:
                   type: integer
                   minimum: 1
@@ -1624,7 +1703,7 @@ paths:
               description: 'How loans moved between states across two governed snapshots: DPD deterioration,
                 cures, entries and exits.'
               properties:
-                resource: *id005
+                resource: *id001
                 dimension:
                   type: string
                   description: The state to track, e.g. 'account_status' or 'ifrs9_stage'.
@@ -1686,7 +1765,7 @@ paths:
               description: 'How old and how good the collateral evidence is: valuation age distribution,
                 method mix and missing-valuation share, all balance-weighted.'
               properties:
-                resource: *id008
+                resource: *id009
                 stale_after_months:
                   type: integer
                   minimum: 1
@@ -1789,7 +1868,7 @@ components:
           - 'null'
         error:
           oneOf:
-          - &id009
+          - &id010
             type: object
             description: A governed failure. Branch on `code`, never on `message`.
             properties:
@@ -1827,7 +1906,7 @@ components:
       - status
       - request_id
       - tenant_id
-    TraktError: *id009
+    TraktError: *id010
     ToolDeclaration:
       type: object
       properties:
@@ -1856,20 +1935,20 @@ components:
   responses:
     InvalidArguments:
       description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
-      content: &id010
+      content: &id011
         application/json:
           schema:
             $ref: '#/components/schemas/GovernedResult'
     Unauthorized:
       description: The bearer token is missing, invalid or expired.
-      content: *id010
+      content: *id011
     Forbidden:
       description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
         RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
-      content: *id010
+      content: *id011
     UnknownTool:
       description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
-      content: *id010
+      content: *id011
     Unavailable:
       description: The agent API or the governed data source is not available. Retryable.
-      content: *id010
+      content: *id011

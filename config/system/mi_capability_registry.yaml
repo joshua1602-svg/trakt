@@ -313,6 +313,7 @@ capabilities:
         any_of: [current_principal_balance, current_outstanding_balance]
 
   - id: arrears_transition
+    owned_kpi: true
     synonyms: ["roll rate", "roll rates", "transition analysis", "migration"]
     name: Arrears transition / roll analysis
     description: State migration between two governed snapshots.
@@ -329,50 +330,73 @@ capabilities:
         minimum: 2
 
   - id: default_rate
-    synonyms: ["default rate"]
-    name: Default rate
+    owned_kpi: true
+    synonyms: ["default rate", "periodic default rate", "cdr",
+               "constant default rate", "annualised default rate"]
+    name: Default rate (periodic / annualised CDR)
     description: >-
-      Defaults as a rate. The inputs exist — default_date (RREL72),
-      default_amount (RREL71), account_status (RREL69) — and the DEFINITION
-      does not.
+      Balance classified as defaulted DURING the period, over the balance of
+      non-defaulted exposures at the beginning of it, annualised
+      geometrically. ESMA's own definition, quoted rather than chosen.
     category: loss
     unit: percent
     basis: observed
     time_basis: period_flow
-    consumers: []
-    status_override: METHODOLOGY_NOT_APPROVED
-    reason_code: METHODOLOGY_NOT_APPROVED
-    explanation: >-
-      Sprint 2.5C established that the data is settled and the methodology is
-      not: absorbing versus reversible default, count versus balance, period
-      versus cumulative, and whether the CRR materiality threshold applies.
-      Registering a plausible formula would publish an unowned convention as
-      production-ready, which is the specific failure this registry exists to
-      prevent. Use arrears_90_plus for delinquency, or read default_amount
-      directly, and say which you used.
+    methodology: OBSERVED_DEFAULT_RATE_CDR@v1
+    calculation_source: analytics_lib.history.default_rate
+    authority: >-
+      ESMA Annex 12 investor-report schema, AnlsdCstDfltRate
+      (DRAFT1auth.098.001.04)
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: history_periods
+        minimum: 2
+        explanation: >-
+          A default RATE compares two points in time. A single snapshot
+          supports the default STOCK, which is a different measure and is not
+          served under this name.
+      - type: fields_present
+        any_of: [default_date, account_status]
+        explanation: >-
+          A default event needs evidence — default_date (RREL72) or a
+          defaulted account_status (RREL69). It is not inferred from days past
+          due, which is a different definition, nor from a loan disappearing.
 
   - id: cure_rate
-    synonyms: ["cure rate", "cures"]
+    owned_kpi: true
+    synonyms: ["cure rate", "cures", "cure performance"]
     name: Cure rate
     description: >-
-      Exits from arrears back to performing. Fields exist; the observation
-      window and the definition of a cure do not.
+      Delinquent balance that returned to CURRENT, over the delinquent balance
+      able to cure at the opening. Improvement to a better but still
+      delinquent bucket is a roll, not a cure, and is reported separately.
     category: delinquency
     unit: percent
     basis: observed
     time_basis: period_flow
-    consumers: []
-    status_override: METHODOLOGY_NOT_APPROVED
-    reason_code: METHODOLOGY_NOT_APPROVED
-    explanation: >-
-      What counts as a cure, over what window, and whether a re-default
-      reverses it are all unowned decisions. arrears_transition gives the
-      underlying migrations without asserting a cure definition.
+    methodology: OBSERVED_CURE_RATE@v1
+    calculation_source: analytics_lib.history.cure_rate
+    authority: >-
+      Trakt-selected market convention. ESMA defines NO loan-level cure
+      concept — its cure fields are covenant and trigger cure periods — so
+      unlike the default rate this is not quoted from a regulator.
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: history_periods
+        minimum: 2
+        explanation: >-
+          A cure is a movement between two points in time.
+      - type: fields_present
+        any_of: [number_of_days_in_arrears]
+        explanation: >-
+          Delinquency must be observable (RREL68) before a return from it can
+          be.
 
   # ===================================================================
   # Prepayment
   # ===================================================================
   - id: observed_smm
+    owned_kpi: true
     synonyms: ["smm", "single monthly mortality"]
     name: Single monthly mortality (observed)
     description: >-
@@ -399,6 +423,7 @@ capabilities:
           instead. Disappearance from the tape is never read as prepayment.
 
   - id: observed_cpr
+    owned_kpi: true
     synonyms: ["cpr", "constant prepayment rate", "prepayment rate", "prepayment speed"]
     name: Constant prepayment rate (observed)
     description: Annualised prepayment speed, 1 - (1 - SMM)^12.
@@ -424,6 +449,7 @@ capabilities:
   # Loss and recovery
   # ===================================================================
   - id: observed_loss_rate
+    owned_kpi: true
     synonyms: ["loss rate", "realised loss rate", "realized loss rate", "cumulative loss"]
     name: Realised loss rate (observed)
     description: >-
@@ -443,6 +469,7 @@ capabilities:
         minimum: 2
 
   - id: observed_recovery_rate
+    owned_kpi: true
     synonyms: ["recovery rate", "recoveries"]
     name: Recovery rate on defaulted exposure (observed)
     description: Cumulative recoveries (RREL74) over defaulted exposure (RREL71).
@@ -462,6 +489,7 @@ capabilities:
         minimum: 2
 
   - id: observed_loss_severity
+    owned_kpi: true
     synonyms: ["loss severity", "severity"]
     name: Loss severity (observed)
     description: >-
@@ -506,6 +534,7 @@ capabilities:
   # Contractual cash-flow analytics
   # ===================================================================
   - id: contractual_wal
+    owned_kpi: true
     synonyms: ["contractual wal", "wal", "weighted average life", "average life", "contractual weighted average life"]
     name: Contractual weighted average life
     description: >-
@@ -531,6 +560,7 @@ capabilities:
       - type: principal_series_deterministic
 
   - id: contractual_ytm
+    owned_kpi: true
     synonyms: ["contractual ytm", "ytm", "yield to maturity", "contractual yield", "yield"]
     name: Contractual yield to maturity (periodic)
     description: >-
@@ -559,6 +589,7 @@ capabilities:
       - type: interest_series_deterministic
 
   - id: expected_wal
+    owned_kpi: true
     synonyms: ["expected wal", "expected weighted average life", "expected life", "behavioural wal"]
     name: Expected weighted average life
     description: >-

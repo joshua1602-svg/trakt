@@ -121,7 +121,20 @@ class Capability:
     methodology: Optional[str] = None
     calculation_source: Optional[str] = None
     metric_id: Optional[str] = None
+    #: Where the methodology comes from. Named because "the regulator defines
+    #: this" and "Trakt selected this convention" are different claims and a
+    #: consumer quoting the number should know which it is holding.
+    authority: Optional[str] = None
     consumers: Tuple[str, ...] = ()
+    #: True where this capability is an owned named KPI with its own
+    #: methodology, which generic aggregation must NOT impersonate. Sprint
+    #: 2.5E-close found "what is realised loss severity?" resolving to an
+    #: unweighted mean of a SUPPLIED bank LGD estimate and answering 45.0 with
+    #: ok=True, while Trakt's own OBSERVED_LOSS_SEVERITY@v1 measures allocated
+    #: losses over the balance at default. Field-plus-aggregation capabilities
+    #: (total balance, WA LTV, WA coupon) are deliberately NOT marked: the
+    #: generic path computes those correctly and owns them.
+    owned_kpi: bool = False
     #: Phrases a human might use for this capability. Used only to recognise
     #: a question Trakt cannot answer, so that it can say WHY rather than
     #: "that measure does not exist" — never to resolve a value.
@@ -144,6 +157,8 @@ class Capability:
             "methodology": self.methodology,
             "calculation_source": self.calculation_source,
             "metric_id": self.metric_id,
+            "authority": self.authority,
+            "owned_kpi": self.owned_kpi,
             "consumers": list(self.consumers),
         }
 
@@ -237,7 +252,9 @@ def _build(raw: Mapping[str, Any]) -> CapabilityRegistry:
             methodology=entry.get("methodology") or None,
             calculation_source=entry.get("calculation_source") or None,
             metric_id=entry.get("metric_id") or None,
+            authority=str(entry.get("authority") or "").strip() or None,
             consumers=tuple(str(c) for c in (entry.get("consumers") or ())),
+            owned_kpi=bool(entry.get("owned_kpi", False)),
             synonyms=tuple(str(x).strip().lower()
                            for x in (entry.get("synonyms") or ())),
             conditions=conditions,

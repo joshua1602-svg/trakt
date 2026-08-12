@@ -788,9 +788,16 @@ CURATION: Dict[str, dict] = {
     },
     "loss_given_default": {
         "tier": "core", "business_name": "LGD",
-        "business_description": "Loss given default as a decimal (0-1).",
-        "synonyms": ["lgd", "loss given default", "loss severity",
-                     "recovery assumption"],
+        "business_description": (
+            "Loss given default as a decimal (0-1). A SUPPLIED estimate from "
+            "the originator's own model — not a realised outcome."),
+        # "loss severity" was a synonym here and had to be removed. It made
+        # "what is realised loss severity?" resolve to an unweighted mean of a
+        # supplied LGD assumption and answer 45.0 with ok=True, while Trakt's
+        # owned OBSERVED_LOSS_SEVERITY@v1 measures allocated losses over the
+        # balance at default. A modelled input answering for an observed
+        # outcome is the one substitution this programme most needs to prevent.
+        "synonyms": ["lgd", "loss given default", "recovery assumption"],
         "overrides": {"role": "metric", "format": "decimal",
                       "bucket_field": "lgd_bucket", **_RATIO_AGG},
     },

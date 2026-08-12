@@ -98,9 +98,11 @@ def test_a_capability_that_can_never_be_available_says_so_without_a_portfolio():
     available by finding a richer portfolio — so it must not be resolved
     against one."""
     registry = load_registry()
-    for metric_id, expected in (("default_rate", METHODOLOGY_NOT_APPROVED),
-                                ("cure_rate", METHODOLOGY_NOT_APPROVED),
-                                ("expected_wal", MODEL_REQUIRED)):
+    # default_rate and cure_rate were here until the 2.5E close-out pass owned
+    # their methodologies; they now resolve against the portfolio like any
+    # other capability. expected_wal remains, because no portfolio makes a
+    # behavioural model unnecessary.
+    for metric_id, expected in (("expected_wal", MODEL_REQUIRED),):
         capability = registry.get(metric_id)
         assert capability is not None
         assert capability.status_override == expected
@@ -288,7 +290,15 @@ def test_every_state_in_the_model_is_reachable_from_real_data():
     seen = set()
     for builder in PORTFOLIOS.values():
         seen.update(a.status for a in _matrix(builder).values())
-    assert seen == set(STATES), f"unreached states: {set(STATES) - seen}"
+
+    # METHODOLOGY_NOT_APPROVED is no longer reachable from these four
+    # portfolios, because the close-out pass owned the two methodologies that
+    # produced it. The state stays in the model — it is the right answer the
+    # next time Trakt holds data for a metric whose definition is unsettled,
+    # and removing it would guarantee the next such metric is mislabelled
+    # UNAVAILABLE, sending someone to a client for a field already on the tape.
+    expected = set(STATES) - {METHODOLOGY_NOT_APPROVED}
+    assert seen == expected, f"unreached states: {expected - seen}"
 
 
 def test_no_capability_ever_resolves_to_an_undeclared_state():
@@ -404,12 +414,29 @@ def test_asking_an_erm_book_for_a_wal_gets_the_reason_not_a_dead_end():
     assert "no other measure has been substituted" in answer
 
 
-def test_a_book_that_can_answer_is_left_to_the_ordinary_query_path():
-    """The capability layer only speaks when it has a refusal to explain.
-    Answering an AVAILABLE metric here would be a second route to the same
-    number, which is the duplication this whole sprint is against."""
-    assert _ask("What is the contractual WAL of this portfolio?",
+def test_a_generic_metric_that_can_answer_is_left_to_the_ordinary_query_path():
+    """The capability layer must not become a second route to a number the
+    ordinary path computes correctly. A field-plus-aggregation capability —
+    balance, WA LTV, WA coupon — stays silent when it is available."""
+    from trakt_core.capability import load_registry
+
+    assert load_registry().get("total_balance").owned_kpi is False
+    assert _ask("What is the total outstanding balance?",
                 portfolio_b_fixed_amortising) is None
+
+
+def test_an_owned_kpi_that_is_available_names_its_methodology_instead():
+    """The precedence rule. An owned KPI is NOT computed by the ad-hoc query
+    path, so when it is available the honest answer names the approved
+    methodology and where it comes from — rather than falling through to "I
+    couldn't map this question", which is what happened before the close-out
+    pass traced the real code path."""
+    answer = _ask("What is the contractual WAL of this portfolio?",
+                  portfolio_b_fixed_amortising)
+    assert answer is not None
+    assert "CONTRACTUAL_WAL@v1" in answer
+    assert "analytics_lib.contractual.portfolio_wal" in answer
+    assert "generic aggregation" in answer
 
 
 def test_asking_a_floating_book_for_a_yield_names_the_rate_path():
@@ -418,11 +445,18 @@ def test_asking_a_floating_book_for_a_yield_names_the_rate_path():
     assert "No rate path is assumed" in answer
 
 
-def test_asking_for_cpr_without_history_says_how_many_periods_are_missing():
+def test_a_multi_snapshot_metric_says_mi_query_is_the_wrong_path_for_it():
+    """MI Query is a SINGLE-FRAME engine: one dataset in, one answer out. A
+    metric measured across snapshots cannot be computed here whatever the
+    deployment holds, so reporting "1 snapshot is available" would misreport
+    a limitation of this path as a gap in the client's data — and would send
+    someone to ask for history they already have."""
     answer = _ask("What was CPR over the last 12 months?",
                   portfolio_b_fixed_amortising, periods=1)
-    assert "UNAVAILABLE" in answer
-    assert "at least 2 governed snapshots" in answer
+    assert "single dataset" in answer
+    assert "OBSERVED_CPR@v2" in answer
+    assert "analytics_lib.history.prepayment_rate" in answer
+    assert "at least 2 governed snapshots" not in answer
 
 
 def test_asking_an_unsecured_book_for_wa_ltv_is_not_applicable():
@@ -431,14 +465,28 @@ def test_asking_an_unsecured_book_for_wa_ltv_is_not_applicable():
     assert "no value to weight a loan against" in answer
 
 
-def test_asking_for_default_rate_admits_the_methodology_is_unowned():
-    """The state that must not collapse into UNAVAILABLE. Trakt has the data;
-    what it lacks is a decision, and saying "missing data" would send someone
-    to the client for a field that is already there."""
-    answer = _ask("What is the default rate?", portfolio_b_fixed_amortising)
-    assert "METHODOLOGY_NOT_APPROVED" in answer
-    assert "arrears_90_plus" in answer, (
-        "a refusal should point at what IS supported")
+def test_asking_for_default_rate_now_gets_history_not_a_methodology_refusal():
+    """Until the close-out pass this answered METHODOLOGY_NOT_APPROVED. The
+    methodology is now owned — ESMA's own CDR definition — so the only thing
+    standing between this portfolio and a default rate is a second snapshot,
+    and the answer says exactly that."""
+    answer = _ask("What is the default rate?", portfolio_b_fixed_amortising,
+                  periods=1)
+    assert "METHODOLOGY_NOT_APPROVED" not in answer
+    assert "OBSERVED_DEFAULT_RATE_CDR@v1" in answer
+
+
+def test_asking_for_default_rate_with_history_names_the_owned_methodology():
+    answer = _ask("What is the default rate?", portfolio_b_fixed_amortising,
+                  periods=3)
+    assert "OBSERVED_DEFAULT_RATE_CDR@v1" in answer
+    assert "analytics_lib.history.default_rate" in answer
+
+
+def test_asking_for_cure_rate_names_its_methodology_too():
+    answer = _ask("What is the cure rate?", portfolio_b_fixed_amortising,
+                  periods=3)
+    assert "OBSERVED_CURE_RATE@v1" in answer
 
 
 def test_a_question_about_nothing_still_falls_through_to_the_generic_refusal():

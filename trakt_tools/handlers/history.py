@@ -406,6 +406,78 @@ LOSS_OUTPUT = object_schema(
 )
 
 
+DEFAULT_CURE_OUTPUT = object_schema(
+    description="Observed default and cure rates across governed snapshots.",
+    properties={
+        "resource": {"type": "string"},
+        "available": {"type": "boolean"},
+        "reason": {"type": ["string", "null"]},
+        "method": {"type": ["string", "null"]},
+        "authority": {"type": ["string", "null"]},
+        "window": {"type": "object"},
+        "annualised_cdr_pct": {"type": ["number", "null"]},
+        "mean_periodic_default_rate_pct": {"type": ["number", "null"]},
+        "default_stock_pct": {"type": ["number", "null"]},
+        "mean_cure_rate_pct": {"type": ["number", "null"]},
+        "per_period": {"type": "array", "items": {"type": "object"}},
+        "notes": {"type": "array", "items": {"type": "string"}},
+        "scope": {"type": "object"},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+    },
+    required=["resource", "available", "scope"],
+)
+
+
+def default_analysis(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
+    """Observed default rate. Wraps ``analytics_lib.history.default_rate``."""
+    from analytics_lib.history import default_rate
+
+    snapshots = _resolve_history(inv)
+    periods = _window(snapshots, args, inv)
+    inv.telemetry.scanned(len(snapshots[periods[-1]]))
+    outcome = default_rate(snapshots, periods=periods)
+    inv.telemetry.returned(len(outcome.get("per_period") or ()))
+    return {
+        "resource": inv.authorised.resource.ref.key,
+        **outcome,
+        "reason": outcome.get("reason"),
+        "scope": _scope_block(inv),
+        "warnings": [
+            "OBSERVED default, not a probability of default. This is what "
+            "happened, not what is expected to happen.",
+            "The default RATE is a flow and the default STOCK is a level. A "
+            "book can carry a large stock and have a zero rate. Quote the one "
+            "you mean.",
+        ],
+    }
+
+
+def cure_analysis(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
+    """Observed cure rate. Wraps ``analytics_lib.history.cure_rate``."""
+    from analytics_lib.history import cure_rate
+
+    snapshots = _resolve_history(inv)
+    periods = _window(snapshots, args, inv)
+    inv.telemetry.scanned(len(snapshots[periods[-1]]))
+    outcome = cure_rate(snapshots, periods=periods,
+                        minimum_dpd=int(args.get("minimum_dpd") or 1))
+    inv.telemetry.returned(len(outcome.get("per_period") or ()))
+    return {
+        "resource": inv.authorised.resource.ref.key,
+        **outcome,
+        "reason": outcome.get("reason"),
+        "scope": _scope_block(inv),
+        "warnings": [
+            "A cure is a return to CURRENT. Improvement to a better but still "
+            "delinquent bucket is reported as improved_not_cured_balance and "
+            "is NOT in the numerator — that movement is a roll, which "
+            "transition_analysis measures.",
+            "Unlike the default rate, this convention is Trakt's rather than "
+            "a regulator's: ESMA defines no loan-level cure concept.",
+        ],
+    }
+
+
 def loss_analysis(args: Dict[str, Any], inv: ToolInvocation) -> Dict[str, Any]:
     """Observed loss and recovery. Wraps ``analytics_lib.history``."""
     from analytics_lib.history import loss_and_recovery

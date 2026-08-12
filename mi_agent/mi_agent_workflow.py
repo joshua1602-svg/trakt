@@ -192,7 +192,42 @@ def _capability_explanation(question: str, frame, history_periods: int = 1
         return None
 
     if outcome.status == AVAILABLE:
-        return None
+        if not capability.owned_kpi:
+            # A field-plus-aggregation capability: the ordinary query path
+            # owns it and computes it correctly. Answering here would be a
+            # second route to the same number.
+            return None
+        # An owned KPI that IS available. Naming its methodology is better
+        # than "I couldn't map this question", which is what the caller would
+        # otherwise fall through to — and far better than letting a generic
+        # aggregation produce a number of its own.
+        where = capability.calculation_source or "the shared analytics layer"
+        return (
+            f"{capability.name} is an owned Trakt metric "
+            f"({capability.methodology or 'versioned methodology'}) and is "
+            f"AVAILABLE for this portfolio. It is not computed by the ad-hoc "
+            f"query path: it comes from {where}, via the governed tool that "
+            "wraps it. Request it there so the approved methodology — not a "
+            "generic aggregation over a similarly named field — produces the "
+            "number.")
+
+    # MI Query is a SINGLE-FRAME engine: one dataset in, one answer out. A
+    # capability needing consecutive snapshots therefore cannot be executed
+    # here whatever the deployment holds, and saying "1 snapshot is available"
+    # would misreport a limitation of this path as a gap in the data.
+    needs_history = any(c.type == "history_periods" and c.minimum > 1
+                        for c in capability.conditions)
+    if needs_history and outcome.reason_code == "INSUFFICIENT_HISTORY":
+        where = capability.calculation_source or "the shared analytics layer"
+        return (
+            f"{capability.name} is measured ACROSS governed snapshots and MI "
+            "Query answers from a single dataset, so it cannot be computed on "
+            f"this path. It is an owned Trakt metric "
+            f"({capability.methodology or 'versioned methodology'}) served by "
+            f"{where}; request it through the governed history tools, where "
+            "the snapshot window is resolved. No value has been computed and "
+            "no other measure has been substituted for the one you asked "
+            "about.")
 
     parts = [f"{capability.name} is {outcome.status} for this portfolio."]
     if outcome.explanation:
@@ -369,7 +404,13 @@ def run_mi_agent_query(
     if (result["parser_mode"] == "deterministic"
             and parse_meta.get("note") == "unmapped"
             and not _portfolio_lens.mentions_portfolio(question)):
-        msg = (
+        # Sprint 2.5E wired the capability explanation only into the
+        # `unresolved_metric` branch. Tracing the real path in the close-out
+        # pass showed CPR, contractual WAL, YTM and default rate all arrive
+        # HERE instead, so the explanation never fired for any of them and the
+        # 2.5E report overstated the integration. Both branches consult it now.
+        capability_msg = _capability_explanation(question, df)
+        msg = capability_msg or (
             "I couldn't map this question to a governed analytic, so I haven't "
             "computed an answer (nothing was guessed). Try a metric by a "
             "dimension — e.g. 'balance by region', 'weighted average LTV by "

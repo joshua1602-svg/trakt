@@ -657,6 +657,55 @@ metrics:
       and amount fields rather than status alone.
     status: READY
 
+  - id: PERF_DEFAULT_RATE
+    capability: default_rate
+    name: Default rate (annualised CDR)
+    category: performance
+    description: >-
+      Balance entering default during the period over non-defaulted opening
+      balance, annualised. A FLOW, and deliberately separate from
+      PERF_DEFAULT_SHARE, which is the stock.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: default_analysis
+    calculation_source: analytics_lib.history.default_rate
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [snapshot, prior_snapshot]
+    agent_investigation_guidance: >-
+      Read this WITH PERF_DEFAULT_SHARE, never instead of it: a book can carry
+      a large stock of legacy defaults and have a default rate of zero, and
+      the two answer different questions. The methodology is ESMA's own
+      (Annex 12 AnlsdCstDfltRate), so the numerator and denominator are quoted
+      rather than chosen. This is an OBSERVED rate and is not a probability of
+      default — do not present it as forward-looking.
+    status: READY
+
+  - id: PERF_CURE_RATE
+    capability: cure_rate
+    name: Cure rate
+    category: performance
+    description: >-
+      Delinquent balance returning to current, over the delinquent balance
+      able to cure at the opening.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: cure_analysis
+    calculation_source: analytics_lib.history.cure_rate
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, prior_snapshot]
+    agent_investigation_guidance: >-
+      Read improved_not_cured_balance beside the rate. A book whose loans move
+      from 90+ to 30 days has improved without curing, and reporting that as a
+      cure overstates the recovery — that movement is a roll, which
+      transition_analysis measures. Unlike the default rate, this convention
+      is Trakt's own: ESMA defines no loan-level cure concept, so say so when
+      quoting it externally.
+    status: READY
+
   - id: PERF_LOSSES
     capability: observed_loss_rate
     name: Cumulative losses

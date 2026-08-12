@@ -98,6 +98,10 @@ CPR_METHOD = "OBSERVED_CPR@v2"
 LOSS_METHOD = "OBSERVED_LOSS@v2"
 RECOVERY_METHOD = "OBSERVED_RECOVERY@v2"
 SEVERITY_METHOD = "OBSERVED_LOSS_SEVERITY@v1"
+#: The regulator's own definition — see :func:`default_rate`.
+DEFAULT_RATE_METHOD = "OBSERVED_DEFAULT_RATE_CDR@v1"
+#: A market convention, NOT a regulator definition — see :func:`cure_rate`.
+CURE_RATE_METHOD = "OBSERVED_CURE_RATE@v1"
 SERIES_METHOD = "OBSERVED_SERIES@v1"
 
 
@@ -829,4 +833,332 @@ def compare_cohorts(
         "measures": rows,
         "note": ("A cohort figure is only interpretable against the rest of the "
                  "book. Both are reported so neither is quoted alone."),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Default and cure
+# --------------------------------------------------------------------------- #
+DPD_FIELD = "number_of_days_in_arrears"
+
+
+def _defaulted_mask(frame: pd.DataFrame) -> pd.Series:
+    """Which exposures are in default, on the evidence the tape carries.
+
+    Deliberately the SAME definition ``classify_exits`` uses — the default
+    date (RREL72) or a defaulted ``account_status`` (RREL69). A second
+    definition of default in the same module is exactly the defect Sprint
+    2.5C spent its first half removing from the arrears metrics.
+    """
+    mask = pd.Series(False, index=frame.index)
+    if DEFAULT_DATE_FIELD in frame.columns:
+        mask = mask | _present(frame[DEFAULT_DATE_FIELD])
+    if STATUS_FIELD in frame.columns:
+        status = frame[STATUS_FIELD].astype(str).str.lower()
+        mask = mask | status.str.contains(_DEFAULT_STATUS_PATTERN,
+                                          regex=True, na=False)
+    return mask
+
+
+def _balance_by_loan(frame: pd.DataFrame) -> Dict[Any, float]:
+    if LOAN_ID_FIELD not in frame.columns or BALANCE_FIELD not in frame.columns:
+        return {}
+    ids = frame[LOAN_ID_FIELD].astype(object)
+    balances = pd.to_numeric(frame[BALANCE_FIELD], errors="coerce").fillna(0.0)
+    return dict(zip(ids, balances))
+
+
+def default_rate(
+    snapshots: Mapping[str, pd.DataFrame],
+    *,
+    periods: Optional[Sequence[str]] = None,
+    periods_per_year: int = 12,
+) -> Dict[str, Any]:
+    """Observed default rate, on the regulator's own definition.
+
+    ESMA supplies this one verbatim. From the Annex 12 investor-report schema
+    (``DRAFT1auth.098.001.04``, ``AnlsdCstDfltRate``):
+
+        "Annualised Constant Default Rate (CDR) for the underlying exposures
+        based on the periodic CDR. **Periodic CDR is equal to the [(total
+        current balance of underlying exposures classified as defaulted
+        during the period) / (total current balance of non-defaulted
+        underlying exposures at the beginning of the period)]**. This value is
+        then annualised as follows: 100*(1-((1-Periodic CDR)^number of
+        collection periods in a year))"
+
+    Every element of the methodology is therefore quoted rather than chosen:
+
+    * **balance-based, not count-based** — "total current balance";
+    * **a FLOW, not a stock** — "classified as defaulted *during the period*",
+      which is why a loan already in default at the opening is in neither the
+      numerator nor the denominator;
+    * **denominator excludes defaults** — "non-defaulted ... at the beginning
+      of the period", so the base is the population that was *able* to default;
+    * **annualised geometrically**, structurally identical to CPR from SMM.
+
+    Default stock is reported alongside and named separately. "How much of the
+    book is in default today" and "how much entered default this period" are
+    different questions and the first is not a rate.
+
+    **One convention this cannot settle.** ESMA itself carries two definitions
+    of default — ``DfltdXpsr`` uses "the definition of default specified in
+    the securitisation documentation", while ``DfltdXpsrCptlRqrmntRgltn`` uses
+    Article 178 CRR. Trakt reads whichever the tape asserts through
+    ``default_date`` and ``account_status``; it does not impose either, and it
+    does not derive default from a DPD threshold, which would be a third.
+    """
+    order = list(periods) if periods is not None else sorted(snapshots)
+    if len(order) < 2:
+        return {"available": False,
+                "reason": ("a default RATE compares two points in time and "
+                           "needs at least two consecutive snapshots. A "
+                           "single snapshot supports the default STOCK, "
+                           "which is a different measure.")}
+
+    closing_frame = snapshots[order[-1]]
+    if not any(f in closing_frame.columns
+               for f in (DEFAULT_DATE_FIELD, STATUS_FIELD)):
+        return {"available": False,
+                "reason": (f"the tape carries neither {DEFAULT_DATE_FIELD} "
+                           f"(RREL72) nor {STATUS_FIELD} (RREL69), so a "
+                           "default event cannot be evidenced. It is not "
+                           "inferred from days past due, which would be a "
+                           "different definition, nor from disappearance.")}
+
+    per_period: List[Dict[str, Any]] = []
+    for previous, current in zip(order, order[1:]):
+        opening, closing = snapshots[previous], snapshots[current]
+        if LOAN_ID_FIELD not in opening.columns:
+            continue
+
+        opening_defaulted = _defaulted_mask(opening)
+        opening_ids = opening[LOAN_ID_FIELD].astype(object)
+        already_defaulted = set(opening_ids[opening_defaulted])
+        eligible_ids = set(opening_ids) - already_defaulted
+
+        opening_balances = _balance_by_loan(opening)
+        # "non-defaulted underlying exposures at the beginning of the period"
+        denominator = sum(opening_balances.get(i, 0.0) for i in eligible_ids)
+
+        closing_defaulted = _defaulted_mask(closing)
+        closing_ids = closing[LOAN_ID_FIELD].astype(object)
+        closing_balances = _balance_by_loan(closing)
+        # "classified as defaulted DURING the period": in default now, and not
+        # in default at the opening. A loan already defaulted has not defaulted
+        # again, and counting it every period would compound one event.
+        newly = [i for i, flag in zip(closing_ids, closing_defaulted)
+                 if flag and i not in already_defaulted]
+        numerator = sum(closing_balances.get(i, 0.0) for i in newly)
+
+        periodic = (numerator / denominator) if denominator > 0 else None
+        annualised = (None if periodic is None
+                      else (1.0 - (1.0 - periodic) ** periods_per_year) * 100.0)
+
+        total_closing = sum(closing_balances.values())
+        stock = sum(closing_balances.get(i, 0.0)
+                    for i, flag in zip(closing_ids, closing_defaulted) if flag)
+
+        per_period.append({
+            "from": previous, "to": current,
+            "newly_defaulted_balance": round(numerator, 2),
+            "newly_defaulted_count": len(newly),
+            "eligible_opening_balance": round(denominator, 2),
+            "periodic_default_rate_pct": (None if periodic is None
+                                          else round(periodic * 100.0, 6)),
+            "annualised_cdr_pct": (None if annualised is None
+                                   else round(annualised, 6)),
+            "default_stock_balance": round(stock, 2),
+            "default_stock_pct": (round(stock / total_closing * 100.0, 6)
+                                  if total_closing > 0 else None),
+        })
+
+    rates = [p["periodic_default_rate_pct"] for p in per_period
+             if p["periodic_default_rate_pct"] is not None]
+    mean_periodic = (sum(rates) / len(rates) / 100.0) if rates else None
+
+    return {
+        "available": True,
+        "method": DEFAULT_RATE_METHOD,
+        "authority": "ESMA Annex 12 AnlsdCstDfltRate (DRAFT1auth.098.001.04)",
+        "window": {"from": order[0], "to": order[-1], "periods": len(order)},
+        "periods_per_year": periods_per_year,
+        "mean_periodic_default_rate_pct": (None if mean_periodic is None
+                                           else round(mean_periodic * 100, 6)),
+        "annualised_cdr_pct": (
+            None if mean_periodic is None
+            else round((1.0 - (1.0 - mean_periodic) ** periods_per_year) * 100,
+                       6)),
+        "default_stock_pct": per_period[-1]["default_stock_pct"] if per_period
+        else None,
+        "per_period": per_period,
+        "notes": [
+            "Numerator and denominator are ESMA's, quoted from the Annex 12 "
+            "schema: balance classified as defaulted DURING the period, over "
+            "the balance of NON-DEFAULTED exposures at the beginning of it.",
+            "Balance-based, because the regulator's definition is. A "
+            "count-based rate answers a different question and is not "
+            "published under this name.",
+            "Default STOCK is reported separately and is not a rate. A book "
+            "with a high stock and no new defaults has a default rate of zero.",
+            "Loans already in default at the opening are excluded from BOTH "
+            "sides: they cannot default again, and including them would "
+            "compound one event across every later period.",
+            "Default is read from default_date (RREL72) or account_status "
+            "(RREL69) — whichever definition the tape asserts. It is NOT "
+            "derived from days past due, and NOT inferred from a loan "
+            "disappearing from the tape.",
+            "This is an OBSERVED default rate. It is not a probability of "
+            "default, and it must not be presented as one.",
+        ],
+    }
+
+
+def cure_rate(
+    snapshots: Mapping[str, pd.DataFrame],
+    *,
+    periods: Optional[Sequence[str]] = None,
+    minimum_dpd: int = 1,
+) -> Dict[str, Any]:
+    """Observed cure rate: delinquent balance that returned to performing.
+
+    **This one has no regulator definition, and the report says so.** ESMA
+    carries no loan-level cure concept at all — its only "cure" elements are
+    ``CurePrd``, ``BrchCureDt`` and ``CurePmtPssblty``, which are covenant and
+    trigger cure periods on CRE loans, not delinquency cures. So unlike the
+    default rate, this is a *market convention* Trakt has selected and
+    versioned, not a standard it can quote.
+
+    The convention adopted, which market sources agree on: a cure is a
+    delinquent exposure **returning to current**. The denominator is the
+    delinquent population at the opening — the balance that was *able* to cure
+    — never the whole portfolio, which would make the rate a function of how
+    healthy the book is rather than of how delinquency resolved.
+
+    **Improvement is not cure**, and the distinction is published. A loan
+    moving from 90+ days to 30 days has improved and is still delinquent; it
+    is reported in ``improved_not_cured_balance`` and is deliberately absent
+    from the numerator. That movement is a roll, and roll rates are what
+    ``transition_analysis`` measures.
+
+    Exposures that disappear from the tape are excluded and disclosed: a loan
+    that leaves may have redeemed, been sold or been written off, and reading
+    absence as a cure would flatter every book that sheds its worst loans.
+    """
+    order = list(periods) if periods is not None else sorted(snapshots)
+    if len(order) < 2:
+        return {"available": False,
+                "reason": ("a cure rate observes a movement between two "
+                           "points in time and needs at least two "
+                           "consecutive snapshots.")}
+
+    if DPD_FIELD not in snapshots[order[-1]].columns:
+        return {"available": False,
+                "reason": (f"the tape carries no {DPD_FIELD} (RREL68), so "
+                           "delinquency cannot be observed and neither can a "
+                           "return from it.")}
+
+    per_period: List[Dict[str, Any]] = []
+    for previous, current in zip(order, order[1:]):
+        opening, closing = snapshots[previous], snapshots[current]
+        if LOAN_ID_FIELD not in opening.columns or DPD_FIELD not in opening.columns:
+            continue
+
+        opening_dpd = pd.to_numeric(opening[DPD_FIELD],
+                                    errors="coerce").fillna(0)
+        opening_ids = opening[LOAN_ID_FIELD].astype(object)
+        opening_balances = _balance_by_loan(opening)
+        opening_defaulted = _defaulted_mask(opening)
+
+        # Eligible to cure: delinquent at the opening and not already in
+        # default. A defaulted exposure returning to performing is a
+        # different event, and folding it in would let one book's write-back
+        # policy move a delinquency statistic.
+        eligible = {i for i, dpd, defaulted
+                    in zip(opening_ids, opening_dpd, opening_defaulted)
+                    if dpd >= minimum_dpd and not defaulted}
+        denominator = sum(opening_balances.get(i, 0.0) for i in eligible)
+
+        closing_dpd = dict(zip(
+            closing[LOAN_ID_FIELD].astype(object),
+            pd.to_numeric(closing[DPD_FIELD], errors="coerce").fillna(0)))
+        closing_balances = _balance_by_loan(closing)
+        closing_defaulted_ids = set(
+            closing[LOAN_ID_FIELD].astype(object)[_defaulted_mask(closing)])
+
+        opening_dpd_by_loan = dict(zip(opening_ids, opening_dpd))
+        cured = improved = worsened = still = gone = defaulted_out = 0.0
+        cured_count = 0
+        for loan in eligible:
+            opening_balance = opening_balances.get(loan, 0.0)
+            if loan not in closing_dpd:
+                gone += opening_balance
+                continue
+            if loan in closing_defaulted_ids:
+                defaulted_out += opening_balance
+                continue
+            now = float(closing_dpd[loan])
+            was = float(opening_dpd_by_loan[loan])
+            if now == 0:
+                cured += closing_balances.get(loan, opening_balance)
+                cured_count += 1
+                continue
+            # Still delinquent. Whether it got better or worse is published,
+            # but neither is a cure.
+            still += opening_balance
+            if now < was:
+                improved += opening_balance
+            elif now > was:
+                worsened += opening_balance
+
+        rate = (cured / denominator * 100.0) if denominator > 0 else None
+        per_period.append({
+            "from": previous, "to": current,
+            "eligible_opening_balance": round(denominator, 2),
+            "eligible_count": len(eligible),
+            "cured_balance": round(cured, 2),
+            "cured_count": cured_count,
+            "cure_rate_pct": None if rate is None else round(rate, 6),
+            "improved_not_cured_balance": round(improved, 2),
+            "worsened_balance": round(worsened, 2),
+            "still_delinquent_balance": round(still, 2),
+            "defaulted_balance": round(defaulted_out, 2),
+            "exited_tape_balance": round(gone, 2),
+        })
+
+    rates = [p["cure_rate_pct"] for p in per_period
+             if p["cure_rate_pct"] is not None]
+    return {
+        "available": True,
+        "method": CURE_RATE_METHOD,
+        "authority": ("Trakt-selected market convention. ESMA defines NO "
+                      "loan-level cure concept — its cure fields are covenant "
+                      "and trigger cure periods."),
+        "window": {"from": order[0], "to": order[-1], "periods": len(order)},
+        "minimum_dpd_for_eligibility": minimum_dpd,
+        "mean_cure_rate_pct": (round(sum(rates) / len(rates), 6)
+                               if rates else None),
+        "per_period": per_period,
+        "notes": [
+            "A cure is a return to CURRENT (0 days past due). Improvement to "
+            "a better but still delinquent bucket is NOT a cure: it is "
+            "reported as improved_not_cured_balance and excluded from the "
+            "numerator. That movement is a roll, which transition_analysis "
+            "measures.",
+            "The denominator is the delinquent balance at the OPENING — the "
+            "balance able to cure. Dividing by the whole portfolio would make "
+            "the rate a function of how healthy the book is rather than of "
+            "how its delinquency resolved.",
+            "Exposures already in default at the opening are excluded: a "
+            "write-back is a different event from a delinquency cure.",
+            "Exposures that leave the tape are excluded and disclosed. "
+            "Reading absence as a cure would flatter every book that sheds "
+            "its worst loans.",
+            "No minimum performing period is required, because a single "
+            "snapshot pair cannot evidence one. A loan that cures and "
+            "re-defaults later is a cure in the period it cured and a default "
+            "in the period it defaulted — both are visible in the series.",
+            "Unlike the default rate, this convention is NOT quoted from a "
+            "regulator. It is Trakt's, versioned, and other conventions exist.",
+        ],
     }

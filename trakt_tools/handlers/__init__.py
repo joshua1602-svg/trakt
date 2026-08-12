@@ -550,3 +550,43 @@ register(ToolSpec(
     required_capability=SCOPE_RISK_READ,
     handler=_capability.portfolio_capabilities,
 ))
+
+register(ToolSpec(
+    name="default_analysis",
+    version="1.0.0",
+    description=(
+        "Observed default rate across governed snapshots: balance classified "
+        "as defaulted DURING the period over non-defaulted opening balance, "
+        "annualised — ESMA's own CDR definition — plus the default stock, "
+        "reported separately because it is a level and not a rate."),
+    agent_guidance=(
+        "OBSERVED, not a probability of default: this is what happened. The "
+        "rate and the stock are different questions — a book can carry a "
+        "large stock of legacy defaults and have a default rate of zero — so "
+        "say which you are quoting. Default is read from default_date or "
+        "account_status, never inferred from days past due or from a loan "
+        "disappearing from the tape."),
+    input_schema=_history.LOSS_INPUT,
+    output_schema=_history.DEFAULT_CURE_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_history.default_analysis,
+))
+
+register(ToolSpec(
+    name="cure_analysis",
+    version="1.0.0",
+    description=(
+        "Observed cure rate: delinquent balance returning to CURRENT over the "
+        "delinquent balance able to cure at the opening. Improvement within "
+        "delinquency is reported separately and is not a cure."),
+    agent_guidance=(
+        "Read improved_not_cured_balance alongside the rate. A book whose "
+        "loans move from 90+ to 30 days has improved without curing, and "
+        "reporting that as a cure would overstate the recovery. Unlike the "
+        "default rate this convention is Trakt's own — ESMA defines no "
+        "loan-level cure concept — so say so when quoting it externally."),
+    input_schema=_history.LOSS_INPUT,
+    output_schema=_history.DEFAULT_CURE_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_history.cure_analysis,
+))
