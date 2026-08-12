@@ -146,6 +146,27 @@ def test_the_shipped_framework_loads_and_is_internally_consistent():
             "metric and no guidance will invent an interpretation")
 
 
+def test_a_metric_served_by_a_registered_tool_is_not_still_marked_a_gap():
+    """Status drift, which this caught in Sprint 2.5: five metrics had their
+    tools built, registered and tested while their framework status still said
+    SMALL_GAP. The published framework then understated Trakt's own coverage —
+    an agent reading it would have skipped capabilities that existed.
+
+    A metric may legitimately name a tool it is not yet READY for (the tool
+    exists but the metric needs more), so this asserts the narrower thing: if
+    the named tool is REGISTERED, the status must not claim the calculation is
+    missing.
+    """
+    from trakt_tools.registry import get
+
+    framework = load_framework()
+    for metric in framework.metrics:
+        if metric.fact_tool and get(metric.fact_tool) is not None:
+            assert metric.status not in ("SMALL_GAP", "DATA_GAP"), (
+                f"{metric.id} is served by registered tool "
+                f"{metric.fact_tool!r} but is still marked {metric.status}")
+
+
 def test_a_metric_claiming_a_screening_rule_has_one_in_the_pack():
     """A dangling screening_rule would publish a threshold that does not exist."""
     framework = load_framework()

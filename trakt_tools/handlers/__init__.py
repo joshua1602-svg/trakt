@@ -19,6 +19,7 @@ from ..registry import register
 from ..spec import ToolSpec
 from . import analysis as _analysis
 from . import covenants as _covenants
+from . import history as _history
 from . import loans as _loans
 from . import movement as _movement
 from . import provenance as _provenance
@@ -382,5 +383,104 @@ register(ToolSpec(
     handler=_readiness.evaluate_rule_packs,
 ))
 
-__all__ = ["_analysis", "_covenants", "_loans", "_movement", "_provenance",
-           "_readiness"]
+# --------------------------------------------------------------------------- #
+# Observed historical behaviour. Four SHAPES of question rather than one tool
+# per metric, plus transition_analysis wrapping the Risk Monitor's existing
+# migration matrix. Every calculation lives in analytics_lib so React and MI
+# Query reach the same arithmetic.
+# --------------------------------------------------------------------------- #
+register(ToolSpec(
+    name="portfolio_history",
+    version="1.0.0",
+    description=(
+        "How named measures have moved across governed snapshots — balance, "
+        "loan count, weighted-average LTV, arrears at 30/60/90 days, defaults, "
+        "high-LTV share, largest-region share and stale-valuation share. One "
+        "call covers every measure and every period."),
+    agent_guidance=(
+        "Use this for any 'how has X changed' question. Ask for several "
+        "measures at once — it costs one pass per snapshot, not one per "
+        "measure. There is no expression language: ask for a named measure. A "
+        "single-period window means no movement can be observed, which is an "
+        "absence of history rather than evidence of stability."),
+    input_schema=_history.HISTORY_INPUT,
+    output_schema=_history.HISTORY_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_history.portfolio_history,
+))
+
+register(ToolSpec(
+    name="prepayment_analysis",
+    version="1.0.0",
+    description=(
+        "Observed prepayment and redemption: single-monthly mortality and its "
+        "annualised form, from the canonical unscheduled-principal field, with "
+        "per-period detail."),
+    agent_guidance=(
+        "The rate is measured from unscheduled principal and full redemptions, "
+        "over the OPENING balance of each period. Scheduled amortisation, "
+        "maturity and default-related reduction are excluded — they are not "
+        "prepayment. Never infer a rate from the change in total balance, and "
+        "if this returns unavailable, report that rather than estimating."),
+    input_schema=_history.PREPAYMENT_INPUT,
+    output_schema=_history.PREPAYMENT_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_history.prepayment_analysis,
+))
+
+register(ToolSpec(
+    name="loss_analysis",
+    version="1.0.0",
+    description=(
+        "Observed cumulative and period losses and recoveries, reported on "
+        "every defensible denominator: original balance, opening balance, "
+        "current balance, and recoveries over losses."),
+    agent_guidance=(
+        "Several loss denominators are legitimate and each answers a different "
+        "question, so all are returned and none is chosen for you. State which "
+        "one you are quoting. Losses come from the governed field and are never "
+        "inferred from balance movement."),
+    input_schema=_history.LOSS_INPUT,
+    output_schema=_history.LOSS_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_history.loss_analysis,
+))
+
+register(ToolSpec(
+    name="cohort_comparison",
+    version="1.0.0",
+    description=(
+        "One cohort against the REST of the portfolio on the same measures — "
+        "by vintage, region, LTV band or any canonical field. Bounded to two "
+        "groups."),
+    agent_guidance=(
+        "This is how a flagged cohort becomes a finding. 'The high-LTV cohort "
+        "has 4% arrears' is a number; '4.0% against 1.2% for the rest of the "
+        "book' is something a reviewer can act on. Always compare before "
+        "concluding, and never retrieve loans to do it yourself."),
+    input_schema=_history.COHORT_INPUT,
+    output_schema=_history.COHORT_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_history.cohort_comparison,
+))
+
+register(ToolSpec(
+    name="transition_analysis",
+    version="1.0.0",
+    description=(
+        "How loans moved between states across two governed snapshots: "
+        "deterioration, cures, entries and exits. Wraps the Risk Monitor's "
+        "existing migration matrix."),
+    agent_guidance=(
+        "Use this to tell a rising arrears figure caused by NEW delinquency "
+        "from one caused by existing cases worsening — they call for different "
+        "responses. Cures appear as improving transitions. A loan absent from "
+        "one snapshot is an entry or an exit, not a state change."),
+    input_schema=_history.TRANSITION_INPUT,
+    output_schema=_history.TRANSITION_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_history.transition_analysis,
+))
+
+__all__ = ["_analysis", "_covenants", "_history", "_loans", "_movement",
+           "_provenance", "_readiness"]

@@ -115,6 +115,12 @@ class ToolDependencies:
     #: portfolio on disk. Production leaves both unset.
     drillthrough_evaluator: Any = None
     period_change_analyser: Any = None
+    #: Test seam: ``() -> {reporting_date: DataFrame}`` for the governed
+    #: snapshot history. Production leaves it unset and the handler discovers
+    #: snapshots through ``mi_agent_api.snapshots`` — the SAME discovery the MI
+    #: period-change workflow uses, so a trend an agent reads and a trend the
+    #: workspace shows come from one set of snapshots.
+    loan_history_resolver: Any = None
 
 
 def build_dependencies(
@@ -129,6 +135,7 @@ def build_dependencies(
     lineage_index_path: Any = None,
     drillthrough_evaluator: Any = None,
     period_change_analyser: Any = None,
+    loan_history_resolver: Any = None,
 ) -> ToolDependencies:
     """Construct the dependency set for one execution.
 
@@ -154,6 +161,7 @@ def build_dependencies(
         lineage_index_path=lineage_index_path,
         drillthrough_evaluator=drillthrough_evaluator,
         period_change_analyser=period_change_analyser,
+        loan_history_resolver=loan_history_resolver,
     )
 
 

@@ -66,6 +66,91 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/cohort_comparison:
+    post:
+      operationId: invoke_cohort_comparison
+      summary: One cohort against the REST of the portfolio on the same measures — by vintage, region,
+        LTV band or any canonical field
+      description: 'One cohort against the REST of the portfolio on the same measures — by vintage, region,
+        LTV band or any canonical field. Bounded to two groups.
+
+
+        This is how a flagged cohort becomes a finding. ''The high-LTV cohort has 4% arrears'' is a number;
+        ''4.0% against 1.2% for the rest of the book'' is something a reviewer can act on. Always compare
+        before concluding, and never retrieve loans to do it yourself.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Compare a cohort against the REST of the portfolio on the same measures. Optionally
+                across periods.
+              properties:
+                resource: &id005
+                  type: string
+                  description: The portfolio resource, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                cohort_field:
+                  type: string
+                  description: The canonical field defining the cohort, e.g. 'portfolio_cohort' for vintage
+                    or 'geographic_region_collateral' for region.
+                cohort_value:
+                  type:
+                  - string
+                  - 'null'
+                  description: The value identifying the cohort. Omit with 'above'/'below' to define a
+                    numeric cohort.
+                  default: null
+                above:
+                  type:
+                  - number
+                  - 'null'
+                  description: 'Numeric cohort: values strictly above this.'
+                  default: null
+                below:
+                  type:
+                  - number
+                  - 'null'
+                  description: 'Numeric cohort: values strictly below this.'
+                  default: null
+                measures:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  default: null
+                period:
+                  type:
+                  - string
+                  - 'null'
+                  description: Which snapshot. Omit for the most recent.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - cohort_field
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/agent/tools/concentration:
     post:
       operationId: invoke_concentration
@@ -103,7 +188,7 @@ paths:
                   maximum: 200
                   description: How many leading groups to combine.
                   default: 10
-                filters: &id006
+                filters: &id007
                   type:
                   - object
                   - 'null'
@@ -156,7 +241,7 @@ paths:
               description: The loans contributing to ONE covenant or concentration test's numerator. Use
                 this after evaluate_covenants tells you a test is breached or close to its limit.
               properties:
-                resource: &id005
+                resource: &id006
                   type: string
                   description: The resource the test was evaluated against, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -348,7 +433,7 @@ paths:
               description: 'Apply every configured rulebook to the same measured facts: warehouse criteria,
                 Trakt''s internal screening thresholds, and any supplied securitisation criteria.'
               properties:
-                resource: &id007
+                resource: &id008
                   type: string
                   description: The portfolio resource to assess, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -701,6 +786,68 @@ paths:
           $ref: '#/components/responses/UnknownTool'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/loss_analysis:
+    post:
+      operationId: invoke_loss_analysis
+      summary: 'Observed cumulative and period losses and recoveries, reported on every defensible denominator:
+        original balance, opening balance, current balance, and recoveries over losses'
+      description: 'Observed cumulative and period losses and recoveries, reported on every defensible
+        denominator: original balance, opening balance, current balance, and recoveries over losses.
+
+
+        Several loss denominators are legitimate and each answers a different question, so all are returned
+        and none is chosen for you. State which one you are quoting. Losses come from the governed field
+        and are never inferred from balance movement.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Observed losses and recoveries, reported on every defensible denominator rather
+                than one chosen for you.
+              properties:
+                resource: *id005
+                months:
+                  type:
+                  - integer
+                  - 'null'
+                  minimum: 1
+                  maximum: 60
+                  default: null
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/agent/tools/period_change:
     post:
       operationId: invoke_period_change
@@ -727,7 +874,7 @@ paths:
                 which periods are comparable — do not compare figures you gathered from separate calls
                 yourself.
               properties:
-                resource: *id005
+                resource: *id006
                 fields:
                   type:
                   - array
@@ -748,6 +895,87 @@ paths:
                   description: Include the balance bridge — how the opening balance became the closing
                     one (redemptions, additions, amortisation).
                   default: true
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/portfolio_history:
+    post:
+      operationId: invoke_portfolio_history
+      summary: How named measures have moved across governed snapshots — balance, loan count, weighted-average
+        LTV, arrears at 30/60/90 days, defaults, high-LTV share, largest-region share and stale-valuation
+        share
+      description: 'How named measures have moved across governed snapshots — balance, loan count, weighted-average
+        LTV, arrears at 30/60/90 days, defaults, high-LTV share, largest-region share and stale-valuation
+        share. One call covers every measure and every period.
+
+
+        Use this for any ''how has X changed'' question. Ask for several measures at once — it costs one
+        pass per snapshot, not one per measure. There is no expression language: ask for a named measure.
+        A single-period window means no movement can be observed, which is an absence of history rather
+        than evidence of stability.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: How named measures have moved across governed snapshots. One call covers every
+                measure and every period.
+              properties:
+                resource: *id005
+                measures:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Named measures. Omit for the standard set. There is no expression language
+                    — ask for a named measure.
+                  default: null
+                months:
+                  type:
+                  - integer
+                  - 'null'
+                  minimum: 1
+                  maximum: 60
+                  description: Most recent N periods.
+                  default: null
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  description: Applied to every snapshot before measuring.
+                  default: null
               additionalProperties: false
               required:
               - resource
@@ -795,7 +1023,79 @@ paths:
                 averages, arrears and stage mix.'
               properties:
                 resource: *id001
-                filters: *id006
+                filters: *id007
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/prepayment_analysis:
+    post:
+      operationId: invoke_prepayment_analysis
+      summary: 'Observed prepayment and redemption: single-monthly mortality and its annualised form,
+        from the canonical unscheduled-principal field, with per-period detail'
+      description: 'Observed prepayment and redemption: single-monthly mortality and its annualised form,
+        from the canonical unscheduled-principal field, with per-period detail.
+
+
+        The rate is measured from unscheduled principal and full redemptions, over the OPENING balance
+        of each period. Scheduled amortisation, maturity and default-related reduction are excluded —
+        they are not prepayment. Never infer a rate from the change in total balance, and if this returns
+        unavailable, report that rather than estimating.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Observed prepayment and redemption, from the canonical unscheduled-principal
+                field. Never inferred from balance movement.
+              properties:
+                resource: *id005
+                months:
+                  type:
+                  - integer
+                  - 'null'
+                  minimum: 2
+                  maximum: 60
+                  description: Most recent N periods.
+                  default: null
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                include_redemptions:
+                  type: boolean
+                  description: Count full redemptions alongside partial prepayment.
+                  default: true
+                annualise:
+                  type: boolean
+                  description: Also report the annualised (CPR) form.
+                  default: true
               additionalProperties: false
               required:
               - resource
@@ -858,7 +1158,7 @@ paths:
                   maximum: 200
                   description: How many loans to return (at most 200).
                   default: 20
-                filters: *id006
+                filters: *id007
                 include_fields:
                   type:
                   - array
@@ -916,7 +1216,7 @@ paths:
               description: 'The Securitisation Readiness Framework: what a first-pass review assesses,
                 which of it Trakt can measure deterministically, and which tool supplies each fact.'
               properties:
-                resource: *id007
+                resource: *id008
                 category:
                   type:
                   - string
@@ -973,7 +1273,7 @@ paths:
               description: 'Measure one or more framework facts using the governed concentration-test
                 metric library. Batch-first: ask for several in one call.'
               properties:
-                resource: *id007
+                resource: *id008
                 requests:
                   type: array
                   minItems: 1
@@ -1037,7 +1337,7 @@ paths:
                 of the regime''s required loan-level fields, separating hard blockers from fields that
                 may report a No-Data value.'
               properties:
-                resource: *id007
+                resource: *id008
                 regime:
                   type: string
                   description: The disclosure regime. ESMA Annex 2 is the loan-level template.
@@ -1103,7 +1403,7 @@ paths:
                   description: Canonical fields to report as balance-weighted averages per category, e.g.
                     ['current_loan_to_value'].
                   default: null
-                filters: *id006
+                filters: *id007
                 limit:
                   type: integer
                   minimum: 1
@@ -1114,6 +1414,67 @@ paths:
               required:
               - resource
               - dimension
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/transition_analysis:
+    post:
+      operationId: invoke_transition_analysis
+      summary: 'How loans moved between states across two governed snapshots: deterioration, cures, entries
+        and exits'
+      description: 'How loans moved between states across two governed snapshots: deterioration, cures,
+        entries and exits. Wraps the Risk Monitor''s existing migration matrix.
+
+
+        Use this to tell a rising arrears figure caused by NEW delinquency from one caused by existing
+        cases worsening — they call for different responses. Cures appear as improving transitions. A
+        loan absent from one snapshot is an entry or an exit, not a state change.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How loans moved between states across two governed snapshots: DPD deterioration,
+                cures, entries and exits.'
+              properties:
+                resource: *id005
+                dimension:
+                  type: string
+                  description: The state to track, e.g. 'account_status' or 'ifrs9_stage'.
+                  default: account_status
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  description: Baseline snapshot. Omit for the earliest.
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  description: Current snapshot. Omit for the latest.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
       responses:
         '200':
           description: The governed result.
@@ -1156,7 +1517,7 @@ paths:
               description: 'How old and how good the collateral evidence is: valuation age distribution,
                 method mix and missing-valuation share, all balance-weighted.'
               properties:
-                resource: *id007
+                resource: *id008
                 stale_after_months:
                   type: integer
                   minimum: 1
@@ -1259,7 +1620,7 @@ components:
           - 'null'
         error:
           oneOf:
-          - &id008
+          - &id009
             type: object
             description: A governed failure. Branch on `code`, never on `message`.
             properties:
@@ -1297,7 +1658,7 @@ components:
       - status
       - request_id
       - tenant_id
-    TraktError: *id008
+    TraktError: *id009
     ToolDeclaration:
       type: object
       properties:
@@ -1326,20 +1687,20 @@ components:
   responses:
     InvalidArguments:
       description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
-      content: &id009
+      content: &id010
         application/json:
           schema:
             $ref: '#/components/schemas/GovernedResult'
     Unauthorized:
       description: The bearer token is missing, invalid or expired.
-      content: *id009
+      content: *id010
     Forbidden:
       description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
         RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
-      content: *id009
+      content: *id010
     UnknownTool:
       description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
-      content: *id009
+      content: *id010
     Unavailable:
       description: The agent API or the governed data source is not available. Retryable.
-      content: *id009
+      content: *id010

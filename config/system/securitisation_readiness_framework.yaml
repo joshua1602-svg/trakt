@@ -356,7 +356,7 @@ metrics:
       does not make a loan bad, it makes the reported LTV unreliable — which
       is a data-quality finding, not a credit one. Distinguish the two
       explicitly, because remediation differs.
-    status: SMALL_GAP
+    status: READY
 
   - id: COLL_VALUATION_METHOD_MIX
     name: Valuation method mix
@@ -374,7 +374,7 @@ metrics:
       A book valued predominantly by index has weaker collateral evidence than
       one valued by inspection, even at identical LTVs. Transaction documents
       often restrict which methods are acceptable.
-    status: SMALL_GAP
+    status: READY
 
   - id: COLL_MISSING_VALUATION_SHARE
     name: Missing valuation share
@@ -392,7 +392,7 @@ metrics:
       A loan with no valuation has no LTV, so it is silently absent from every
       LTV metric. Always read the LTV figures together with this one, or the
       book will look better than the data supports.
-    status: SMALL_GAP
+    status: READY
 
   - id: COLL_WA_PROPERTY_VALUE
     name: Weighted-average property value
@@ -850,7 +850,7 @@ metrics:
       submission is possible without it. One that may is a quality question.
       Separate them, because conflating them turns a blocker into a footnote
       or a footnote into a blocker.
-    status: SMALL_GAP
+    status: READY
 
   - id: REG_SCHEMA_VALIDATION
     name: Regulatory schema validation
@@ -867,7 +867,7 @@ metrics:
     agent_investigation_guidance: >-
       Validation state is about the SUBMISSION, not the portfolio. Never let a
       clean regulatory result imply a sound book, or the reverse.
-    status: SMALL_GAP
+    status: READY
 
   - id: REG_SUBMISSION_STATE
     name: Submission acceptance state
