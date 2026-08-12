@@ -117,6 +117,13 @@ class FrameworkMetric:
     fact_tool: Optional[str] = None
     calculation_source: Optional[str] = None
     metric_id: Optional[str] = None
+    #: The shared MI capability this readiness requirement consumes, from
+    #: ``config/system/mi_capability_registry.yaml``. Readiness owns no
+    #: alternative calculation: the requirement names a capability, the
+    #: capability names the one implementation, and its availability state
+    #: tells a reviewer whether an absence is a data gap or simply a metric
+    #: that does not apply to this book.
+    capability: Optional[str] = None
     #: Set when ``metric_id`` names a concentration-library metric that is
     #: still unimplemented, but a *tool* now serves the same economic concept
     #: by a different route. Prepayment is the example: a rate needs two
@@ -151,6 +158,7 @@ class FrameworkMetric:
             "status": self.status, "fact_tool": self.fact_tool,
             "calculation_source": self.calculation_source,
             "metric_id": self.metric_id,
+            "capability": self.capability,
             "supersedes_library_metric": self.supersedes_library_metric,
             "screening_rule": self.screening_rule,
             "external_criteria_supported": self.external_criteria_supported,
@@ -256,6 +264,7 @@ def load_framework(config_path: Optional[str | Path] = None) -> ReadinessFramewo
                 fact_tool=entry.get("fact_tool") or None,
                 calculation_source=entry.get("calculation_source") or None,
                 metric_id=entry.get("metric_id") or None,
+                capability=entry.get("capability") or None,
                 supersedes_library_metric=bool(
                     entry.get("supersedes_library_metric", False)),
                 screening_rule=entry.get("screening_rule") or None,

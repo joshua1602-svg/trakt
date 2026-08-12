@@ -93,6 +93,7 @@ metrics:
   # judgement is made against.
   # ===================================================================
   - id: COMP_TOTAL_BALANCE
+    capability: total_balance
     name: Total portfolio balance
     category: composition
     description: Aggregate current principal balance of the governed population.
@@ -111,6 +112,7 @@ metrics:
     status: READY
 
   - id: COMP_LOAN_COUNT
+    capability: loan_count
     name: Loan count
     category: composition
     description: Number of distinct loans in the governed population.
@@ -128,6 +130,7 @@ metrics:
     status: READY
 
   - id: COMP_AVERAGE_LOAN_SIZE
+    capability: average_loan_size
     name: Average loan size
     category: composition
     description: Mean current balance per loan.
@@ -254,6 +257,7 @@ metrics:
     status: READY
 
   - id: COMP_CONTRACTUAL_WAL
+    capability: contractual_wal
     name: Contractual weighted average life
     category: composition
     description: >-
@@ -281,6 +285,7 @@ metrics:
     status: READY
 
   - id: COMP_CONTRACTUAL_YTM
+    capability: contractual_ytm
     name: Contractual yield to maturity (periodic)
     category: composition
     description: >-
@@ -310,6 +315,7 @@ metrics:
   # is a recognised concern independent of any particular transaction.
   # ===================================================================
   - id: COLL_WA_LTV
+    capability: wa_current_ltv
     name: Weighted-average current LTV
     category: collateral
     description: Balance-weighted average current loan-to-value.
@@ -652,6 +658,7 @@ metrics:
     status: READY
 
   - id: PERF_LOSSES
+    capability: observed_loss_rate
     name: Cumulative losses
     category: performance
     description: Allocated losses as a share of original balance.
@@ -677,6 +684,7 @@ metrics:
     status: READY
 
   - id: PERF_PREPAYMENT
+    capability: observed_cpr
     name: Prepayment rate
     category: performance
     description: Prepayments as a share of balance.
@@ -707,6 +715,7 @@ metrics:
   # E. CONCENTRATIONS
   # ===================================================================
   - id: CONC_GEOGRAPHIC
+    capability: geographic_concentration
     name: Geographic concentration
     category: concentration
     description: Share of balance in the largest single region.

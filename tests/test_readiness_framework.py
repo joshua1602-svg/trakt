@@ -707,3 +707,40 @@ def test_the_contractual_ytm_guidance_admits_it_is_only_periodic():
     guidance = metric.agent_investigation_guidance
     assert "PERIODIC" in guidance
     assert "CREL122" in guidance
+
+
+def test_readiness_metrics_that_name_a_capability_name_a_real_one():
+    """Sprint 2.5E. Readiness must consume shared MI capabilities rather than
+    own alternative calculations, so a dangling capability reference would
+    publish a requirement pointing at nothing."""
+    from trakt_core.capability import load_registry
+
+    framework = load_framework()
+    registry = load_registry()
+    linked = [m for m in framework.metrics if m.capability]
+
+    assert linked, "no readiness metric consumes a shared capability"
+    for metric in linked:
+        assert registry.get(metric.capability) is not None, (
+            f"{metric.id} names capability {metric.capability!r}, which is "
+            "not in the MI capability registry")
+
+
+def test_a_readiness_metric_and_its_capability_agree_on_the_implementation():
+    """One economic definition, one calculation, many consumers. If the
+    framework and the capability registry named different modules for the same
+    metric, two consumers could disagree about the same portfolio."""
+    from trakt_core.capability import load_registry
+
+    framework = load_framework()
+    registry = load_registry()
+    for metric in framework.metrics:
+        if not metric.capability or not metric.calculation_source:
+            continue
+        capability = registry.get(metric.capability)
+        if not capability.calculation_source:
+            continue
+        assert metric.calculation_source == capability.calculation_source, (
+            f"{metric.id} calculates via {metric.calculation_source} but "
+            f"capability {capability.id} names "
+            f"{capability.calculation_source}; there must be exactly one")

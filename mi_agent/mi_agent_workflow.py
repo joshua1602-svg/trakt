@@ -158,6 +158,52 @@ def _detect_unsupported_concept(question, semantics, available_columns):
     return None
 
 
+def _capability_explanation(question: str, frame, history_periods: int = 1
+                            ) -> Optional[str]:
+    """Why Trakt cannot answer a question about a KNOWN capability.
+
+    Returns None unless the question names a registered capability that is not
+    AVAILABLE for this dataset. A capability that IS available is left alone —
+    the ordinary query path owns those, and answering here would be a second
+    route to the same number.
+    """
+    try:
+        from trakt_core.capability import (
+            AVAILABLE,
+            describe_portfolio,
+            load_registry,
+            match_capability,
+            resolve_capability,
+        )
+    except Exception:
+        return None
+
+    try:
+        registry = load_registry()
+        capability = match_capability(question, registry=registry)
+        if capability is None:
+            return None
+
+        if frame is None:
+            return None
+        shape = describe_portfolio(frame, history_periods=history_periods)
+        outcome = resolve_capability(capability, shape)
+    except Exception:
+        return None
+
+    if outcome.status == AVAILABLE:
+        return None
+
+    parts = [f"{capability.name} is {outcome.status} for this portfolio."]
+    if outcome.explanation:
+        parts.append(outcome.explanation)
+    if outcome.missing_inputs:
+        parts.append("Missing input(s): " + ", ".join(outcome.missing_inputs) + ".")
+    parts.append("No value has been computed and no other measure has been "
+                 "substituted for the one you asked about.")
+    return " ".join(parts)
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -289,7 +335,15 @@ def run_mi_agent_query(
     # just because it mentions a portfolio. The measure the user asked for does
     # not exist here, and no other measure may stand in for it.
     if parse_meta.get("note") == "unresolved_metric":
-        msg = (
+        # Before refusing, ask the capability registry whether the question
+        # names something Trakt KNOWS ABOUT but cannot produce for THIS book.
+        # "What is the contractual WAL of this ERM portfolio?" deserves the
+        # reason — repayment is contingent on a borrower event — not "that
+        # measure does not exist here", which is both wrong and unhelpful.
+        # This resolves no value and substitutes no measure; it only makes a
+        # refusal explain itself.
+        capability_msg = _capability_explanation(question, df)
+        msg = capability_msg or (
             f"{spec.explanation} I haven't computed an answer, and I have not "
             "substituted a different measure for the one you asked about. Ask "
             "for a governed measure — e.g. balance, LTV, interest rate, borrower "

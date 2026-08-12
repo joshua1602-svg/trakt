@@ -18,6 +18,7 @@ from trakt_core.context import SCOPE_LOAN_READ, SCOPE_RISK_READ
 from ..registry import register
 from ..spec import ToolSpec
 from . import analysis as _analysis
+from . import capability as _capability
 from . import contractual as _contractual
 from . import covenants as _covenants
 from . import history as _history
@@ -508,4 +509,32 @@ register(ToolSpec(
     output_schema=_contractual.CONTRACTUAL_OUTPUT,
     required_capability=SCOPE_RISK_READ,
     handler=_contractual.contractual_analytics,
+))
+
+register(ToolSpec(
+    name="portfolio_capabilities",
+    version="1.0.0",
+    description=(
+        "What analytical capabilities Trakt can produce for this portfolio, "
+        "and for each one it cannot, the reason: UNAVAILABLE (an input is "
+        "missing), NOT_APPLICABLE (economically meaningless here), "
+        "ASSUMPTION_REQUIRED (needs an unknown future rate), MODEL_REQUIRED "
+        "(needs behavioural modelling) or METHODOLOGY_NOT_APPROVED (the data "
+        "exists and the definition is unsettled)."),
+    agent_guidance=(
+        "Call this FIRST. It tells you what is worth asking for before you "
+        "ask, and it does not compute anything, so surveying a portfolio is "
+        "cheap. The five refusal states are not interchangeable: "
+        "UNAVAILABLE means a field could be requested from the client, "
+        "NOT_APPLICABLE means no field would help because the metric does not "
+        "apply to this product, ASSUMPTION_REQUIRED means Trakt will not "
+        "guess a rate path, MODEL_REQUIRED means Trakt does not model "
+        "behaviour, and METHODOLOGY_NOT_APPROVED means Trakt has the data and "
+        "has not settled the definition — report it as an open decision, not "
+        "as a gap. Every refusal carries missing_inputs or an explanation you "
+        "can quote."),
+    input_schema=_capability.CAPABILITIES_INPUT,
+    output_schema=_capability.CAPABILITIES_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_capability.portfolio_capabilities,
 ))
