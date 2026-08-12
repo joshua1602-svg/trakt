@@ -27,7 +27,7 @@ import pandas as pd
 import pytest
 
 from mi_agent_api.cohorts import _weighted_avg_pct, cohort_analysis
-from mi_agent_api.evolution import _column, _pct_fraction, _weighted_avg
+from mi_agent_api.evolution import _pct_fraction, _weighted_avg
 from mi_agent_api.funded_prep import prepare_funded_mi_dataset
 
 #: The React formatter's contract-aware path, mirrored: a fraction times 100,
@@ -81,8 +81,7 @@ class TestOneContractAcrossSurfaces:
     def test_every_surface_emits_the_same_fraction(self, ltv, label):
         df = frame(ltv)
         evolution = _pct_fraction(df, "current_loan_to_value")
-        progression = _pct_fraction(df, "current_loan_to_value",
-                                    _column(df, "current_loan_to_value"))
+        progression = _pct_fraction(df, "current_loan_to_value", df)
         table = _weighted_avg_pct(df["current_loan_to_value"],
                                   df["current_outstanding_balance"])
         assert render(evolution) == render(progression) == render(table) == 39.6, label
@@ -115,11 +114,11 @@ class TestScaleIsAPropertyOfTheColumn:
     """The subset-heuristic defect: one cohort scaled differently from its
     neighbour in the same table."""
 
-    def test_a_low_value_cohort_is_scaled_like_its_column(self):
-        column = pd.Series([40.0, 39.0, 1.2, 1.3, 1.1, 1.4, 41.0, 38.0])
+    def test_a_low_value_cohort_is_scaled_like_its_period(self):
+        period = frame([40.0, 39.0, 1.2, 1.3, 1.1, 1.4, 41.0, 38.0])
         cohort = frame([1.2, 1.3, 1.1, 1.4])
         assert render(_pct_fraction(cohort, "current_loan_to_value")) == 125.0
-        assert render(_pct_fraction(cohort, "current_loan_to_value", column)) == 1.2
+        assert render(_pct_fraction(cohort, "current_loan_to_value", period)) == 1.2
 
     def test_the_cohort_table_scales_every_row_from_the_column(self):
         column = pd.Series([40.0, 39.0, 1.2, 1.3])
@@ -151,6 +150,38 @@ class TestWeightingReconciles:
         assert _pct_fraction(df, "current_loan_to_value") is None
 
 
+class TestTheScaleBasisSignatures:
+    """The two helpers take the scale basis in DIFFERENT shapes, and getting it
+    wrong is silent.
+
+    ``evolution._pct_fraction`` takes the whole period FRAME; ``cohorts.
+    _weighted_avg_pct`` takes the whole column SERIES. This module used to bridge
+    them through an ``evolution._column`` helper, which was removed when the
+    progression route started passing the frame — and because ``_pct_fraction``
+    resolves its basis with ``col in getattr(scale_from, "columns", ())``, a
+    Series argument does not raise. It falls through to the subset, which is
+    exactly the defect the parameter exists to prevent. Pinned so the asymmetry
+    is stated rather than rediscovered.
+    """
+
+    def test_pct_fraction_takes_the_frame(self):
+        period = frame([40.0, 39.0, 1.2, 1.3, 1.1, 1.4, 41.0, 38.0])
+        cohort = frame([1.2, 1.3, 1.1, 1.4])
+        assert render(_pct_fraction(cohort, "current_loan_to_value", period)) == 1.2
+
+    def test_a_series_basis_silently_degrades_to_the_subset(self):
+        period = frame([40.0, 39.0, 1.2, 1.3, 1.1, 1.4, 41.0, 38.0])
+        cohort = frame([1.2, 1.3, 1.1, 1.4])
+        series = period["current_loan_to_value"]
+        assert render(_pct_fraction(cohort, "current_loan_to_value", series)) == 125.0
+
+    def test_weighted_avg_pct_takes_the_series(self):
+        column = pd.Series([40.0, 39.0, 1.2, 1.3])
+        low = pd.Series([1.2, 1.3])
+        weights = pd.Series([100_000, 100_000])
+        assert render(_weighted_avg_pct(low, weights, column)) == 1.2
+
+
 class TestScopesAndPeriods:
     def test_the_latest_period_cannot_use_a_different_scale(self):
         """Each period is scaled from its own column, so a book that changes
@@ -165,5 +196,4 @@ class TestScopesAndPeriods:
         df = frame([0.40] * 4)
         df["source_portfolio_type"] = ["direct", "direct", "acquired", "acquired"]
         sliced = df if scope == "total" else df[df["source_portfolio_type"] == scope]
-        assert render(_pct_fraction(sliced, "current_loan_to_value",
-                                    _column(df, "current_loan_to_value"))) == 40.0
+        assert render(_pct_fraction(sliced, "current_loan_to_value", df)) == 40.0

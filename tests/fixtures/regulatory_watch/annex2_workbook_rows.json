@@ -1,0 +1,1084 @@
+{
+ "note": "Verbatim slice of the ESMA DRAFT1auth.099.001.04 v1.3.1 message workbook (sheet 'DRAFT1auth.099.001.04', template ALL/RRE, performing branch, cancellation rows excluded). Real regulatory content \u2014 do not hand-edit.",
+ "source_artefact": "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx",
+ "sheet": "DRAFT1auth.099.001.04",
+ "codes": [
+  "RREL1",
+  "RREL2",
+  "RREL6",
+  "RREL12",
+  "RREL24",
+  "RREL36",
+  "RREL42",
+  "RREL67",
+  "RREL69",
+  "RREL73",
+  "RREL80",
+  "RREC8",
+  "RREC9",
+  "RREC13"
+ ],
+ "rows": [
+  {
+   "row_number": 9,
+   "codes": [
+    "RREL1",
+    "RREC1"
+   ],
+   "field_code": "2",
+   "item_type": "E",
+   "template": "ALL",
+   "performance": "PRF/NPRF",
+   "rts_field_name": "Unique Identifier",
+   "xml_tag": "ScrtstnIdr",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/ScrtstnIdr",
+   "multiplicity": "[1..1]",
+   "data_type": "SecuritisationIdentifier",
+   "pattern": "xs:string\nPattern: [A-Z0-9]{18,18}[0-9]{2,2}[N]{1,1}[0-9]{4,4}[0-9]{2,2}",
+   "validation_rule": "NONE (this is a pattern, imposed at XSD level)",
+   "definition": "Unique identifier assigned by the reporting entity in accordance with Article 11(1) of Delegated Regulation (EU) \u2026/\u2026 [include number of the disclosure RTS]."
+  },
+  {
+   "row_number": 10,
+   "codes": [
+    "RREL6"
+   ],
+   "field_code": "7",
+   "item_type": "E",
+   "template": "ALL",
+   "performance": "PRF/NPRF",
+   "rts_field_name": "Data Cut-Off Date",
+   "xml_tag": "CutOffDt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/CutOffDt",
+   "multiplicity": "[1..1]",
+   "data_type": "ISODate",
+   "pattern": "xs:date",
+   "validation_rule": "1) Must be in the past",
+   "definition": "The data cut-off date for this data submission."
+  },
+  {
+   "row_number": 14,
+   "codes": [
+    "RREL2"
+   ],
+   "field_code": "4",
+   "item_type": "E",
+   "template": "ALL",
+   "performance": "PRF/NPRF",
+   "rts_field_name": "Original Underlying Exposure Identifier",
+   "xml_tag": "OrgnlUndrlygXpsrIdr",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrId/OrgnlUndrlygXpsrIdr",
+   "multiplicity": "[1..1]",
+   "data_type": "Max1000Text",
+   "pattern": "xs:string\nmaxLength: 1000\nminLength: 1",
+   "validation_rule": "1) The \u201cOriginal Underlying Exposure Identifier\u201d of an underlying exposure can never under any circumstances be changed. The Original Underlying Exposure Identifier must be the same as the Original Underlying Exposure Identifier that was reported for the same securitisation and previous data cut-off date",
+   "definition": "Unique underlying exposure identifier. The identifier must be different from any external identification number, to ensure anonymity of the obligor. The reporting entity must not amend this unique identifier."
+  },
+  {
+   "row_number": 74,
+   "codes": [
+    "RREL12"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Geographic Region Classification",
+   "xml_tag": "ClssfctnYr",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Enter the year of the NUTS3 classification used for the Geographic Region fields, e.g. 2013 for NUTS3 2013. All geographic region fields must use the same classification consistently for each underlying exposure and across all underlying exposures in the data submission. For example, reporting using NUTS3 2006 for some geographic fields relating to a given underlying exposure and reporting using NUTS3 2013 for other fields relating to the same exposure is not allowed. In the same way, reporting geographic region fields using NUTS3 2006 for some underlying exposures and reporting geographic region fields using NUTS3 2013 for other underlying exposures in the same data submission is not allowed."
+  },
+  {
+   "row_number": 75,
+   "codes": [
+    "RREL12"
+   ],
+   "field_code": "18",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Geographic Region Classification",
+   "xml_tag": "Yr",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr/Yr",
+   "multiplicity": "[1..1]",
+   "data_type": "ISOYear",
+   "pattern": "xs:gYear",
+   "validation_rule": "1) Must be greater than 1980\n2) Must be less than 2100",
+   "definition": "Enter the year of the NUTS3 classification used for the Geographic Region fields, e.g. 2013 for NUTS3 2013. All geographic region fields must use the same classification consistently for each underlying exposure and across all underlying exposures in the data submission. For example, reporting using NUTS3 2006 for some geographic fields relating to a given underlying exposure and reporting using NUTS3 2013 for other fields relating to the same exposure is not allowed. In the same way, reporting geographic region fields using NUTS3 2006 for some underlying exposures and reporting geographic region fields using NUTS3 2013 for other underlying exposures in the same data submission is not allowed."
+  },
+  {
+   "row_number": 76,
+   "codes": [
+    "RREL12"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Geographic Region Classification",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing data on NUTS3 classification year."
+  },
+  {
+   "row_number": 77,
+   "codes": [
+    "RREL12"
+   ],
+   "field_code": "19",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Geographic Region Classification",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification2Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 82,
+   "codes": [
+    "RREL12"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Geographic Region Classification",
+   "xml_tag": "NoData4",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr/NoDataOptn/NoData4",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Option for field values when data is not available at the moment but will be in future."
+  },
+  {
+   "row_number": 83,
+   "codes": [
+    "RREL12"
+   ],
+   "field_code": "20",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Geographic Region Classification",
+   "xml_tag": "Dt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr/NoDataOptn/NoData4/Dt",
+   "multiplicity": "[1..1]",
+   "data_type": "ISODate",
+   "pattern": "xs:date",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  },
+  {
+   "row_number": 84,
+   "codes": [
+    "RREL12"
+   ],
+   "field_code": "13718",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Geographic Region Classification",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr/NoDataOptn/NoData4/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification4Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  },
+  {
+   "row_number": 367,
+   "codes": [
+    "RREL24"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Maturity Date",
+   "xml_tag": "MtrtyDt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/MtrtyDt",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "The date of maturity of the underlying exposure or expiry of the lease."
+  },
+  {
+   "row_number": 368,
+   "codes": [
+    "RREL24"
+   ],
+   "field_code": "64",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Maturity Date",
+   "xml_tag": "Dt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/MtrtyDt/Dt",
+   "multiplicity": "[1..1]",
+   "data_type": "ISODate",
+   "pattern": "xs:date",
+   "validation_rule": "",
+   "definition": "Date of the event."
+  },
+  {
+   "row_number": 369,
+   "codes": [
+    "RREL24"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Maturity Date",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/MtrtyDt/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing date."
+  },
+  {
+   "row_number": 370,
+   "codes": [
+    "RREL24"
+   ],
+   "field_code": "65",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Maturity Date",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/MtrtyDt/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification3Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 502,
+   "codes": [
+    "RREL36"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Principal Grace Period End Date",
+   "xml_tag": "GracePrdEndDt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/GracePrdEndDt",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "If applicable as at the data cut-off date, indicate the principal grace period end date."
+  },
+  {
+   "row_number": 503,
+   "codes": [
+    "RREL36"
+   ],
+   "field_code": "98",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Principal Grace Period End Date",
+   "xml_tag": "Dt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/GracePrdEndDt/Dt",
+   "multiplicity": "[1..1]",
+   "data_type": "ISODate",
+   "pattern": "xs:date",
+   "validation_rule": "",
+   "definition": "Date of the event."
+  },
+  {
+   "row_number": 504,
+   "codes": [
+    "RREL36"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Principal Grace Period End Date",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/GracePrdEndDt/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing date."
+  },
+  {
+   "row_number": 505,
+   "codes": [
+    "RREL36"
+   ],
+   "field_code": "99",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Principal Grace Period End Date",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/GracePrdEndDt/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification3Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 657,
+   "codes": [
+    "RREL42"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Interest Rate Type",
+   "xml_tag": "Tp",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/Tp",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Interest rate type of the underlying exposure."
+  },
+  {
+   "row_number": 658,
+   "codes": [
+    "RREL42"
+   ],
+   "field_code": "119",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Interest Rate Type",
+   "xml_tag": "Cd",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/Tp/Cd",
+   "multiplicity": "[1..1]",
+   "data_type": "InterestRateType2Code",
+   "pattern": "Enumeration",
+   "validation_rule": "NONE (this is an enumeration, controlled as XSD level)",
+   "definition": "Specifies the type of the interest rate."
+  },
+  {
+   "row_number": 673,
+   "codes": [
+    "RREL42"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Interest Rate Type",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/Tp/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing data for interest rate type."
+  },
+  {
+   "row_number": 674,
+   "codes": [
+    "RREL42"
+   ],
+   "field_code": "120",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Interest Rate Type",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/Tp/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification3Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 971,
+   "codes": [
+    "RREL69"
+   ],
+   "field_code": "173",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Account Status",
+   "xml_tag": "AcctSts",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/AcctSts",
+   "multiplicity": "[1..1]",
+   "data_type": "SecuritisationAccountStatus1Code",
+   "pattern": "Enumeration",
+   "validation_rule": "NONE (this is an enumeration, controlled as XSD level)",
+   "definition": "Current status of the underlying exposure that has been securitised."
+  },
+  {
+   "row_number": 1064,
+   "codes": [],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "",
+   "xml_tag": "ArrearsBal",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/ArrearsBal",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Current balance of arrears, which is defined as: _x000D_\nTotal payments due to date_x000D_\nPLUS any amounts capitalised _x000D_\nPLUS any fees applied to the account_x000D_\nLESS total payments received to date._x000D_\n_x000D_\nIf no arrears then enter 0."
+  },
+  {
+   "row_number": 1065,
+   "codes": [
+    "RREL67"
+   ],
+   "field_code": "191",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Arrears Balance",
+   "xml_tag": "Amt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/ArrearsBal/Amt",
+   "multiplicity": "[1..1]",
+   "data_type": "ActiveOrHistoricCurrencyAndAmount",
+   "pattern": "xs:decimal\nfractionDigits: 5\nminInclusive: 0\ntotalDigits: 18",
+   "validation_rule": "The numerical field must be equal to or greater than 0",
+   "definition": "Amount of money that results in an increase (positively signed) or decrease (negatively signed), with specification of the currency."
+  },
+  {
+   "row_number": 1069,
+   "codes": [
+    "RREL67"
+   ],
+   "field_code": "193",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Arrears Balance",
+   "xml_tag": "Sgn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/ArrearsBal/Sgn",
+   "multiplicity": "[0..1]",
+   "data_type": "PlusOrMinusIndicator",
+   "pattern": "xs:boolean",
+   "validation_rule": "1) The numerical field must be equal to or greater than 0",
+   "definition": "Indicates that the amount value is positive or negative.\nUsage: PlusOrMinusIndicator may take the following values:\n    - True and 1 means Plus\n    - False and 0 means Minus\nWhen absent, the amount is positive."
+  },
+  {
+   "row_number": 1142,
+   "codes": [
+    "RREL73"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Allocated Losses",
+   "xml_tag": "AllctdLoss",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "The allocated losses to date, net of fees after application of sale proceeds (excluding prepayment charge if subordinate to principal recoveries). Show any gain on sale as a negative number. Should reflect most recent situation as at the data cut-off date, i.e. as recoveries are collected and the work out process progresses. The estimate of losses should be as complete as possible including accrued but unpaid interest plus unpaid principal. Where possible, default interest should also be included."
+  },
+  {
+   "row_number": 1143,
+   "codes": [
+    "RREL73"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Allocated Losses",
+   "xml_tag": "Val",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss/Val",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Value and currency of amount._x000D_\nInclude the currency in which the amount is denominated, using {CURRENCYCODE_3} format."
+  },
+  {
+   "row_number": 1144,
+   "codes": [
+    "RREL73"
+   ],
+   "field_code": "211",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Allocated Losses",
+   "xml_tag": "Amt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss/Val/Amt",
+   "multiplicity": "[1..1]",
+   "data_type": "ActiveOrHistoricCurrencyAndAmount",
+   "pattern": "xs:decimal\nfractionDigits: 5\nminInclusive: 0\ntotalDigits: 18",
+   "validation_rule": "",
+   "definition": "Amount of money that results in an increase (positively signed) or decrease (negatively signed), with specification of the currency."
+  },
+  {
+   "row_number": 1148,
+   "codes": [
+    "RREL73"
+   ],
+   "field_code": "213",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Allocated Losses",
+   "xml_tag": "Sgn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss/Val/Sgn",
+   "multiplicity": "[0..1]",
+   "data_type": "PlusOrMinusIndicator",
+   "pattern": "xs:boolean",
+   "validation_rule": "",
+   "definition": "Indicates that the amount value is positive or negative.\nUsage: PlusOrMinusIndicator may take the following values:\n    - True and 1 means Plus\n    - False and 0 means Minus\nWhen absent, the amount is positive."
+  },
+  {
+   "row_number": 1150,
+   "codes": [
+    "RREL73"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Allocated Losses",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing data for amount and currency."
+  },
+  {
+   "row_number": 1151,
+   "codes": [
+    "RREL73"
+   ],
+   "field_code": "214",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Allocated Losses",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification3Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 1294,
+   "codes": [
+    "RREL80"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Original Lender Legal Entity Identifier",
+   "xml_tag": "LEICd",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Legal Entity Identifier (as specified in the Global Legal Entity Foundation (GLEIF) database)._x000D_\nWhere no Legal Entity Identifier is available, enter ND5."
+  },
+  {
+   "row_number": 1295,
+   "codes": [
+    "RREL80"
+   ],
+   "field_code": "248",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Original Lender Legal Entity Identifier",
+   "xml_tag": "LEI",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd/LEI",
+   "multiplicity": "[1..1]",
+   "data_type": "LEIIdentifier",
+   "pattern": "xs:string\nPattern: [A-Z0-9]{18,18}[0-9]{2,2}",
+   "validation_rule": "1) Could validate against a conclusive LEI reference list (GLEIF)\n\n2) If there is no such availability, then at minimum the LEI format should be validated",
+   "definition": "Legal Entity Identifier (as specified in the Global Legal Entity Foundation (GLEIF) database)."
+  },
+  {
+   "row_number": 1296,
+   "codes": [
+    "RREL80"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Original Lender Legal Entity Identifier",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing LEI."
+  },
+  {
+   "row_number": 1297,
+   "codes": [
+    "RREL80"
+   ],
+   "field_code": "249",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Original Lender Legal Entity Identifier",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification1Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 1303,
+   "codes": [
+    "RREL80"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Original Lender Legal Entity Identifier",
+   "xml_tag": "NoData4",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn/NoData4",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Option for field values when data is not available at the moment but will be in future."
+  },
+  {
+   "row_number": 1304,
+   "codes": [
+    "RREL80"
+   ],
+   "field_code": "250",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Original Lender Legal Entity Identifier",
+   "xml_tag": "Dt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn/NoData4/Dt",
+   "multiplicity": "[1..1]",
+   "data_type": "ISODate",
+   "pattern": "xs:date",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  },
+  {
+   "row_number": 1305,
+   "codes": [
+    "RREL80"
+   ],
+   "field_code": "251",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Original Lender Legal Entity Identifier",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEI/NoDataOptn/NoData4/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification4Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  },
+  {
+   "row_number": 1385,
+   "codes": [
+    "RREC8"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Lien",
+   "xml_tag": "LienVal",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Highest lien position held by the originator in relation to the collateral."
+  },
+  {
+   "row_number": 1386,
+   "codes": [
+    "RREC8"
+   ],
+   "field_code": "263",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Lien",
+   "xml_tag": "Lien",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal/Lien",
+   "multiplicity": "[1..1]",
+   "data_type": "Max4PositiveNumber",
+   "pattern": "xs:decimal\nfractionDigits: 0\nminInclusive: 0\ntotalDigits: 4",
+   "validation_rule": "NONE (positive value controlled by XSD)",
+   "definition": "Highest lien position held by the originator in relation to the collateral._x000D_\n_x000D_\nIf the collateral being reported is not property collateral, enter ND5."
+  },
+  {
+   "row_number": 1387,
+   "codes": [
+    "RREC8"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Lien",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing data for lien."
+  },
+  {
+   "row_number": 1388,
+   "codes": [
+    "RREC8"
+   ],
+   "field_code": "264",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Lien",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification1Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 1394,
+   "codes": [
+    "RREC8"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Lien",
+   "xml_tag": "NoData4",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn/NoData4",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Option for field values when data is not available at the moment but will be in future."
+  },
+  {
+   "row_number": 1395,
+   "codes": [
+    "RREC8"
+   ],
+   "field_code": "265",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Lien",
+   "xml_tag": "Dt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn/NoData4/Dt",
+   "multiplicity": "[1..1]",
+   "data_type": "ISODate",
+   "pattern": "xs:date",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  },
+  {
+   "row_number": 1396,
+   "codes": [
+    "RREC8"
+   ],
+   "field_code": "266",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Lien",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/Lien/NoDataOptn/NoData4/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification4Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  },
+  {
+   "row_number": 1453,
+   "codes": [
+    "RREC9"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Property Type",
+   "xml_tag": "PrprtyTp",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/PrprtyTp",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Property type."
+  },
+  {
+   "row_number": 1454,
+   "codes": [
+    "RREC9"
+   ],
+   "field_code": "274",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Property Type",
+   "xml_tag": "Cd",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/PrprtyTp/Cd",
+   "multiplicity": "[1..1]",
+   "data_type": "PropertyType1Code",
+   "pattern": "Enumeration",
+   "validation_rule": "NONE (this is an enumeration, controlled as XSD level)",
+   "definition": "Specifies the collateral's property type. If the collateral being reported is not property collateral, enter No Data Option ND5."
+  },
+  {
+   "row_number": 1465,
+   "codes": [
+    "RREC9"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Property Type",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/PrprtyTp/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": ".Reason for not providing data for the collateral,"
+  },
+  {
+   "row_number": 1466,
+   "codes": [
+    "RREC9"
+   ],
+   "field_code": "275",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Property Type",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/PrprtyTp/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification3Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 1617,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "ValtnAmt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "The most recent valuation of the collateral as assessed by an independent external or internal appraiser. If such assessment is not available, the current value of the collateral can be estimated using a real estate value index sufficiently granular with respect to geographical location and type of collateral; if such real estate value index is also not available, a real estate price index sufficiently granular with respect to geographical location and type of collateral can be used after application of a suitably chosen mark-down to account for the depreciation of the collateral._x000D_\n_x000D_\nIf the collateral being reported is not property collateral, enter the most recent valuation of the collateral as assessed by an independent external or internal appraiser or, if not available, by the originator._x000D_\n_x000D_\nIf the collateral being reported is a guarantee, enter the amount of underlying exposure guaranteed by this collateral item to the benefit of the originator."
+  },
+  {
+   "row_number": 1618,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "Val",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/Val",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Value and currency of amount._x000D_\nInclude the currency in which the amount is denominated, using {CURRENCYCODE_3} format."
+  },
+  {
+   "row_number": 1619,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "303",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "Amt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/Val/Amt",
+   "multiplicity": "[1..1]",
+   "data_type": "ActiveOrHistoricCurrencyAndAmount",
+   "pattern": "xs:decimal\nfractionDigits: 5\nminInclusive: 0\ntotalDigits: 18",
+   "validation_rule": "The numerical field must be equal to or greater than 0",
+   "definition": "Amount of money that results in an increase (positively signed) or decrease (negatively signed), with specification of the currency."
+  },
+  {
+   "row_number": 1623,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "305",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "Sgn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/Val/Sgn",
+   "multiplicity": "[0..1]",
+   "data_type": "PlusOrMinusIndicator",
+   "pattern": "xs:boolean",
+   "validation_rule": "1) The numerical field must be equal to or greater than 0",
+   "definition": "Indicates that the amount value is positive or negative.\nUsage: PlusOrMinusIndicator may take the following values:\n    - True and 1 means Plus\n    - False and 0 means Minus\nWhen absent, the amount is positive."
+  },
+  {
+   "row_number": 1625,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "NoDataOptn",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/NoDataOptn",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Reason for not providing data for amount and currency."
+  },
+  {
+   "row_number": 1626,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "306",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/NoDataOptn/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification1Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Options for field values when data is not available."
+  },
+  {
+   "row_number": 1632,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "",
+   "item_type": "P",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "NoData4",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/NoDataOptn/NoData4",
+   "multiplicity": "[1..1]",
+   "data_type": "",
+   "pattern": "",
+   "validation_rule": "",
+   "definition": "Option for field values when data is not available at the moment but will be in future."
+  },
+  {
+   "row_number": 1633,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "307",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "Dt",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/NoDataOptn/NoData4/Dt",
+   "multiplicity": "[1..1]",
+   "data_type": "ISODate",
+   "pattern": "xs:date",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  },
+  {
+   "row_number": 1634,
+   "codes": [
+    "RREC13"
+   ],
+   "field_code": "308",
+   "item_type": "E",
+   "template": "RRE",
+   "performance": "PRF",
+   "rts_field_name": "Current Valuation Amount",
+   "xml_tag": "NoData",
+   "path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt/NoDataOptn/NoData4/NoData",
+   "multiplicity": "[1..1]",
+   "data_type": "NoDataAllowedJustification4Code",
+   "pattern": "Enumeration",
+   "validation_rule": "",
+   "definition": "Data collected but will only be available from reported date."
+  }
+ ]
+}

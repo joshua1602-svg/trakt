@@ -5,8 +5,15 @@ import { publicConfig } from "@/lib/public-config";
 
 import "./globals.css";
 
-const TITLE = "Trakt | Governed Portfolio Intelligence";
+/**
+ * The strapline is the title and opens the description verbatim: this is what
+ * a search result and a link preview surface, so it is the one place the
+ * positioning has to be stated in full and unaltered.
+ */
+const STRAPLINE = "Agentic portfolio intelligence. Deterministic by design.";
+const TITLE = `Trakt | ${STRAPLINE}`;
 const DESCRIPTION =
+  `${STRAPLINE} ` +
   "Trakt connects portfolio data, documents and funding requirements into one " +
   "governed layer — powering monitoring, forecasting, covenant controls, reporting " +
   "and portfolio Q&A for specialist lenders.";
@@ -96,11 +103,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-GB">
       <body>
-        {/* Gate for the scroll-reveal CSS: without JavaScript the `js` class
-            never lands, the hidden initial states never apply, and the page
-            renders complete. Inline and first so it beats the first paint of
-            any section. */}
-        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
         {children}
         <script
           type="application/ld+json"

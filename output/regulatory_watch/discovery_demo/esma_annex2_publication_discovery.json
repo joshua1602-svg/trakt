@@ -1,0 +1,590 @@
+{
+  "authority": "ESMA",
+  "contract_version": "1.0.0",
+  "developments": [
+    {
+      "annex2_relevance": "RELEVANT",
+      "authority": "ESMA",
+      "classifier": "deterministic",
+      "confidence": "HIGH",
+      "consultation_deadline": null,
+      "development_id": "esma-a2-880b23f7f07aa1d5393e",
+      "development_status": "TECHNICAL_SPEC_CHANGE",
+      "discovered_at": "2026-02-16T00:00:00Z",
+      "discovery_version": "annex2-discovery/1.0.0",
+      "effective_date": null,
+      "final_status": null,
+      "first_seen": "2026-02-16T00:00:00Z",
+      "implementation_date": null,
+      "matched_signals": [
+        "disclosure",
+        "esma_securitisation_reporting",
+        "reporting template",
+        "reporting_instructions",
+        "schema and instructions",
+        "securitisation",
+        "technical_standards",
+        "templates_schema",
+        "xml schema"
+      ],
+      "publication": {
+        "also_seen_in_sources": [
+          "esma_publications_feed"
+        ],
+        "categories": [
+          "Securitisation"
+        ],
+        "content_sha256": "3f175f97c33b5bbc92889be628b32df54f8ff2fea7eaeda93fa5ac66c52a65cb",
+        "linked_urls": [],
+        "official_identifier": "ESMA-SECURITISATION-TS-1.3.1",
+        "publication_date": "2021-06-11",
+        "raw_locator": "a[3]",
+        "source_id": "esma_securitisation_technical_standards",
+        "summary": "Reporting templates, XML schema and technical reporting instructions for securitisation disclosure",
+        "title": "Securitisation reporting technical standards — XML schema and instructions (version 1.3.1)",
+        "url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+      },
+      "publication_type": "TEMPLATE_SCHEMA_UPDATE",
+      "regime": "ESMA_Annex2",
+      "relevance_reason": "publishes an Annex 2 technical artefact (template/schema); Stage 1A must run to determine the exact field deltas",
+      "review_required": true,
+      "seen_state": "NEW",
+      "supersedes": null,
+      "technical_spec_linkage": {
+        "artefact_links": [
+          {
+            "detail": "matches 4 allowlisted Stage 1A technical source(s); run the Stage 1A snapshot/compare to determine the exact field deltas",
+            "stage1a_artefact_id": "esma_annex2_message_workbook, esma_annex2_reporting_instructions, esma_annex2_sample_message, esma_annex2_xml_schema",
+            "status": "MATCHES_STAGE1A_SOURCE",
+            "url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+          }
+        ],
+        "implementation_impact_count": 3,
+        "regulatory_delta_count": 1,
+        "stage1a_baseline_snapshot_ids": [
+          "esma_annex2_message_workbook@983e33c851a6621a",
+          "esma_annex2_sample_message@64e30a51b1019acb",
+          "esma_annex2_xml_schema@48e587ec5905ab32"
+        ],
+        "stage1a_candidate_snapshot_ids": [
+          "esma_annex2_message_workbook@983e33c851a6621a",
+          "esma_annex2_sample_message@64e30a51b1019acb",
+          "esma_annex2_xml_schema@3f4ed4e0030d0fbf"
+        ],
+        "stage1a_outcome": "REGULATORY_SPEC_CHANGED",
+        "stage1a_report_path": "/home/user/trakt/output/regulatory_watch/discovery_demo/stage1a/esma_annex2_regulatory_watch.json",
+        "stage1a_verification_required": false,
+        "status": "MATCHES_STAGE1A_SOURCE"
+      },
+      "triage": {
+        "matched_groups": [
+          "disclosure",
+          "esma_securitisation_reporting",
+          "reporting_instructions",
+          "securitisation",
+          "technical_standards",
+          "templates_schema"
+        ],
+        "matched_terms": [
+          "disclosure",
+          "reporting instruction",
+          "reporting template",
+          "schema and instructions",
+          "securitisation",
+          "securitisation reporting",
+          "technical reporting instruction",
+          "technical standard",
+          "xml schema"
+        ],
+        "passed": true,
+        "reason": "matched relevance group(s): disclosure, esma_securitisation_reporting, reporting_instructions, securitisation, technical_standards, templates_schema"
+      }
+    },
+    {
+      "annex2_relevance": "RELEVANT",
+      "authority": "ESMA",
+      "classifier": "deterministic",
+      "confidence": "HIGH",
+      "consultation_deadline": null,
+      "development_id": "esma-a2-96862b40bf17b106f8d7",
+      "development_status": "TECHNICAL_SPEC_CHANGE",
+      "discovered_at": "2026-02-16T00:00:00Z",
+      "discovery_version": "annex2-discovery/1.0.0",
+      "effective_date": null,
+      "final_status": null,
+      "first_seen": "2026-02-16T00:00:00Z",
+      "implementation_date": null,
+      "matched_signals": [
+        "esma_securitisation_reporting",
+        "securitisation",
+        "validation rule",
+        "validation rules",
+        "validation_rules"
+      ],
+      "publication": {
+        "categories": [
+          "Securitisation"
+        ],
+        "content_sha256": "a866458cf0a7cc6a0fa4e598fed4c713f88a0f0f462c24cedc9269a970882bf0",
+        "linked_urls": [],
+        "official_identifier": null,
+        "publication_date": "2026-02-13",
+        "raw_locator": "a[4]",
+        "source_id": "esma_securitisation_technical_standards",
+        "summary": "Validation rules applied by securitisation repositories to submitted reports",
+        "title": "Securitisation reporting validation rules package",
+        "url": "https://www.esma.europa.eu/document/securitisation-validation-rules-package"
+      },
+      "publication_type": "VALIDATION_RULE_UPDATE",
+      "regime": "ESMA_Annex2",
+      "relevance_reason": "publishes updated validation rules; Stage 1A must run to determine the exact rule deltas",
+      "review_required": true,
+      "seen_state": "NEW",
+      "supersedes": null,
+      "technical_spec_linkage": {
+        "artefact_links": [
+          {
+            "detail": "technical artefact URL that Stage 1A does not track; a human must decide whether to add it to the Stage 1A allowlist — Stage 1B never edits it",
+            "stage1a_artefact_id": null,
+            "status": "NEW_TECHNICAL_SOURCE_REVIEW_REQUIRED",
+            "url": "https://www.esma.europa.eu/document/securitisation-validation-rules-package"
+          }
+        ],
+        "implementation_impact_count": null,
+        "regulatory_delta_count": null,
+        "stage1a_baseline_snapshot_ids": [],
+        "stage1a_candidate_snapshot_ids": [],
+        "stage1a_outcome": null,
+        "stage1a_report_path": null,
+        "stage1a_verification_required": true,
+        "status": "NEW_TECHNICAL_SOURCE_REVIEW_REQUIRED"
+      },
+      "triage": {
+        "matched_groups": [
+          "esma_securitisation_reporting",
+          "securitisation",
+          "validation_rules"
+        ],
+        "matched_terms": [
+          "securitisation",
+          "securitisation reporting",
+          "validation rule",
+          "validation rules"
+        ],
+        "passed": true,
+        "reason": "matched relevance group(s): esma_securitisation_reporting, securitisation, validation_rules"
+      }
+    },
+    {
+      "annex2_relevance": "RELEVANT",
+      "authority": "ESMA",
+      "classifier": "deterministic",
+      "confidence": "HIGH",
+      "consultation_deadline": null,
+      "development_id": "esma-a2-d85911418efb8a195b62",
+      "development_status": "FUTURE_CHANGE_EXPECTED",
+      "discovered_at": "2026-02-16T00:00:00Z",
+      "discovery_version": "annex2-discovery/1.0.0",
+      "effective_date": null,
+      "final_status": "final",
+      "first_seen": "2026-02-16T00:00:00Z",
+      "implementation_date": null,
+      "matched_signals": [
+        "disclosure",
+        "esma_securitisation_reporting",
+        "final report",
+        "securitisation",
+        "technical_standards",
+        "templates_schema",
+        "underlying_exposures"
+      ],
+      "publication": {
+        "categories": [
+          "Securitisation",
+          "Technical standards"
+        ],
+        "content_sha256": "b7237dd73688186619353fd65629940366e836ad22e70d87ae7b560c978b61f6",
+        "linked_urls": [],
+        "official_identifier": "https://www.esma.europa.eu/document/final-report-draft-rts-and-its-securitisation-reporting",
+        "publication_date": "2019-11-27",
+        "raw_locator": "channel/item[0]",
+        "source_id": "esma_publications_feed",
+        "summary": "ESMA final report on the draft regulatory and implementing technical standards on disclosure requirements under Article 7 of the Securitisation Regulation, covering the underlying exposures reporting templates.",
+        "title": "Final Report — Draft RTS and ITS on securitisation reporting",
+        "url": "https://www.esma.europa.eu/document/final-report-draft-rts-and-its-securitisation-reporting"
+      },
+      "publication_type": "FINAL_REPORT",
+      "regime": "ESMA_Annex2",
+      "relevance_reason": "a final report settles ESMA's position; technical artefacts typically follow",
+      "review_required": true,
+      "seen_state": "NEW",
+      "supersedes": null,
+      "technical_spec_linkage": {
+        "artefact_links": [],
+        "implementation_impact_count": null,
+        "regulatory_delta_count": null,
+        "stage1a_baseline_snapshot_ids": [],
+        "stage1a_candidate_snapshot_ids": [],
+        "stage1a_outcome": null,
+        "stage1a_report_path": null,
+        "stage1a_verification_required": false,
+        "status": "NO_TECHNICAL_ARTEFACT"
+      },
+      "triage": {
+        "matched_groups": [
+          "disclosure",
+          "esma_securitisation_reporting",
+          "securitisation",
+          "technical_standards",
+          "templates_schema",
+          "underlying_exposures"
+        ],
+        "matched_terms": [
+          " rts ",
+          "article 7",
+          "disclosure",
+          "disclosure requirement",
+          "draft rts",
+          "implementing technical standard",
+          "reporting template",
+          "rts and its",
+          "securitisation",
+          "securitisation reporting",
+          "technical standard",
+          "underlying exposure",
+          "underlying exposures"
+        ],
+        "passed": true,
+        "reason": "matched relevance group(s): disclosure, esma_securitisation_reporting, securitisation, technical_standards, templates_schema, underlying_exposures"
+      }
+    },
+    {
+      "annex2_relevance": "RELEVANT",
+      "authority": "ESMA",
+      "classifier": "deterministic",
+      "confidence": "HIGH",
+      "consultation_deadline": "2026-05-15",
+      "development_id": "esma-a2-15b5dac02a5e094725cf",
+      "development_status": "POTENTIAL_FUTURE_CHANGE",
+      "discovered_at": "2026-02-16T00:00:00Z",
+      "discovery_version": "annex2-discovery/1.0.0",
+      "effective_date": null,
+      "final_status": "consultation",
+      "first_seen": "2026-02-16T00:00:00Z",
+      "implementation_date": null,
+      "matched_signals": [
+        "consultation paper",
+        "disclosure",
+        "residential_real_estate",
+        "securitisation",
+        "templates_schema",
+        "underlying_exposures"
+      ],
+      "publication": {
+        "categories": [
+          "Consultation",
+          "Securitisation"
+        ],
+        "content_sha256": "7fb480f13aceff3ab031c78c3dec7eb5f93cd347d2dff96c419eded0e2fd43d5",
+        "linked_urls": [],
+        "official_identifier": "esma-cp-securitisation-disclosure-2026-01",
+        "publication_date": "2026-02-10",
+        "raw_locator": "channel/item[3]",
+        "source_id": "esma_publications_feed",
+        "summary": "ESMA seeks views on proposed changes to the Article 7 disclosure templates for underlying exposures, including simplification of residential real estate reporting fields. Responses close 2026-05-15.",
+        "title": "Consultation Paper on amendments to the securitisation disclosure templates",
+        "url": "https://www.esma.europa.eu/document/consultation-paper-securitisation-disclosure-templates-review"
+      },
+      "publication_type": "CONSULTATION",
+      "regime": "ESMA_Annex2",
+      "relevance_reason": "a consultation proposes change; nothing is in force yet",
+      "review_required": true,
+      "seen_state": "NEW",
+      "supersedes": null,
+      "technical_spec_linkage": {
+        "artefact_links": [],
+        "implementation_impact_count": null,
+        "regulatory_delta_count": null,
+        "stage1a_baseline_snapshot_ids": [],
+        "stage1a_candidate_snapshot_ids": [],
+        "stage1a_outcome": null,
+        "stage1a_report_path": null,
+        "stage1a_verification_required": false,
+        "status": "NO_TECHNICAL_ARTEFACT"
+      },
+      "triage": {
+        "matched_groups": [
+          "disclosure",
+          "residential_real_estate",
+          "securitisation",
+          "templates_schema",
+          "underlying_exposures"
+        ],
+        "matched_terms": [
+          "article 7",
+          "disclosure",
+          "disclosure template",
+          "residential real estate",
+          "securitisation",
+          "underlying exposure",
+          "underlying exposures"
+        ],
+        "passed": true,
+        "reason": "matched relevance group(s): disclosure, residential_real_estate, securitisation, templates_schema, underlying_exposures"
+      }
+    },
+    {
+      "annex2_relevance": "RELEVANT",
+      "authority": "ESMA",
+      "classifier": "deterministic",
+      "confidence": "HIGH",
+      "consultation_deadline": null,
+      "development_id": "esma-a2-2d871d0c4e9fef63817a",
+      "development_status": "INTERPRETATION_REVIEW_REQUIRED",
+      "discovered_at": "2026-02-16T00:00:00Z",
+      "discovery_version": "annex2-discovery/1.0.0",
+      "effective_date": null,
+      "final_status": null,
+      "first_seen": "2026-02-16T00:00:00Z",
+      "implementation_date": null,
+      "matched_signals": [
+        "disclosure",
+        "no_data",
+        "q&a",
+        "q_and_a",
+        "questions and answers",
+        "residential_real_estate",
+        "securitisation",
+        "templates_schema",
+        "underlying_exposures"
+      ],
+      "publication": {
+        "also_seen_in_sources": [
+          "esma_securitisation_landing"
+        ],
+        "categories": [
+          "Q&A",
+          "Securitisation"
+        ],
+        "content_sha256": "e8c51fb3a0243c1e42bfa3ba8d20467194e8f10029c04c0c742eda43f42289af",
+        "linked_urls": [],
+        "official_identifier": "esma-qa-securitisation-disclosure-2026-02",
+        "publication_date": "2026-02-11",
+        "raw_locator": "channel/item[4]",
+        "source_id": "esma_publications_feed",
+        "summary": "New Q&A clarifying how to complete residential real estate underlying exposure fields, including the use of no-data options ND1 to ND5 where a value is not collected.",
+        "title": "Questions and Answers on the Securitisation Regulation — disclosure templates",
+        "url": "https://www.esma.europa.eu/document/qa-securitisation-regulation-disclosure-templates"
+      },
+      "publication_type": "Q_AND_A",
+      "regime": "ESMA_Annex2",
+      "relevance_reason": "a Q&A can change how a field must be populated without changing the machine-readable specification",
+      "review_required": true,
+      "seen_state": "NEW",
+      "supersedes": null,
+      "technical_spec_linkage": {
+        "artefact_links": [],
+        "implementation_impact_count": null,
+        "regulatory_delta_count": null,
+        "stage1a_baseline_snapshot_ids": [],
+        "stage1a_candidate_snapshot_ids": [],
+        "stage1a_outcome": null,
+        "stage1a_report_path": null,
+        "stage1a_verification_required": false,
+        "status": "NO_TECHNICAL_ARTEFACT"
+      },
+      "triage": {
+        "matched_groups": [
+          "disclosure",
+          "no_data",
+          "q_and_a",
+          "residential_real_estate",
+          "securitisation",
+          "templates_schema",
+          "underlying_exposures"
+        ],
+        "matched_terms": [
+          "disclosure",
+          "disclosure template",
+          "nd1",
+          "nd5",
+          "no-data",
+          "q&a",
+          "questions and answers",
+          "residential real estate",
+          "securitisation",
+          "underlying exposure"
+        ],
+        "passed": true,
+        "reason": "matched relevance group(s): disclosure, no_data, q_and_a, residential_real_estate, securitisation, templates_schema, underlying_exposures"
+      }
+    },
+    {
+      "annex2_relevance": "NOT_RELEVANT",
+      "authority": "ESMA",
+      "classifier": "deterministic",
+      "confidence": "MEDIUM",
+      "consultation_deadline": null,
+      "development_id": "esma-a2-654170b0728a2e0ea227",
+      "development_status": "INFORMATION_ONLY",
+      "discovered_at": "2026-02-16T00:00:00Z",
+      "discovery_version": "annex2-discovery/1.0.0",
+      "effective_date": null,
+      "final_status": null,
+      "first_seen": "2026-02-16T00:00:00Z",
+      "implementation_date": null,
+      "matched_signals": [
+        "securitisation"
+      ],
+      "publication": {
+        "categories": [
+          "Securitisation"
+        ],
+        "content_sha256": "d9f31449f7d285d9e8cdfad8c091c442a6fce878a9a24dd5e78f443d2e17e9b5",
+        "linked_urls": [],
+        "official_identifier": "esma-market-report-securitisation-2026",
+        "publication_date": "2026-02-12",
+        "raw_locator": "channel/item[5]",
+        "source_id": "esma_publications_feed",
+        "summary": "Statistical overview of issuance volumes and outstanding balances across the European securitisation market.",
+        "title": "ESMA report on the securitisation market in the European Union",
+        "url": "https://www.esma.europa.eu/document/esma-report-securitisation-market-european-union"
+      },
+      "publication_type": "OTHER_REGULATORY_PUBLICATION",
+      "regime": "ESMA_Annex2",
+      "relevance_reason": "matched only broad securitisation terms with no reporting, disclosure or technical-standards signal",
+      "review_required": false,
+      "seen_state": "NEW",
+      "supersedes": null,
+      "technical_spec_linkage": {
+        "artefact_links": [],
+        "implementation_impact_count": null,
+        "regulatory_delta_count": null,
+        "stage1a_baseline_snapshot_ids": [],
+        "stage1a_candidate_snapshot_ids": [],
+        "stage1a_outcome": null,
+        "stage1a_report_path": null,
+        "stage1a_verification_required": false,
+        "status": "NO_TECHNICAL_ARTEFACT"
+      },
+      "triage": {
+        "matched_groups": [
+          "securitisation"
+        ],
+        "matched_terms": [
+          "securitisation"
+        ],
+        "passed": true,
+        "reason": "matched relevance group(s): securitisation"
+      }
+    }
+  ],
+  "discovery_date": "2026-02-16T00:00:00Z",
+  "discovery_status": "DISCOVERY_OK",
+  "discovery_version": "annex2-discovery/1.0.0",
+  "new_publications": 7,
+  "not_relevant": 2,
+  "notes": [
+    "2 publication sighting(s) were the same publication reached through more than one allowlisted source, and were merged into a single development record.",
+    "A technical-spec-change candidate was found. Stage 1B does not determine field deltas — run Stage 1A against the linked artefacts."
+  ],
+  "potentially_relevant": 5,
+  "previously_seen_publications": 0,
+  "publications_seen": 9,
+  "regime": "ESMA_Annex2",
+  "rejected": [
+    {
+      "development_id": "esma-a2-2f8a8c347516a2426d20",
+      "reason": "no ESMA Annex 2 relevance term matched the title, summary, categories or URL",
+      "rejected_by": "deterministic_relevance_filter",
+      "seen_state": "NEW",
+      "source_id": "esma_publications_feed",
+      "title": "ESMA publishes latest edition of its Spotlight on Markets newsletter",
+      "url": "https://www.esma.europa.eu/press-news/esma-news/esma-publishes-spotlight-markets-newsletter"
+    }
+  ],
+  "review_required_count": 5,
+  "revised_publications": 0,
+  "source_outcomes": [
+    {
+      "content_sha256": "0aead063440c538518c3cb6333ec1552aeb9af03f2be92cf484ca8584ee0e29f",
+      "criticality": "gating",
+      "detail": "fixture: esma_securitisation_technical_standards.html",
+      "item_count": 2,
+      "outcome": "OK",
+      "retrieved_at": "2026-02-16T00:00:00Z",
+      "source_id": "esma_securitisation_technical_standards"
+    },
+    {
+      "content_sha256": "471d3ab9cb6ac775a3718e34fa998584ef0db6aa2963604ce41a4fe467ff04a5",
+      "criticality": "gating",
+      "detail": "fixture: esma_publications_feed.xml",
+      "item_count": 6,
+      "outcome": "OK",
+      "retrieved_at": "2026-02-16T00:00:00Z",
+      "source_id": "esma_publications_feed"
+    },
+    {
+      "content_sha256": "49bcc3a74a115ab3e83f5e3d64baf3b5923fecfe4193d6f10e30b508923eba99",
+      "criticality": "corroborating",
+      "detail": "fixture: esma_securitisation_landing.html",
+      "item_count": 1,
+      "outcome": "OK",
+      "retrieved_at": "2026-02-16T00:00:00Z",
+      "source_id": "esma_securitisation_landing"
+    }
+  ],
+  "sources_checked": 3,
+  "sources_failed": 0,
+  "stage1a_linkages": [
+    {
+      "artefact_links": [
+        {
+          "detail": "matches 4 allowlisted Stage 1A technical source(s); run the Stage 1A snapshot/compare to determine the exact field deltas",
+          "stage1a_artefact_id": "esma_annex2_message_workbook, esma_annex2_reporting_instructions, esma_annex2_sample_message, esma_annex2_xml_schema",
+          "status": "MATCHES_STAGE1A_SOURCE",
+          "url": "https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions"
+        }
+      ],
+      "development_id": "esma-a2-880b23f7f07aa1d5393e",
+      "implementation_impact_count": 3,
+      "regulatory_delta_count": 1,
+      "stage1a_baseline_snapshot_ids": [
+        "esma_annex2_message_workbook@983e33c851a6621a",
+        "esma_annex2_sample_message@64e30a51b1019acb",
+        "esma_annex2_xml_schema@48e587ec5905ab32"
+      ],
+      "stage1a_candidate_snapshot_ids": [
+        "esma_annex2_message_workbook@983e33c851a6621a",
+        "esma_annex2_sample_message@64e30a51b1019acb",
+        "esma_annex2_xml_schema@3f4ed4e0030d0fbf"
+      ],
+      "stage1a_outcome": "REGULATORY_SPEC_CHANGED",
+      "stage1a_report_path": "/home/user/trakt/output/regulatory_watch/discovery_demo/stage1a/esma_annex2_regulatory_watch.json",
+      "stage1a_verification_required": false,
+      "status": "MATCHES_STAGE1A_SOURCE",
+      "title": "Securitisation reporting technical standards — XML schema and instructions (version 1.3.1)"
+    },
+    {
+      "artefact_links": [
+        {
+          "detail": "technical artefact URL that Stage 1A does not track; a human must decide whether to add it to the Stage 1A allowlist — Stage 1B never edits it",
+          "stage1a_artefact_id": null,
+          "status": "NEW_TECHNICAL_SOURCE_REVIEW_REQUIRED",
+          "url": "https://www.esma.europa.eu/document/securitisation-validation-rules-package"
+        }
+      ],
+      "development_id": "esma-a2-96862b40bf17b106f8d7",
+      "implementation_impact_count": null,
+      "regulatory_delta_count": null,
+      "stage1a_baseline_snapshot_ids": [],
+      "stage1a_candidate_snapshot_ids": [],
+      "stage1a_outcome": null,
+      "stage1a_report_path": null,
+      "stage1a_verification_required": true,
+      "status": "NEW_TECHNICAL_SOURCE_REVIEW_REQUIRED",
+      "title": "Securitisation reporting validation rules package"
+    }
+  ],
+  "technical_spec_change_candidates": 2
+}

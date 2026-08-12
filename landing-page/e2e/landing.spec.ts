@@ -28,7 +28,14 @@ test.describe("Trakt landing page", () => {
   });
 
   test("loads with the proposition, navigation and both CTAs", async ({ page }) => {
-    await expect(page).toHaveTitle(/Trakt \| Governed Portfolio Intelligence/);
+    // The strapline is the title, verbatim — this is what a search result and
+    // a link preview surface.
+    await expect(page).toHaveTitle(
+      /Trakt \| Agentic portfolio intelligence\. Deterministic by design\./,
+    );
+    await expect(
+      page.getByText("Agentic portfolio intelligence.", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("heading", {
         level: 1,
@@ -42,8 +49,49 @@ test.describe("Trakt landing page", () => {
       page.getByRole("link", { name: /explore the live demo/i }).first(),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /book a portfolio walkthrough/i }),
+      page.getByRole("link", { name: /demo on your portfolio/i }).first(),
     ).toBeVisible();
+  });
+
+  /**
+   * The two controls that offer a demonstration against the visitor's own
+   * portfolio must carry the same words and point at the same place. They
+   * drifted into three separate names once already ("Book a demo", "Book a
+   * portfolio walkthrough", "Book a tailored demonstration"), which left a
+   * reader to work out that all three were one destination.
+   *
+   * The closing CTA is deliberately excluded: it sits above the form itself,
+   * where it has its own context and competes with nothing.
+   */
+  test("the nav and hero demo controls carry one label and one destination", async ({
+    page,
+    isMobile,
+  }) => {
+    if (isMobile) await page.getByRole("button", { name: /open menu/i }).click();
+
+    const controls = page.getByRole("link", { name: /demo on your portfolio/i });
+    await expect(controls).toHaveCount(2);
+
+    const seen = await controls.evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        text: (node.textContent ?? "").trim(),
+        href: node.getAttribute("href"),
+      })),
+    );
+    expect(new Set(seen.map((c) => c.text)).size, "the two controls disagree on wording").toBe(1);
+    expect(new Set(seen.map((c) => c.href)).size, "the two controls disagree on target").toBe(1);
+    expect(seen[0]?.href).toBe("#book-a-demo");
+
+    // The closing CTA keeps its own wording.
+    await expect(page.getByRole("button", { name: /book a tailored demonstration/i })).toHaveCount(1);
+
+    // Scoped to the two controls this test governs. "Book a portfolio
+    // walkthrough" still exists inside the demo, on the session-limit card
+    // (`CopilotDemo.tsx`, `ReportPreview.tsx`) — a separate label for the same
+    // anchor, deliberately left alone in this pass and recorded in the
+    // content map as an open item.
+    await expect(page.getByRole("banner").getByText(/walkthrough/i)).toHaveCount(0);
+    await expect(page.locator("#product").getByText(/walkthrough/i)).toHaveCount(0);
   });
 
   test("the hero CTA lands on the query demo, which waits to be started", async ({
@@ -75,8 +123,12 @@ test.describe("Trakt landing page", () => {
     await expect(demo.getByText("SPV1 Sponsored Securitisation").first()).toBeVisible();
     await expect(demo.getByText("Platform total (warehoused)")).toBeVisible();
     await expect(demo.getByText("Sponsor total (including SPV1)")).toBeVisible();
-    // The SPV1 story lives in a tooltip on its own row, not the answer prose.
-    await expect(demo.locator('[title*="risk retention"]')).toBeVisible();
+    // The SPV1 story lives on its own row behind a real toggle — tap-
+    // reachable, unlike a native title tooltip, which never opens on touch.
+    const spvNote = demo.getByRole("button", { name: "SPV1 Sponsored Securitisation" });
+    await expect(spvNote).toHaveAttribute("aria-expanded", "false");
+    await spvNote.click();
+    await expect(demo.getByText(/servicing, risk retention and investor reporting retained/i)).toBeVisible();
     // The as-at date appears once, in the portfolio header — not per answer.
     await expect(demo.getByText(/as at 30 June 2026/)).toHaveCount(1);
     // No internal identifiers reach the page.
@@ -172,11 +224,11 @@ test.describe("Trakt landing page", () => {
       }),
     ).toBeVisible();
     await expect(controls.getByText(/what the portfolio is moving toward/i)).toBeVisible();
-    await expect(
-      controls.getByRole("heading", {
-        name: /see a portfolio requirement become a live control\./i,
-      }),
-    ).toBeVisible();
+    // One heading only: the demo's own restated the section's directly above.
+    await expect(controls.getByRole("heading", { level: 2 })).toHaveCount(1);
+    await expect(controls.getByRole("heading", { level: 3 })).toHaveCount(0);
+    // Both demo sections share one shape: heading, one line, full-width demo.
+    await expect(controls.locator(".grid")).toHaveCount(0);
 
     // Idle: poster showing, nothing playing, and the element can neither
     // autoplay nor loop silently from the middle.
@@ -215,7 +267,9 @@ test.describe("Trakt landing page", () => {
 
     // The illustrative provenance is DOM text, not only pixels in the video.
     await expect(controls.getByText(/from documented requirement to live monitoring/i)).toBeVisible();
-    await expect(controls.getByText(/figures illustrative/i)).toBeVisible();
+    // The film burns "Illustrative · synthetic data" into every frame, so the
+    // caption no longer repeats it.
+    await expect(controls.getByText(/figures illustrative/i)).toHaveCount(0);
   });
 
   test("reduced-motion visitors see no motion until they ask for it", async ({ page }) => {
@@ -244,35 +298,7 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator("main")).not.toContainText(/instant/i);
   });
 
-  test("the lens switcher recomputes the same rows under each lens", async ({ page }) => {
-    const lenses = page.locator("#lenses");
-    await lenses.scrollIntoViewIfNeeded();
-
-    await expect(
-      lenses.getByRole("heading", { name: /one portfolio truth\. every relevant lens\./i }),
-    ).toBeVisible();
-    await expect(lenses).toContainText(/individually reportable and consolidated/i);
-
-    // Default lens: the consolidated sponsor scope, summed from the very rows
-    // on screen — and it reconciles to the governed total to the penny.
-    await expect(lenses.getByText("£37,270,061")).toBeVisible();
-    await expect(lenses.getByText("SPV1 Sponsored Securitisation")).toBeVisible();
-    await expect(lenses.getByText("sold", { exact: true })).toBeVisible();
-
-    // Narrowing the lens recomputes the total over the same rows: the value
-    // appears twice — once on the book row, once as the recomputed total.
-    await lenses.getByRole("button", { name: "Acquired" }).click();
-    await expect(lenses.getByText("£11,974,544")).toHaveCount(2);
-    await lenses.getByRole("button", { name: "Origination" }).click();
-    await expect(lenses.getByText("£15,432,544")).toHaveCount(2);
-    await lenses.getByRole("button", { name: "Sponsor total" }).click();
-    await expect(lenses.getByText("£37,270,061")).toBeVisible();
-  });
-
-  test("the delivery accordion opens one panel at a time, under user control", async ({
-    page,
-    isMobile,
-  }) => {
+  test("the delivery model is five static tiles, with nothing to open", async ({ page }) => {
     const delivery = page.locator("#delivery");
     await delivery.scrollIntoViewIfNeeded();
 
@@ -280,50 +306,22 @@ test.describe("Trakt landing page", () => {
       delivery.getByRole("heading", { name: /every mode reads the same governed layer\./i }),
     ).toBeVisible();
 
-    if (isMobile) {
-      // Below 768px: a plain vertical stack — every panel visible, no
-      // horizontal behaviour, no expand/collapse controls.
-      for (const name of [
-        "Managed service",
-        "Trakt Agent",
-        "Copilot",
-        "Enterprise agent",
-        "Agent-to-agent",
-      ]) {
-        await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
-      }
-      await expect(delivery.getByRole("button")).toHaveCount(0);
-      return;
+    // All five modes readable in one pass, in order, at every breakpoint.
+    const names = ["Managed service", "Trakt Agent", "Copilot", "Agent access"];
+    for (const name of names) {
+      await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
+    await expect(delivery.getByRole("heading", { level: 3 })).toHaveCount(names.length);
 
-    // The horizontal accordion is the visible surface on desktop; the mobile
-    // stack coexists in the DOM behind a display toggle, so assertions scope
-    // to the accordion group.
-    const accordion = delivery.getByRole("group", { name: "Delivery modes" });
+    // Availability is stated per tile: three shipped, two roadmap.
+    await expect(delivery.getByText("Available today")).toHaveCount(3);
+    // One roadmap tile, not two: the agent section shows both patterns.
+    await expect(delivery.getByText("Roadmap")).toHaveCount(1);
 
-    // Panel 1 open on load, and exactly one panel is ever expanded.
-    await expect(accordion.getByText(/recurring reporting, regulatory output/i)).toBeVisible();
-
-    // Selecting another spine moves the expansion — never all-collapsed.
-    await accordion.getByRole("button", { name: "Copilot" }).click();
-    await expect(accordion.getByText(/inside the tools your teams already use/i)).toBeVisible();
-    await expect(accordion.getByText(/recurring reporting, regulatory output/i)).toHaveCount(0);
-
-    // Roadmap panels expand too, and stay labelled as roadmap in grey.
-    await accordion.getByRole("button", { name: "Agent-to-agent" }).click();
-    await expect(accordion.getByText(/consulting the governed layer directly/i)).toBeVisible();
-    await expect(accordion.getByText("Roadmap", { exact: true })).toBeVisible();
-
-    // Arrow keys move between panels.
-    await accordion.getByRole("button", { name: "Enterprise agent" }).focus();
-    await page.keyboard.press("ArrowLeft");
-    const focused = await page.evaluate(
-      () =>
-        document.activeElement?.getAttribute("aria-label") ??
-        document.activeElement?.textContent ??
-        "",
-    );
-    expect(focused).toMatch(/copilot/i);
+    // No expand/collapse interaction anywhere in the section.
+    await expect(delivery.getByRole("button")).toHaveCount(0);
+    await expect(delivery.locator("details")).toHaveCount(0);
+    await expect(delivery.locator("[aria-expanded]")).toHaveCount(0);
   });
 
   test("governance makes four claims once, with the reconciliation proof", async ({ page }) => {
@@ -339,15 +337,24 @@ test.describe("Trakt landing page", () => {
     await expect(
       governance.getByText(/reconciled by construction rather than by comparison/i),
     ).toBeVisible();
-    for (const name of ["Deterministic", "Traceable", "Controlled", "Isolated"]) {
+    for (const name of [
+      "Deterministic",
+      "Traceable",
+      "Controlled",
+      "Isolated",
+      "Agent-addressable",
+    ]) {
       await expect(governance.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
     await expect(governance.getByText(/microsoft entra id/i)).toBeVisible();
-    // Asset extensibility is an architecture claim, never a coverage claim,
-    // and the agentic direction is design intent, never live capability.
-    await expect(governance.getByText(/asset-specific configuration/i)).toBeVisible();
+    // Extensibility survives as one line answering the objection; it is an
+    // architecture claim, never a coverage claim. The agentic direction is
+    // cut — the Delivery Model tiles show it in grey instead.
+    await expect(
+      governance.getByText("New asset classes are added through configuration, not a rebuild."),
+    ).toBeVisible();
     await expect(governance).not.toContainText(/every asset class/i);
-    await expect(governance.getByText(/toward increasingly agentic operation/i)).toBeVisible();
+    await expect(governance).not.toContainText(/agentic/i);
     await expect(governance).not.toContainText(/roadmap/i);
     await expect(governance).not.toContainText(/autonomous/i);
 
@@ -356,6 +363,34 @@ test.describe("Trakt landing page", () => {
       .locator("#governance")
       .evaluate((section) => section.nextElementSibling?.id ?? "");
     expect(nextSectionId).toBe("book-a-demo");
+  });
+
+  test("the agent section is roadmap, with a topology and no fabricated demo", async ({
+    page,
+  }) => {
+    const agents = page.locator("#agents");
+    await agents.scrollIntoViewIfNeeded();
+
+    await expect(
+      agents.getByRole("heading", {
+        name: /agents don't calculate the portfolio\. trakt does\./i,
+      }),
+    ).toBeVisible();
+    // Roadmap language is deliberate and must not be tightened to present tense.
+    await expect(agents.getByText(/trakt is designed to make governed/i)).toBeVisible();
+    await expect(agents.getByText("Roadmap", { exact: true })).toBeVisible();
+
+    // Three nodes on one line, protocols as connector labels only.
+    for (const node of ["External agent", "Client enterprise agent", "Trakt"]) {
+      await expect(agents.getByText(node, { exact: true })).toBeVisible();
+    }
+    await expect(agents.getByText("A2A", { exact: true })).toBeVisible();
+
+    // Nothing here may fabricate a demonstration: no frame, no still, no
+    // invented figures, and no vendor mark as an actor in the diagram.
+    await expect(agents.locator("video, img")).toHaveCount(0);
+    await expect(agents).not.toContainText(/copilot/i);
+    await expect(agents).not.toContainText(/%/);
   });
 
   test("the lead form validates, then accepts a complete submission", async ({ page }) => {
@@ -379,22 +414,29 @@ test.describe("Trakt landing page", () => {
     await expect(cta.getByRole("status")).toContainText(/thank you/i);
   });
 
-  test("the intelligence section covers distribution without repeating the demo", async ({
+  test("delivery states each channel once, and the intelligence section is gone", async ({
     page,
   }) => {
-    const intelligence = page.locator("#intelligence");
-    await intelligence.scrollIntoViewIfNeeded();
+    // The Portfolio Intelligence section named the same surfaces as the tiles
+    // below it, in a second format. It must not come back.
+    await expect(page.locator("#intelligence")).toHaveCount(0);
+    await expect(page.getByText("Trakt workspace")).toHaveCount(0);
 
-    for (const channel of ["Trakt workspace", "Microsoft Teams", "Microsoft 365 Copilot"]) {
-      await expect(intelligence.getByText(channel, { exact: true })).toBeVisible();
+    const delivery = page.locator("#delivery");
+    await delivery.scrollIntoViewIfNeeded();
+
+    for (const mode of ["Managed service", "Trakt Agent", "Copilot", "Agent access"]) {
+      await expect(delivery.getByRole("heading", { name: mode, exact: true })).toBeVisible();
     }
-    // Three channel chips, each carrying a small neutral glyph — labels do the
-    // naming, no imitation product logos.
-    await expect(intelligence.locator("span:has(> svg)")).toHaveCount(3);
-    await expect(intelligence.getByText("Available today")).toBeVisible();
+    // The claim carried over from the deleted section: push, not pull, and
+    // governed by approval. Stated once on the page.
+    await expect(page.getByText("Approved risk findings are pushed to Teams.")).toHaveCount(1);
+    await expect(
+      delivery.getByText("Approved risk findings are pushed to Teams."),
+    ).toBeVisible();
     // The query demo lives in section 2 — no duplicate here.
-    await expect(intelligence.locator("#example")).toHaveCount(0);
-    await expect(intelligence.locator("video")).toHaveCount(0);
+    await expect(delivery.locator("#example")).toHaveCount(0);
+    await expect(delivery.locator("video")).toHaveCount(0);
   });
 
   test("the synthetic disclosure is the amber pill, stated exactly once", async ({
@@ -406,20 +448,167 @@ test.describe("Trakt landing page", () => {
     await expect(page.getByText("Synthetic portfolio", { exact: true })).toHaveCount(0);
 
     // After it starts: still exactly one, now on the live demo's header.
-    const demo = await startQueryDemo(page);
+    await startQueryDemo(page);
     await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
+  });
 
-    // Refusal is promoted out of small print: a titled block with the two
-    // example prompts as first-class buttons.
+  test("the refusal claim is its own section, and its prompts drive the demo", async ({
+    page,
+  }) => {
+    const refusal = page.locator("#refusal");
+    await refusal.scrollIntoViewIfNeeded();
+
+    // Stated once on the page: a live section, not a still inside the poster.
     await expect(
-      demo.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
+      refusal.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
     ).toBeVisible();
     await expect(
-      demo.getByRole("button", { name: /show me individual loan records/i }),
-    ).toBeVisible();
-    await expect(
-      demo.getByRole("button", { name: /summarise the current pipeline/i }),
-    ).toBeVisible();
+      page.getByRole("heading", { name: /trakt declines what it cannot derive/i }),
+    ).toHaveCount(1);
+
+    // Pressing a prompt starts the demo above and asks it, so the visitor
+    // watches Trakt decline rather than being told that it does.
+    await refusal.getByRole("button", { name: /show me individual loan records/i }).click();
+    const demo = page.locator("#example");
+    await expect(demo.getByText(/not supported in this demonstration/i)).toBeVisible();
+    await expect(demo.getByText(/will not return exposure-level records/i)).toBeVisible();
+  });
+
+  /**
+   * Opacity guards.
+   *
+   * `toBeVisible()` checks the layout box and display/visibility — it passes
+   * on an opacity-0 element. Six sections once rendered blank behind a
+   * scroll-reveal and the whole suite stayed green, so these assert the
+   * computed value directly.
+   */
+  test("every section paints: computed opacity and real text", async ({ page }) => {
+    for (const id of [
+      "query-demo",
+      "refusal",
+      "platform",
+      "controls",
+      "delivery",
+      "agents",
+      "governance",
+    ]) {
+      const section = page.locator(`#${id}`);
+      await section.scrollIntoViewIfNeeded();
+
+      // Polled, not sampled: the reveal transition runs 240ms plus up to
+      // 120ms of stagger, so an immediate read catches it mid-flight.
+      await expect
+        .poll(
+          () =>
+            section.evaluate((node) =>
+              Number(getComputedStyle(node.querySelector("[data-reveal]") ?? node).opacity),
+            ),
+          { message: `#${id} never reached full opacity` },
+        )
+        .toBe(1);
+
+      const text = await section.evaluate((node) => (node as HTMLElement).innerText.trim().length);
+      expect(text, `#${id} rendered no text`).toBeGreaterThan(0);
+    }
+  });
+
+  test("no revealable element anywhere is left transparent", async ({ page }) => {
+    // Deliberately broad: queries every [data-reveal] on the page rather than
+    // a known list, so anything added later is covered by default.
+    const total = await page.locator("[data-reveal]").count();
+    expect(total).toBeGreaterThan(0);
+
+    for (let index = 0; index < total; index += 1) {
+      await page.locator("[data-reveal]").nth(index).scrollIntoViewIfNeeded();
+    }
+    await page.locator("#top").scrollIntoViewIfNeeded();
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            Array.from(document.querySelectorAll("[data-reveal]"))
+              .filter((node) => Number(getComputedStyle(node).opacity) < 1)
+              .map(
+                (node) =>
+                  `${node.getAttribute("data-reveal")}: ${(node as HTMLElement).innerText.slice(0, 40)}`,
+              ),
+          ),
+        { message: "revealable content left transparent" },
+      )
+      .toEqual([]);
+  });
+
+  /**
+   * The play plate must never cover the demo's argument.
+   *
+   * The controls rows live inside the poster image, so they have no DOM boxes
+   * to measure. The poster is a purpose-built 1200x960 still rendered into a
+   * 5:4 frame with no crop, so the mapping is exact: the control card — its
+   * three rows, their percentages and the breach horizon — ends at 41% of the
+   * frame height, and the closing line begins at 73%. The plate is centred,
+   * and must sit inside that clear band. Asserted at all three widths because
+   * it has twice been checked by eye and twice been wrong.
+   */
+  test("the play plate never covers the control rows or the breach horizon", async ({
+    page,
+  }) => {
+    for (const width of [1440, 834, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator("#controls").scrollIntoViewIfNeeded();
+
+      const frame = await page.locator("#controls video").boundingBox();
+      const plate = await page.locator('[data-plate="controls"]').boundingBox();
+      expect(frame, `no video frame at ${width}`).not.toBeNull();
+      expect(plate, `no play plate at ${width}`).not.toBeNull();
+      if (!frame || !plate) continue;
+
+      // Centred, which is the intended geometry the poster is drawn for.
+      const frameCentre = frame.y + frame.height / 2;
+      const plateCentre = plate.y + plate.height / 2;
+      expect(
+        Math.abs(plateCentre - frameCentre),
+        `the plate is not centred in the frame at ${width}px`,
+      ).toBeLessThanOrEqual(4);
+
+      // And inside the band the poster leaves clear for it. The plate is a
+      // fixed height while the frame scales with width, so at 390 the frame
+      // is too short for both — there the accepted trade-off is a centred
+      // plate over the first row, and only the centring is asserted.
+      if (width >= 834) {
+        expect(
+          plate.y,
+          `the plate intrudes into the control rows at ${width}px`,
+        ).toBeGreaterThanOrEqual(frame.y + frame.height * 0.39);
+        expect(
+          plate.y + plate.height,
+          `the plate covers the closing line at ${width}px`,
+        ).toBeLessThanOrEqual(frame.y + frame.height * 0.73);
+      }
+    }
+  });
+
+  test("the query plate covers none of its poster's content", async ({ page }) => {
+    for (const width of [1440, 834, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator("#example").scrollIntoViewIfNeeded();
+
+      const plate = await page.locator('[data-plate="query"]').boundingBox();
+      expect(plate, `no query plate at ${width}`).not.toBeNull();
+      if (!plate) continue;
+
+      // The replica reserves a band between its two content groups; the
+      // plate is centred in that band and must intersect neither group.
+      const groups = page.locator("[data-poster-content]");
+      const count = await groups.count();
+      expect(count, `no poster content at ${width}`).toBeGreaterThan(0);
+      for (let i = 0; i < count; i += 1) {
+        const box = await groups.nth(i).boundingBox();
+        if (!box) continue;
+        const overlaps = plate.y < box.y + box.height && box.y < plate.y + plate.height;
+        expect(overlaps, `the query plate overlaps poster content ${i} at ${width}px`).toBe(false);
+      }
+    }
   });
 
   test("has no horizontal overflow and one h1", async ({ page }) => {
@@ -577,6 +766,36 @@ test.describe("Trakt landing page", () => {
   });
 });
 
+/**
+ * A permanent contract, not a spot check: the page must be readable with no
+ * JavaScript at all. Motion is an enhancement; content never depends on it.
+ */
+test.describe("without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("every section still renders at full opacity", async ({ page }) => {
+    await page.goto("/");
+
+    for (const id of ["refusal", "platform", "controls", "delivery", "agents", "governance"]) {
+      const painted = await page.locator(`#${id}`).evaluate((node) => {
+        const target = node.querySelector("[data-reveal]") ?? node;
+        return {
+          opacity: Number(getComputedStyle(target).opacity),
+          text: (node as HTMLElement).innerText.trim().length,
+        };
+      });
+      expect(painted.opacity, `#${id} is transparent without JavaScript`).toBe(1);
+      expect(painted.text, `#${id} rendered no text without JavaScript`).toBeGreaterThan(0);
+    }
+
+    // The proposition and the closing form survive too.
+    await expect(
+      page.getByRole("heading", { level: 1, name: /one governed view of your lending portfolios\./i }),
+    ).toBeVisible();
+    await expect(page.locator("#book-a-demo")).toContainText(/see your portfolio through one governed view/i);
+  });
+});
+
 test.describe("mobile navigation", () => {
   test.skip(({ isMobile }) => !isMobile, "mobile viewport only");
 
@@ -590,5 +809,25 @@ test.describe("mobile navigation", () => {
 
     await expect(page).toHaveURL(/#platform$/);
     await expect(menu).toBeHidden();
+  });
+
+  /**
+   * A permanent guard, not a spot check. A nav entry pointing at a section
+   * that has been deleted is silent — the link simply does nothing — so the
+   * menu is checked against the document rather than against a list kept in
+   * step by hand.
+   */
+  test("every menu link points at a section that exists", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /open menu/i }).click();
+
+    const hrefs = await page.locator("#mobile-nav a[href^='#']").evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLAnchorElement).getAttribute("href") ?? ""),
+    );
+    expect(hrefs.length).toBeGreaterThan(0);
+
+    for (const href of hrefs) {
+      await expect(page.locator(href), `${href} has no target on the page`).toHaveCount(1);
+    }
   });
 });

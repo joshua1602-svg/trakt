@@ -93,7 +93,9 @@ describe("Hero", () => {
       "href",
       "#query-demo",
     );
-    expect(screen.getByRole("link", { name: /book a portfolio walkthrough/i })).toHaveAttribute(
+    // Word for word the nav button, and the same anchor — see the drift guard
+    // in the e2e suite.
+    expect(screen.getByRole("link", { name: /demo on your portfolio/i })).toHaveAttribute(
       "href",
       "#book-a-demo",
     );
@@ -114,10 +116,23 @@ describe("Nav", () => {
   it("exposes the required destinations", () => {
     render(<Nav />);
     const nav = screen.getByRole("navigation", { name: /primary/i });
-    for (const label of ["Demo", "Platform", "Risk & Controls", "Intelligence", "Governance"]) {
+    // The desktop bar. Agent-to-agent is asserted deliberately: it is the
+    // section a technical reader arrives looking for, and it was missing from
+    // the nav for as long as it existed.
+    for (const label of [
+      "Platform",
+      "Risk & controls",
+      "Delivery",
+      "Agent-to-agent",
+      "Governance",
+    ]) {
       expect(within(nav).getByRole("link", { name: label })).toBeInTheDocument();
     }
-    expect(within(nav).getByRole("link", { name: /book a demo/i })).toBeInTheDocument();
+    // The deleted section must not be linked from anywhere.
+    expect(within(nav).queryByRole("link", { name: /intelligence/i })).toBeNull();
+    expect(
+      within(nav).getByRole("link", { name: /demo on your portfolio/i }),
+    ).toBeInTheDocument();
   });
 
   it("opens and closes the mobile menu", async () => {
@@ -203,8 +218,12 @@ describe("CopilotDemo", () => {
     expect(screen.getByText("Synthetic data")).toBeInTheDocument();
     // The session counter stays silent this early — it is a cap, not a meter.
     expect(screen.queryByText(/questions remaining/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/trakt declines what it cannot derive/i))
-      .toBeInTheDocument();
+    // The refusal claim moved to its own page section; inside the card the
+    // unsupported prompts remain as suggestions, which is what they are here.
+    expect(screen.queryByText(/trakt declines what it cannot derive/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /how has the portfolio changed since last month/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows a clear message for an unsupported question", async () => {

@@ -157,23 +157,29 @@ body {
 
 /* Scroll-triggered reveal (see components/site/Reveal.tsx).
  *
- * The hidden state applies only when the `js` class is present (set inline in
- * the layout) AND motion is acceptable — so visitors without JavaScript, and
- * visitors preferring reduced motion, always see the final state with no
- * transform at any point. 240ms ease-out, one 14px rise, staggered by the
- * component via --reveal-delay. Deliberately no spring and no replay. */
+ * Keyed off the attribute VALUE, which the component owns:
+ *
+ *   static    the server-rendered default — no rule matches, always visible
+ *   pending   set after mount, and only for content a viewport below the
+ *             fold, so nothing on screen is ever hidden
+ *   revealed  transitions in: 240ms ease-out, one 14px rise, staggered by
+ *             the component via --reveal-delay
+ *
+ * Content is therefore readable with no JavaScript, a blocked or broken
+ * bundle, reduced motion, in print, and in any capture tool: none of those
+ * paths can produce `pending`. Deliberately no spring and no replay. */
 @media (prefers-reduced-motion: no-preference) {
-  .js [data-reveal] {
+  [data-reveal="pending"] {
     opacity: 0;
     transform: translateY(14px);
+  }
+  [data-reveal="revealed"] {
+    opacity: 1;
+    transform: none;
     transition:
       opacity 240ms ease-out,
       transform 240ms ease-out;
     transition-delay: var(--reveal-delay, 0ms);
-  }
-  .js [data-reveal].is-revealed {
-    opacity: 1;
-    transform: none;
   }
 }
 

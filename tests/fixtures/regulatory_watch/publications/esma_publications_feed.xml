@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Weekly-style ESMA publications feed fixture.
+
+  Items 1 and 2 are REAL historical ESMA securitisation publications: their
+  titles and URLs are the ones this repository already relies on
+  (config/system/esma_code_order.yaml cites the Final Report as the source of
+  the ESMA field ordering; the technical-standards package is the Stage 1A
+  artefact source). The 1.3.1 publication date is the date ESMA records in the
+  workbook's own "Change log - Summary" sheet.
+
+  Items 3-6 are structural fixtures in ESMA's publication style, used to
+  exercise the irrelevant / broad / consultation / Q&A paths. They are not
+  claimed to be real publications.
+-->
+<rss version="2.0">
+  <channel>
+    <title>ESMA publications</title>
+    <link>https://www.esma.europa.eu/</link>
+    <description>European Securities and Markets Authority publications</description>
+
+    <item>
+      <title>Final Report — Draft RTS and ITS on securitisation reporting</title>
+      <link>https://www.esma.europa.eu/document/final-report-draft-rts-and-its-securitisation-reporting</link>
+      <guid isPermaLink="true">https://www.esma.europa.eu/document/final-report-draft-rts-and-its-securitisation-reporting</guid>
+      <pubDate>Wed, 27 Nov 2019 00:00:00 +0000</pubDate>
+      <category>Securitisation</category>
+      <category>Technical standards</category>
+      <description>ESMA final report on the draft regulatory and implementing technical standards on disclosure requirements under Article 7 of the Securitisation Regulation, covering the underlying exposures reporting templates.</description>
+    </item>
+
+    <item>
+      <title>Securitisation reporting technical standards — XML schema and instructions (version 1.3.1)</title>
+      <link>https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions</link>
+      <guid isPermaLink="true">https://www.esma.europa.eu/document/securitisation-reporting-technical-standards-xml-schema-and-instructions</guid>
+      <pubDate>Fri, 11 Jun 2021 00:00:00 +0000</pubDate>
+      <category>Securitisation</category>
+      <description>Updated reporting templates, XML schema and technical reporting instructions for securitisation disclosure. Includes the non-ABCP underlying exposure report XSD and the disclosure template workbook.</description>
+    </item>
+
+    <item>
+      <title>ESMA publishes latest edition of its Spotlight on Markets newsletter</title>
+      <link>https://www.esma.europa.eu/press-news/esma-news/esma-publishes-spotlight-markets-newsletter</link>
+      <guid isPermaLink="false">esma-news-spotlight-2026-w06</guid>
+      <pubDate>Mon, 09 Feb 2026 09:00:00 +0000</pubDate>
+      <category>Press release</category>
+      <description>The newsletter covers ESMA's recent supervisory convergence work, speeches and staff appointments.</description>
+    </item>
+
+    <item>
+      <title>Consultation Paper on amendments to the securitisation disclosure templates</title>
+      <link>https://www.esma.europa.eu/document/consultation-paper-securitisation-disclosure-templates-review</link>
+      <guid isPermaLink="false">esma-cp-securitisation-disclosure-2026-01</guid>
+      <pubDate>Tue, 10 Feb 2026 09:00:00 +0000</pubDate>
+      <category>Consultation</category>
+      <category>Securitisation</category>
+      <description>ESMA seeks views on proposed changes to the Article 7 disclosure templates for underlying exposures, including simplification of residential real estate reporting fields. Responses close 2026-05-15.</description>
+    </item>
+
+    <item>
+      <title>Questions and Answers on the Securitisation Regulation — disclosure templates</title>
+      <link>https://www.esma.europa.eu/document/qa-securitisation-regulation-disclosure-templates</link>
+      <guid isPermaLink="false">esma-qa-securitisation-disclosure-2026-02</guid>
+      <pubDate>Wed, 11 Feb 2026 09:00:00 +0000</pubDate>
+      <category>Q&amp;A</category>
+      <category>Securitisation</category>
+      <description>New Q&amp;A clarifying how to complete residential real estate underlying exposure fields, including the use of no-data options ND1 to ND5 where a value is not collected.</description>
+    </item>
+
+    <item>
+      <title>ESMA report on the securitisation market in the European Union</title>
+      <link>https://www.esma.europa.eu/document/esma-report-securitisation-market-european-union</link>
+      <guid isPermaLink="false">esma-market-report-securitisation-2026</guid>
+      <pubDate>Thu, 12 Feb 2026 09:00:00 +0000</pubDate>
+      <category>Securitisation</category>
+      <description>Statistical overview of issuance volumes and outstanding balances across the European securitisation market.</description>
+    </item>
+
+  </channel>
+</rss>
