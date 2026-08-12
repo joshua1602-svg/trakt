@@ -253,6 +253,57 @@ metrics:
       question, and transaction documents usually cap them.
     status: READY
 
+  - id: COMP_CONTRACTUAL_WAL
+    name: Contractual weighted average life
+    category: composition
+    description: >-
+      Principal-weighted average time to contractual principal repayment,
+      derived from the amortisation type the contract states.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: MEASURE_ONLY
+    fact_tool: contractual_analytics
+    calculation_source: analytics_lib.contractual.portfolio_wal
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      CONTRACTUAL, not expected. This is what the contract fixes, and it takes
+      no view on prepayment — compare it against the OBSERVED CPR before
+      drawing any conclusion about how long the book will actually last.
+      Read the status before the number. A bullet or fixed-amortisation loan
+      keeps its WAL on a floating rate, because its principal series does not
+      depend on the rate; a French or German loan does not, because there the
+      contract fixes the total instalment and the principal split moves with
+      the rate. Deliberately NOT applicable to equity release: repayment is
+      contingent on a borrower event, so no contractual WAL exists and the
+      legal long-stop maturity must never be substituted for one.
+    status: READY
+
+  - id: COMP_CONTRACTUAL_YTM
+    name: Contractual yield to maturity (periodic)
+    category: composition
+    description: >-
+      Balance-weighted contractual yield from purchase price (RREL34) and the
+      contractual cash flows, discounted at the payment frequency.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: MEASURE_ONLY
+    fact_tool: contractual_analytics
+    calculation_source: analytics_lib.contractual.contractual_ytm
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      PERIODIC, and say so when quoting it: day_count_convention exists only
+      as CREL122 on Annex 3, so a day-count-exact yield cannot be computed for
+      a residential tape and is not invented. Available only where the rate is
+      contractually fixed — a floating exposure reports ASSUMPTION_REQUIRED
+      rather than using today's rate as though it were fixed. On a book bought
+      at par, RREL34 is 100 and the yield collapses to the coupon: that is a
+      correct answer that reads like a broken one.
+    status: READY
+
   # ===================================================================
   # B. LEVERAGE AND COLLATERAL
   # Where screening thresholds are most defensible, because a very high LTV

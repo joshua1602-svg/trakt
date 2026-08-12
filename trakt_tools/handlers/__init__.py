@@ -18,6 +18,7 @@ from trakt_core.context import SCOPE_LOAN_READ, SCOPE_RISK_READ
 from ..registry import register
 from ..spec import ToolSpec
 from . import analysis as _analysis
+from . import contractual as _contractual
 from . import covenants as _covenants
 from . import history as _history
 from . import loans as _loans
@@ -484,3 +485,27 @@ register(ToolSpec(
 
 __all__ = ["_analysis", "_covenants", "_history", "_loans", "_movement",
            "_provenance", "_readiness"]
+
+register(ToolSpec(
+    name="contractual_analytics",
+    version="1.0.0",
+    description=(
+        "Contractual weighted average life and periodic yield, derived only "
+        "from terms the contract fixes — amortisation type (RREL35), rate "
+        "type (RREL42), frequency, maturity, balloon and price (RREL34). One "
+        "schedule pass serves both metrics."),
+    agent_guidance=(
+        "CONTRACTUAL, not observed: this is what the contract says will "
+        "happen, not what borrowers do. Read the status before the number. "
+        "NOT_APPLICABLE on a lifetime mortgage is the correct answer and not "
+        "a gap — repayment is contingent on death or sale, so no contractual "
+        "WAL exists and the legal maturity must not be substituted for one. "
+        "ASSUMPTION_REQUIRED means a floating rate makes the answer "
+        "unknowable, not that Trakt failed. Note that a bullet or "
+        "fixed-amortisation loan keeps its WAL even when floating, because "
+        "its principal series does not depend on the rate."),
+    input_schema=_contractual.CONTRACTUAL_INPUT,
+    output_schema=_contractual.CONTRACTUAL_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_contractual.contractual_analytics,
+))

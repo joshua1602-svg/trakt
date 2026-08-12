@@ -658,3 +658,52 @@ def test_no_readiness_tool_holds_its_own_calculation():
     for forbidden in ("df.groupby", ".sum() /", "np.average"):
         assert forbidden not in source, (
             f"trakt_tools.handlers.readiness computes with {forbidden!r}")
+
+
+def test_contractual_metrics_do_not_apply_to_equity_release():
+    """Sprint 2.5D. Contractual WAL and YTM are registered for residential and
+    commercial mortgages and deliberately NOT for equity release.
+
+    This is the encoding of the ERM conclusion. A lifetime mortgage repays on
+    death, sale or long-term care, so no contractual WAL exists — and the
+    framework must not count its absence as a readiness failure, because the
+    metric was never applicable. `applies_to` returning False is what keeps it
+    out of an ERM assessment entirely, rather than showing up as a gap somebody
+    later tries to close by using the legal long-stop maturity.
+    """
+    framework = load_framework()
+    by_id = {m.id: m for m in framework.metrics}
+
+    for metric_id in ("COMP_CONTRACTUAL_WAL", "COMP_CONTRACTUAL_YTM"):
+        metric = by_id[metric_id]
+        assert metric.status == "READY"
+        assert metric.fact_tool == "contractual_analytics"
+        assert metric.applies_to("residential_mortgage") is True
+        assert metric.applies_to("commercial_mortgage") is True
+        assert metric.applies_to("equity_release") is False, (
+            f"{metric_id} must not be assessed on an equity-release book")
+        assert "cross_asset" not in metric.asset_class_applicability, (
+            "cross_asset would sweep equity release back in")
+
+
+def test_the_contractual_wal_guidance_forbids_substituting_legal_maturity():
+    """The one wrong answer that would look right. An agent with a legal
+    long-stop of 2075 and no WAL is one short step from quoting 49 years."""
+    framework = load_framework()
+    metric = {m.id: m for m in framework.metrics}["COMP_CONTRACTUAL_WAL"]
+    guidance = metric.agent_investigation_guidance.lower()
+    assert "legal long-stop" in guidance or "legal maturity" in guidance
+    assert "never be substituted" in guidance or "must never" in guidance
+    assert "observed cpr" in guidance, (
+        "a contractual life quoted without the observed prepayment rate beside "
+        "it invites the reader to treat it as expected life")
+
+
+def test_the_contractual_ytm_guidance_admits_it_is_only_periodic():
+    """day_count_convention is CREL122 — Annex 3 only. An agent must not
+    present a periodic yield as day-count exact."""
+    framework = load_framework()
+    metric = {m.id: m for m in framework.metrics}["COMP_CONTRACTUAL_YTM"]
+    guidance = metric.agent_investigation_guidance
+    assert "PERIODIC" in guidance
+    assert "CREL122" in guidance
