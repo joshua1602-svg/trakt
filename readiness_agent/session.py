@@ -80,6 +80,7 @@ class GovernedSession:
     def __init__(self, context: ExecutionContext, resource: str, *,
                  dependencies: Optional[ToolDependencies] = None) -> None:
         self._context = context
+        self.resource = resource
         self._resource = resource
         self._dependencies = dependencies
         self._calls: List[ToolCallRecord] = []
