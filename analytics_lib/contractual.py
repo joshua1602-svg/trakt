@@ -139,54 +139,52 @@ FREQUENCY_MONTHS = {"MNTH": 1, "QUTR": 3, "SEMI": 6, "YEAR": 12}
 #: beyond that the input is more likely wrong than the loan long.
 MAX_PERIODS = 1200
 
-DEFAULT_DELIVERY_RULES = "config/regime/annex2_delivery_rules.yaml"
-DELIVERY_RULES_ENV = "TRAKT_ANNEX2_DELIVERY_RULES"
-
-_ENUM_CACHE: Dict[str, Dict[str, str]] = {}
+#: Source-label synonyms for the ESMA enums this module normalises, keyed by
+#: field code and lower-cased label.
+#:
+#: Restated here rather than read from the regulatory delivery
+#: configuration. ``analytics_lib`` is
+#: MI runtime, and MI must not depend on the regulatory delivery chain — an
+#: invariant ``tests/test_mi_regulatory_separation.py`` enforces, and one this
+#: module previously broke.
+#:
+#: The previous version read the delivery rules file to avoid restating
+#: the mapping, and caught ``OSError`` by falling back to an **empty** map. That
+#: made the coupling worse than the duplication it avoided: a deployment that
+#: runs MI without the regulatory configuration would silently stop recognising
+#: "French" and "Bullet", and would then produce *fewer contractual schedules*
+#: with no error and no warning — a quiet reduction in coverage, which is the
+#: hardest kind of defect to notice. An explicit map cannot fail that way.
+#:
+#: Drift against the delivery rules is caught by
+#: ``tests/test_contractual_enum_synonyms.py``, which compares the two whenever
+#: the delivery configuration is present. A test that fails loudly is a better
+#: guarantee than a coupling that degrades silently.
+_ENUM_SYNONYMS: Dict[str, Dict[str, str]] = {
+    "RREL35": {
+        "french": "FRXX", "german": "DEXX",
+        "fixed amortisation schedule": "FIXE", "bullet": "BLLT",
+        "other": "OTHR", "interest roll-up": "OTHR",
+        "frxx": "FRXX", "dexx": "DEXX", "fixe": "FIXE", "bllt": "BLLT",
+        "othr": "OTHR",
+    },
+    "RREL42": {
+        "fixed": "FXRL",
+        "fxrl": "FXRL", "flif": "FLIF", "disc": "DISC", "flcf": "FLCF",
+        "fxpr": "FXPR", "finx": "FINX", "capp": "CAPP", "flfl": "FLFL",
+        "flca": "FLCA", "mode": "MODE", "obls": "OBLS", "swic": "SWIC",
+        "othr": "OTHR",
+    },
+    "RREL37": {
+        "monthly": "MNTH", "quarterly": "QUTR",
+        "mnth": "MNTH", "qutr": "QUTR",
+    },
+}
 
 
 def _delivery_enum_map(code: str) -> Dict[str, str]:
-    """The repository's own enum map for an ESMA code.
-
-    Read from ``annex2_delivery_rules.yaml`` rather than restated here. The
-    delivery path already normalises "French" to FRXX and "Bullet" to BLLT;
-    a second mapping in Python would be a second definition of one thing, and
-    they would drift the first time a synonym was added to only one of them.
-    """
-    if code in _ENUM_CACHE:
-        return _ENUM_CACHE[code]
-
-    import yaml
-
-    path = os.environ.get(DELIVERY_RULES_ENV, DEFAULT_DELIVERY_RULES)
-    mapping: Dict[str, str] = {}
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            doc = yaml.safe_load(handle) or {}
-    except OSError:
-        doc = {}
-
-    def walk(node: Any) -> Optional[Dict[str, Any]]:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key == code and isinstance(value, dict):
-                    return value
-                found = walk(value)
-                if found is not None:
-                    return found
-        elif isinstance(node, list):
-            for item in node:
-                found = walk(item)
-                if found is not None:
-                    return found
-        return None
-
-    entry = walk(doc) or {}
-    raw = ((entry.get("transform") or {}).get("enum_map") or {})
-    for source, target in raw.items():
-        mapping[str(source).strip().lower()] = str(target).strip().upper()
-    _ENUM_CACHE[code] = mapping
-    return mapping
+    """The enum synonyms for one ESMA field code."""
+    return _ENUM_SYNONYMS.get(code, {})
 
 
 def normalise_amortisation(value: Any) -> Optional[str]:
