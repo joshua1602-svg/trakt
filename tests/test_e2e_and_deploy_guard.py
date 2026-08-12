@@ -120,22 +120,57 @@ class TestFundedRenderE2E(unittest.TestCase):
 
 
 class TestDeployImportGuard(unittest.TestCase):
+    """The guard that keeps an incomplete Function App package from deploying.
+
+    It is found by CONTENT, not by filename. It used to read
+    ``.github/workflows/main_trakt.yml`` by name; the workflow was renamed to
+    ``main_trakt-blob-trigger-v2.yml`` and the guard raised FileNotFoundError
+    from then on — so the check that exists to stop the historical
+    ``No module named 'apps'`` deploy had itself stopped running, and said so
+    only as a red test nobody read. A rename must not be able to do that again.
+    """
+
+    def _workflow_path(self) -> Path:
+        """The workflow that builds and deploys the Function App package."""
+        candidates = [p for p in sorted((_REPO / ".github/workflows").glob("*.yml"))
+                      if "zip -r deploy.zip" in p.read_text(encoding="utf-8")]
+        self.assertEqual(
+            len(candidates), 1,
+            f"expected exactly one Function App deploy workflow, found: "
+            f"{[p.name for p in candidates]}")
+        return candidates[0]
 
     def _workflow_text(self):
-        return (_REPO / ".github/workflows/main_trakt.yml").read_text()
+        return self._workflow_path().read_text(encoding="utf-8")
+
+    def test_the_deploy_workflow_is_discoverable(self):
+        # Named explicitly so a rename that also drops the packaging step fails
+        # here, rather than silently leaving every assertion below unrun.
+        self.assertTrue(self._workflow_path().is_file())
 
     def test_deploy_packages_the_apps_package(self):
         wf = self._workflow_text()
-        # Every runtime package the entrypoint imports must be zipped.
+        # Every runtime package the entrypoint imports must be zipped — including
+        # the ones reached only from inside a function body. Those register the
+        # trigger fine and fail on the first blob (operations_control) or log a
+        # swallowed failure every five minutes (trakt_notifications, trakt_core),
+        # which reads as "quiet" rather than as a broken deployment.
         for pkg in ("apps/", "engine/", "mi_agent/", "mi_agent_api/",
-                    "mi_agent_pptx/", "analytics_lib/", "config/"):
+                    "mi_agent_pptx/", "analytics_lib/", "config/",
+                    "operations_control/", "trakt_notifications/", "trakt_core/"):
             self.assertIn(pkg, wf, f"deploy package must include {pkg}")
 
     def test_ci_sanity_check_imports_function_app(self):
         wf = self._workflow_text()
         # py_compile never runs imports; the guard must actually import.
-        self.assertIn("import function_app", wf)
         self.assertNotIn("python -m py_compile function_app.py", wf)
+        # The probe lives in verify_package.py and must run against the BUILT
+        # archive. Asserting the workflow merely contains the words
+        # "import function_app" matched a comment and proved nothing.
+        self.assertIn("verify_package.py deploy.zip", wf)
+        verifier = (_REPO / "deploy/trakt-function-app/verify_package.py"
+                    ).read_text(encoding="utf-8")
+        self.assertIn("import function_app", verifier)
 
     def test_function_app_imports_when_azure_available(self):
         if importlib.util.find_spec("azure") is None or \
