@@ -157,6 +157,27 @@ class TestRedactSampleDateShielding(unittest.TestCase):
     def test_real_id_still_redacted(self):
         result = _redact_sample("account 1234567890")
         self.assertIn("[ID]", result)
+        self.assertNotIn("[PHONE]", result)
+
+    def test_bare_account_run_is_an_id_not_a_phone(self):
+        """_PHONE_RE runs before _ID_RE and matches ANY run of 8+ digits, so a
+        bare account number was labelled [PHONE] and _ID_RE never saw it. The
+        label reaches the model in the prompt, so an account column was
+        described as telephone numbers."""
+        for value in ("1234567890", "556677889900", "4111222233"):
+            self.assertEqual(_redact_sample(value), "[ID]", value)
+
+    def test_uk_national_number_is_still_a_phone(self):
+        """A bare run carrying the UK trunk 0 at phone length stays [PHONE] —
+        the discriminator is shape, not the presence of a separator."""
+        self.assertEqual(_redact_sample("07700900123"), "[PHONE]")
+        self.assertEqual(_redact_sample("02071234567"), "[PHONE]")
+
+    def test_formatted_numbers_are_unchanged_by_the_split(self):
+        """Everything that redacted as a phone before still does."""
+        for value in ("+44 7911 123456", "(020) 7123 4567", "020-7123-4567",
+                      "148250.55"):
+            self.assertIn("[PHONE]", _redact_sample(value), value)
 
     def test_date_and_phone_in_same_string(self):
         result = _redact_sample("DOB 1985-03-22 mob 07700900123")

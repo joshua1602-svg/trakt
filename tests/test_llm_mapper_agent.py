@@ -490,10 +490,22 @@ class TestHumanReviewSessionCLI(unittest.TestCase):
         result = self._run_review(["Q"], suggestions)
         self.assertTrue(all(s.status in ("pending", "skipped") for s in result))
 
+    def test_reject_sets_status(self):
+        """[X]eject — the suggestion is wrong and the mapping stays unresolved.
+
+        Untested until now, which is why it could quietly take over the letter
+        the invalid-choice test below was using.
+        """
+        suggestions = [_make_suggestion()]
+        result = self._run_review(["X", ""], suggestions)
+        self.assertEqual(result[0].status, "rejected")
+        self.assertIsNone(result[0].confirmed_field)
+
     def test_invalid_choice_prompts_again(self):
         suggestions = [_make_suggestion()]
-        # First input is invalid, second is valid
-        result = self._run_review(["X", "C", ""], suggestions)
+        # "Z" is not bound to an action. ("X" was, until the CLI gained an
+        # explicit Reject; the loop re-prompts on anything unrecognised.)
+        result = self._run_review(["Z", "C", ""], suggestions)
         self.assertEqual(result[0].status, "confirmed")
 
     def test_no_pending_returns_immediately(self):
@@ -507,6 +519,42 @@ class TestHumanReviewSessionCLI(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # TEST: LLM batching and API interaction
 # ---------------------------------------------------------------------------
+
+
+class TestRedactSampleKeepsDates(unittest.TestCase):
+    """The Gate 1 redactor's sample values are half the evidence the mapper has.
+
+    The phone pattern matches any run of 7+ digits-and-separators, which is
+    exactly the shape of a date, so every date sample reached the model as
+    <PHONE> — a wrong statement about the column, not a redaction. Dates are
+    shielded and restored; the sibling redactors in engine/enum_agent and
+    engine/onboarding_agent/file_profiler already did this.
+    """
+
+    def _r(self, s):
+        return LLMFieldMapper._redact_sample(s)
+
+    def test_iso_date_survives(self):
+        self.assertEqual(self._r("2024-01-01"), "2024-01-01")
+
+    def test_european_and_undelimited_dates_survive(self):
+        self.assertEqual(self._r("31/01/2024"), "31/01/2024")
+        self.assertEqual(self._r("31.01.2024"), "31.01.2024")
+        self.assertEqual(self._r("20240131"), "20240131")
+
+    def test_timestamps_keep_their_date(self):
+        self.assertIn("2024-01-15", self._r("2024-01-15 00:00:00"))
+
+    def test_pii_is_still_redacted(self):
+        self.assertEqual(self._r("+44 7911 123456"), "<PHONE>")
+        self.assertEqual(self._r("SW1A 2AA"), "<UK_POSTCODE>")
+        self.assertEqual(self._r("someone@example.com"), "<EMAIL>")
+
+    def test_a_date_and_a_phone_together(self):
+        out = self._r("2024-01-15 +44 7911 123456")
+        self.assertIn("2024-01-15", out)
+        self.assertIn("<PHONE>", out)
+        self.assertNotIn("7911", out)
 
 
 class TestLLMFieldMapperBatching(unittest.TestCase):

@@ -229,9 +229,39 @@ class LLMFieldMapper:
         """
         Redact PII and long identifiers from a sample value string before
         sending to the LLM.  Applied to every sample value in _build_envelope.
+
+        Dates are shielded first and restored afterwards. The phone pattern below
+        matches any run of 7+ digits-and-separators, and a date is exactly that:
+        ``2024-01-01`` was redacted to ``<PHONE>`` before it ever reached the
+        model. Sample values are HALF the evidence this mapper has — the header
+        is the other half — so every date column in every client tape arrived
+        described as telephone numbers, which is not a redaction but a wrong
+        statement about the data. Mapping a date column is the case the samples
+        matter most for: ``Loan Valn Dt`` is ambiguous from its header alone and
+        obvious from ``2024-01-15``.
+
+        A date is not PII here. ``engine/enum_agent`` shields dates for the same
+        reason and says so; ``engine/onboarding_agent/file_profiler`` classifies
+        them as ``<DATE>``. This makes the third redactor agree with the two that
+        already got it right.
         """
         # A4: Truncate to max 32 characters first
         s = s[:32]
+
+        # Shield dates before the phone/ID patterns, restore after.
+        shielded: list = []
+
+        def _shield(m: "re.Match") -> str:
+            shielded.append(m.group(0))
+            return f"\x00D{len(shielded) - 1}\x00"
+
+        s = re.sub(
+            r'\b(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}'      # 2024-01-31, 2024/01/31
+            r'|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}'        # 31/01/2024, 31.01.24
+            r'|20\d{6}|19\d{6})\b',                    # 20240131 undelimited
+            _shield,
+            s,
+        )
 
         # UK postcode: e.g. SW1A 2AA, EC1A 1BB, W1A 0AX
         s = re.sub(
@@ -261,6 +291,9 @@ class LLMFieldMapper:
             '<ID>',
             s,
         )
+
+        for idx, date_str in enumerate(shielded):
+            s = s.replace(f"\x00D{idx}\x00", date_str, 1)
 
         return s
 

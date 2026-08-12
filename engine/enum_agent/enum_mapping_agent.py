@@ -22,6 +22,9 @@ _NORMALIZE_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 _PHONE_RE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
 _ID_RE = re.compile(r"\b\d{6,}\b")
+# Separators that make a digit run PHONE-SHAPED — the same set _PHONE_RE already
+# accepts, so nothing that redacted before stops redacting.
+_PHONE_SEPARATORS = " -()."
 _POSTCODE_RE = re.compile(r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b", re.IGNORECASE)
 # Shields date patterns from _PHONE_RE / _ID_RE false positives.
 # e.g. "2024-01-15" would otherwise match _PHONE_RE via its [-. ] char class.
@@ -103,6 +106,29 @@ def _hash_allowed_values(allowed_values: List[str]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _phone_sub(match: "re.Match") -> str:
+    """``[PHONE]`` only for a genuinely phone-shaped run; otherwise leave the
+    text for ``_ID_RE`` to classify.
+
+    ``_PHONE_RE`` ran before ``_ID_RE`` and matches any run of 8+ digits, so a
+    bare account number ("1234567890") was labelled ``[PHONE]`` and ``_ID_RE``
+    never saw it. Both are redacted either way — no PII escaped — but the label
+    is part of the prompt the enum agent sends, so an account column was
+    described to the model as telephone numbers.
+
+    A run is a phone when it is formatted like one (an international ``+``, or a
+    space / dash / paren separator) or when it is a UK national number, which
+    carries the trunk ``0`` and is 10-11 digits. A bare run that is neither is an
+    identifier.
+    """
+    s = match.group(0)
+    if s.startswith("+") or any(c in s for c in _PHONE_SEPARATORS):
+        return "[PHONE]"
+    if s.startswith("0") and 10 <= len(s) <= 11:
+        return "[PHONE]"
+    return s
+
+
 def _redact_sample(value: str, max_len: int = 120) -> str:
     # Shield date patterns before phone/ID regexes to prevent false positives.
     # Dates are restored after redaction — they are not PII in enum contexts.
@@ -114,7 +140,7 @@ def _redact_sample(value: str, max_len: int = 120) -> str:
 
     working = _DATE_RE.sub(_shield, value)
     working = _EMAIL_RE.sub("[EMAIL]", working)
-    working = _PHONE_RE.sub("[PHONE]", working)
+    working = _PHONE_RE.sub(_phone_sub, working)
     working = _POSTCODE_RE.sub("[POSTCODE]", working)
     working = _ID_RE.sub("[ID]", working)
 
