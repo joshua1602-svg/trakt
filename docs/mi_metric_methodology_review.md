@@ -10,10 +10,10 @@ The question this sprint was reopened to answer:
 
 The short answer is that Trakt's field universe is much stronger than its
 metric universe, and the earlier review mistook the second for the first. Of
-the thirty economic concepts a securitisation review quotes, **twenty-seven are
-present as governed canonical fields**, twenty-four of them carrying ESMA codes
-on every annex. Almost everything the previous pass listed as a data gap was a
-calculation nobody had written.
+the thirty economic concepts a securitisation review quotes, **all thirty are
+present as governed canonical fields**; twenty-seven carry ESMA codes, and
+twenty-four of those on three or more annexes. Almost everything the previous
+pass listed as a data gap was a calculation nobody had written.
 
 Three things were wrong in the repository and are now fixed. Each was found by
 reading a definition next to the code that claimed to implement it, and none
@@ -43,7 +43,7 @@ order was:
    methodology questions on their own.
 4. `config/business_semantics_registry.yaml` — 242 of the 499 fields carry
    analytical metadata (concept, role, temporality, aggregation, weight).
-5. `config/risk/concentration_test_library.yaml` — 42 MI metrics and the 51
+5. `config/risk/concentration_test_library.yaml` — 42 MI metrics and the 50
    field *roles* they resolve through.
 6. `config/regime/annex12_template.yaml` and the Annex 12 XSD.
 
@@ -85,7 +85,7 @@ snapshots.
 | **WAC / WA margin** | `current_interest_rate`, `current_interest_rate_margin`, balance | Yes | REG (RREL43, RREL46) | No | `rate_gross_wac`, `rate_net_wac` | **Yes — READY** |
 | **WA seasoning** | `origination_date` | Yes | REG (RREL23) | No | `composition_vintage_share` only | **READY, not exposed** |
 | **WA remaining term** | `maturity_date` | Yes | REG (RREL24) | No | `maturity_within_horizon_share` only | **READY, not exposed** |
-| **Concentrations (geo, borrower, top-N)** | geography, `borrower_identifier`, balance | Yes | analytics + REG | No | 20 library metrics | **Yes — READY** |
+| **Concentrations (geo, borrower, top-N)** | geography, `borrower_identifier`, balance | Yes | analytics + REG | No | 17 library metrics (geography 6, borrower 6, balance 5) | **Yes — READY** |
 | **Vintage / cohort performance** | `origination_date` + any measure | Yes | REG | Yes | `cohort_comparison` | **Yes, with a caveat (§7)** |
 | **Contractual WAL** | balance, `maturity_date`, `amortisation_type`, `scheduled_principal_payment_frequency`, `regular_principal_instalment`, `balloon_amount`, `principal_grace_period_end_date` | Yes | REG ×5 + one analytics field | No | none | **METHODOLOGY GAP (§11)** |
 | **Observed portfolio life / runoff** | governed snapshots | Yes | HIST | Yes | `portfolio_series` (partly) | **READY, not exposed** |
@@ -299,11 +299,10 @@ entries are missing. §10.
 
 ## 9. Concentration and portfolio characteristics
 
-Twenty library metrics cover geography (region, country, county, postcode
-area, largest region, region count), borrower (largest, multi-loan, aggregate,
-joint, age), balance (top-N, largest, average, weighted average, above
-threshold), product and rate type, LTV, maturity horizon, extension, residual
-value and vintage share. Each declares `denominator_options` of
+The library's 42 metrics break down as geography 6, borrower 6, property
+value 5, loan balance 5, rate and product 5, performance 4, LTV 3, composition
+3, maturity 2, and one each for residual value, external index and the generic
+filtered-share primitive. Each declares `denominator_options` of
 `current_balance` / `original_balance` / `loan_count` and publishes which was
 used. **`denominator_floor` is contractual and is never inferred from data** —
 a covenant with a floored denominator has to say so.
@@ -382,11 +381,15 @@ a broken calculation.
 
 **YTW — EXPOSURE GAP, and the more fundamental of the two.** Yield to worst is
 the minimum yield across every call and prepayment scenario, and at the level
-it is normally quoted it is a **note-level** measure. Trakt holds no tranche,
-note or class data: a search of all 499 canonical fields returns no
-tranche/note/class field, and the Annex 12 deal template's `cashflow_items` and
-`triggers_tests_events` lists are both empty. YTW is not blocked by methodology
-— it is blocked by an entity Trakt does not model.
+it is normally quoted it is a **note-level** measure, and Trakt does not model
+the liability side. No canonical field carries a tranche or class balance,
+coupon, attachment point or paydown. The nine fields whose names mention notes,
+seniority or subordination — `noteholder_consent`, `seniority`,
+`principal_payment_allocation_to_senior_loan`, `restrictions_on_sale_of_
+subordinated_loan` and the rest — are all attributes of the **underlying
+exposure**, not of a securitisation tranche. The Annex 12 deal template's
+`cashflow_items` and `triggers_tests_events` lists are both empty. YTW is not
+blocked by methodology — it is blocked by an entity Trakt does not model.
 
 **Neither is being built on synthetic assumptions.** A YTM produced by
 inventing a price, or a YTW produced by inventing call dates, would be worse
