@@ -223,14 +223,28 @@ def test_a_tape_without_the_unscheduled_field_refuses_rather_than_guessing(
     assert "A rate is NOT inferred from the change in total balance" in result.reason
 
 
-def test_redemptions_are_derived_from_loans_that_left(snapshots):
-    """A per-period redemption column is often unpopulated on a real tape, so
-    exits are derived by set difference and the derivation is disclosed."""
+def test_exits_are_classified_before_being_counted_as_redemptions(snapshots):
+    """UPDATED in Sprint 2.5C. This test previously asserted that exits were
+    "derived" by set difference and that the rate "counts EVERY exit" — which
+    was the Sprint 2.5B behaviour and was methodologically wrong.
+
+    A disappearance is not a redemption. A loan can leave a tape because it
+    defaulted and was written off, reached maturity, was sold, or because the
+    extract broke. Counting all of them as voluntary prepayment inflates the
+    rate most in exactly the case where it matters — a book shedding defaulted
+    loans. Exits are now classified, and only evidenced redemptions count.
+    """
     result = prepayment_rate(snapshots, periods=list(PERIODS))
-    derived = [p for p in result.per_period
-               if p["redemption_source"].startswith("derived")]
-    assert derived
-    assert any("counts EVERY exit" in note for note in result.notes)
+    classified = [p for p in result.per_period
+                  if p["redemption_source"].startswith("classified")]
+    assert classified
+    assert any("a disappearance is not a redemption" in note.lower()
+               for note in result.notes)
+
+    # Every exit in this fixture carries a redemption flag, so none is unknown.
+    for period in result.per_period:
+        exits = period.get("exits") or {}
+        assert exits.get("unknown_exit", {}).get("balance", 0.0) == 0.0
 
 
 def test_the_annualised_form_is_labelled_as_an_annualisation(snapshots):

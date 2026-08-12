@@ -1128,7 +1128,10 @@ metrics:
     category: performance
     description: >-
       Balance share of loans in arrears — either any positive arrears balance,
-      or days past due above `min_days`.
+      or days past due AT OR ABOVE `min_days`. The boundary is inclusive by
+      default, so `min_days: 30` is the market-standard "30+ DPD". Set
+      `dpd_boundary: exclusive` where a contract genuinely says "more than N
+      days".
     asset_classes: [cross_asset]
     evaluator: arrears_share
     unit: percent
@@ -1144,7 +1147,16 @@ metrics:
       min_days:
         type: number
         required: false
-        description: Days-past-due threshold; omitted means any arrears balance.
+        description: >-
+          Days-past-due threshold, INCLUSIVE by default: `30` means 30 or more
+          days. Omitted means any positive arrears balance.
+      dpd_boundary:
+        type: enum
+        values: [inclusive, exclusive]
+        default: inclusive
+        description: >-
+          Whether a loan at exactly `min_days` qualifies. Inclusive matches the
+          "N+ DPD" convention every consumer label uses.
       denominator:
         type: enum
         values: [current_balance, original_balance]

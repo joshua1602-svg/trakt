@@ -84,11 +84,26 @@ def _measure_functions(names) -> Dict[str, Callable]:
         total = float(balances.sum())
         return round(float(balances[mask].sum()) / total * 100, 6) if total else None
 
-    def _dpd(df, minimum: int):
-        if "number_of_days_in_arrears" not in df.columns:
+    def _dpd(df, minimum: int) -> Optional[float]:
+        """Arrears share, delegated to the GOVERNED library metric.
+
+        Sprint 2.5C: this used to apply its own ``>= minimum`` mask while the
+        concentration library applied ``> min_days``, so the same nominal "30+
+        DPD" reported 50% here and 25% there on a book with loans at exactly 30
+        days. Two definitions of one metric is the failure this whole sprint
+        exists to remove, so the measure now CALLS the library rather than
+        agreeing with it by hand — agreement by hand is what drifts.
+        """
+        from mi_agent.concentration_tests.library import load_library
+        from mi_agent.concentration_tests.metrics import evaluate_metric
+
+        library = load_library()
+        metric = library.get("perf_arrears_share")
+        if metric is None or not len(df):
             return None
-        days = pd.to_numeric(df["number_of_days_in_arrears"], errors="coerce")
-        return _share_where(df, days.fillna(0) >= minimum)
+        computation = evaluate_metric(df, library, metric,
+                                      {"min_days": minimum})
+        return computation.value
 
     catalogue: Dict[str, Callable] = {
         "total_balance": lambda df: (float(_balance(df).sum())

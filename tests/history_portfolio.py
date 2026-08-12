@@ -287,6 +287,12 @@ def snapshot(period_index: int) -> pd.DataFrame:
             "unscheduled_principal_collections":
                 _unscheduled_principal(plan, period_index),
             "redemptions_received_in_period": 0.0,   # exits recorded below
+            # Sprint 2.5C: a disappearance is only counted as a voluntary
+            # redemption with qualifying evidence. The redeeming cohort carries
+            # the flag a real servicer tape would set; every other cohort does
+            # not, so an exit from one of them classifies as UNKNOWN_EXIT and is
+            # excluded from the prepayment numerator.
+            "loan_redemption_flag": "Y" if cohort == "redeeming" else None,
             "geographic_region_collateral": plan["region"],
             "geographic_region_obligor": plan["region"],
             "collateral_type": "residential_property",
