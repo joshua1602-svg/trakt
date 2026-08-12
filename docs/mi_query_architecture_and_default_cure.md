@@ -1,6 +1,6 @@
 # MI Query architecture, and the default & cure close-out
 
-*Sprint 2.5E close-out. Baseline `ccbcf56` → `093ee4c`.*
+*Sprint 2.5E close-out. Baseline `ccbcf56` → `8ab5d14`.*
 
 ## 1. What actually calculates the answer
 
@@ -52,7 +52,7 @@ what each actually needs:
 
 | Type | Count | Capability link appropriate? | Current state |
 |---|---:|---|---|
-| **A. Registered derived metric** | **11** | **Yes** | linked — CPR, losses, severity-adjacent, WAL, YTM, default rate, cure rate, balance, count, average size, WA LTV, geography |
+| **A. Registered derived metric** | **11** | **Yes** | all linked: total balance, loan count, average loan size, WA LTV, geographic concentration, contractual WAL, contractual YTM, prepayment (CPR), losses, default rate, cure rate |
 | **B. Generic deterministic aggregation** | 2 | No | field + aggregation; MI Query owns these correctly |
 | **C. Shared analytics operation** | 12 | No | stratify, concentration, cohort, migration, period change, valuation age — operations, not named KPIs |
 | **D. Covenant-library metric** | 22 | No | resolve through `readiness_metrics` + the concentration library, which is already one shared implementation with thresholds |
