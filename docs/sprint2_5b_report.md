@@ -397,7 +397,48 @@ than worked around in the tool layer.
 
 ## 14. Regression evidence
 
-*(filled in from the full-suite comparison against `130f3b0`)*
+Full suite, both trees, `-p no:randomly` so ordering is fixed.
+
+| | baseline `130f3b0` | current |
+|---|---|---|
+| passed | 5,137 | **5,260** (+123) |
+| failed | 64 | **64** |
+| errors | 13 | **13** |
+| skipped | 33 | 33 |
+| wall clock | 2,454 s | 2,429 s |
+
+**Both complete ID sets are identical** — extracted, sorted, deduplicated and
+diffed in both directions:
+
+```
+failure ids: base=64  current=64
+error ids:   base=13  current=13
+
+=== NEW FAILURES ===      (empty)
+=== FIXED ===             (empty)
+=== NEW ERRORS ===        (empty)
+
+failure sets IDENTICAL
+error sets IDENTICAL
+```
+
+**One caveat on how this was run, stated because it affects how much weight the
+result carries.** The candidate run was started at `3463a1e` and Sprint 2.5C
+edits landed in the working tree while it was still executing. pytest imports
+test modules at collection, but this repository imports handler modules lazily
+*inside* handler functions, so a late-running test could in principle have
+picked up an edited module. The totals and both ID sets match the baseline
+exactly, which is strong evidence nothing was disturbed — but it is not a clean
+snapshot of `3463a1e`, and it should not be read as one.
+
+A clean comparison (`cdefc25` → Sprint 2.5C head, tree untouched throughout) was
+run subsequently and is reported in `docs/mi_metric_methodology_review.md`. That
+one supersedes this as the trustworthy regression evidence for everything from
+Sprint 2.5B onward.
+
+**Sprint 2.5B added 38 tests** in `tests/test_historical_analysis.py`. No
+existing test was changed in Sprint 2.5B itself; one was updated in Sprint 2.5C
+and is explained there.
 
 ---
 
