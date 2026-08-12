@@ -70,17 +70,17 @@ export default function Page() {
               <QueryDemo meta={meta} />
             </div>
           </Reveal>
-          <Reveal delay={120}>
-            <p className="mt-4 text-[13px] font-medium text-ink-300">
-              Same question. Same calculation. Same answer.
-            </p>
-          </Reveal>
+          {/* "Same question. Same calculation. Same answer." has moved to the
+              hero. As a caption here it was the page's central claim doing
+              footnote duty, and it read as commentary on this one demo rather
+              than on the four surfaces the page shows. The demo keeps its own
+              figcaption. */}
           {/* The refusal claim, folded back in. It is a sub-claim of this
               demo, not a destination, and as its own section it sat in
               adjacent territory to the agent-to-agent headline. Beneath the
               frame it keeps heading-scale type: same function, one less
               section, no loss of weight. */}
-          <Reveal delay={180}>
+          <Reveal delay={120}>
             <RefusalSection meta={meta} />
           </Reveal>
         </Section>
@@ -104,7 +104,15 @@ export default function Page() {
             roadmap kept visually distinct. Static — nothing to open. */}
         <Section id="delivery" className="pb-16 sm:pb-20">
           <Reveal>
-            {/* The body line is the one delivery behaviour the tiles cannot
+            {/* The headline names the span of the tiles below it rather than
+                restating the layer. "Every mode reads the same governed layer"
+                was the third statement of one argument — the platform section
+                makes it as architecture, the agent section makes it for
+                agents, and the hero now makes it for the whole page. This one
+                introduces the row instead, and hands off to the agent section
+                beneath it.
+
+                The body line is the one delivery behaviour the tiles cannot
                 carry: every tile describes somewhere a person goes to ask, and
                 this is the case where Trakt arrives without being asked. It is
                 the Teams outbox (`trakt_notifications/`), not the Copilot
@@ -112,7 +120,7 @@ export default function Page() {
             <SectionHeading
               id="delivery"
               eyebrow="Delivery model"
-              title="Every mode reads the same governed layer."
+              title="From a managed service to your own agents."
               intro="Approved risk findings are pushed to Teams."
             />
           </Reveal>
@@ -131,10 +139,11 @@ export default function Page() {
           <ForwardControls />
         </Section>
 
-        {/* 6c — Agent-to-agent. Roadmap, and its demo slot is deliberately
-            absent: the footage does not exist, the section budget allows one
-            visual, and an empty 700px frame under a diagram reads as broken
-            however it is labelled. The topology is the visual. */}
+        {/* 6c — Agent-to-agent. Two named agents and the delegation claim; the
+            topology diagram is deleted, not hidden. The tiles are the visual,
+            and the Securitisation Readiness demo takes that slot when it
+            exists. No demo placeholder: an empty reserved frame reads as
+            broken however it is labelled. */}
         <Section id="agents" className="pb-16 sm:pb-20">
           <AgentSection />
         </Section>

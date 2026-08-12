@@ -7,6 +7,7 @@ import { cx } from "@/components/ui";
 import type {
   ChartArtifact,
   DemoArtifact,
+  DemoRow,
   KpiArtifact,
   TableArtifact,
 } from "@/types/demo";
@@ -121,6 +122,30 @@ function ChartBlock({ artifact }: { artifact: ChartArtifact }) {
  * touch, which would have made this unreachable on a phone — and it is the
  * explanation that makes the two-totals answer land.
  */
+/**
+ * A total row reads as a total.
+ *
+ * The reason is not tidiness. The sponsor total — £37,270,061 — is the same
+ * figure the hero's Copilot preview already showed, and the page's central
+ * claim is that every channel returns the same answer. Rendered as one plain
+ * cell among five identical rows, the repetition was invisible: a reader had
+ * to be looking for it. The hero gives that number semibold ink-100; the
+ * answer table now does the same, so the reader recognises it.
+ *
+ * Keyed off the first column's own label rather than a flag on the data: the
+ * demo pack is engine-generated and hash-checked, so adding a presentation
+ * field to it would mean changing the generator to carry a styling hint. In
+ * the committed pack this matches four rows across two artifacts — the
+ * platform and sponsor totals in the balance and movement tables — and
+ * nothing else.
+ */
+function isTotalRow(artifact: TableArtifact, row: DemoRow): boolean {
+  const first = artifact.columns[0]?.key;
+  if (!first) return false;
+  const label = row[first];
+  return typeof label === "string" && /\btotals?\b/i.test(label);
+}
+
 function RowNote({ value, note }: { value: string; note: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -172,7 +197,9 @@ function TableBlock({
           </tr>
         </thead>
         <tbody>
-          {artifact.rows.map((row, index) => (
+          {artifact.rows.map((row, index) => {
+            const total = isTotalRow(artifact, row);
+            return (
             <tr key={index} className="border-b border-line-soft last:border-0">
               {artifact.columns.map((column, columnIndex) => {
                 const value = formatValue(row[column.key] ?? null, column.format);
@@ -184,7 +211,8 @@ function TableBlock({
                   <td
                     key={column.key}
                     className={cx(
-                      "px-3 py-2 text-ink-200",
+                      "px-3 py-2",
+                      total ? "font-semibold text-ink-100" : "text-ink-200",
                       column.align === "right" ? "text-right tabular-nums" : "text-left",
                     )}
                   >
@@ -193,7 +221,8 @@ function TableBlock({
                 );
               })}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

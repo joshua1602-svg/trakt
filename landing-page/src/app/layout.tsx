@@ -16,7 +16,8 @@ const DESCRIPTION =
   `${STRAPLINE} ` +
   "Trakt connects portfolio data, documents and funding requirements into one " +
   "governed layer — powering monitoring, forecasting, covenant controls, reporting " +
-  "and portfolio Q&A for specialist lenders.";
+  "and portfolio Q&A for specialist lenders. Enterprise agents discover Trakt's " +
+  "agents and delegate an objective, and get an evidence-backed result.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicConfig.siteUrl),

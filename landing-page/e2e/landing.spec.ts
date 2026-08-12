@@ -298,12 +298,12 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator("main")).not.toContainText(/instant/i);
   });
 
-  test("the delivery model is five static tiles, with nothing to open", async ({ page }) => {
+  test("the delivery model is four static tiles, with nothing to open", async ({ page }) => {
     const delivery = page.locator("#delivery");
     await delivery.scrollIntoViewIfNeeded();
 
     await expect(
-      delivery.getByRole("heading", { name: /every mode reads the same governed layer\./i }),
+      delivery.getByRole("heading", { name: /from a managed service to your own agents\./i }),
     ).toBeVisible();
 
     // All five modes readable in one pass, in order, at every breakpoint.
@@ -393,7 +393,7 @@ test.describe("Trakt landing page", () => {
     expect(nextSectionId).toBe("book-a-demo");
   });
 
-  test("the agent section is roadmap, with a topology and no fabricated demo", async ({
+  test("the agent section states delegation and names its two agents", async ({
     page,
   }) => {
     const agents = page.locator("#agents");
@@ -404,22 +404,81 @@ test.describe("Trakt landing page", () => {
         name: /agents don't calculate the portfolio\. trakt does\./i,
       }),
     ).toBeVisible();
-    // Roadmap language is deliberate and must not be tightened to present tense.
-    await expect(agents.getByText(/trakt is designed to make governed/i)).toBeVisible();
-    await expect(agents.getByText("Roadmap", { exact: true })).toBeVisible();
 
-    // Three nodes on one line, protocols as connector labels only. Scoped to
-    // the topology list: the A2A demo below it has a "Trakt" node of its own,
-    // so an unscoped exact-text match now resolves to two elements.
-    const topology = agents.getByRole("list", { name: /agent-to-agent topology/i });
-    for (const node of ["External agent", "Client enterprise agent", "Trakt"]) {
-      await expect(topology.getByText(node, { exact: true })).toBeVisible();
+    // Delegation is the section's claim, stated once and in the present tense.
+    await expect(
+      agents.getByText(
+        "An agent that knows nothing about Trakt can discover it and delegate an objective.",
+      ),
+    ).toBeVisible();
+    // The roadmap framing is gone with the mechanism it hedged.
+    await expect(agents.getByText("Roadmap", { exact: true })).toHaveCount(0);
+    await expect(agents.getByText(/is designed to/i)).toHaveCount(0);
+
+    // The two agents are named lines beneath the demo, not a second tile row:
+    // the demo is the section's one visual.
+    for (const agent of [
+      "Securitisation Readiness Agent",
+      "Portfolio Acquisition Intelligence Agent",
+    ]) {
+      await expect(agents.getByRole("term").filter({ hasText: agent })).toBeVisible();
     }
-    await expect(topology.getByText("A2A", { exact: true })).toBeVisible();
+
+    // The topology is deleted, not hidden. It was a diagram of the exchange
+    // sitting beside both the sentence describing it and a demo performing it.
+    for (const node of ["External agent", "Client enterprise agent", "Governed tool calls"]) {
+      await expect(agents.getByText(node, { exact: true })).toHaveCount(0);
+    }
+
+    // The A2A demo is the section's visual, and it is real: built from
+    // recorded runs, not a mocked still.
+    await expect(agents.getByText("Agent-to-agent delegation")).toBeVisible();
 
     // No vendor mark is used as an actor: Copilot is a surface Trakt is
     // reached through, named in prose elsewhere, not a party in this exchange.
     await expect(agents).not.toContainText(/copilot/i);
+  });
+
+  /**
+   * The page's central claim is that every surface returns the same answer.
+   * It is asserted in the hero and then demonstrated by the same figure
+   * appearing on surface after surface — so the claim must be present, in the
+   * hero, at claim weight rather than caption weight, and the figure it is
+   * about must be legible where it repeats.
+   */
+  test("the connective claim leads the page and its figure repeats visibly", async ({
+    page,
+    request,
+  }) => {
+    const meta = await (await request.get("/api/demo/meta")).json();
+    const total: string = meta.scope.totalBalanceDisplay;
+
+    const claim = page.getByText("Same question. Same calculation. Same answer.");
+    await expect(claim).toHaveCount(1);
+    await expect(page.locator("#product").getByText("Same question.", { exact: false })).toBeVisible();
+
+    // Claim weight, not caption weight: the page's grammar for a claim is
+    // 18px medium in ink-100, and this line had been sitting at 13px.
+    const type = await claim.evaluate((node) => {
+      const cs = getComputedStyle(node);
+      return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight), colour: cs.color };
+    });
+    expect(type.size, "the connective claim is back at caption size").toBeGreaterThanOrEqual(18);
+    expect(type.weight).toBeGreaterThanOrEqual(500);
+    expect(type.colour).toBe("rgb(238, 241, 248)");
+
+    // The hero shows the figure; the demo's answer must show the same one, and
+    // show it as a total rather than as one plain cell among five.
+    await expect(page.locator("#product").getByText(total).first()).toBeVisible();
+    const demo = await startQueryDemo(page);
+    const totalCell = demo.getByRole("cell", { name: total });
+    await expect(totalCell).toBeVisible();
+    const cellWeight = await totalCell.evaluate((node) =>
+      Number(getComputedStyle(node).fontWeight),
+    );
+    expect(cellWeight, "the repeated figure is not emphasised in the answer").toBeGreaterThanOrEqual(
+      600,
+    );
   });
 
   test("the lead form validates, then accepts a complete submission", async ({ page }) => {
