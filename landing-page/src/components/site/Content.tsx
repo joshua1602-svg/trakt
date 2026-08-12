@@ -232,82 +232,19 @@ export function ControlPreview() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Distribution — the channel strip in the intelligence section              */
+/* Delivery model — four static tiles                                         */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Three live surfaces reading one layer, each with a small glyph. The glyphs
- * are neutral strokes in the page's own icon style — the repository carries
- * no Microsoft brand assets, and imitation logos would be worse than none —
- * so the text labels carry the product names.
- */
-const DELIVERY_SURFACES = [
-  {
-    name: "Trakt workspace",
-    icon: "M3 5h18v14H3zM3 9h18M9 9v10",
-  },
-  {
-    name: "Microsoft Teams",
-    icon: "M9 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16.5 9a2.5 2.5 0 1 0 0-5M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20M17 13.5h.5a4 4 0 0 1 4 4V19",
-  },
-  {
-    name: "Microsoft 365 Copilot",
-    icon: "M4 5h16v11H9l-5 4zM15.5 8l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z",
-  },
-] as const;
-
-function ChannelIcon({ path }: { path: string }) {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      className="shrink-0 text-peri-300"
-    >
-      <path d={path} />
-    </svg>
-  );
-}
-
-export function DeliveryStrip() {
-  return (
-    <div className="mt-6 flex flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] text-ink-200">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-mint-400">
-        Available today
-      </span>
-      {DELIVERY_SURFACES.map((surface) => (
-        <span
-          key={surface.name}
-          className="inline-flex items-center gap-1.5 rounded-full border border-mint-400/30 bg-navy-850 px-3 py-1.5"
-        >
-          <ChannelIcon path={surface.icon} />
-          {surface.name}
-        </span>
-      ))}
-      {/* The section's single body line. Push, not pull — that is the claim,
-          and "approved" is what keeps it governed. */}
-      <span className="basis-full text-[12px] text-ink-300 sm:basis-auto">
-        Approved risk findings are pushed to Teams.
-      </span>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Delivery model — five static tiles                                         */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Five delivery modes, stated once each. A static row: no expand, no
+ * Four delivery modes, stated once each. A static row: no expand, no
  * collapse, no keyboard handling — the whole section is legible in one pass,
  * which is the point. Mint marks what ships; grey marks what does not.
+ *
+ * The channel strip that used to precede this row, in its own Portfolio
+ * Intelligence section, is gone: "Trakt workspace" and "Trakt Agent" were the
+ * same surface named twice, and Copilot appeared in both. The tiles carry
+ * availability themselves, so the strip's "Available today" label went with
+ * it; its proactive-Teams claim is now the section's body line.
  */
 const DELIVERY_MODES = [
   {

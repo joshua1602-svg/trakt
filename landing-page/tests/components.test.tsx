@@ -93,7 +93,9 @@ describe("Hero", () => {
       "href",
       "#query-demo",
     );
-    expect(screen.getByRole("link", { name: /book a portfolio walkthrough/i })).toHaveAttribute(
+    // Word for word the nav button, and the same anchor — see the drift guard
+    // in the e2e suite.
+    expect(screen.getByRole("link", { name: /demo on your portfolio/i })).toHaveAttribute(
       "href",
       "#book-a-demo",
     );
@@ -114,10 +116,23 @@ describe("Nav", () => {
   it("exposes the required destinations", () => {
     render(<Nav />);
     const nav = screen.getByRole("navigation", { name: /primary/i });
-    for (const label of ["Demo", "Platform", "Risk & Controls", "Intelligence", "Governance"]) {
+    // The desktop bar. Agent-to-agent is asserted deliberately: it is the
+    // section a technical reader arrives looking for, and it was missing from
+    // the nav for as long as it existed.
+    for (const label of [
+      "Platform",
+      "Risk & controls",
+      "Delivery",
+      "Agent-to-agent",
+      "Governance",
+    ]) {
       expect(within(nav).getByRole("link", { name: label })).toBeInTheDocument();
     }
-    expect(within(nav).getByRole("link", { name: /book a demo/i })).toBeInTheDocument();
+    // The deleted section must not be linked from anywhere.
+    expect(within(nav).queryByRole("link", { name: /intelligence/i })).toBeNull();
+    expect(
+      within(nav).getByRole("link", { name: /demo on your portfolio/i }),
+    ).toBeInTheDocument();
   });
 
   it("opens and closes the mobile menu", async () => {

@@ -27,15 +27,27 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
   return (
     <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-x-8">
       <div className="lg:col-span-6">
+        {/* The strapline, in the eyebrow's existing type treatment — measured
+            at 555px against a 656px column at 1440 and 770px at 834, so it
+            holds one line on both. At 390 the column is 350px and it must
+            wrap; the second sentence is a block below `sm` so the break lands
+            on the full stop by construction rather than by luck, and stays
+            there if the type or the column ever changes. */}
         <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-peri-400">
-          Trakt for specialist lending
+          <span>Agentic portfolio intelligence.</span>{" "}
+          <span className="block sm:inline">Deterministic by design.</span>
         </p>
         <h1 className="text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-100 sm:text-5xl">
           One governed view of your lending portfolios.
         </h1>
         <p className="mt-5 max-w-[72ch] text-lg leading-relaxed text-ink-200">
+          {/* "for specialist lenders" carries the audience naming the eyebrow
+              used to do. Without it the page names no audience above the fold:
+              the headline says "lending portfolios", not specialist lending,
+              and metadata is not visible. */}
           Connect loan data, documents and funding requirements once. Trakt turns them
-          into live portfolio monitoring, forecasting, controls and reporting.
+          into live portfolio monitoring, forecasting, controls and reporting for
+          specialist lenders.
         </p>
 
         {/* The reconciliation line now leads the governance section — too
@@ -66,12 +78,18 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           >
             Explore the live demo
           </a>
+          {/* Word for word the nav button, and the same anchor. Three names for
+              one form — "Book a demo", "Book a portfolio walkthrough", "Book a
+              tailored demonstration" — made a visitor work out that they were
+              the same destination. Two controls, one offer, one label; the
+              closing CTA keeps its own wording because it sits above the form
+              itself and competes with nothing. */}
           <a
             href="#book-a-demo"
             onClick={() => track("book_demo_click", { source: "hero" })}
             className={buttonStyles.secondary}
           >
-            Book a portfolio walkthrough
+            Demo on your portfolio
           </a>
         </div>
       </div>
