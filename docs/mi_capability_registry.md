@@ -1,6 +1,23 @@
 # Unified MI capability registry
 
-*Sprint 2.5E. Baseline `670c404` → `a01f240`.*
+*Sprint 2.5E. Baseline `670c404` → `ccbcf56`.*
+
+> **Superseded in part by the close-out pass** —
+> `docs/mi_query_architecture_and_default_cure.md`. Three claims below have
+> since changed and are left in place as the record of what this sprint
+> delivered rather than silently corrected:
+>
+> * **"only 9 of the 50 readiness metrics carry a capability link"** was a
+>   mis-framed statistic. Classifying all of them showed the correct
+>   denominator is the 11 named derived KPIs, not 50; the other 41 are
+>   covenant-library metrics and shared analytical operations for which a
+>   capability link would create a second identity. §2 of the close-out report.
+> * **`default_rate` and `cure_rate` are no longer `METHODOLOGY_NOT_APPROVED`.**
+>   Both methodologies are now owned, versioned and registered.
+> * **The MI Query integration described in §6 did not work on the real code
+>   path.** The capability explanation was wired to the `unresolved_metric`
+>   branch; CPR, WAL, YTM and default rate all arrive on the `unmapped` branch,
+>   so it never fired for any of them. Fixed in the close-out pass.
 
 ## 1. Executive answer
 
@@ -363,9 +380,50 @@ per-row Python call in a pandas path has been the bottleneck.
 
 ## 13. Regression
 
-Baseline `670c404`, candidate `a01f240`, each from a pinned, clean worktree.
+Baseline `670c404`, candidate `ccbcf56`, each from a pinned, clean worktree,
+verified by `rev-parse` before and after.
 
-*[Results inserted on completion. No neutrality claim is made before then.]*
+| | Baseline `670c404` | Candidate `ccbcf56` | Δ |
+|---|---|---|---|
+| passed | 5,245 | 5,277 | **+32** |
+| failed | 67 | **64** | **−3** |
+| errors | 13 | 13 | 0 |
+| skipped | 33 | 33 | 0 |
+| collected | 5,345 | 5,374 | +29 |
+
+**Full ID comparison, both directions:**
+
+```
+FAILED only at baseline (REPAIRED by the candidate):
+  tests/test_agent_openapi_document.py::test_the_document_is_not_stale
+  tests/test_agent_openapi_document.py::test_every_registered_tool_has_a_route
+  tests/test_agent_openapi_document.py::test_each_route_publishes_the_registrys_own_schema
+
+FAILED only at candidate : none
+ERROR  only at baseline  : none
+ERROR  only at candidate : none
+```
+
+The three repaired failures are the ones Sprint 2.5D introduced and this
+sprint's `0149e20` fixed — the stale OpenAPI document. The baseline carries
+them because `670c404` predates the fix; the candidate is back to the 64
+long-standing failures.
+
+**The +32 is fully accounted for:**
+
+| Source | Tests |
+|---|---|
+| `tests/test_mi_capability_registry.py` (new file) | 27 |
+| readiness framework — contractual metrics and ERM exclusion | 2 |
+| OpenAPI tests moving from failed to passed | 3 |
+| **Total** | **32** |
+
+Confirmed by collection in both worktrees: 5,345 → 5,374 collected (+29 new
+tests), and 3 previously-failing tests now pass.
+
+**Regression neutrality is claimed, and better than neutral:** no test passing
+at `670c404` fails at `ccbcf56`, no new error appears, and the candidate
+repairs three failures it inherited.
 
 ---
 
