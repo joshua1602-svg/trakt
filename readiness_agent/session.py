@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional
+from typing import (Any, Callable, Dict, List, Mapping, Optional, Tuple)
 
 from trakt_core.context import ExecutionContext
 from trakt_core.envelope import STATUS_SUCCESS
@@ -78,11 +78,20 @@ class GovernedSession:
     """An authorised agent's connection to Trakt."""
 
     def __init__(self, context: ExecutionContext, resource: str, *,
-                 dependencies: Optional[ToolDependencies] = None) -> None:
+                 dependencies: Optional[ToolDependencies] = None,
+                 transport: Optional[Callable[
+                     [str, Mapping[str, Any]],
+                     Tuple[Dict[str, Any], str, Optional[str]]]] = None) -> None:
         self._context = context
         self.resource = resource
         self._resource = resource
         self._dependencies = dependencies
+        #: How a governed call actually reaches Trakt. ``None`` means call
+        #: ``execute_governed_tool`` directly, which is what Sprint 3 measured
+        #: and therefore stays the default. Sprint 4 injects an MCP transport
+        #: here, and the agent above cannot tell the difference — which is the
+        #: whole equivalence claim, and is asserted rather than asserted-about.
+        self._transport = transport
         self._calls: List[ToolCallRecord] = []
         self._capability_cache: Optional[Dict[str, Any]] = None
 
@@ -127,30 +136,34 @@ class GovernedSession:
         args.setdefault("resource", self._resource)
 
         started = time.perf_counter()
-        result = execute_governed_tool(tool, args, self._context,
-                                       dependencies=self._dependencies)
+        payload, status, error_code = (
+            self._transport(tool, args) if self._transport
+            else self._execute_directly(tool, args))
         elapsed = (time.perf_counter() - started) * 1000.0
-
-        payload: Dict[str, Any]
-        if result.status == STATUS_SUCCESS:
-            payload = dict(result.result or {})
-            error_code = None
-        else:
-            error = result.error
-            error_code = getattr(error, "code", None)
-            error_code = getattr(error_code, "value", error_code)
-            payload = {
-                "refused": True,
-                "error_code": str(error_code) if error_code else "REFUSED",
-                "message": getattr(error, "message", "") or "",
-            }
 
         self._calls.append(ToolCallRecord(
             sequence=len(self._calls) + 1, tool=tool, arguments=args,
-            status=result.status, elapsed_ms=elapsed,
+            status=status, elapsed_ms=elapsed,
             error_code=str(error_code) if error_code else None,
             result_digest=_digest(payload)))
         return payload
+
+    def _execute_directly(self, tool: str, args: Dict[str, Any]
+                          ) -> Tuple[Dict[str, Any], str, Optional[str]]:
+        """The Sprint 3 path, unchanged: straight to ``execute_governed_tool``."""
+        result = execute_governed_tool(tool, args, self._context,
+                                       dependencies=self._dependencies)
+        if result.status == STATUS_SUCCESS:
+            return dict(result.result or {}), result.status, None
+
+        error = result.error
+        error_code = getattr(error, "code", None)
+        error_code = getattr(error_code, "value", error_code)
+        return ({
+            "refused": True,
+            "error_code": str(error_code) if error_code else "REFUSED",
+            "message": getattr(error, "message", "") or "",
+        }, result.status, error_code)
 
     # -- audit -------------------------------------------------------------- #
     def transcript(self) -> List[Dict[str, Any]]:
