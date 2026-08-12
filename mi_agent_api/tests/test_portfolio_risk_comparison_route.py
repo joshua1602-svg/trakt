@@ -79,8 +79,8 @@ class TestRegistration:
         assert names == [
             "scenario", "cohort_conversion", "forecast_extrapolation",
             "funded_bridge", "cohort_progression", "geo_exposure",
-            "period_movement", "portfolio_summary", "temporal_compare",
-            "risk_limits", "evolution"]
+            "period_movement", "portfolio_summary", "period_change_analysis",
+            "temporal_compare", "risk_limits", "evolution"]
 
 
 # --------------------------------------------------------------------------- #

@@ -179,7 +179,7 @@ def test_lens_aware_routes_are_declared_on_the_recogniser():
     assert chat_routing._lens_aware_routes() == frozenset({
         "portfolio_summary", "period_movement", "funded_bridge",
         "cohort_progression", "geo_exposure", "portfolio_risk_comparison",
-        "concentration_analysis"})
+        "concentration_analysis", "period_change_analysis"})
 
 
 # --------------------------------------------------------------------------- #

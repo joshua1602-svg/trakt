@@ -354,84 +354,151 @@ class TestMinimumXmlPreviewPlan(unittest.TestCase):
 
 
 class TestXmlPreviewPolicy(unittest.TestCase):
+    """The governance guarantees of the non-production XML preview modes.
+
+    Rewritten against the policy schema the engine actually reads. The class
+    previously opened `yaml[...]["preview_policy"]` — a flat block with `mode`,
+    `preview_gate_flags`, `placeholder_policy.fields` and `resolved_examples` —
+    which no longer exists. Every test here raised KeyError in setUpClass, so ten
+    regulatory-governance assertions had been reporting nothing for as long as
+    the schema had been current.
+
+    The policy now describes FOUR named preview modes and classifies preview
+    dispositions by blocker TYPE as well as by field, which is what
+    `engine/delivery_xml_agent/preview_readiness.py` consumes
+    (`policy["preview_modes"][mode]`, `policy["client_preview_field_policy"]`,
+    `policy["resolved_fields"]`). The guarantees asserted are the same ones: nothing is on by default, no preview
+    can move a production gate, placeholders are labelled and bounded, economic
+    values are never fabricated, and the field sets still agree with the
+    remediation matrix.
+    """
+
     @classmethod
     def setUpClass(cls):
-        cls.policy = yaml.safe_load(PREVIEW_POLICY.read_text(encoding="utf-8"))["preview_policy"]
+        cls.policy = yaml.safe_load(PREVIEW_POLICY.read_text(encoding="utf-8"))
+        cls.modes = cls.policy["preview_modes"]
+        cls.cp = cls.policy["client_preview_field_policy"]
         rows = list(csv.DictReader(open(PREVIEW_MATRIX, encoding="utf-8")))
+        cls.rows = rows
         cls.m_ph = {r["esma_code"] for r in rows
                     if r["recommended_preview_treatment"] == "synthetic_placeholder_for_demo_only"}
         cls.m_ex = {r["esma_code"] for r in rows
                     if r["recommended_preview_treatment"] == "preview_exclusion"}
-        cls.m_mr = {("record_structure" if r["esma_code"] == "(structural)" else r["esma_code"])
-                    for r in rows if r["recommended_preview_treatment"] == "must_resolve"}
+        cls.m_mr = {r["esma_code"] for r in rows
+                    if r["recommended_preview_treatment"] == "must_resolve"}
+        cls.m_resolved = {r["esma_code"] for r in rows
+                          if r["recommended_preview_treatment"] == "not_required_for_preview"}
 
     def test_spec_and_config_exist(self):
         self.assertTrue(PREVIEW_SPEC.exists())
         self.assertTrue(PREVIEW_POLICY.exists())
 
-    def test_disabled_by_default(self):
-        self.assertFalse(self.policy["enabled"])
-        self.assertEqual(self.policy["mode"], "non_production_preview")
-        self.assertTrue(self.policy["preserve_production_gates"])
-        self.assertFalse(self.policy["allow_silent_defaults"])
-        self.assertFalse(self.policy["allow_nd_without_policy"])
+    def test_the_engine_reads_the_keys_this_test_asserts(self):
+        """Pins the test to the schema the engine consumes, so a rename breaks
+        here loudly instead of turning every assertion below into a KeyError."""
+        source = (_REPO_ROOT / "engine" / "delivery_xml_agent"
+                  / "preview_readiness.py").read_text(encoding="utf-8")
+        for key in ("preview_modes", "client_preview_field_policy",
+                    "resolved_fields"):
+            self.assertIn(f'"{key}"', source, key)
+            self.assertIn(key, self.policy, key)
+        # Declarative, asserted directly rather than read by the engine.
+        self.assertIn("production_guardrails", self.policy)
 
-    def test_preview_and_production_flags_are_separate(self):
-        prev = set(self.policy["preview_gate_flags"])
-        prod = set(self.policy["production_gate_flags_unchanged"])
-        self.assertEqual(prev, {"xml_preview_allowed", "xml_preview_generated",
-                                "ready_for_xml_preview"})
-        self.assertEqual(prod, {"xml_generation_allowed", "ready_for_xml_delivery",
-                                "xml_generated"})
-        self.assertFalse(prev & prod)  # disjoint — gates do not collapse.
+    def test_every_mode_is_disabled_by_default(self):
+        self.assertTrue(self.modes)
+        for name, cfg in self.modes.items():
+            self.assertFalse(cfg["enabled"], f"{name} must ship disabled")
+
+    def test_no_mode_may_claim_production_xsd_validity(self):
+        self.assertFalse(self.policy["xml_emission"]["production_xsd_mapping_configured"])
+        self.assertTrue(self.policy["xml_emission"]["production_xsd_blocker"])
+        # The preview emits under an internal namespace, never the ESMA one.
+        self.assertTrue(self.policy["xml_emission"]["preview_namespace"]
+                        .startswith("urn:trakt:nonproduction"))
+        for name, cfg in self.modes.items():
+            if "production_xsd_claim_allowed" in cfg:
+                self.assertFalse(cfg["production_xsd_claim_allowed"], name)
 
     def test_production_guardrails(self):
         g = self.policy["production_guardrails"]
-        self.assertTrue(g["never_set_xml_generation_allowed"])
-        self.assertTrue(g["never_set_ready_for_xml_delivery"])
-        self.assertTrue(g["never_set_xml_generated"])
-        self.assertTrue(g["preview_output_must_be_separate"])
-        self.assertTrue(g["do_not_promote_placeholders_to_production"])
-        self.assertTrue(g["do_not_fabricate_valuation_or_source"])
+        for flag in ("never_set_xml_generation_allowed",
+                     "never_set_ready_for_xml_delivery",
+                     "never_write_preview_to_production_output",
+                     "never_promote_preview_values_to_production",
+                     "preserve_production_gates"):
+            self.assertTrue(g[flag], flag)
 
-    def test_field_lists_match_matrix(self):
-        ph = set(self.policy["placeholder_policy"]["fields"])
-        ex = set(self.policy["exclusion_policy"]["fields"])
-        mr = set()
-        for v in self.policy["must_resolve_before_preview"].values():
-            mr.update(v)
-        self.assertEqual(ph, self.m_ph)
-        self.assertEqual(ex, self.m_ex)
-        self.assertEqual(mr, self.m_mr)
+    def test_watermark_present_on_every_mode(self):
+        for name, cfg in self.modes.items():
+            mark = cfg["watermark"]
+            self.assertTrue(mark.strip(), name)
+            self.assertTrue(
+                "NON-PRODUCTION" in mark or "ENGINEERING ONLY" in mark, name)
+            self.assertIn("NOT FOR", mark, name)
+        self.assertIn("non-production", PREVIEW_SPEC.read_text(encoding="utf-8").lower())
 
-    def test_placeholder_prefix_and_non_reportable(self):
-        pp = self.policy["placeholder_policy"]
-        self.assertEqual(pp["prefix"], "PREVIEW_ONLY_")
-        self.assertTrue(pp["non_reportable"])
+    def test_only_engineering_modes_may_fabricate(self):
+        """A client-facing preview never invents an economic value; the
+        engineering schema tests may, and are labelled as engineering-only."""
+        for name, cfg in self.modes.items():
+            if cfg.get("allow_fabricated_economic_values"):
+                self.assertIn("engineering", cfg["intended_audience"], name)
+                self.assertIn("ENGINEERING ONLY", cfg["watermark"], name)
+        client = self.modes["client_safe_preview"]
+        self.assertFalse(client["allow_fabricated_economic_values"])
+        self.assertFalse(client["allow_full_dummy_population"])
 
-    def test_rrel82_is_onboarding_static_reference_placeholder(self):
-        f = self.policy["placeholder_policy"]["fields"]["RREL82"]
-        self.assertEqual(f["business_group"], "onboarding_static_reference")
-        self.assertIn("onboarding", f["owner"])
-        self.assertIn("ND is NOT allowed", f["reason"])
+    def test_placeholder_prefix_and_field_list_match_the_matrix(self):
+        self.assertEqual(self.cp["placeholder_prefix"], "PREVIEW_ONLY_")
+        self.assertEqual(set(self.cp["placeholder_fields"]), self.m_ph)
 
-    def test_rrel35_resolved_not_in_preview_logic(self):
-        ph = set(self.policy["placeholder_policy"]["fields"])
-        ex = set(self.policy["exclusion_policy"]["fields"])
-        mr = set()
-        for v in self.policy["must_resolve_before_preview"].values():
-            mr.update(v)
-        self.assertNotIn("RREL35", ph | ex | mr)
-        self.assertIn("RREL35", self.policy["resolved_examples"])
+    def test_rrel82_is_an_approved_identifier_placeholder(self):
+        self.assertIn("RREL82", self.cp["placeholder_fields"])
+        row = next(r for r in self.rows if r["esma_code"] == "RREL82")
+        self.assertEqual(row["recommended_preview_treatment"],
+                         "synthetic_placeholder_for_demo_only")
+        self.assertIn("onboarding", row["owner"])
 
-    def test_operator_valuations_excluded_not_fabricated(self):
-        ex = self.policy["exclusion_policy"]["fields"]
+    def test_rrel35_resolved_and_absent_from_every_preview_treatment(self):
+        self.assertEqual(set(self.policy["resolved_fields"]), self.m_resolved)
+        self.assertIn("RREL35", self.policy["resolved_fields"])
+        self.assertNotIn("RREL35", set(self.cp["placeholder_fields"])
+                         | set(self.cp["exclusion_fields"])
+                         | set(self.cp["must_resolve_before_preview_fields"]))
+
+    def test_every_matrix_code_is_classified_by_the_policy(self):
+        """The field lists shrank because the policy now classifies by blocker
+        TYPE as well as by code. Coverage is asserted against the matrix so the
+        move from enumeration to classification cannot lose a field."""
+        ex_f, ex_t = set(self.cp["exclusion_fields"]), set(self.cp["exclusion_blocker_types"])
+        mr_f = set(self.cp["must_resolve_before_preview_fields"])
+        mr_t = set(self.cp["must_resolve_before_preview_blocker_types"])
+        for treatment, fields, types in (
+                ("preview_exclusion", ex_f, ex_t),
+                ("must_resolve", mr_f, mr_t)):
+            uncovered = [r["esma_code"] for r in self.rows
+                         if r["recommended_preview_treatment"] == treatment
+                         and r["esma_code"] != "(structural)"
+                         and r["esma_code"] not in fields
+                         and r["current_blocker_type"] not in types]
+            self.assertEqual(uncovered, [], f"{treatment} codes unclassified: {uncovered}")
+
+    def test_operator_valuations_are_never_fabricated(self):
+        """RREC13 / RREC17 / RREC9 / RREL43 were enumerated as exclusions. They
+        are now covered as never-fabricate fields or by an exclusion blocker
+        type — none of them may reach a client preview as an invented value."""
+        never = set(self.cp["never_fabricate_fields"])
+        ex_t = set(self.cp["exclusion_blocker_types"])
         for code in ("RREC13", "RREC17", "RREC9", "RREL43"):
-            self.assertIn(code, ex, code)
-
-    def test_watermark_present(self):
-        self.assertIn("NON-PRODUCTION PREVIEW", self.policy["watermark"])
-        self.assertIn("NON-PRODUCTION PREVIEW", PREVIEW_SPEC.read_text(encoding="utf-8"))
+            row = next(r for r in self.rows if r["esma_code"] == code)
+            self.assertTrue(
+                code in never or row["current_blocker_type"] in ex_t,
+                f"{code} is neither never-fabricate nor excluded by blocker type")
+            self.assertNotIn(code, set(self.cp["placeholder_fields"]), code)
+        # Monetary and percentage values are never placeholdered by format either.
+        self.assertEqual(set(self.cp["never_fabricate_format_tokens"]),
+                         {"{MONETARY}", "{PERCENTAGE}"})
 
 
 if __name__ == "__main__":

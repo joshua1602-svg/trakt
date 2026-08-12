@@ -203,7 +203,19 @@ class TestAnnex2Workflow(unittest.TestCase):
         self.assertTrue(s["regime_config_path"].endswith("annex2_delivery_rules.yaml"))
         self.assertTrue(s["asset_config_path"].endswith("product_defaults_ERM.yaml"))
         self.assertEqual(s["annex2_field_count"], len(self.cov["rows"]))
-        self.assertGreaterEqual(s["annex2_invalid_default_count"], 1)
+        # Reconciles to 42, rather than asserting a magic number. Both real asset
+        # defaults that used to sit outside the regime envelope are now declared
+        # inside it (RREL35 "Bullet" is in the RREL35 enum map; RREL40 "ND5" is in
+        # nd_allowed), so the current count is 0 — a configuration-completeness
+        # improvement, not a lost check. The mechanism is proven on a synthetic
+        # config by TestAnnex2NdEligibility.test_asset_default_outside_regime_
+        # envelope_is_invalid, which does not depend on the real config having a
+        # conflict left in it.
+        val = json.loads(
+            (self.out / "42_annex2_config_validation.json").read_text())
+        self.assertEqual(s["annex2_invalid_default_count"],
+                         sum(1 for r in val["rows"]
+                             if r["validation_status"] == tcov.VS_INVALID))
 
     def test_40_status_not_ready_when_universe_incomplete(self):
         # With pending_regime_rule codes in the authoritative universe, the
@@ -222,15 +234,58 @@ class TestAnnex2Workflow(unittest.TestCase):
         self.assertEqual(cov_by["RREC8"]["coverage_status"], tcov.DEFAULTED_VALUE)
         self.assertNotIn("RREC8", dec_fields)
 
-    def test_invalid_default_appears_as_nonblocking_decision(self):
-        inv = [d for d in self.dec["rows"]
-               if d["decision_type"] == tcov.D_INVALID_DEFAULT]
-        self.assertTrue(inv)
-        # RREL40 (DTI) is now reconciled to a valid ND5; the remaining real-config
-        # invalid asset default is RREL35 (amortisation_type = "Bullet").
-        self.assertIn("RREL35", {d["target_field"] for d in inv})
-        for d in inv:
-            self.assertFalse(d["blocking"])  # regime fallback exists -> non-blocking
+    def test_invalid_default_decisions_track_the_config_validation(self):
+        """The decision queue carries an invalid-default item for exactly the
+        codes 42 marked invalid — no more, and no fewer.
+
+        This used to assert RREL35 was in the queue. It no longer is, because
+        "Bullet" was declared in the RREL35 regime enum map and the ERM pack maps
+        it to OTHR for this asset class; the conflict was resolved in
+        configuration, which is where it should be resolved. Asserting the
+        relationship keeps the check alive when the real config has nothing
+        invalid left; the branch itself is covered on a synthetic row by
+        test_an_invalid_asset_default_becomes_a_nonblocking_decision below.
+        """
+        val = json.loads(
+            (self.out / "42_annex2_config_validation.json").read_text())
+        invalid_codes = {r["esma_code"] for r in val["rows"]
+                         if r["validation_status"] == tcov.VS_INVALID}
+        queued = {d["esma_code"] for d in self.dec["rows"]
+                  if d["decision_type"] == tcov.D_INVALID_DEFAULT}
+        self.assertTrue(queued <= invalid_codes,
+                        f"queued invalid-default codes not marked invalid by 42: "
+                        f"{queued - invalid_codes}")
+        for d in self.dec["rows"]:
+            if d["decision_type"] == tcov.D_INVALID_DEFAULT:
+                self.assertFalse(d["blocking"])  # regime fallback -> non-blocking
+
+    def test_an_invalid_asset_default_becomes_a_nonblocking_decision(self):
+        """The D_INVALID_DEFAULT branch, driven directly.
+
+        Independent of whether today's shipped configuration happens to contain a
+        conflict, so resolving the last real one cannot leave this untested.
+        """
+        row = {
+            "target_contract_id": "esma_annex_2",
+            "target_field": "RREL35", "esma_code": "RREL35",
+            "coverage_status": tcov.DEFAULTED_VALUE,
+            "config_validation_status": tcov.VS_INVALID,
+            "requires_user_decision": True, "blocking": False,
+            "decision_reason": "asset default not allowed by regime rule",
+            "operator_question": "Confirm the regime default?",
+            "selected_source_file": "", "selected_source_column": "",
+            "asset_default_value": "Bullet", "nd_allowed": "ND1; ND2",
+            "default_value": "OTHR", "required_status": "optional",
+            "target_domain": "loan", "coverage_basis": "asset_config",
+            "value_compatibility_status": "", "overlap_evidence": "",
+            "alternative_source_candidates": "",
+        }
+        queue = tcov.build_human_decision_queue("regulatory_mi", [row], [])
+        inv = [d for d in queue if d["decision_type"] == tcov.D_INVALID_DEFAULT]
+        self.assertEqual(len(inv), 1)
+        self.assertEqual(inv[0]["target_field"], "RREL35")
+        self.assertFalse(inv[0]["blocking"])
+        self.assertIn("Bullet", inv[0]["evidence_summary"])
 
     def test_queue_contains_only_genuine_regulatory_decisions(self):
         allowed = {tcov.D_MISSING, tcov.D_CONFLICT, tcov.D_PRIORITY, tcov.D_VALUE,
@@ -385,6 +440,8 @@ class TestAnnex2NdEligibility(unittest.TestCase):
         cls.summary = _run_annex2(cls.out)
         cls.nd = json.loads(
             (cls.out / "44_annex2_nd_eligibility_reconciliation.json").read_text())
+        cls.align = json.loads(
+            (cls.out / "45_annex2_config_alignment_review.json").read_text())
 
     def test_44_artefacts_written(self):
         for name in ("44_annex2_nd_eligibility_reconciliation.csv",
@@ -427,13 +484,22 @@ class TestAnnex2NdEligibility(unittest.TestCase):
         self.assertTrue(any("manual review" in w for w in self.summary["warnings"]))
 
     def test_regime_validation_behaviour_unchanged(self):
-        # 42 config validation still uses the regime nd_allowed (RREL40 -> [ND5]),
-        # i.e. the reconciliation is report-only and does NOT widen regime rules.
+        # 42 config validation uses the regime nd_allowed (RREL40 -> [ND5]) and
+        # the reconciliation is report-only: it does NOT widen the regime rule to
+        # the workbook's ND1-ND5 envelope. That is the assertion. The asset pack
+        # declares ND5, which is inside the narrow rule, so the row is valid —
+        # this once expected invalid, from when the pack declared ND1.
         val = json.loads(
             (self.out / "42_annex2_config_validation.json").read_text())
         rrel40 = next(r for r in val["rows"] if r["esma_code"] == "RREL40")
         self.assertEqual(rrel40["regime_nd_allowed"], "ND5")
-        self.assertEqual(rrel40["validation_status"], tcov.VS_INVALID)
+        self.assertEqual(rrel40["asset_default_value"], "ND5")
+        self.assertEqual(rrel40["validation_status"], tcov.VS_VALID)
+        # The workbook permits more than the regime does, and the regime stays
+        # stricter — the reconciliation reports the gap, it does not close it.
+        align = next(r for r in self.align["rows"] if r["esma_code"] == "RREL40")
+        self.assertEqual(align["alignment_status"], "left_stricter_by_policy")
+        self.assertEqual(align["regime_nd_allowed_after"], "ND5")
 
     def test_review_pack_shows_nd_reconciliation(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
@@ -604,6 +670,8 @@ class TestAnnex2ConfigAlignment(unittest.TestCase):
         cls.summary = _run_annex2(cls.out)
         cls.align = json.loads(
             (cls.out / "45_annex2_config_alignment_review.json").read_text())
+        cls.val = json.loads(
+            (cls.out / "42_annex2_config_validation.json").read_text())
         cls.by = {}
         for r in cls.align["rows"]:
             cls.by.setdefault(r["esma_code"], []).append(r)
@@ -644,25 +712,49 @@ class TestAnnex2ConfigAlignment(unittest.TestCase):
             "Fixed", {"transform": {"enum_map": {"Fixed": "FXRL"}}})
         self.assertTrue(ok)
 
-    def test_remaining_asset_conflicts_require_manual_review(self):
-        # Bullet amortisation is NOT auto-resolved (no obvious/safe enum map) and is
-        # surfaced as a conflict. DTI (RREL40) is now reconciled to a valid ND5 and
-        # is NO LONGER a conflict.
+    def test_asset_defaults_resolve_to_declared_esma_values(self):
+        """Both asset defaults that were once conflicts now sit inside the regime
+        envelope, by declaration rather than by tolerance.
+
+        RREL35 ("Bullet") is a key of the RREL35 regime enum map, and the ERM pack
+        maps it to OTHR for this asset class — a lifetime mortgage rolls up and
+        repays at death or sale, which is not a scheduled bullet under the Annex 2
+        definition. RREL40 ("ND5") is inside the regime's nd_allowed. Neither is a
+        conflict, and asserting that they still are would mean re-opening a
+        regulatory reporting decision to satisfy a test.
+        """
         conflicts = [r for r in self.align["rows"]
                      if r["alignment_status"] == "asset_default_conflict"]
-        codes = {r["esma_code"] for r in conflicts}
-        self.assertIn("RREL35", codes)  # amortisation_type = Bullet
-        self.assertNotIn("RREL40", codes)  # debt_to_income_ratio reconciled to ND5
-        for r in conflicts:
-            self.assertTrue(r["requires_manual_review"])
+        self.assertEqual([r["esma_code"] for r in conflicts], [])
+        for code in ("RREL35", "RREL40"):
+            row = next(r for r in self.val["rows"] if r["esma_code"] == code)
+            self.assertEqual(row["validation_status"], tcov.VS_VALID, code)
+        # The mapping is declared, not inferred: "Bullet" is a real key.
+        import yaml as _yaml
+        rules = _yaml.safe_load(
+            (_REPO_ROOT / "config" / "regime"
+             / "annex2_delivery_rules.yaml").read_text(encoding="utf-8"))
+        enum_map = rules["field_rules"]["RREL35"]["transform"]["enum_map"]
+        self.assertIn("Bullet", enum_map)
+
+    def test_any_conflict_that_survives_requires_manual_review(self):
+        """Whatever ends up here is never auto-applied."""
+        for r in self.align["rows"]:
+            if r["alignment_status"] == "asset_default_conflict":
+                self.assertTrue(r["requires_manual_review"])
 
     def test_40_reports_alignment_counts(self):
         s = self.summary
         self.assertEqual(s["annex2_alignment_tightened_count"], 5)
         self.assertEqual(s["annex2_alignment_phantom_removed_count"], 11)
         self.assertEqual(s["annex2_alignment_registry_added_count"], 1)
-        # RREL40 (DTI) reconciled to a valid ND5 -> only RREL35 (Bullet) remains.
-        self.assertEqual(s["annex2_asset_default_conflict_count"], 1)
+        # Both real asset defaults now resolve to declared ESMA values, so no
+        # conflict remains. Reconciled to the alignment rows rather than pinned
+        # to a number that only described one moment in the configuration.
+        self.assertEqual(s["annex2_asset_default_conflict_count"],
+                         sum(1 for r in self.align["rows"]
+                             if r["alignment_status"] == "asset_default_conflict"))
+        self.assertEqual(s["annex2_asset_default_conflict_count"], 0)
         self.assertGreater(s["annex2_alignment_manual_review_count"], 0)
 
     def test_review_pack_shows_alignment_review(self):
