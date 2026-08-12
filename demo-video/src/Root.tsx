@@ -18,6 +18,7 @@ import { Composition } from "remotion";
 
 import Film from "./Film";
 import ControlsDemo, { CONTROLS_DEMO } from "./landing/ControlsDemo";
+import ControlsPoster, { CONTROLS_POSTER } from "./landing/ControlsPoster";
 import { FPS, totalFrames } from "./timeline";
 import theme from "./theme";
 
@@ -46,6 +47,16 @@ export const RemotionRoot: React.FC = () => (
     {/* The landing page's Risk & Controls loop — its own theme (the landing
         page's tokens, not the film's), registered here to reuse the render
         pipeline. See src/landing/ControlsDemo.tsx. */}
+    {/* The poster still — the card lifted so a centred play control clears
+        the three monitored rows. See src/landing/ControlsPoster.tsx. */}
+    <Composition
+      id={CONTROLS_POSTER.id}
+      component={ControlsPoster}
+      durationInFrames={CONTROLS_POSTER.duration}
+      fps={CONTROLS_POSTER.fps}
+      width={CONTROLS_POSTER.width}
+      height={CONTROLS_POSTER.height}
+    />
     <Composition
       id={CONTROLS_DEMO.id}
       component={ControlsDemo}

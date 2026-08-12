@@ -14,14 +14,16 @@ name: Deploy landing page (App Service)
 #                                       this must be the production origin
 #       LANDING_PAGE_ANALYTICS_PROVIDER optional: none | appinsights | firstparty
 #
-# Manual by default, matching `deploy-mi-api.yml`. Uncomment the push trigger
-# once the App Service exists.
+# Deploys on every push to `main` that touches `landing-page/`, and on demand.
+# It was dispatch-only while the App Service was being created; that left
+# finished work sitting unshipped on `main` twice, so the push trigger is now
+# the default and `workflow_dispatch` is kept only for re-runs.
 
 on:
   workflow_dispatch: {}
-  # push:
-  #   branches: [ main ]
-  #   paths: [ 'landing-page/**' ]
+  push:
+    branches: [ main ]
+    paths: [ 'landing-page/**' ]
 
 permissions:
   contents: read

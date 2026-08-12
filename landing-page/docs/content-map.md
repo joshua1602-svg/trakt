@@ -231,23 +231,44 @@ elsewhere. The evidence underneath each card is unchanged.
 
 ---
 
-## 6b. Delivery model — five static tiles
+## 6b. Delivery model — four static tiles
 
-Five modes, one line each, in a static grid (5 columns desktop / 2 tablet /
+Four modes, one line each, in a static grid (4 columns desktop / 2 tablet /
 1 mobile). **Pass 6 replaced the horizontal accordion** added in Pass 5: the
 page is a vertical scroll and carries no expand/collapse interaction, so the
-whole section is legible in one pass. Copy is trimmed from the ledger-
-evidenced delivery claims; the live/roadmap split keeps its accent meaning
-(mint shipped, grey not). No client JavaScript — `DeliveryModes` in
-`Content.tsx` is a server component.
+whole section is legible in one pass. **Pass 7 collapsed the two roadmap
+tiles into one** — §6c below shows client-owned agents and cross-institution
+exchange in a single topology, so splitting them here stated the same
+distinction twice and less well. Copy is trimmed from the ledger-evidenced
+delivery claims; the live/roadmap split keeps its accent meaning (mint
+shipped, grey not). No client JavaScript — `DeliveryModes` in `Content.tsx`
+is a server component.
 
 | Tile | Class | Evidence |
 |---|---|---|
-| Managed service — "Recurring reporting and governance artefacts, produced with no user interaction." (Available today) | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. |
-| Trakt Agent — "The full analytical environment: dashboards, charting and drill-through." (Available today) | Evidenced | `frontend/mi-agent-ui/src/components/`. |
-| Copilot — "Portfolio questions inside the tools your teams already use." (Available today) | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py`. |
-| Enterprise agent — "Trakt running inside a client's own agent estate." (Roadmap, grey) | Roadmap | `trakt_core/context.py` `CHANNEL_ENTERPRISE_AGENT` reserved; test fixture only. Labelled Roadmap on the page, never mixed with live capability. |
-| Agent-to-agent — "Upstream and downstream systems consulting the layer directly." (Roadmap, grey) | Roadmap | `CHANNEL_AGENT_TO_AGENT` reserved; outbound Teams delivery exists (`trakt_notifications/`), agent callback does not. |
+| Managed service — "Reporting run by Trakt, not your team." (Available today) | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. Deliberately the longest line in the row: it is the only one that separates a managed service from automated software. |
+| Trakt Agent — "Dashboards, charting and drill-through." (Available today) | Evidenced | `frontend/mi-agent-ui/src/components/`. |
+| Copilot — "Portfolio questions inside Teams and Microsoft 365." (Available today) | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py`. |
+| Agent access — "Client and counterparty agents querying Trakt directly." (Roadmap, grey) | Roadmap | Replaces the former "Enterprise agent" and "Agent-to-agent" tiles. `trakt_core/context.py` reserves `CHANNEL_ENTERPRISE_AGENT` and `CHANNEL_AGENT_TO_AGENT`; a test fixture is the only implementation of either. Outbound Teams delivery exists (`trakt_notifications/`); agent callback does not. Labelled Roadmap on the page, never mixed with live capability. |
+
+---
+
+## 6c. Agent-to-agent — a roadmap section (`AgentSection.tsx`)
+
+New in Pass 7. Sits after the delivery model and before governance, so the
+reader meets the delivery surfaces first and the governance answer
+immediately after. Everything in it is **Roadmap**; the section carries a
+"Roadmap" label in `ink-500`, and "Trakt **is designed to**" is deliberate
+roadmap phrasing that must not be tightened into a present-tense claim in a
+later pass.
+
+| Copy | Class | Evidence |
+|---|---|---|
+| Eyebrow: "Agent-to-agent" · heading "Agents don't calculate the portfolio. Trakt does." | Positioning | The commercial statement of the architectural boundary the page already argues: calculation is deterministic and lives in the engine (`mi_workflows/engine.py` — "no I/O, no LLM"), not in a language model. True of the shipped product today; the *agent access* to it is what is roadmap. |
+| "Your agents already have somewhere to work. Give them somewhere trustworthy to get credit intelligence." | Positioning | No capability claimed. |
+| "Trakt is designed to make governed portfolio intelligence available to enterprise agents — with controlled access, deterministic calculations and evidence behind every result." | Roadmap (worded as design intent) | `trakt_core/context.py` reserved channels `CHANNEL_ENTERPRISE_AGENT` / `CHANNEL_AGENT_TO_AGENT`; `docs/governed_capability_architecture.md` documents the adapter shape; only a test fixture exists. The three qualities named are each evidenced for the live channels (tenancy `trakt_core/tenancy.py`; determinism `test_channel_parity.py`; lineage `lineage_tracker.py`) — what is unbuilt is the agent channel that would expose them. |
+| Topology: External agent —*A2A*→ Client enterprise agent —*Governed tool calls*→ Trakt | Roadmap | Three nodes on one line; protocol names appear as connector labels only, never as a claim of a shipped integration. **No vendor mark is used as an actor** — Microsoft and Copilot are surfaces Trakt is *reached through*, named in prose elsewhere, and are not parties in this exchange. The platform section owns the multi-tier stack shape; this is deliberately not a second one. |
+| **Demo slot: deliberately absent** | — | The Securitisation Readiness Agent footage does not exist. A mocked still — invented agent messages, figures nobody computed — would be the one thing on the page that fabricates a capability. An empty reserved frame was built and rejected: at ~700px under a diagram it reads as broken however it is labelled, and it breaches the one-visual-per-section budget. The topology is the section's only visual until there is real footage. Do not re-add a placeholder frame. |
 
 ---
 
@@ -303,6 +324,19 @@ leaks into page prose. See `app/globals.css`.
 
 Contrast: 8.5:1 on `navy-950`, 8.0:1 on `navy-900` — WCAG AA/AAA. The chart
 fill green `#2E7D5B` is still never used as type (3.8:1, fails AA).
+
+---
+
+## Open items — deferred deliberately, not forgotten
+
+Work that is known, agreed and **not** to be done as a standalone pass. Each
+line names the batch it belongs to, so it ships with related work rather than
+as an isolated change.
+
+| Item | Batch it belongs to |
+|---|---|
+| **`LandingControlsPoster` vertical rhythm.** Centring the play plate meant shifting the monitoring card up and the closing keyline down, which left roughly 170px of dead space below the keyline. This is the same void problem already fixed on the query poster (which takes its natural content height rather than a fixed ratio) and should be tightened for consistency. Contained entirely in `demo-video/src/landing/ControlsPoster.tsx` — the card scale and the keyline's `at` offset. | The Remotion re-render for the **Securitisation Readiness Agent** demo. Do not render the poster twice. |
+| **The §6c agent-to-agent demo slot.** No frame, no placeholder, no "in build" line — the topology is the section's only visual, by decision. When the footage exists, the section takes a real demo the way §2 and §4 do. | The same Securitisation Readiness Agent render. |
 
 ---
 

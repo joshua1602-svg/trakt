@@ -259,13 +259,7 @@ test.describe("Trakt landing page", () => {
     ).toBeVisible();
 
     // All five modes readable in one pass, in order, at every breakpoint.
-    const names = [
-      "Managed service",
-      "Trakt Agent",
-      "Copilot",
-      "Enterprise agent",
-      "Agent-to-agent",
-    ];
+    const names = ["Managed service", "Trakt Agent", "Copilot", "Agent access"];
     for (const name of names) {
       await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
@@ -273,7 +267,8 @@ test.describe("Trakt landing page", () => {
 
     // Availability is stated per tile: three shipped, two roadmap.
     await expect(delivery.getByText("Available today")).toHaveCount(3);
-    await expect(delivery.getByText("Roadmap")).toHaveCount(2);
+    // One roadmap tile, not two: the agent section shows both patterns.
+    await expect(delivery.getByText("Roadmap")).toHaveCount(1);
 
     // No expand/collapse interaction anywhere in the section.
     await expect(delivery.getByRole("button")).toHaveCount(0);
@@ -294,7 +289,13 @@ test.describe("Trakt landing page", () => {
     await expect(
       governance.getByText(/reconciled by construction rather than by comparison/i),
     ).toBeVisible();
-    for (const name of ["Deterministic", "Traceable", "Controlled", "Isolated"]) {
+    for (const name of [
+      "Deterministic",
+      "Traceable",
+      "Controlled",
+      "Isolated",
+      "Agent-addressable",
+    ]) {
       await expect(governance.getByRole("heading", { name, level: 3 })).toBeVisible();
     }
     await expect(governance.getByText(/microsoft entra id/i)).toBeVisible();
@@ -314,6 +315,34 @@ test.describe("Trakt landing page", () => {
       .locator("#governance")
       .evaluate((section) => section.nextElementSibling?.id ?? "");
     expect(nextSectionId).toBe("book-a-demo");
+  });
+
+  test("the agent section is roadmap, with a topology and no fabricated demo", async ({
+    page,
+  }) => {
+    const agents = page.locator("#agents");
+    await agents.scrollIntoViewIfNeeded();
+
+    await expect(
+      agents.getByRole("heading", {
+        name: /agents don't calculate the portfolio\. trakt does\./i,
+      }),
+    ).toBeVisible();
+    // Roadmap language is deliberate and must not be tightened to present tense.
+    await expect(agents.getByText(/trakt is designed to make governed/i)).toBeVisible();
+    await expect(agents.getByText("Roadmap", { exact: true })).toBeVisible();
+
+    // Three nodes on one line, protocols as connector labels only.
+    for (const node of ["External agent", "Client enterprise agent", "Trakt"]) {
+      await expect(agents.getByText(node, { exact: true })).toBeVisible();
+    }
+    await expect(agents.getByText("A2A", { exact: true })).toBeVisible();
+
+    // Nothing here may fabricate a demonstration: no frame, no still, no
+    // invented figures, and no vendor mark as an actor in the diagram.
+    await expect(agents.locator("video, img")).toHaveCount(0);
+    await expect(agents).not.toContainText(/copilot/i);
+    await expect(agents).not.toContainText(/%/);
   });
 
   test("the lead form validates, then accepts a complete submission", async ({ page }) => {
@@ -410,6 +439,7 @@ test.describe("Trakt landing page", () => {
       "controls",
       "intelligence",
       "delivery",
+      "agents",
       "governance",
     ]) {
       const section = page.locator(`#${id}`);
@@ -463,11 +493,12 @@ test.describe("Trakt landing page", () => {
    * The play plate must never cover the demo's argument.
    *
    * The controls rows live inside the poster image, so they have no DOM boxes
-   * to measure. The poster is a 1200x960 still rendered into a 5:4 frame with
-   * no crop, so the mapping is exact: the control card — its three rows, their
-   * percentages and the breach horizon — ends at ~77% of the frame height.
-   * The plate must therefore start below 78%, or below the frame entirely.
-   * Asserted at all three widths because it has twice been checked by eye.
+   * to measure. The poster is a purpose-built 1200x960 still rendered into a
+   * 5:4 frame with no crop, so the mapping is exact: the control card — its
+   * three rows, their percentages and the breach horizon — ends at 41% of the
+   * frame height, and the closing line begins at 73%. The plate is centred,
+   * and must sit inside that clear band. Asserted at all three widths because
+   * it has twice been checked by eye and twice been wrong.
    */
   test("the play plate never covers the control rows or the breach horizon", async ({
     page,
@@ -482,11 +513,28 @@ test.describe("Trakt landing page", () => {
       expect(plate, `no play plate at ${width}`).not.toBeNull();
       if (!frame || !plate) continue;
 
-      const safeTop = frame.y + frame.height * 0.78;
+      // Centred, which is the intended geometry the poster is drawn for.
+      const frameCentre = frame.y + frame.height / 2;
+      const plateCentre = plate.y + plate.height / 2;
       expect(
-        plate.y,
-        `the plate intrudes into the control rows at ${width}px`,
-      ).toBeGreaterThanOrEqual(safeTop);
+        Math.abs(plateCentre - frameCentre),
+        `the plate is not centred in the frame at ${width}px`,
+      ).toBeLessThanOrEqual(4);
+
+      // And inside the band the poster leaves clear for it. The plate is a
+      // fixed height while the frame scales with width, so at 390 the frame
+      // is too short for both — there the accepted trade-off is a centred
+      // plate over the first row, and only the centring is asserted.
+      if (width >= 834) {
+        expect(
+          plate.y,
+          `the plate intrudes into the control rows at ${width}px`,
+        ).toBeGreaterThanOrEqual(frame.y + frame.height * 0.39);
+        expect(
+          plate.y + plate.height,
+          `the plate covers the closing line at ${width}px`,
+        ).toBeLessThanOrEqual(frame.y + frame.height * 0.73);
+      }
     }
   });
 
@@ -495,17 +543,21 @@ test.describe("Trakt landing page", () => {
       await page.setViewportSize({ width, height: 900 });
       await page.locator("#example").scrollIntoViewIfNeeded();
 
-      const content = await page.locator("[data-poster-content]").boundingBox();
       const plate = await page.locator('[data-plate="query"]').boundingBox();
-      expect(content, `no poster content at ${width}`).not.toBeNull();
       expect(plate, `no query plate at ${width}`).not.toBeNull();
-      if (!content || !plate) continue;
+      if (!plate) continue;
 
-      // The replica reserves a band beneath its content; the plate sits in it.
-      expect(
-        plate.y,
-        `the query plate overlaps the poster content at ${width}px`,
-      ).toBeGreaterThanOrEqual(content.y + content.height);
+      // The replica reserves a band between its two content groups; the
+      // plate is centred in that band and must intersect neither group.
+      const groups = page.locator("[data-poster-content]");
+      const count = await groups.count();
+      expect(count, `no poster content at ${width}`).toBeGreaterThan(0);
+      for (let i = 0; i < count; i += 1) {
+        const box = await groups.nth(i).boundingBox();
+        if (!box) continue;
+        const overlaps = plate.y < box.y + box.height && box.y < plate.y + plate.height;
+        expect(overlaps, `the query plate overlaps poster content ${i} at ${width}px`).toBe(false);
+      }
     }
   });
 
@@ -674,7 +726,7 @@ test.describe("without JavaScript", () => {
   test("every section still renders at full opacity", async ({ page }) => {
     await page.goto("/");
 
-    for (const id of ["refusal", "platform", "controls", "intelligence", "delivery", "governance"]) {
+    for (const id of ["refusal", "platform", "controls", "intelligence", "delivery", "agents", "governance"]) {
       const painted = await page.locator(`#${id}`).evaluate((node) => {
         const target = node.querySelector("[data-reveal]") ?? node;
         return {

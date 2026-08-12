@@ -63,7 +63,7 @@ export function DemoPlayer({
   if (failed) return <>{fallback}</>;
 
   return (
-    <figure className="relative m-0 max-w-4xl">
+    <figure className="m-0 max-w-4xl">
       <div className="relative aspect-[5/4] overflow-hidden rounded-2xl border border-line bg-navy-900/80 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)]">
         <video
           ref={videoRef}
@@ -94,6 +94,33 @@ export function DemoPlayer({
             <button type="button" onClick={replay} className={buttonStyles.primary}>
               <ReplayGlyph /> Watch again
             </button>
+          </div>
+        ) : null}
+
+        {state === "idle" ? (
+          /* The still stays at full contrast and sharpness — a global overlay
+             made working software look disabled — and the plate is fully
+             opaque, because live text ghosting through it read as a rendering
+             fault. Centred on the FRAME, not the figure: the figure includes
+             the caption, which pushed the centre down by half its height. The
+             poster is drawn for a centred plate, with the concentration card
+             lifted into the upper third so the three rows and the breach
+             horizon stay clear (demo-video/src/landing/ControlsPoster.tsx). */
+          <div className="absolute inset-0 flex items-center justify-center">
+            {/* The hook sits on the visible plate, not the full-size
+                positioning container — measuring the container told the guard
+                the plate filled the frame. */}
+            <div
+              data-plate="controls"
+              className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-navy-950 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]"
+            >
+              <button type="button" onClick={play} className={buttonStyles.primary}>
+                <PlayGlyph /> {overlayLabel}
+              </button>
+              {durationLabel ? (
+                <span className="text-[12px] font-medium text-ink-300">{durationLabel}</span>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -131,29 +158,6 @@ export function DemoPlayer({
           </div>
         ) : null}
       </div>
-
-      {state === "idle" ? (
-        /* The still stays at full contrast and sharpness — a global overlay
-           made working software look disabled — and the plate is fully
-           opaque, because live text ghosting through it read as a rendering
-           fault. Below `md` it sits under the frame rather than on it: the
-           frame is short enough there that a fixed-height plate would cover
-           the three control rows, and those rows going pass → warning →
-           projected breach are the demo's whole argument. */
-        <div
-          data-plate="controls"
-          className="mt-3 flex justify-center md:absolute md:inset-x-0 md:bottom-0 md:mt-0 md:pb-6"
-        >
-          <div className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-navy-950 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]">
-            <button type="button" onClick={play} className={buttonStyles.primary}>
-              <PlayGlyph /> {overlayLabel}
-            </button>
-            {durationLabel ? (
-              <span className="text-[12px] font-medium text-ink-300">{durationLabel}</span>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       {caption ? (
         <figcaption className="mt-3 text-[11px] leading-relaxed text-ink-500">

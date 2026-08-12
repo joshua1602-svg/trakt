@@ -1,3 +1,4 @@
+import { AgentSection } from "@/components/site/AgentSection";
 import { AttributionCapture } from "@/components/site/AttributionCapture";
 import {
   Architecture,
@@ -124,6 +125,14 @@ export default function Page() {
           <div className="mt-9">
             <DeliveryModes />
           </div>
+        </Section>
+
+        {/* 6c — Agent-to-agent. Roadmap, and its demo slot is deliberately
+            absent: the footage does not exist, the section budget allows one
+            visual, and an empty 700px frame under a diagram reads as broken
+            however it is labelled. The topology is the visual. */}
+        <Section id="agents" className="pb-16 sm:pb-20">
+          <AgentSection />
         </Section>
 
         {/* 7 — Why trust the outputs? */}
