@@ -167,6 +167,67 @@ def test_a_metric_served_by_a_registered_tool_is_not_still_marked_a_gap():
                 f"{metric.fact_tool!r} but is still marked {metric.status}")
 
 
+def test_the_framework_and_the_metric_library_agree_on_what_is_implemented():
+    """The other direction of the same drift, which the guard above cannot see.
+
+    ``test_a_metric_served_by_a_registered_tool_is_not_still_marked_a_gap``
+    only fires when the framework *names* a tool. PERF_PREPAYMENT and
+    PERF_LOSSES named none — ``fact_tool: null`` — so they sat published as
+    SMALL_GAP with the guidance "report as unavailable" for a whole sprint
+    after ``prepayment_analysis`` and ``loss_analysis`` were built,
+    registered and tested. An agent reading the framework would have declined
+    to measure prepayment on a book where Trakt could measure it.
+
+    The link that went stale is ``metric_id`` → the concentration library. So
+    assert the two agree: a framework metric tied to an unimplemented library
+    metric is either a gap, or explicitly marked as superseded by a tool that
+    genuinely exists.
+    """
+    from mi_agent.concentration_tests.library import load_library
+    from trakt_tools.registry import get
+
+    framework = load_framework()
+    library = load_library()
+
+    for metric in framework.metrics:
+        if not metric.metric_id:
+            continue
+        definition = library.get(metric.metric_id)
+        if definition is None:
+            continue
+        implemented = getattr(
+            definition, "implementation_status", "implemented") == "implemented"
+        if implemented or metric.status in ("SMALL_GAP", "DATA_GAP"):
+            continue
+        assert metric.supersedes_library_metric, (
+            f"{metric.id} is {metric.status} against library metric "
+            f"{metric.metric_id!r}, which is not implemented. Either it is a "
+            "gap, or a tool supersedes the library metric and the framework "
+            "must say so with supersedes_library_metric: true.")
+        assert metric.fact_tool and get(metric.fact_tool) is not None, (
+            f"{metric.id} claims to supersede the unimplemented library "
+            f"metric {metric.metric_id!r} but names no registered tool, so "
+            "nothing actually computes it.")
+
+
+def test_prepayment_and_loss_are_published_as_capabilities_trakt_has():
+    """The specific regression. Named, because the general test above would
+    still pass if someone reverted these two to gaps 'to be safe' — and a
+    published gap that is not a gap is a false negative an agent obeys."""
+    framework = load_framework()
+    by_id = {m.id: m for m in framework.metrics}
+
+    for metric_id, tool in (("PERF_PREPAYMENT", "prepayment_analysis"),
+                            ("PERF_LOSSES", "loss_analysis")):
+        metric = by_id[metric_id]
+        assert metric.status == "READY", (
+            f"{metric_id} is served by {tool} and must not be a gap")
+        assert metric.fact_tool == tool
+        assert "prior_snapshot" in metric.evidence_required, (
+            f"{metric_id} is a rate between two periods; declaring only "
+            "'snapshot' would let an agent request it with one and be refused")
+
+
 def test_a_metric_claiming_a_screening_rule_has_one_in_the_pack():
     """A dangling screening_rule would publish a threshold that does not exist."""
     framework = load_framework()

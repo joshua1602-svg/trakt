@@ -117,6 +117,15 @@ class FrameworkMetric:
     fact_tool: Optional[str] = None
     calculation_source: Optional[str] = None
     metric_id: Optional[str] = None
+    #: Set when ``metric_id`` names a concentration-library metric that is
+    #: still unimplemented, but a *tool* now serves the same economic concept
+    #: by a different route. Prepayment is the example: a rate needs two
+    #: periods, so no single-snapshot library evaluator can produce one, and
+    #: ``prepayment_analysis`` supersedes it. Without this marker the two
+    #: sources drift silently — which is exactly how PERF_PREPAYMENT and
+    #: PERF_LOSSES stayed published as gaps for a sprint after their tools
+    #: were built.
+    supersedes_library_metric: bool = False
     screening_rule: Optional[str] = None
     external_criteria_supported: bool = True
     severity_if_flagged: Optional[str] = None
@@ -141,7 +150,9 @@ class FrameworkMetric:
             "description": self.description, "type": self.type,
             "status": self.status, "fact_tool": self.fact_tool,
             "calculation_source": self.calculation_source,
-            "metric_id": self.metric_id, "screening_rule": self.screening_rule,
+            "metric_id": self.metric_id,
+            "supersedes_library_metric": self.supersedes_library_metric,
+            "screening_rule": self.screening_rule,
             "external_criteria_supported": self.external_criteria_supported,
             "severity_if_flagged": self.severity_if_flagged,
             "asset_class_applicability": list(self.asset_class_applicability),
@@ -245,6 +256,8 @@ def load_framework(config_path: Optional[str | Path] = None) -> ReadinessFramewo
                 fact_tool=entry.get("fact_tool") or None,
                 calculation_source=entry.get("calculation_source") or None,
                 metric_id=entry.get("metric_id") or None,
+                supersedes_library_metric=bool(
+                    entry.get("supersedes_library_metric", False)),
                 screening_rule=entry.get("screening_rule") or None,
                 external_criteria_supported=bool(
                     entry.get("external_criteria_supported", True)),

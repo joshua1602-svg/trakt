@@ -606,18 +606,24 @@ metrics:
     description: Allocated losses as a share of original balance.
     asset_class_applicability: [cross_asset]
     type: MEASURE_ONLY
-    fact_tool: null
-    calculation_source: null
+    fact_tool: loss_analysis
+    calculation_source: analytics_lib.history.loss_and_recovery
     metric_id: perf_cumulative_loss_share
+    supersedes_library_metric: true
     screening_rule: null
     external_criteria_supported: true
     severity_if_flagged: medium
-    evidence_required: [snapshot]
+    evidence_required: [snapshot, prior_snapshot]
     agent_investigation_guidance: >-
-      Not yet computable. The library declares the metric but no evaluator is
-      registered, so the agent must state that losses could not be assessed
-      rather than inferring them from other fields.
-    status: SMALL_GAP
+      Computable across governed snapshots via loss_analysis, which is the
+      observed-loss measurement (OBSERVED_LOSS@v1), not a modelled one. It
+      reports four denominators — original, opening, current balance, and
+      recoveries over losses — and deliberately chooses none, because the
+      market quotes all four and they differ materially on the same book.
+      State which denominator you are quoting. The single-snapshot library
+      metric perf_cumulative_loss_share remains unimplemented and is
+      superseded by this tool: a loss rate needs two periods, not one.
+    status: READY
 
   - id: PERF_PREPAYMENT
     name: Prepayment rate
@@ -625,17 +631,26 @@ metrics:
     description: Prepayments as a share of balance.
     asset_class_applicability: [cross_asset]
     type: MEASURE_ONLY
-    fact_tool: null
-    calculation_source: null
+    fact_tool: prepayment_analysis
+    calculation_source: analytics_lib.history.prepayment_rate
     metric_id: perf_prepayment_share
+    supersedes_library_metric: true
     screening_rule: null
     external_criteria_supported: true
     severity_if_flagged: null
-    evidence_required: [snapshot]
+    evidence_required: [snapshot, prior_snapshot]
     agent_investigation_guidance: >-
-      Not yet computable — the library metric has no registered evaluator, and
-      a reliable rate needs consecutive snapshots. Report as unavailable.
-    status: SMALL_GAP
+      Computable across governed snapshots via prepayment_analysis, which
+      reports single monthly mortality and the annualised CPR
+      (OBSERVED_SMM@v2 / OBSERVED_CPR@v2). The denominator is the opening
+      balance net of scheduled principal, which is the market convention;
+      each period publishes denominator_basis so a reader can see which was
+      used. Read unknown_exit_balance before quoting the rate — an
+      unexplained disappearance is excluded from the numerator and is a
+      data-quality finding, not a prepayment. The single-snapshot library
+      metric perf_prepayment_share remains unimplemented and is superseded by
+      this tool: a prepayment rate needs two periods, not one.
+    status: READY
 
   # ===================================================================
   # E. CONCENTRATIONS

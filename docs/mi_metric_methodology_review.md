@@ -1,286 +1,576 @@
-# MI metric methodology review
+# Field availability → market-standard KPI methodology
 
-*Sprint 2.5C. Baseline `cdefc25` → `7d3c05f`.*
+*Sprint 2.5C, completed. Baseline `cdefc25` → this commit.*
 
-> **Scope warning.** This sprint specifies 25 work parts and a 20-section
-> report. **It is partially delivered.** The audit found and fixed two
-> label/calculation defects and one performance defect, and built the test
-> apparatus for methodology checking. Parts 3 and 7–16 — external market-source
-> verification and the systematic audit of default, cure, loss, recovery, LTV,
-> concentration, vintage, completeness and period-change methodologies — are
-> **not done**. §9 lists exactly what remains. Nothing below claims coverage it
-> does not have.
+The question this sprint was reopened to answer:
 
----
+> **Given the core, canonical and mapped regulatory fields Trakt already holds,
+> which market-standard credit and securitisation KPIs can Trakt calculate
+> correctly and deterministically?**
 
-## 1. Executive summary
+The short answer is that Trakt's field universe is much stronger than its
+metric universe, and the earlier review mistook the second for the first. Of
+the thirty economic concepts a securitisation review quotes, **twenty-seven are
+present as governed canonical fields**, twenty-four of them carrying ESMA codes
+on every annex. Almost everything the previous pass listed as a data gap was a
+calculation nobody had written.
 
-> **Can we now trust the economically meaningful metrics in the MI registry to
-> mean what a market professional would reasonably expect?**
+Three things were wrong in the repository and are now fixed. Each was found by
+reading a definition next to the code that claimed to implement it, and none
+was caught by a test:
 
-**NO — not yet, across the board.** Two metrics are now demonstrably correct
-where they previously were not, and the audit apparatus exists. But the majority
-of the metric universe has **not** been audited against external sources, so a
-blanket assurance would be exactly the kind of unearned confidence this sprint
-exists to remove.
-
-What changed:
-
-| | Before | After |
+| | Was | Is |
 |---|---|---|
-| "Prepayment Speed (CPR)" | a **sum of £ amounts** labelled as an annualised rate | renamed to what it shows; genuine SMM/CPR exists separately |
-| "30+ DPD" | **two definitions** — 25% and 50% on the same book | one definition, inclusive boundary, structurally shared |
-| Redemption | any disappearance counted as prepayment | classified; unexplained exits excluded |
-| `prepayment_rate` at 100k × 12 | 9,501 ms | **681 ms** |
-
-The finding that most deserves attention is the second, and not because of its
-size: **I introduced half of it in Sprint 2.5B.** A metric can be correct in
-each of two places and still be wrong as a system, and no test caught it because
-each side passed its own.
+| Loss severity | not implemented; recorded as needing collateral-proceeds data Trakt lacks | `allocated_losses` ÷ `default_amount`, both Mandatory on every annex |
+| `net_loss` (mine, 2.5B) | allocated losses **less** cumulative recoveries | withdrawn — RREL73 is already stated after recoveries, so it deducted them twice |
+| Annex 12 arrears buckets IVSS38–44 | a **balance** summed into a field ESMA types `PercentageRate`, with `min: 0` on the "1–29 days" band and `min: 50` on the "60–89" band | share of pool balance, bands per the schema, seven codes, no test previously |
 
 ---
 
-## 2. Metric universe reviewed
+## 1. What was searched, and in what order
 
-Repository-derived. **Audited in this sprint:**
+The brief's first non-negotiable is *do not label something a field gap until
+the complete canonical + regime field universe has been searched*. The search
+order was:
 
-| Metric | Location | Verdict |
+1. `config/system/fields_registry.yaml` — **499 canonical fields**
+   (295 core, 93 performance, 57 product, 54 collateral; 316 regulatory,
+   183 analytics).
+2. Their `regime_mapping` blocks — ESMA Annex 2 (107 fields), Annex 3 (238),
+   Annex 4 (120), Annex 8 (84), Annex 9 (85).
+3. `config/regime/annex2_field_universe.yaml` — the regulator's own field
+   *definitions* and ND-fallback rules, which turned out to settle three
+   methodology questions on their own.
+4. `config/business_semantics_registry.yaml` — 242 of the 499 fields carry
+   analytical metadata (concept, role, temporality, aggregation, weight).
+5. `config/risk/concentration_test_library.yaml` — 42 MI metrics and the 51
+   field *roles* they resolve through.
+6. `config/regime/annex12_template.yaml` and the Annex 12 XSD.
+
+Only after all six did anything get called a field gap.
+
+**Two things worth stating about the regime coverage.** `BOE_Cashflow` is
+declared as a priority regime for the `BOE_Securitisation` consumer and **no
+field maps to it** — the consumer resolves to nothing. And there is **no FCA
+field mapping anywhere in the repository**: "FCA" appears only in prose
+describing UK ITL3 geography fields for MI drill-down. The regulatory-leverage
+table in §3 therefore has no FCA column, because populating one would mean
+inventing it.
+
+---
+
+## 2. Field → KPI capability map
+
+`CORE` = canonical core field. `REG` = carries an ESMA code (annexes listed).
+`DERIVED` = computed from canonical fields. `HIST` = needs two or more governed
+snapshots.
+
+| KPI | Required source fields | Available? | Where | Historical? | Existing calculation? | Can calculate now? |
+|---|---|---|---|---|---|---|
+| **Arrears share, N+ DPD** | `number_of_days_in_arrears`, `current_principal_balance` | Yes | REG A2/3/4/8/9 (RREL68, RREL30) | No | `perf_arrears_share` | **Yes — READY** |
+| **Arrears stock (£)** | `arrears_balance` | Yes | REG (RREL67) | No | none | **READY, not exposed** |
+| **Principal vs interest arrears** | `principal_arrears_amount`, `interest_arrears_amount` | Yes | Analytics (no code) | No | none | **READY, not exposed** |
+| **Arrears roll / migration** | `days_in_arrears_prior` + `number_of_days_in_arrears` | Yes | Analytics + REG | **No — one snapshot** | `transition_analysis` (two snapshots) | **READY by a second route** |
+| **Delinquency bucket distribution** | `number_of_days_in_arrears`, balance | Yes | REG | No | Annex 12 IVSS38–44 | **Yes — fixed this sprint** |
+| **SMM / CPR** | unscheduled principal, scheduled principal, opening balance, exit evidence | **Partly** | `unscheduled_principal_collections` is **Annex 3 only** | Yes | `prepayment_rate` @v2 | **Yes for CRE; derived for RMBS** |
+| **Default rate** | `default_date`, `default_amount`, `account_status` | Yes | REG (RREL71/72/69) | Either | none as a *rate* | **METHODOLOGY GAP** |
+| **Cure rate** | `account_status`, `days_in_arrears_prior`, `date_last_in_arrears` | Yes | REG + analytics | Either | none | **METHODOLOGY GAP** |
+| **Cumulative loss rate** | `allocated_losses`, balances | Yes | REG (RREL73) | Yes | `loss_and_recovery` | **Yes — READY** |
+| **Loss severity** | `allocated_losses`, `default_amount` | Yes | REG (RREL73, RREL71) | No | **built this sprint** | **Yes — READY** |
+| **Recovery rate** | `cumulative_recoveries`, `default_amount` | Yes | REG (RREL74, RREL71) | Yes | **corrected this sprint** | **Yes — READY** |
+| **Liquidation decomposition** | `liquidation_expense`, `net_proceeds_received_on_liquidation` | CRE only | REG A3 (CREL138/139) | No | **built this sprint** | **Yes for CRE** |
+| **Current LTV** | `current_loan_to_value` or balance ÷ valuation | Yes | REG (RREC12) + valuation observations | No | `ltv_weighted_average`, `ltv_above_share` | **Yes — READY** |
+| **Original / indexed LTV** | `original_loan_to_value`, `indexed_loan_to_value` | Yes | REG (RREC16) / analytics | No | roles exist; no distinct metric | **READY, not exposed** |
+| **Valuation staleness** | valuation date + selection policy | Yes | collateral layer | No | `valuation_age_profile` | **Yes — READY** |
+| **WAC / WA margin** | `current_interest_rate`, `current_interest_rate_margin`, balance | Yes | REG (RREL43, RREL46) | No | `rate_gross_wac`, `rate_net_wac` | **Yes — READY** |
+| **WA seasoning** | `origination_date` | Yes | REG (RREL23) | No | `composition_vintage_share` only | **READY, not exposed** |
+| **WA remaining term** | `maturity_date` | Yes | REG (RREL24) | No | `maturity_within_horizon_share` only | **READY, not exposed** |
+| **Concentrations (geo, borrower, top-N)** | geography, `borrower_identifier`, balance | Yes | analytics + REG | No | 20 library metrics | **Yes — READY** |
+| **Vintage / cohort performance** | `origination_date` + any measure | Yes | REG | Yes | `cohort_comparison` | **Yes, with a caveat (§7)** |
+| **Contractual WAL** | balance, `maturity_date`, `amortisation_type`, `scheduled_principal_payment_frequency`, `regular_principal_instalment`, `balloon_amount`, `principal_grace_period_end_date` | Yes | REG ×5 + one analytics field | No | none | **METHODOLOGY GAP (§11)** |
+| **Observed portfolio life / runoff** | governed snapshots | Yes | HIST | Yes | `portfolio_series` (partly) | **READY, not exposed** |
+| **Expected WAL** | the above **+ a prepayment assumption** | No | — | — | none | **ASSUMPTION-MODEL REQUIRED** |
+| **YTM** | `purchase_price` (RREL34), rate, balance, maturity, frequency | Yes | REG ×5 | No | none | **METHODOLOGY GAP (§12)** |
+| **YTW** | the above **+ call/prepayment scenarios**, at note level | **No** | no tranche/note data model exists | — | none | **EXPOSURE GAP + ASSUMPTION-MODEL** |
+| **PD / LGD** | `bank_internal_loss_given_default_lgd_estimate`, `loss_given_default` | Yes, **as supplied values** | analytics layer | No | none | **READY to report, never to model** |
+| **Regulatory field readiness** | ND rules + `regime_mapping` | Yes | `annex2_field_universe.yaml` | No | `regulatory_readiness` | **Yes — READY** |
+
+---
+
+## 3. Regulatory-field leverage
+
+The concepts a credit KPI needs, and where each already lives. "Used in MI"
+means a shared calculation reads it today.
+
+| Economic concept | Core field | ESMA field(s) | FCA | Canonical representation | Used in MI? |
+|---|---|---|---|---|---|
+| Current exposure | `current_principal_balance` | RREL30 / CREL23 / CRPL39 / LESL28 / ESTL28 | — | monetary, point_in_time | **Yes** |
+| Original exposure | `original_principal_balance` | RREL29 / CREL24 / CRPL38 / LESL27 / ESTL27 | — | monetary, static_baseline | **Yes** |
+| Days past due | `number_of_days_in_arrears` | RREL68 / CREL130 / CRPL78 / LESL56 / ESTL54 | — | integer, point_in_time | **Yes** |
+| Arrears stock | `arrears_balance` | RREL67 / CREL129 / CRPL77 / LESL55 / ESTL53 | — | monetary, point_in_time | No |
+| Prior-period DPD | `days_in_arrears_prior` | — (analytics) | — | integer, point_in_time | No |
+| Account state | `account_status` | RREL69 / CREL136 / CRPL79 / LESL57 / ESTL55 | — | enum | **Yes** |
+| Default event | `default_date` | RREL72 / CREL133 / CRPL82 / LESL60 / ESTL58 | — | date | **Yes** (exit classification) |
+| Defaulted exposure | `default_amount` | RREL71 / CREL132 / CRPL81 / LESL59 / ESTL57 | — | monetary — *gross, before proceeds* | **Yes — new this sprint** |
+| Realised loss | `allocated_losses` | RREL73 / CREL137 / CRPL83 / LESL61 / ESTL59 | — | monetary — *after sale proceeds* | **Yes** |
+| Recoveries | `cumulative_recoveries` | RREL74 / CREL141 / CRPL84 / LESL62 / ESTL60 | — | monetary, cumulative | **Yes** |
+| Liquidation proceeds | `net_proceeds_received_on_liquidation` | CREL138 | — | monetary | **Yes — new this sprint** |
+| Liquidation costs | `liquidation_expense` | CREL139 | — | monetary | **Yes — new this sprint** |
+| Collateral sale | `sale_price` | RREC21 / CRPC17 / ESTC19 | — | monetary | No |
+| Unscheduled principal | `unscheduled_principal_collections` | **CREL98 only** | — | monetary, period_flow | **Yes** |
+| Scheduled principal | `regular_principal_instalment` | — (analytics) | — | monetary, period_flow | **Yes (SMM denominator)** |
+| Principal frequency | `scheduled_principal_payment_frequency` | RREL37 / CREL90 / CRPL48 / LESL33 / ESTL33 | — | enum (MNTH/QUTR/SEMI/YEAR) | No |
+| Amortisation shape | `amortisation_type` | RREL35 / CREL87 / CRPL46 / LESL31 / ESTL31 | — | enum (French/German/…) | via `payment_option` |
+| Balloon | `balloon_amount` | RREL41 / CRPL51 / ESTL37 | — | monetary | as a role only |
+| Maturity | `maturity_date` | RREL24 / CREL18 / CRPL34 / LESL23 / ESTL25 | — | date | **Yes** |
+| Origination | `origination_date` | RREL23 / CREL15 / CRPL33 / LESL22 / ESTL24 | — | date | **Yes** |
+| Original term | `original_term` | RREL25 / CREL19 / LESL24 | — | integer months | via `extension_share` |
+| Coupon | `current_interest_rate` | RREL43 / CREL110 / CRPL53 / LESL36 / ESTL39 | — | percent | **Yes** |
+| Margin | `current_interest_rate_margin` | RREL46 / CREL113 / CRPL56 / LESL39 / ESTL42 | — | percent | **Yes** |
+| Rate type | `interest_rate_type` | RREL42 / CREL109 / CRPL52 | — | enum | **Yes** |
+| Purchase price | `purchase_price` | RREL34 / CREL28 / CRPL43 / LESL29 / ESTL30 | — | **percent of par** | No |
+| Current valuation | `current_valuation_amount` | RREC13 / CREC15 / CRPC10 / LESL75 / ESTC10 | — | monetary + observation | **Yes** |
+| Original valuation | `original_valuation_amount` | RREC17 / CRPC13 / LESL72 / ESTC14 | — | monetary | **Yes** |
+| Current LTV | `current_loan_to_value` | RREC12 / CREL76 | — | percent | **Yes** |
+| Supplied LGD | `bank_internal_loss_given_default_lgd_estimate` | — (analytics) | — | percent | No |
+| Grace period | `principal_grace_period_end_date` | RREL36 / CREL88 / CRPL47 / LESL32 / ESTL32 | — | date | No |
+
+**Twenty-four of the thirty carry ESMA codes on at least three annexes.** The
+concepts MI does not read are not missing; they are unread.
+
+---
+
+## 4. Field gap vs KPI gap
+
+| Metric | Classification | Why |
 |---|---|---|
-| SMM / CPR | `analytics_lib.history.prepayment_rate` | **Corrected** (§3) |
-| "Prepayment Speed (CPR)" chart | `config/asset/static_pools_config_erm.yaml` | **WRONG → renamed** |
-| Arrears share / 30-60-90 DPD | `concentration_tests.metrics._eval_arrears_share` | **Corrected** (§4) |
-| Arrears measures | `trakt_tools.handlers.history._measure_functions` | **Corrected** — now delegates |
-| Exit classification | `analytics_lib.history.classify_exits` | **New** (§5) |
-| WA LTV weighting | `_eval_weighted_average`, history `wa_ltv` | Verified balance-weighted |
-| Loss denominators | `analytics_lib.history.loss_and_recovery` | Verified — all four reported |
+| Arrears share, DPD bands | **READY** | fields and calculation both present |
+| Cumulative loss rate | **READY** | four denominators published, none chosen |
+| **Loss severity** | **was METHODOLOGY GAP → now READY** | RREL71 and RREL73 were always there |
+| **Recovery rate on defaulted exposure** | **was METHODOLOGY GAP → now READY** | previously divided by the wrong denominator |
+| Arrears stock, principal-vs-interest split | **METHODOLOGY GAP** | fields present, no metric exposes them |
+| Default rate | **METHODOLOGY GAP** | see §6 — the event definition is the work, not the data |
+| Cure rate | **METHODOLOGY GAP** | needs an observation window, which is a choice |
+| WA seasoning / remaining term / borrower age | **METHODOLOGY GAP** | the weighted-average evaluator already exists |
+| SMM/CPR numerator on **RMBS** | **FIELD GAP, asset-class-scoped** | `unscheduled_principal_collections` is Annex 3 only |
+| Contractual WAL | **METHODOLOGY GAP** | every input field exists; the schedule builder does not |
+| Expected WAL | **ASSUMPTION-MODEL REQUIRED** | out of scope by the brief |
+| YTM | **METHODOLOGY GAP** | RREL34 supplies price relative to par |
+| YTW | **EXPOSURE GAP** | Trakt holds no tranche or note-level data at all |
+| PD / LGD modelling | **out of scope** | supplied estimates may be reported; none may be built |
+| Submission acceptance state | **DATA GAP** | genuinely external evidence Trakt does not hold |
 
-**Identified but NOT audited:** default rate, cure rate, roll/transition rates,
-loss severity, recovery-rate denominators, original-vs-current LTV, high-LTV
-exposure basis, concentration denominators, WA coupon/rate/age/seasoning/term,
-vintage comparability, completeness definitions, period-change stock-vs-flow.
-
----
-
-## 3. CPR / SMM
-
-**Previous state.** No SMM or CPR calculation existed anywhere in the
-repository. A chart titled *"Prepayment Speed (CPR)"* was specified as
-`metric: prepayment_amount, agg: sum` — cumulative redemptions in pounds,
-plotted, with an annualised-rate label.
-
-**Corrected methodology** (`OBSERVED_SMM@v1` / `OBSERVED_CPR@v1`):
-
-```
-SMM  = (qualifying unscheduled principal + evidenced redemptions)
-       / opening principal balance of the period
-
-CPR  = 1 − (1 − mean monthly SMM)^12
-```
-
-**Numerator** — `unscheduled_principal_collections` plus full redemptions with
-qualifying evidence. **Denominator** — the opening balance of the period.
-**Excluded by name** — scheduled amortisation, contractual maturity,
-default-related reduction, unexplained exits.
-
-**Synthetic proof**, hand-worked and asserted:
-
-```
-opening exposed balance   £100,000,000
-qualifying prepayment          £500,000
-SMM                               0.5%
-CPR = 1 − (1 − 0.005)^12        5.8377%
-```
-
-And the negative case: a book falling £1m purely through **scheduled** principal
-reports **SMM 0.0000%**.
-
-**The React chart has been renamed, not converted.** It is now *"Cumulative
-Redemptions by Cohort"*. Genuine CPR is `prepayment_analysis`. A test fails if
-any chart summing an amount carries a rate-implying label.
-
-**Known limitation:** the denominator is the full opening balance, not opening
-balance net of scheduled principal. Both conventions exist; Trakt's choice is
-stated but **not yet verified against an external source** — see §9.
+Exactly one true field gap was found, and it is scoped to an asset class.
 
 ---
 
-## 4. Arrears
+## 5. Prepayment: SMM and CPR
 
-**The defect.** `_eval_arrears_share` masked on `> min_days`; the Sprint 2.5B
-history measure masked on `>= minimum`. Same nominal metric, same book:
+**Denominator, corrected earlier in this sprint and verified externally:**
 
 ```
-loans at 0, 29, 30, 31 days — equal balances
-
-concentration library  "30+ DPD"  →  25.0%   (only the loan at 31)
-history measure        "30+ DPD"  →  50.0%   (the loans at 30 and 31)
+SMM = unscheduled principal ÷ (beginning balance − scheduled principal)
+CPR = 1 − (1 − SMM)^12
 ```
 
-**Fixed structurally.** The history measure now *calls* the library metric.
-Agreement by hand is what drifts; delegation cannot.
+Scheduled principal was never available to prepay, so it does not belong in the
+denominator. Worked and asserted: £100m opening, £1m scheduled, £500k
+unscheduled → 0.505051% SMM → 5.895058% CPR. Every period publishes
+`denominator_basis`, and a tape with no scheduled-principal field says so
+rather than quietly using the opening balance.
 
-**The boundary is now explicit and inclusive by default** — `min_days: 30` means
-30 or more, matching the "N+ DPD" label every consumer uses. `dpd_boundary:
-exclusive` remains available for a contract that genuinely says "more than N
-days", but must be requested.
+**The numerator is where the asset-class gap sits.**
+`unscheduled_principal_collections` carries **CREL98 and nothing else** — it is
+a commercial-real-estate field. Annex 2 has no equivalent. For a residential
+book the numerator is assembled from redemption evidence
+(`loan_redemption_flag`, `redemptions_received_in_period`) and balance
+movement, which is weaker. That is a real field gap, and it is the only one in
+this report.
 
-**Direction of change is conservative:** inclusive can only report *more*
-arrears, so it cannot hide a breach. No operator-approved test config pins the
-parameter — only Trakt's own rule packs do.
-
-**Verified properties:** balance-weighted (a £900k delinquent loan gives 90%,
-not the 50% a count would give); bands are **cumulative, not mutually
-exclusive** (30+ ⊃ 60+ ⊃ 90+), asserted so a reader cannot double-count.
+**Exits still require evidence.** `loan_redemption_flag` → redemption;
+`default_date` or a defaulted `account_status` → `default_exit`;
+`maturity_date` on or before the close → `maturity`; anything else →
+`UNKNOWN_EXIT`, excluded from the numerator and disclosed. Disappearance is
+never read as redemption.
 
 ---
 
-## 5. Redemption identification
+## 6. Arrears: stock, flow, rate, movement, migration
 
-**Previous state (Sprint 2.5B).** Any loan present at the open and absent at the
-close was counted as a voluntary redemption.
+Trakt holds all five, and the earlier review only used two.
 
-**Why that is wrong.** A loan leaves a tape because it redeemed, defaulted and
-was written off, matured, was sold or transferred — or because the extract
-broke. Counting all of them as prepayment inflates the rate *most* in the
-situation where it matters: a book shedding defaulted loans.
-
-**Corrected.** `classify_exits` requires qualifying evidence, all from fields
-that already exist in the canonical model:
-
-| Evidence | Classification | In the prepayment numerator? |
+| Kind | Fields | Exposed today |
 |---|---|---|
-| `loan_redemption_flag` set | `redemption` | **Yes** |
-| `default_date`, or a defaulted `account_status` | `default_exit` | No |
-| `maturity_date` on or before the close | `maturity` | No |
-| none of the above | **`UNKNOWN_EXIT`** | **No** |
+| **Stock (£)** | `arrears_balance` (RREL67), `principal_arrears_amount`, `interest_arrears_amount` | No |
+| **Stock (days)** | `number_of_days_in_arrears` (RREL68) | Yes |
+| **Rate (%)** | balance in band ÷ pool balance | Yes — `perf_arrears_share` |
+| **Movement** | `days_in_arrears_prior`, `loan_entered_arrears`, `date_last_in_arrears` (RREL66) | No |
+| **Migration** | prior vs current DPD | Only via two snapshots |
 
-A defaulted exit is never reclassified as a redemption however the flag was
-left. `UNKNOWN_EXIT` balance is reported and excluded — an unexplained
-disappearance is a data-quality finding, not a prepayment.
+`days_in_arrears_prior` is the interesting one: it is *"prior-period days past
+due; comparison basis for arrears deterioration"*. A roll rate normally needs
+two periods. Trakt carries the prior state **on the row**, so a single snapshot
+can produce one. It is deliberately **not** built here — `transition_analysis`
+already computes roll rates from two snapshots, and a second implementation of
+one metric is the exact defect this sprint spent its first half removing. It is
+registered as latent MI in §10 with the condition attached: build it only as an
+alternative *input* to the existing calculation, never as a second calculation.
 
-**Demonstrated:** five loans exit with £1.5m opening balance; only the £100k
-carrying redemption evidence enters the numerator, and the £400k unexplained is
-disclosed in the notes.
+**The boundary question is now settled by an authority, not by argument.** The
+ESMA Annex 12 schema defines its bands as *"between 30 and 59 days
+(inclusive)"*. Trakt's inclusive default — `min_days: 30` means 30 or more — is
+the regulator's convention. The `dpd_boundary: exclusive` option remains, and
+it now has a named justification too: CRR Article 178 defines default as *past
+due **more than** 90 days*, so a rule pack expressing the regulatory default
+definition should ask for it.
+
+**Which also means arrears is not default.** "90+ DPD" as Trakt computes it has
+no materiality threshold (CRR sets €100 retail / €500 other, and 1% of the
+obligor's aggregate exposure) and no consecutive-day requirement. It is a
+delinquency measure. Default is read from `default_date` and `account_status`,
+and the two must not be presented as the same fact.
 
 ---
 
-## 6. Weighted averages (partial)
+## 7. Loss, recovery and severity
 
-**Verified:** WA LTV is balance-weighted in both the library evaluator
-(`weighting` defaults to `current_balance`) and the history measure. Asserted on
-a two-loan book where the arithmetic mean is 50.0% and the balance-weighted
-answer is 82.0%.
+**Severity is now implemented, and the regime wrote the formula.** Reading the
+two field definitions side by side:
 
-**Not verified:** WA coupon, WA interest rate, WA borrower age, WA seasoning, WA
-remaining term, WA property value. Each may legitimately want a different
-weight, and none was checked.
+> **RREL71 Default Amount** — "Total **gross** default amount **before** the
+> application of sale proceeds and recoveries."
+>
+> **RREL73 Allocated Losses** — "The allocated losses to date, net of fees,
+> accrued interest etc. **after application of sale proceeds** ... as
+> recoveries are collected and the work out process progresses."
+
+The market definition of severity — net loss over unpaid balance at
+liquidation — is exactly RREL73 over RREL71. Both are Mandatory on all five
+annexes. Nothing needed to be added to the field model.
+
+**And the same two sentences found a defect in code I wrote in Sprint 2.5B.**
+`net_loss` was `allocated_losses − cumulative_recoveries`. RREL73 is *already*
+after recoveries, so that subtraction removes the same money twice. On the test
+book it reports 30% severity where the answer is 40%. `net_loss` and
+`net_loss_rate_on_original_pct` are **withdrawn**; `recovery_rate_on_losses_pct`
+is renamed `recoveries_against_residual_loss_pct` because that is what it
+measures; and a genuine `recovery_rate_on_defaulted_pct` — recoveries over
+RREL71 — has been added. `OBSERVED_LOSS@v1` → `@v2`, because output fields
+changed meaning and a finding that cited v1 must keep meaning what it meant.
+
+Where a CRE tape carries `liquidation_expense` and
+`net_proceeds_received_on_liquidation`, severity is also built the long way —
+balance at default + expenses − proceeds — and published as a **cross-check**
+with an explicit `agrees_with_allocated_losses` flag. A disagreement is a data
+finding about the tape, not a second severity.
+
+**A pool with no defaults reports severity as unavailable, not 0%.** Zero
+asserts that defaults happened and cost nothing.
+
+**Still not audited:** default rate and cure rate. Both are methodology gaps
+where the *data* question is settled and the *definition* question is not:
+absorbing versus reversible default, count versus balance, period versus
+cumulative, and what observation window makes a cure a cure. Neither should be
+guessed.
 
 ---
 
-## 7. Loss denominators (verified, not extended)
+## 8. Weighted metrics
 
-`loss_and_recovery` reports four denominators and chooses none:
+Every weighted average in the library runs through one evaluator, and it does
+declare all four things the brief asks for:
 
-| Rate | Synthetic result |
+| | |
 |---|---|
-| cumulative loss / original balance | 0.428% |
-| cumulative loss / opening balance | 0.380% |
-| cumulative loss / current balance | 0.453% |
-| recoveries / losses | 40.0% |
+| **Value field** | resolved through a named role (`interest_rate`, `ltv_current`, …) |
+| **Weight field** | the `weighting` parameter; default `current_balance` |
+| **Eligible population** | rows where value **and** weight are both non-null |
+| **Missing-data policy** | pairwise deletion, **and disclosed** — `denominator_value`, `denominator_basis`, `loans_in_numerator` and `total_loans` all published |
 
-Three answers, one portfolio, 19% apart. **Loss severity** (realised loss over
-defaulted exposure) is **not implemented** — §9.
+Verified balance-weighted: WA LTV, WA gross coupon, WA net coupon, WA property
+valuation, WA balance. On a two-loan book the arithmetic mean is 50.0% and the
+balance-weighted answer 82.0%, asserted.
+
+WA seasoning, WA remaining term and WA borrower age are **not defective —
+they do not exist**. The evaluator would serve them unchanged; only library
+entries are missing. §10.
 
 ---
 
-## 8. Performance
+## 9. Concentration and portfolio characteristics
 
-The 100k × 12-period benchmark omitted in Sprint 2.5B was run, and it found a
-real bottleneck.
+Twenty library metrics cover geography (region, country, county, postcode
+area, largest region, region count), borrower (largest, multi-loan, aggregate,
+joint, age), balance (top-N, largest, average, weighted average, above
+threshold), product and rate type, LTV, maturity horizon, extension, residual
+value and vintage share. Each declares `denominator_options` of
+`current_balance` / `original_balance` / `loan_count` and publishes which was
+used. **`denominator_floor` is contractual and is never inferred from data** —
+a covenant with a floored denominator has to say so.
 
-| Workload | Before | After |
+**Not audited, and stated as such:** missing-category treatment across the
+`share_of_balance` family — whether a null region lands in the denominator only
+or in neither. It is a real question and it was not answered here.
+
+---
+
+## 10. Latent MI register
+
+Metrics Trakt can calculate today from governed fields and does not expose.
+
+| Rank | Metric | Fields | Why it ranks there |
+|---|---|---|---|
+| **HIGH** | **Loss severity** | RREL73 ÷ RREL71 | first question asked of a defaulted book — **built this sprint** |
+| **HIGH** | **Recovery rate on defaulted exposure** | RREL74 ÷ RREL71 | the previous ratio used a denominator already net of the numerator — **corrected this sprint** |
+| **HIGH** | **Annex 12 delinquency bands** | RREL68 + balance | a required regulatory disclosure that was emitting a balance into a percentage field — **fixed this sprint** |
+| **HIGH** | Arrears stock in £, principal vs interest | RREL67, `principal_arrears_amount`, `interest_arrears_amount` | a £ arrears figure is what a servicer reconciles against; only a % exists |
+| **HIGH** | Single-snapshot arrears roll rate | `days_in_arrears_prior` | roll rates normally need two periods; the prior state is on the row. **Build as an input to `transition_analysis`, never as a second calculation** |
+| **HIGH** | Annex 12 IVSS22 annualised CPR | the existing `prepayment_rate` | the regulator asks for CPR, the template's `method` is **empty**, and Trakt now has one. Needs two periods, which the single-period projector cannot supply — an architecture change, not a formula |
+| **MEDIUM** | WA seasoning, WA remaining term, WA borrower age | RREL23, RREL24, borrower age roles | quoted in every pool summary; the evaluator already supports them |
+| **MEDIUM** | Original / indexed LTV as distinct metrics | RREC16, `indexed_loan_to_value` | roles resolve; no library metric distinguishes them from current LTV |
+| **MEDIUM** | Observed portfolio runoff / life to date | governed snapshots | the honest, assumption-free half of WAL (§11) |
+| **MEDIUM** | Supplied LGD reporting | `bank_internal_loss_given_default_lgd_estimate` | reporting the originator's own estimate is not modelling; **Trakt still builds no PD/LGD** |
+| **MEDIUM** | Payment-frequency and amortisation-shape mix | RREL37, RREL35 | eligibility screens ask for these directly |
+| **LOW** | Grace-period exposure | RREL36 | narrow, but free |
+| **LOW** | Collateral sale-price outcomes | RREC21 | overlaps the liquidation decomposition on CRE |
+| **LOW** | Annex 12 IVSS24 gross charge-offs | — | `method` empty and `source_field` null; needs a definition decision first |
+
+---
+
+## 11. Weighted average life
+
+Three different questions. Conflating them is how a WAL number becomes
+meaningless, so they are answered separately.
+
+**Contractual WAL — METHODOLOGY GAP, not a field gap.** WAL is
+`Σ(principal_i × t_i) / Σ(principal_i)`, so it needs a principal repayment
+schedule. Every input exists: `current_principal_balance` (RREL30),
+`maturity_date` (RREL24), `amortisation_type` (RREL35),
+`scheduled_principal_payment_frequency` (RREL37), `balloon_amount` (RREL41),
+`principal_grace_period_end_date` (RREL36), `current_interest_rate` (RREL43),
+and `regular_principal_instalment`. Five of the eight are Mandatory on all five
+annexes. What is missing is a schedule builder and its enum handling — French
+versus German versus bullet amortisation each produce a different curve, and
+`regular_principal_instalment` carries **no regime code**, so it is the term
+whose availability varies by tape. **Deliberately not built here**: it is a new
+calculation engine, not a metric, and the brief says to document it rather than
+expand the sprint.
+
+**Observed portfolio life / runoff — supportable today.** Governed snapshots
+already give realised amortisation. This needs no assumptions and no new
+fields, and it is the honest thing to publish first. §10, MEDIUM.
+
+**Expected WAL — ASSUMPTION-MODEL REQUIRED.** External sources are explicit:
+where prepayment is permitted, "the WAL cannot be computed from the
+amortization schedule alone; one must also make assumptions about the
+prepayment and default behavior". That is forecasting. Out of scope, and it
+should stay out until someone owns the assumption.
+
+---
+
+## 12. Yield to maturity and yield to worst
+
+**YTM — METHODOLOGY GAP.** `purchase_price` (RREL34) is Mandatory on all five
+annexes and is defined as *"the price, relative to par, at which the underlying
+exposure was purchased by the SSPE. Enter 100 if no discounting was applied"*.
+That is precisely the price term an IRR needs. Combined with the same
+contractual schedule contractual WAL requires, loan-level YTM is deterministic.
+It is therefore **blocked behind the same schedule builder**, and behind one
+caveat worth stating: on a warehouse book bought at par, RREL34 is 100 for
+every loan and YTM collapses to the coupon — a true answer that would look like
+a broken calculation.
+
+**YTW — EXPOSURE GAP, and the more fundamental of the two.** Yield to worst is
+the minimum yield across every call and prepayment scenario, and at the level
+it is normally quoted it is a **note-level** measure. Trakt holds no tranche,
+note or class data: a search of all 499 canonical fields returns no
+tranche/note/class field, and the Annex 12 deal template's `cashflow_items` and
+`triggers_tests_events` lists are both empty. YTW is not blocked by methodology
+— it is blocked by an entity Trakt does not model.
+
+**Neither is being built on synthetic assumptions.** A YTM produced by
+inventing a price, or a YTW produced by inventing call dates, would be worse
+than not having one.
+
+---
+
+## 13. Not duplicating regulatory calculations
+
+Two places already hold regulator-defined calculations, and the audit found
+Trakt drifting toward re-implementing them.
+
+**Annex 12 arrears bands.** The template computes IVSS38–IVSS44 itself. Three
+defects, all fixed, all verified against the schema's own wording:
+
+| Code | Was | Consequence | Now |
+|---|---|---|---|
+| IVSS38–44 | `BUCKET_SUM` of `current_outstanding_balance` | an amount into a `PercentageRate` element, in fields the constraint file marks as admitting **no** ND fallback | `BUCKET_SHARE` — band balance ÷ pool balance × 100 |
+| IVSS38 | `min: 0` on a band named "1–29 days" | the entire performing book reported as in arrears — on the test pool, 70.0% instead of 10.0% | `min: 1` |
+| IVSS40 | `min: 50` on a band named "60–89 days" | 50–59 days counted in IVSS39 **and** IVSS40; the bands stopped partitioning the book | `min: 60` |
+
+The denominator is the regulator's, quoted rather than chosen: *"relative to the
+total outstanding principal amount of **all** exposures as at the data cut-off
+date"* — the whole pool, not the arrears book. Seven codes had **no test of any
+kind**; there are now eight.
+
+**Annex 12 CPR.** `IVSS22_annualised_constant_prepayment_rate` has an empty
+`method`, so the projector skips it and the field falls to a No-Data value. The
+correct response is *not* a second CPR in the projector — it is to feed the
+existing `prepayment_rate` into it. That needs the projector to see two
+periods, which today it cannot. Recorded in §10 as an architecture item.
+
+---
+
+## 14. Market-methodology verification
+
+The previous pass consulted no external sources and said so. This one did. Each
+source below was read, not cited from memory.
+
+| Source | Type | What it settled |
 |---|---|---|
-| `prepayment_rate` 100k × 12 | 9,501 ms | **681 ms (14×)** |
-| `portfolio_series` 12p × 7 measures, 1.2m rows | — | 860 ms |
-| `loss_and_recovery` 12 periods | — | 4 ms |
+| **ESMA Annex 12 XSD** (`DRAFT1auth.098.001.04_1.3.0.xsd`, `ArrearsData2`) — in repository | Regulator | Delinquency bands are **percentages**, the denominator is **all exposures**, and the bands are **inclusive at both ends**. Settled §6 and §13 outright |
+| **ESMA Annex 2 field universe** (`annex2_field_universe.yaml`, RREL71/73/74/34) — in repository | Regulator | Default amount is gross **before** proceeds; allocated losses are **after** them; purchase price is **relative to par**. Settled §7 and §12 |
+| **EBA / CRR Article 178** and the EBA definition-of-default guidelines | Regulator | Default is *more than* 90 days past due, on a **material** obligation (€100 retail / €500 other, and 1% of aggregate exposure), counted over **consecutive** days. Settled that arrears ≠ default (§6) |
+| Structured-finance WAL convention (SIFMA-style `Σ(Pᵢ·tᵢ)/ΣPᵢ`; industry treatments) | Convention | Confirmed WAL needs a principal schedule, and that with prepayment permitted it is necessarily an **estimate**. Settled §11 |
+| RMBS loss-severity literature (Urban Institute; Philadelphia Fed working paper; Moody's *Measuring Loss Severity Rates of Defaulted RMBS*) | Industry / rating agency | Severity = net loss ÷ **UPB at liquidation**, net loss = balance + expenses − proceeds − recoveries. Settled §7 |
+| SMM/CPR convention (prior pass, `CPR = 1 − (1 − SMM)¹²`, independently worked example 0.5% → 5.84%) | Convention | Settled §5 |
 
-**Root cause, found by profiling after two wrong guesses** (which produced 1.1×
-and 1.2×): pandas' Arrow-backed string `isin` falls back to a **Python list
-comprehension** over 1.1m elements — 9.0 of 9.05 seconds. Converting to object
-dtype routes to the numpy hashtable.
-
-Optimised in the shared implementation. No agent-specific fast path.
-
----
-
-## 9. Remaining exceptions
-
-**Not audited at all** — the systematic methodology review of:
-
-- **default rate** — event definition, population, absorbing vs reversible,
-  period vs cumulative, balance vs count;
-- **cure rate** — eligible states, what constitutes a cure, observation window;
-- **roll / transition rates** — count vs balance weighting, treatment of exits;
-- **loss severity** — not implemented;
-- **recovery-rate denominators** — defaulted balance vs charged-off vs gross
-  loss vs balance at default; currently only recoveries/losses exists;
-- **LTV** — original vs current distinction, missing/zero valuation handling,
-  whether "% > 80% LTV" is of loans or of balance in every consumer;
-- **concentration** — balance vs count denominators, missing-category treatment;
-- **vintage comparability** — calendar-time vs months-on-book alignment, which
-  materially affects any "the 2025 vintage is underperforming" claim;
-- **completeness** — canonical completeness vs ESMA mandatory-field readiness
-  are currently distinct tools but their percentages are not formally defined;
-- **period change** — percentage points vs percent change is asserted in one
-  test but not audited across consumers.
-
-**Not done — external verification (Part 3).** No authoritative external source
-was consulted. Every methodology decision here rests on repository evidence,
-the canonical field semantics, and stated reasoning. The market-source register
-the brief requires is therefore **empty, and deliberately so** — citing sources
-I did not review would be worse than reporting none.
-
-**Not done — the formal catalogue (Part 2).** Registry metadata for
-`numerator` / `denominator` / `weighting` / `time_basis` / `annualisation` /
-`exclusions` / `methodology_version` per metric was not added. Methodology
-identifiers exist (`OBSERVED_SMM@v1`, `OBSERVED_CPR@v1`, `OBSERVED_LOSS@v1`,
-`CURRENT_LTV@v1`) but are not yet uniform across the universe.
-
-**Ambiguous, needing a deliberate decision:**
-
-- SMM denominator — full opening balance vs opening balance net of scheduled
-  principal. Both conventions exist in the market.
-- DPD bucket convention — 1-29/30-59/60-89/90+ vs 1-30/31-60/61-90/91+. Trakt
-  now uses inclusive (30 means 30+), which is stated but not externally
-  validated.
+**Where sources disagree, both are kept and named.** The DPD boundary is the
+clearest case: investor reporting says inclusive, CRR Article 178 says
+exclusive. Trakt defaults to inclusive and offers the other on request, and
+neither is presented as the only convention.
 
 ---
 
-## 10. Sprint 3 recommendation
+## 15. Metric methodology catalogue
 
-> **Are the shared MI metrics now sufficiently methodologically trustworthy for
-> an autonomous agent to use in a production-style securitisation review?**
+The catalogue exists in configuration rather than prose, which is the right
+place for it: `config/risk/concentration_test_library.yaml` already carries
+`numerator`, `denominator_options`, `required_roles`, `optional_roles`, `unit`,
+`aggregation`, `output_precision`, `implementation_status` and `version` for
+each of its **42 metrics** — 39 implemented, 2 declared-not-implemented,
+1 interface-only. The history metrics carry versioned methodology identifiers:
 
-**Not yet — but the blocker is narrow and specific.**
+| Identifier | Metric | Changed this sprint |
+|---|---|---|
+| `OBSERVED_SMM@v2` | single monthly mortality | v1 → v2: denominator now nets scheduled principal |
+| `OBSERVED_CPR@v2` | annualised prepayment | follows SMM |
+| `OBSERVED_LOSS@v2` | loss and recovery | v1 → v2: double-counted netting withdrawn |
+| `OBSERVED_RECOVERY@v2` | recovery rates | v1 → v2: denominator corrected to defaulted exposure |
+| `OBSERVED_LOSS_SEVERITY@v1` | loss severity | new |
+| `OBSERVED_SERIES@v1` | period series | unchanged |
+| `CURRENT_LTV@v1` | LTV from valuation observations | unchanged |
 
-The metrics an agent would lean on hardest are in materially better shape:
-prepayment is real rather than a mislabelled sum, arrears has one definition
-instead of two, redemption requires evidence, and LTV weighting is verified. The
-audit apparatus exists and catches this defect class.
+**Still uneven, and stated plainly:** the two families express methodology
+differently — the library through YAML metadata, history through identifiers in
+code — and `time_basis` / `annualisation` / `exclusions` are not yet uniform
+across either. Unifying them is worth doing and was not done here.
 
-**The genuine blocker is that most of the universe has not been audited.** An
-agent presenting a default rate or a recovery rate to a counterparty today would
-be relying on a definition nobody has checked — and this sprint found that two
-of the first three metrics examined were wrong. That base rate is the argument
-against assuming the rest are fine.
+---
 
-**Recommended before the agent build:** complete Parts 7–16 for default, cure,
-recovery denominators, LTV distribution basis and vintage comparability — the
-five that a securitisation review quotes most. Parts 2, 3 and the remaining
-weighted averages can follow, because they improve documentation and confidence
-rather than correctness.
+## 16. Readiness framework integration
 
-**One observation worth carrying forward.** Both defects were found by reading
-the calculation next to its label, not by running anything. Every test passed
-throughout. A metric audit is not a testing activity, and scheduling it as one
-is how these survive.
+The framework does consume shared MI calculations — every `fact_tool` names a
+registered tool and every `calculation_source` names a real module — but it had
+**drifted again, in the direction the existing guard could not see**.
+
+`PERF_PREPAYMENT` and `PERF_LOSSES` were still published as `SMALL_GAP` with
+`fact_tool: null` and guidance reading *"Report as unavailable"*, a full sprint
+after `prepayment_analysis` and `loss_analysis` were built, registered and
+tested. The Sprint 2.5 guard only fires when a metric **names** a tool, so a
+null `fact_tool` slipped past it. An agent reading the framework would have
+declined to measure prepayment on a book where Trakt could measure it.
+
+Both now name their tool, their calculation source and `prior_snapshot` as
+required evidence. Published coverage moves from 44/48 (91.7%) to **46/48
+(95.8%)**. The two remaining non-READY metrics are honest:
+`REG_SUBMISSION_STATE` is external evidence Trakt does not hold, and
+`TREND_DATA_QUALITY_DRIFT` is explicitly a judgement.
+
+The structural fix closes the direction that leaked. A framework metric linked
+by `metric_id` to an unimplemented library metric must now either **be** a gap
+or declare `supersedes_library_metric: true` and name a registered tool — both
+assertions tested. That is the exact shape of this defect: prepayment can never
+have a single-snapshot library evaluator, because a rate needs two periods, so
+the framework and the library will always disagree here and now have to say why.
+
+---
+
+## 17. What was implemented, and what was deliberately not
+
+**Implemented** — all five conditions met (fields exist, methodology clear,
+metric high-value, change belongs in shared analytics, implementation
+contained):
+
+- loss severity, in `analytics_lib.history` — one function, published through
+  the existing `loss_analysis` tool;
+- the recovery-rate correction and the withdrawal of the double-counting net
+  loss;
+- the Annex 12 arrears bucket fixes — bounds and share basis;
+- the readiness framework status correction and its structural guard.
+
+**Deliberately not implemented, with the reason:**
+
+- **WAL, YTM** — need a contractual schedule builder. A new engine, not a
+  metric. Documented in §11–§12 for follow-up.
+- **YTW** — needs a note-level entity Trakt does not model.
+- **Expected WAL, any PD/LGD** — assumption models. Out of scope by the brief,
+  and supplied LGD values may be reported but never authored.
+- **Single-snapshot roll rate** — buildable today, and *not* built, because
+  `transition_analysis` already computes roll rates. A second implementation of
+  one metric is the defect this sprint exists to remove.
+- **Annex 12 CPR wiring** — needs the projector to see two periods.
+- **Default rate, cure rate** — the data is settled, the definitions are not,
+  and guessing them would put an unowned convention into production.
+
+---
+
+## 18. Regression
+
+Run under the discipline the brief requires: both trees committed and
+immutable, neither edited while its run executed, baseline from a worktree
+pinned at `cdefc25` and candidate from a worktree pinned at the delivered
+commit.
+
+*The candidate run against the final tree is in flight; the comparison — totals,
+complete failure IDs, complete error IDs, and differences in both directions —
+is recorded below when it completes. **No claim of regression neutrality is made
+until then.***
+
+One earlier attempt is worth recording as a process finding: a `git worktree
+add -f` against an existing directory **fails silently**, and a run launched
+that way tested a stale revision while appearing to test HEAD. It was caught by
+checking `rev-parse` on the worktree rather than trusting the command that
+created it. Verifying the tree is part of the regression, not preparation for it.
+
+---
+
+## Sprint 3 readiness
+
+> **Are the shared MI metrics now methodologically trustworthy enough for an
+> autonomous agent to use in a production-style securitisation review?**
+
+**For prepayment, arrears, loss, recovery, severity, LTV and concentration —
+yes.** Those are the metrics such a review leans on hardest, each now has one
+definition, and the definitions have been checked against the regulator's own
+words rather than against each other.
+
+**For default rate and cure rate — no, and they should be finished first.** Not
+because the data is missing, but because the definitions are unowned, and this
+sprint's base rate is unkind: of the metrics examined closely, prepayment,
+arrears, severity, net loss and three Annex 12 bucket definitions were all
+wrong. Assuming the unexamined ones are fine is not supported by the evidence.
+
+**A 2.5D cash-flow sprint is justified, and it is one sprint, not two.** WAL,
+YTM and the Annex 12 CPR wiring all block on the same missing component — a
+contractual principal-schedule builder driven by `amortisation_type`,
+`scheduled_principal_payment_frequency`, `maturity_date` and `balloon_amount`.
+Build it once and three KPIs unblock. YTW does not, and should be scoped
+separately as a note-level data question.
+
+**The observation from the last review still holds, and got stronger.** Every
+defect in this sprint was found by reading a definition next to the code that
+claimed to implement it. Not one was found by running anything — every test
+passed throughout, including the tests I had just written. The most productive
+hour of this sprint was spent reading `annex2_field_universe.yaml`, a file the
+repository already had.

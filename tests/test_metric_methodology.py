@@ -35,6 +35,7 @@ if str(_REPO_ROOT) not in sys.path:
 from analytics_lib.history import (
     DENOM_EXPOSED,
     DENOM_OPENING,
+    loss_and_recovery,
     prepayment_rate,
 )
 from mi_agent.concentration_tests.library import load_library
@@ -311,3 +312,137 @@ def test_percentage_points_and_percent_change_are_distinguishable():
     assert series["change"] == pytest.approx(0.5), (
         "change is the percentage-POINT difference")
     assert series["change"] != pytest.approx(50.0)
+
+
+# =========================================================================== #
+# Loss severity
+#
+# The sprint's question was whether severity was a FIELD gap or a KPI gap. It
+# is a KPI gap: the market denominator — unpaid balance at liquidation — is
+# ``default_amount``, mandatory on every ESMA annex, and Trakt has carried it
+# all along. Nothing was added to the field model to make these pass.
+# =========================================================================== #
+def _severity_book():
+    """£1,000,000 defaulted, £400,000 lost, £100,000 recovered.
+
+    Gross severity 40.0%. Net severity 30.0%. Both computable in the head, and
+    deliberately far apart so a test cannot pass on the wrong one.
+    """
+    opening = pd.DataFrame({
+        "loan_identifier": ["L1", "L2"],
+        "current_principal_balance": [1_000_000.0, 1_000_000.0],
+        "original_principal_balance": [1_200_000.0, 1_200_000.0],
+        "allocated_losses": [0.0, 0.0],
+        "cumulative_recoveries": [0.0, 0.0],
+        "default_amount": [0.0, 0.0],
+    })
+    closing = pd.DataFrame({
+        "loan_identifier": ["L1", "L2"],
+        "current_principal_balance": [600_000.0, 1_000_000.0],
+        "original_principal_balance": [1_200_000.0, 1_200_000.0],
+        "allocated_losses": [400_000.0, 0.0],
+        "cumulative_recoveries": [100_000.0, 0.0],
+        "default_amount": [1_000_000.0, 0.0],
+    })
+    return {"2026-01-31": opening, "2026-02-28": closing}
+
+
+def test_loss_severity_divides_by_the_balance_at_default():
+    """£400,000 of loss on £1,000,000 that defaulted is 40%, not 25% (loss over
+    the £1.6m still outstanding) and not 16.7% (loss over the £2.4m originally
+    advanced). The denominator is the whole metric."""
+    outcome = loss_and_recovery(_severity_book(), periods=list(_severity_book()))
+    severity = outcome["loss_severity"]
+
+    assert severity["available"] is True
+    assert severity["defaulted_exposure"] == pytest.approx(1_000_000.0)
+    assert severity["severity_pct"] == pytest.approx(40.0)
+    # The two wrong denominators, named so a future change cannot drift onto them.
+    assert severity["severity_pct"] != pytest.approx(25.0)
+    assert severity["severity_pct"] != pytest.approx(16.666667, abs=1e-4)
+
+
+def test_recoveries_are_not_deducted_from_a_loss_already_stated_net_of_them():
+    """The regime settles what an earlier draft of this test left open.
+
+    ESMA RREL73 defines allocated losses as stated "after application of sale
+    proceeds ... as recoveries are collected", and RREL71 defines the default
+    amount as "gross ... before the application of sale proceeds and
+    recoveries". So severity is RREL73 over RREL71 and nothing else: deducting
+    RREL74 recoveries as well removes the same £100,000 twice and reports 30%
+    on a book whose severity is 40%.
+
+    This was not hypothetical — ``net_loss`` did it, from Sprint 2.5B until
+    this test.
+    """
+    outcome = loss_and_recovery(_severity_book(), periods=list(_severity_book()))
+    severity = outcome["loss_severity"]
+
+    assert severity["severity_pct"] == pytest.approx(40.0)
+    assert "net_severity_pct" not in severity, (
+        "a 'net' severity on top of RREL73 double-counts recoveries")
+    assert "net_loss" not in outcome
+    assert "net_loss_rate_on_original_pct" not in outcome
+    # Recoveries are still reported — against the denominator that makes them
+    # a recovery RATE, which is the defaulted exposure, not the residual loss.
+    assert outcome["recovery_rate_on_defaulted_pct"] == pytest.approx(10.0)
+
+
+def test_a_book_with_no_defaults_reports_severity_as_undefined_not_zero():
+    """0% severity asserts that defaults happened and cost nothing. Silence is
+    the honest answer when nothing defaulted."""
+    book = _severity_book()
+    for frame in book.values():
+        frame["default_amount"] = 0.0
+        frame["allocated_losses"] = 0.0
+    outcome = loss_and_recovery(book, periods=list(book))
+    assert outcome["loss_severity"]["available"] is False
+    assert "undefined rather than zero" in outcome["loss_severity"]["reason"]
+
+
+def test_severity_refuses_rather_than_substituting_the_current_balance():
+    """The tempting approximation. On an amortising book the balance now and
+    the balance at default are different numbers, and using the first would
+    understate severity by however much the loan had paid down."""
+    book = {k: v.drop(columns=["default_amount"]) for k, v in _severity_book().items()}
+    outcome = loss_and_recovery(book, periods=list(book))
+    assert outcome["loss_severity"]["available"] is False
+    assert "not approximated from the current balance" in (
+        outcome["loss_severity"]["reason"])
+
+
+def test_the_annex3_decomposition_checks_the_allocated_loss_rather_than_replacing_it():
+    """Where a CRE tape carries liquidation expenses and net proceeds, severity
+    can be built the long way. £1,000,000 at default + £50,000 expenses −
+    £650,000 proceeds = £400,000 — which is what the tape allocated, so the two
+    agree. It is published as a check, not as a second severity."""
+    book = _severity_book()
+    closing = book["2026-02-28"]
+    closing["liquidation_expense"] = [50_000.0, 0.0]
+    closing["net_proceeds_received_on_liquidation"] = [650_000.0, 0.0]
+    book["2026-01-31"]["liquidation_expense"] = 0.0
+    book["2026-01-31"]["net_proceeds_received_on_liquidation"] = 0.0
+
+    decomposition = loss_and_recovery(
+        book, periods=list(book))["loss_severity"]["liquidation_decomposition"]
+
+    assert decomposition["constructed_loss"] == pytest.approx(400_000.0)
+    assert decomposition["constructed_severity_pct"] == pytest.approx(40.0)
+    assert decomposition["agrees_with_allocated_losses"] is True
+
+
+def test_a_decomposition_that_disagrees_with_the_tape_says_so():
+    """If the long way and the allocated figure differ, that is a finding about
+    the tape. Reporting only one of them would bury it."""
+    book = _severity_book()
+    closing = book["2026-02-28"]
+    closing["liquidation_expense"] = [50_000.0, 0.0]
+    closing["net_proceeds_received_on_liquidation"] = [900_000.0, 0.0]
+    book["2026-01-31"]["liquidation_expense"] = 0.0
+    book["2026-01-31"]["net_proceeds_received_on_liquidation"] = 0.0
+
+    decomposition = loss_and_recovery(
+        book, periods=list(book))["loss_severity"]["liquidation_decomposition"]
+
+    assert decomposition["constructed_loss"] == pytest.approx(150_000.0)
+    assert decomposition["agrees_with_allocated_losses"] is False

@@ -116,51 +116,56 @@ annex12:
       source_field: defaulted_amount
       output_alias: IVSS28
 
-    # Arrears buckets - generic mapping; overlays may set these to 0/ND.
+    # Arrears buckets. The Annex 12 schema (DRAFT1auth.098.001.04,
+    # ArrearsData2) types every one of these as PercentageRate and defines it
+    # as "the total outstanding principal amount ... of the exposures in this
+    # category of arrears, relative to the total outstanding principal amount
+    # of all exposures". They are shares of the pool, not balances, and the
+    # bands are inclusive at both ends ("between 30 and 59 days (inclusive)").
     IVSS38_arrears_1_29_days:
-      method: BUCKET_SUM
+      method: BUCKET_SHARE
       source_field: current_outstanding_balance
       filter_field: number_of_days_in_arrears
-      min: 0
+      min: 1
       max: 29
       output_alias: IVSS38
     IVSS39_arrears_30_59_days:
-      method: BUCKET_SUM
-      source_field: current_outstanding_balance  # What to sum
-      filter_field: number_of_days_in_arrears              # What to check
+      method: BUCKET_SHARE
+      source_field: current_outstanding_balance
+      filter_field: number_of_days_in_arrears
       min: 30
       max: 59
       output_alias: IVSS39
     IVSS40_arrears_60_89_days:
-      method: BUCKET_SUM
+      method: BUCKET_SHARE
       source_field: current_outstanding_balance
       filter_field: number_of_days_in_arrears
-      min: 50
+      min: 60
       max: 89
       output_alias: IVSS40
     IVSS41_arrears_90_119_days:
-      method: BUCKET_SUM
+      method: BUCKET_SHARE
       source_field: current_outstanding_balance
       filter_field: number_of_days_in_arrears
       min: 90
       max: 119
       output_alias: IVSS41
     IVSS42_arrears_120_149_days:
-      method: BUCKET_SUM
+      method: BUCKET_SHARE
       source_field: current_outstanding_balance
       filter_field: number_of_days_in_arrears
       min: 120
       max: 149
       output_alias: IVSS42
     IVSS43_arrears_150_179_days:
-      method: BUCKET_SUM
+      method: BUCKET_SHARE
       source_field: current_outstanding_balance
       filter_field: number_of_days_in_arrears
       min: 150
       max: 179
       output_alias: IVSS43
     IVSS44_arrears_180_plus_days:
-      method: BUCKET_SUM
+      method: BUCKET_SHARE
       source_field: current_outstanding_balance
       filter_field: number_of_days_in_arrears
       min: 180

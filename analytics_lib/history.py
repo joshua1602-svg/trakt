@@ -68,6 +68,19 @@ RECOVERIES_FIELD = "cumulative_recoveries"
 RECOVERIES_IN_PERIOD_FIELD = "recoveries_in_period"
 ORIGINAL_BALANCE_FIELD = "original_principal_balance"
 
+#: Balance at the point of default (ESMA RREL71 / CREL132 / CRPL81 / LESL59).
+#: This is the denominator loss severity asks for, and it is a governed field
+#: on every annex — which is why severity is a methodology gap rather than a
+#: field gap. Nothing here is modelled: it is a measured loss over a measured
+#: defaulted exposure.
+DEFAULT_AMOUNT_FIELD = "default_amount"
+
+#: The commercial-real-estate decomposition (Annex 3 only). Where a tape
+#: carries these, severity can be shown the long way — balance plus expenses
+#: less proceeds — as a check on the allocated-loss figure.
+LIQUIDATION_EXPENSE_FIELD = "liquidation_expense"
+NET_LIQUIDATION_PROCEEDS_FIELD = "net_proceeds_received_on_liquidation"
+
 #: Methodology identifiers, versioned because a change to any of them changes
 #: reported rates and an explanation that cited one must keep meaning it.
 #: v2 (Sprint 2.5C): the denominator changed from the full beginning balance to
@@ -77,8 +90,14 @@ ORIGINAL_BALANCE_FIELD = "original_principal_balance"
 #: else. A finding that cited @v1 still means what it meant.
 SMM_METHOD = "OBSERVED_SMM@v2"
 CPR_METHOD = "OBSERVED_CPR@v2"
-LOSS_METHOD = "OBSERVED_LOSS@v1"
-RECOVERY_METHOD = "OBSERVED_RECOVERY@v1"
+#: v2 (Sprint 2.5C): ``net_loss`` and ``net_loss_rate_on_original_pct`` are
+#: withdrawn, and ``recovery_rate_on_losses_pct`` is renamed. ESMA RREL73
+#: states allocated losses AFTER sale proceeds, so subtracting RREL74
+#: recoveries from them deducted the same money twice. Output fields change
+#: meaning, so the identifier changes with them.
+LOSS_METHOD = "OBSERVED_LOSS@v2"
+RECOVERY_METHOD = "OBSERVED_RECOVERY@v2"
+SEVERITY_METHOD = "OBSERVED_LOSS_SEVERITY@v1"
 SERIES_METHOD = "OBSERVED_SERIES@v1"
 
 
@@ -597,6 +616,9 @@ def loss_and_recovery(
     period_losses = cumulative_losses - opening_losses
     period_recoveries = cumulative_recoveries - opening_recoveries
 
+    defaulted_exposure = _sum(closing, DEFAULT_AMOUNT_FIELD)
+    severity = _loss_severity(closing, cumulative_losses, defaulted_exposure)
+
     return {
         "available": True,
         "method": LOSS_METHOD,
@@ -615,11 +637,14 @@ def loss_and_recovery(
         "loss_rate_on_opening_pct": _rate(cumulative_losses, opening_balance),
         "loss_rate_on_current_pct": _rate(cumulative_losses, current_balance),
         "period_loss_rate_on_opening_pct": _rate(period_losses, opening_balance),
-        "recovery_rate_on_losses_pct": _rate(cumulative_recoveries,
-                                             cumulative_losses),
-        "net_loss": round(cumulative_losses - cumulative_recoveries, 2),
-        "net_loss_rate_on_original_pct": _rate(
-            cumulative_losses - cumulative_recoveries, original_balance),
+        # Recoveries against the exposure that defaulted — the denominator a
+        # recovery rate actually wants. Recoveries over *losses* is not that
+        # ratio: see the note below on RREL73.
+        "recovery_rate_on_defaulted_pct": _rate(
+            cumulative_recoveries, defaulted_exposure),
+        "recoveries_against_residual_loss_pct": _rate(cumulative_recoveries,
+                                                      cumulative_losses),
+        "loss_severity": severity,
         "notes": [
             "Several legitimate loss denominators exist and each answers a "
             "different question, so all are reported and none is chosen for you.",
@@ -629,8 +654,108 @@ def loss_and_recovery(
             "across them.",
             "Losses are read from the governed field, never inferred from "
             "balance movement.",
+            "NO net-of-recoveries loss is published, deliberately. ESMA RREL73 "
+            "defines allocated losses as already stated 'after application of "
+            "sale proceeds ... as recoveries are collected and the work out "
+            "process progresses'. Subtracting cumulative_recoveries (RREL74) "
+            "from it would deduct the same money twice. A 'net loss' field "
+            "that did exactly that was published up to OBSERVED_LOSS@v1 and "
+            "has been withdrawn.",
         ],
     }
+
+
+def _loss_severity(closing: pd.DataFrame, cumulative_losses: float,
+                   defaulted: float) -> Dict[str, Any]:
+    """Loss severity: realised loss over the exposure that defaulted.
+
+    The market definition is consistent across sources: severity is the net
+    loss on a liquidated exposure divided by its unpaid principal balance at
+    liquidation — the balance plus liquidation expenses, less net sale
+    proceeds and other recoveries, over the balance.
+
+    Trakt does not have to reconstruct that, because ESMA already did. Read
+    the two field definitions next to each other and the whole ratio falls
+    out of them:
+
+        RREL71 Default Amount
+            "Total **gross** default amount **before** the application of
+            sale proceeds and recoveries."
+        RREL73 Allocated Losses
+            "The allocated losses to date, net of fees, accrued interest etc.
+            **after application of sale proceeds** ... i.e. as recoveries are
+            collected and the work out process progresses."
+
+    RREL71 is the market's denominator, stated as gross-before-recoveries.
+    RREL73 is the market's numerator, stated as net-after-recoveries. Both
+    are Mandatory on every annex. Severity was therefore never a data gap; it
+    was a calculation nobody had written.
+
+    The same reading forbids something. ``cumulative_recoveries`` (RREL74) is
+    *not* subtracted here, because RREL73 has already had recoveries applied
+    — deducting them again removes the same money twice. A "net loss" that
+    did precisely that was published up to ``OBSERVED_LOSS@v1``; reading the
+    regime's own wording is what found it.
+
+    A pool with no defaults returns unavailable rather than zero: a severity
+    of 0% asserts that defaults happened and cost nothing.
+    """
+    if DEFAULT_AMOUNT_FIELD not in closing.columns:
+        return {
+            "available": False,
+            "reason": (f"the tape carries no {DEFAULT_AMOUNT_FIELD}, so there "
+                       "is no defaulted exposure to divide by. Severity is "
+                       "not approximated from the current balance: the "
+                       "balance at default and the balance now are different "
+                       "numbers on any amortising book."),
+        }
+
+    if defaulted <= 0:
+        return {
+            "available": False,
+            "reason": ("no defaulted exposure in this window. Severity is "
+                       "undefined rather than zero — 0% would assert that "
+                       "defaults occurred and recovered in full."),
+        }
+
+    result: Dict[str, Any] = {
+        "available": True,
+        "method": SEVERITY_METHOD,
+        "defaulted_exposure": round(defaulted, 2),
+        "severity_pct": round(cumulative_losses / defaulted * 100, 6),
+        "notes": [
+            "Denominator is default_amount (ESMA RREL71), defined as the "
+            "gross default amount BEFORE sale proceeds and recoveries — not "
+            "the current balance and not the original balance.",
+            "Numerator is allocated_losses (ESMA RREL73), defined as already "
+            "AFTER application of sale proceeds. Cumulative recoveries are "
+            "not deducted a second time.",
+        ],
+    }
+
+    # The Annex 3 decomposition, where the tape carries it. Reported as a
+    # cross-check, never as a second severity: one measured fact, one number.
+    if (LIQUIDATION_EXPENSE_FIELD in closing.columns
+            and NET_LIQUIDATION_PROCEEDS_FIELD in closing.columns):
+        expenses = float(pd.to_numeric(
+            closing[LIQUIDATION_EXPENSE_FIELD], errors="coerce").fillna(0).sum())
+        proceeds = float(pd.to_numeric(
+            closing[NET_LIQUIDATION_PROCEEDS_FIELD],
+            errors="coerce").fillna(0).sum())
+        constructed = defaulted + expenses - proceeds
+        result["liquidation_decomposition"] = {
+            "liquidation_expenses": round(expenses, 2),
+            "net_liquidation_proceeds": round(proceeds, 2),
+            "constructed_loss": round(constructed, 2),
+            "constructed_severity_pct": round(constructed / defaulted * 100, 6),
+            "agrees_with_allocated_losses": bool(
+                abs(constructed - cumulative_losses) <= max(1.0, defaulted * 1e-6)),
+            "note": ("Built the long way from the Annex 3 fields — balance at "
+                     "default plus liquidation expenses less net proceeds. A "
+                     "disagreement with allocated_losses is a data-quality "
+                     "finding about the tape, not a second answer."),
+        }
+    return result
 
 
 # --------------------------------------------------------------------------- #

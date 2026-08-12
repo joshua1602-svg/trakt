@@ -271,14 +271,18 @@ def test_one_period_cannot_produce_a_rate(snapshots):
 # Loss and recovery
 # =========================================================================== #
 def test_losses_and_recoveries_match_the_planted_amounts(snapshots):
+    """Rewritten in Sprint 2.5C. The two assertions removed here pinned a
+    methodology the regime contradicts: ``recovery_rate_on_losses_pct`` divided
+    recoveries by a loss figure that RREL73 already states net of them, and
+    ``net_loss`` deducted them from it a second time. Both are withdrawn at
+    OBSERVED_LOSS@v2 — see ``analytics_lib.history._loss_severity``."""
     outcome = loss_and_recovery(snapshots, periods=list(PERIODS))
     assert outcome["available"]
     assert outcome["cumulative_losses"] == pytest.approx(TOTAL_ALLOCATED_LOSSES)
     assert outcome["cumulative_recoveries"] == pytest.approx(TOTAL_RECOVERIES)
-    assert outcome["recovery_rate_on_losses_pct"] == pytest.approx(
+    assert outcome["recoveries_against_residual_loss_pct"] == pytest.approx(
         RECOVERY_RATE_ON_LOSSES)
-    assert outcome["net_loss"] == pytest.approx(
-        TOTAL_ALLOCATED_LOSSES - TOTAL_RECOVERIES)
+    assert "net_loss" not in outcome
 
 
 def test_every_loss_denominator_is_reported(snapshots):
@@ -454,7 +458,9 @@ def test_prepayment_and_loss_tools_report_their_methodology(snapshots):
     assert any("none of them is prepayment" in n for n in prepayment["notes"])
 
     losses = _ok("loss_analysis", {"resource": PORTFOLIO_A.key}, snapshots)
-    assert losses["method"] == "OBSERVED_LOSS@v1"
+    # v2: the net-of-recoveries outputs were withdrawn once RREL73's own
+    # wording showed they deducted recoveries twice.
+    assert losses["method"] == "OBSERVED_LOSS@v2"
     assert any("different question" in n for n in losses["notes"])
 
 
