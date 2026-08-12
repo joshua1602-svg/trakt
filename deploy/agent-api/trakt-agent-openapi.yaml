@@ -322,6 +322,69 @@ paths:
           $ref: '#/components/responses/UnknownTool'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/evaluate_rule_packs:
+    post:
+      operationId: invoke_evaluate_rule_packs
+      summary: 'Apply every configured rulebook to the SAME measured facts: warehouse criteria, Trakt''s
+        internal screening thresholds, and any supplied securitisation criteria'
+      description: 'Apply every configured rulebook to the SAME measured facts: warehouse criteria, Trakt''s
+        internal screening thresholds, and any supplied securitisation criteria. Each fact is computed
+        once and every pack reads it.
+
+
+        Check ''authority'' on every result before reporting it. An external pack returns pass/breach
+        and is a real requirement; Trakt''s screening pack returns clear/flag and means only ''worth investigating''.
+        NEVER describe a screening flag as a breach, and never add the two counts together. If no securitisation
+        criteria pack is configured, the assessment cannot conclude the book meets them — say so.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Apply every configured rulebook to the same measured facts: warehouse criteria,
+                Trakt''s internal screening thresholds, and any supplied securitisation criteria.'
+              properties:
+                resource: &id007
+                  type: string
+                  description: The portfolio resource to assess, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                packs:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Pack ids to evaluate. Omit for every configured pack.
+                  default: null
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/agent/tools/explain_value:
     post:
       operationId: invoke_explain_value
@@ -826,6 +889,183 @@ paths:
           $ref: '#/components/responses/UnknownTool'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/readiness_framework:
+    post:
+      operationId: invoke_readiness_framework
+      summary: 'The Securitisation Readiness Framework: every metric a first-pass review assesses, which
+        tool supplies each fact, which are only meaningful against supplied criteria, and Trakt''s deterministic
+        coverage of the framework overall and by category'
+      description: 'The Securitisation Readiness Framework: every metric a first-pass review assesses,
+        which tool supplies each fact, which are only meaningful against supplied criteria, and Trakt''s
+        deterministic coverage of the framework overall and by category.
+
+
+        Call this FIRST when assessing readiness — it tells you what to investigate and what Trakt can
+        actually measure, so you neither invent a checklist nor assume a gap. Read each metric''s ''agent_investigation_guidance''
+        and ''type'': MEASURE_ONLY means report the number and form no view; EXTERNAL_CRITERIA means it
+        is only meaningful against a supplied rulebook.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'The Securitisation Readiness Framework: what a first-pass review assesses,
+                which of it Trakt can measure deterministically, and which tool supplies each fact.'
+              properties:
+                resource: *id007
+                category:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional category filter.
+                  default: null
+                asset_class:
+                  type:
+                  - string
+                  - 'null'
+                  description: Narrow to metrics applicable to this asset class.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/readiness_metrics:
+    post:
+      operationId: invoke_readiness_metrics
+      summary: Measure framework facts using the governed concentration-test metric library — the same
+        39 registered evaluators the Risk Limits workspace uses
+      description: 'Measure framework facts using the governed concentration-test metric library — the
+        same 39 registered evaluators the Risk Limits workspace uses. Batch-first.
+
+
+        Ask for several metrics in ONE call. Each result names its calculation_source and its numerator
+        and denominator, so you can cite how a figure was produced. A metric declared in the library but
+        without an evaluator returns unavailable — report that, never an estimate.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Measure one or more framework facts using the governed concentration-test
+                metric library. Batch-first: ask for several in one call.'
+              properties:
+                resource: *id007
+                requests:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                  description: Objects of {metric_id, parameters?, label?}. metric_id names a metric in
+                    the governed library.
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  description: Optional equality filters applied first.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - requests
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/regulatory_readiness:
+    post:
+      operationId: invoke_regulatory_readiness
+      summary: 'Whether a regulatory submission could be produced from this tape: coverage of the regime''s
+        required loan-level fields, separating fields that may NOT report a No-Data value (hard blockers)
+        from those that may'
+      description: 'Whether a regulatory submission could be produced from this tape: coverage of the
+        regime''s required loan-level fields, separating fields that may NOT report a No-Data value (hard
+        blockers) from those that may.
+
+
+        Read ''blocking_gaps'' first — those fields admit no No-Data fallback, so no valid submission
+        exists until they are resolved. Fields permitting ND1-ND4 weaken the disclosure without blocking
+        it. Never let a clean regulatory result imply a sound portfolio, or the reverse: they are different
+        questions.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Whether a regulatory submission could be produced from this tape: coverage
+                of the regime''s required loan-level fields, separating hard blockers from fields that
+                may report a No-Data value.'
+              properties:
+                resource: *id007
+                regime:
+                  type: string
+                  description: The disclosure regime. ESMA Annex 2 is the loan-level template.
+                  default: ESMA_Annex2
+                include_field_detail:
+                  type: boolean
+                  description: Return per-field coverage as well as the summary.
+                  default: false
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/agent/tools/stratify:
     post:
       operationId: invoke_stratify
@@ -874,6 +1114,64 @@ paths:
               required:
               - resource
               - dimension
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/valuation_age_profile:
+    post:
+      operationId: invoke_valuation_age_profile
+      summary: 'How old and how good the collateral evidence is: balance-weighted valuation age distribution,
+        physical/indexed method mix, and the share of balance with no usable valuation'
+      description: 'How old and how good the collateral evidence is: balance-weighted valuation age distribution,
+        physical/indexed method mix, and the share of balance with no usable valuation.
+
+
+        Every LTV in the book rests on these observations, so read this before quoting any LTV metric.
+        A stale valuation makes the reported LTV unreliable rather than making the loan bad — that is
+        a data-quality finding, and it calls for different remediation from a credit one. Loans with no
+        valuation are silently absent from every LTV figure.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How old and how good the collateral evidence is: valuation age distribution,
+                method mix and missing-valuation share, all balance-weighted.'
+              properties:
+                resource: *id007
+                stale_after_months:
+                  type: integer
+                  minimum: 1
+                  maximum: 600
+                  description: Months at or beyond which a valuation counts as stale. Defaults to the
+                    governed selection policy's own limit.
+                  default: 24
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
       responses:
         '200':
           description: The governed result.
@@ -961,7 +1259,7 @@ components:
           - 'null'
         error:
           oneOf:
-          - &id007
+          - &id008
             type: object
             description: A governed failure. Branch on `code`, never on `message`.
             properties:
@@ -999,7 +1297,7 @@ components:
       - status
       - request_id
       - tenant_id
-    TraktError: *id007
+    TraktError: *id008
     ToolDeclaration:
       type: object
       properties:
@@ -1028,20 +1326,20 @@ components:
   responses:
     InvalidArguments:
       description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
-      content: &id008
+      content: &id009
         application/json:
           schema:
             $ref: '#/components/schemas/GovernedResult'
     Unauthorized:
       description: The bearer token is missing, invalid or expired.
-      content: *id008
+      content: *id009
     Forbidden:
       description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
         RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
-      content: *id008
+      content: *id009
     UnknownTool:
       description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
-      content: *id008
+      content: *id009
     Unavailable:
       description: The agent API or the governed data source is not available. Retryable.
-      content: *id008
+      content: *id009

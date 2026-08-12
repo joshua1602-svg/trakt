@@ -1,0 +1,290 @@
+# =========================================================================
+# Trakt Screening Framework v1 — INTERNAL screening thresholds
+# =========================================================================
+#
+#   These are NOT market rules.
+#   These are NOT rating-agency criteria.
+#   These are NOT regulatory requirements.
+#   These are NOT transaction terms.
+#
+# They are Trakt's own conservative thresholds whose ONLY purpose is to draw a
+# reviewer's attention to something worth looking at. A flag here means "look at
+# this", never "this fails".
+#
+# Every result produced from this pack carries `authority: trakt_internal` and
+# the label below, so an agent cannot report a screening flag as though it were
+# an external requirement. That separation is the point of the pack existing at
+# all rather than the thresholds sitting inside metric definitions.
+#
+# ------------------------------------------------------------------------
+# Where these numbers come from
+# ------------------------------------------------------------------------
+# Each carries a `rationale`. Where a threshold is a conventional review
+# trigger, it says so. Where it is a deliberate round number chosen to be
+# conservative, it says that instead. None is presented as derived from a
+# methodology it is not derived from.
+#
+# A metric with no defensible screening default has NO rule here. Filling the
+# pack for completeness would manufacture false precision, and an agent would
+# then treat a number Trakt invented as though it meant something.
+#
+# ------------------------------------------------------------------------
+# Versioning
+# ------------------------------------------------------------------------
+# `version` is part of every result. Changing any threshold MUST bump it: a
+# finding that cited TRAKT_SCREENING@v1 has to keep meaning the same thing.
+#
+# Thresholds are overridable per deployment and per asset class. A client whose
+# book is legitimately concentrated should raise the geographic threshold rather
+# than learn to ignore the flag.
+
+schema_version: "1.0.0"
+
+pack_id: TRAKT_SCREENING
+pack_name: Trakt Screening Framework
+version: 1
+authority: trakt_internal
+authority_label: >-
+  Trakt internal screening threshold — not a transaction requirement, not a
+  regulatory requirement, and not a rating-agency criterion.
+purpose: attention
+description: >-
+  Conservative internal thresholds that mark areas worth investigating in a
+  first-pass securitisation readiness review.
+
+#: What a flag from this pack means, carried onto every result so a downstream
+#: reader cannot mistake it for a pass/fail against an external rulebook.
+outcome_vocabulary:
+  flag: This metric is above Trakt's internal screening threshold and is worth investigating.
+  clear: This metric is below Trakt's internal screening threshold. That is not a pass against any external criterion.
+  unavailable: This metric could not be measured, so no screening view is expressed.
+
+rules:
+
+  # -------------------------------------------------------------------
+  # Leverage
+  # -------------------------------------------------------------------
+  - rule_id: SCREEN_WA_LTV
+    framework_metric: COLL_WA_LTV
+    metric_id: ltv_weighted_average
+    parameters: {ltv_basis: current}
+    operator: max
+    threshold: 75.0
+    unit: percent
+    severity: high
+    rationale: >-
+      A conservative attention threshold rather than a limit. Books with a
+      balance-weighted LTV above roughly three-quarters have materially less
+      cushion against a value correction, and the collateral evidence behind
+      the LTV becomes worth checking. Deliberately a round number.
+
+  - rule_id: SCREEN_HIGH_LTV_SHARE
+    framework_metric: COLL_HIGH_LTV_SHARE
+    metric_id: ltv_above_share
+    parameters: {ltv_percent: 80.0, ltv_basis: current, comparison: above}
+    operator: max
+    threshold: 15.0
+    unit: percent
+    severity: high
+    rationale: >-
+      80% LTV is a long-standing review boundary in residential lending, so it
+      is used as the cohort definition rather than as a pass mark. The 15%
+      share is Trakt's own: below it the cohort is usually a tail, above it it
+      is a portfolio characteristic that shapes the transaction.
+
+  - rule_id: SCREEN_MAX_LTV
+    framework_metric: COLL_MAX_LTV
+    metric_id: ltv_maximum
+    parameters: {ltv_basis: current}
+    operator: max
+    threshold: 100.0
+    unit: percent
+    severity: high
+    rationale: >-
+      Not a limit — a data question. A single loan above 100% is usually either
+      genuine negative equity or a stale valuation, and both deserve a look.
+      Check COLL_VALUATION_AGE before treating it as economic.
+
+  - rule_id: SCREEN_NEGATIVE_EQUITY
+    framework_metric: COLL_NEGATIVE_EQUITY_SHARE
+    metric_id: ltv_above_share
+    parameters: {ltv_percent: 100.0, ltv_basis: current, comparison: above}
+    operator: max
+    threshold: 1.0
+    unit: percent
+    severity: critical
+    rationale: >-
+      Deliberately near zero. Any meaningful negative-equity balance is worth
+      investigating in a first-pass review, and 1% is low enough to surface it
+      while tolerating one or two anomalous loans in a granular book.
+
+  # -------------------------------------------------------------------
+  # Collateral evidence
+  # -------------------------------------------------------------------
+  - rule_id: SCREEN_STALE_VALUATION_SHARE
+    framework_metric: COLL_VALUATION_AGE
+    fact_key: stale_balance_pct
+    parameters: {max_age_months: 24}
+    operator: max
+    threshold: 20.0
+    unit: percent
+    severity: high
+    rationale: >-
+      24 months matches the age limit already governing valuation selection in
+      config/system/valuation_selection_policy.yaml, so the screening rule and
+      the LTV derivation agree about what "stale" means rather than each having
+      its own definition. The 20% share is Trakt's own attention threshold.
+
+  - rule_id: SCREEN_INDEXED_VALUATION_SHARE
+    framework_metric: COLL_VALUATION_METHOD_MIX
+    fact_key: indexed_balance_pct
+    parameters: {}
+    operator: max
+    threshold: 50.0
+    unit: percent
+    severity: medium
+    rationale: >-
+      Where more than half a book's LTVs rest on indexed rather than inspected
+      valuations, the collateral evidence is materially weaker at the same
+      headline LTV. Half is a deliberate round number, not a market convention.
+
+  - rule_id: SCREEN_MISSING_VALUATION_SHARE
+    framework_metric: COLL_MISSING_VALUATION_SHARE
+    fact_key: missing_balance_pct
+    parameters: {}
+    operator: max
+    threshold: 2.0
+    unit: percent
+    severity: high
+    rationale: >-
+      Loans with no valuation are silently absent from every LTV metric, so
+      even a small share distorts the picture. Low on purpose: the point is to
+      make the reader aware of the gap, not to tolerate it.
+
+  # -------------------------------------------------------------------
+  # Performance
+  # -------------------------------------------------------------------
+  - rule_id: SCREEN_ARREARS_SHARE
+    framework_metric: PERF_ARREARS_SHARE
+    metric_id: perf_arrears_share
+    parameters: {min_days: 30}
+    operator: max
+    threshold: 5.0
+    unit: percent
+    severity: high
+    rationale: >-
+      A conventional first look at 30+ DPD. 5% is Trakt's attention threshold,
+      chosen to be conservative across asset classes; a specialist book with
+      structurally higher arrears should override it rather than ignore it.
+
+  - rule_id: SCREEN_90_PLUS_SHARE
+    framework_metric: PERF_90_PLUS_SHARE
+    metric_id: perf_arrears_share
+    parameters: {min_days: 90}
+    operator: max
+    threshold: 1.0
+    unit: percent
+    severity: critical
+    rationale: >-
+      90+ DPD is commonly an outright eligibility exclusion, so any material
+      balance affects what can be included. Set low because the population
+      matters more than the percentage.
+
+  # -------------------------------------------------------------------
+  # Concentration
+  # -------------------------------------------------------------------
+  - rule_id: SCREEN_GEOGRAPHIC_CONCENTRATION
+    framework_metric: CONC_GEOGRAPHIC
+    metric_id: geo_largest_region_share
+    parameters: {}
+    operator: max
+    threshold: 25.0
+    unit: percent
+    severity: high
+    rationale: >-
+      A quarter of a book in one region is worth understanding, not worth
+      failing. Many sound specialist books are legitimately concentrated —
+      which is why this flags for investigation and why the threshold is
+      expected to be overridden for books with a stated regional focus.
+
+  - rule_id: SCREEN_TOP_10_LOAN_SHARE
+    framework_metric: CONC_TOP_N_LOANS
+    metric_id: top_n_loans_share
+    parameters: {n: 10}
+    operator: max
+    threshold: 10.0
+    unit: percent
+    severity: high
+    rationale: >-
+      Granularity. Where the ten largest loans exceed a tenth of the book,
+      individual loan performance drives pool performance and those loans are
+      worth examining individually — which is bounded, cheap work.
+
+  - rule_id: SCREEN_LARGEST_BORROWER_SHARE
+    framework_metric: BORR_LARGEST_SHARE
+    metric_id: borrower_largest_share
+    parameters: {}
+    operator: max
+    threshold: 2.0
+    unit: percent
+    severity: high
+    rationale: >-
+      Single-obligor exposure. 2% is a conservative attention level for a
+      granular consumer book and is expected to be raised substantially for a
+      commercial one, where concentration is inherent.
+
+  # -------------------------------------------------------------------
+  # Data quality
+  # -------------------------------------------------------------------
+  - rule_id: SCREEN_CRITICAL_FIELD_COMPLETENESS
+    framework_metric: DQ_FIELD_COMPLETENESS
+    fact_key: critical_field_completeness_pct
+    parameters:
+      critical_fields:
+        - loan_identifier
+        - current_principal_balance
+        - current_loan_to_value
+        - current_valuation_amount
+        - account_status
+        - origination_date
+        - geographic_region_collateral
+    operator: min
+    threshold: 98.0
+    unit: percent
+    severity: high
+    rationale: >-
+      These specific fields are the inputs to the framework's own metrics, so
+      a gap in them undermines the assessment itself rather than merely the
+      tape. 98% leaves room for a genuinely inapplicable row without letting a
+      systematic gap through.
+
+  - rule_id: SCREEN_VALIDATION_FAILURES
+    framework_metric: DQ_VALIDATION_EXCEPTIONS
+    fact_key: failed_field_count
+    parameters: {}
+    operator: max
+    threshold: 0
+    unit: count
+    severity: high
+    rationale: >-
+      Zero, because this flags the EXISTENCE of a validation failure for a
+      reviewer to weigh — it does not assert that any failure blocks a
+      transaction. Materiality is the reviewer's judgement, and suppressing
+      the flag below some count would make that judgement for them.
+
+  # -------------------------------------------------------------------
+  # Regulatory
+  # -------------------------------------------------------------------
+  - rule_id: SCREEN_MANDATORY_FIELD_COVERAGE
+    framework_metric: REG_MANDATORY_FIELD_COVERAGE
+    fact_key: no_nd_fallback_coverage_pct
+    parameters: {}
+    operator: min
+    threshold: 100.0
+    unit: percent
+    severity: critical
+    rationale: >-
+      100% because this counts only fields that may NOT legally fall back to a
+      No-Data value. Anything below complete coverage is a hard submission
+      blocker, so the threshold is a fact about the regime rather than a
+      Trakt judgement — the one rule in this pack that is not discretionary.

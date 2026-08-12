@@ -22,6 +22,7 @@ from . import covenants as _covenants
 from . import loans as _loans
 from . import movement as _movement
 from . import provenance as _provenance
+from . import readiness as _readiness
 
 register(ToolSpec(
     name="evaluate_covenants",
@@ -272,4 +273,114 @@ register(ToolSpec(
     handler=_movement.period_change,
 ))
 
-__all__ = ["_analysis", "_covenants", "_loans", "_movement", "_provenance"]
+# --------------------------------------------------------------------------- #
+# Securitisation readiness. The framework is published rather than implied: an
+# agent that does not know what a readiness review covers will invent a
+# checklist, and the invented parts are the ones nobody can reproduce.
+#
+# The load-bearing distinction across all five is between a FACT Trakt measured,
+# an EXTERNAL CRITERION somebody supplied, and a TRAKT SCREENING THRESHOLD that
+# only means "look at this". Every result carries the authority it came from.
+# --------------------------------------------------------------------------- #
+register(ToolSpec(
+    name="readiness_framework",
+    version="1.0.0",
+    description=(
+        "The Securitisation Readiness Framework: every metric a first-pass "
+        "review assesses, which tool supplies each fact, which are only "
+        "meaningful against supplied criteria, and Trakt's deterministic "
+        "coverage of the framework overall and by category."),
+    agent_guidance=(
+        "Call this FIRST when assessing readiness — it tells you what to "
+        "investigate and what Trakt can actually measure, so you neither invent "
+        "a checklist nor assume a gap. Read each metric's "
+        "'agent_investigation_guidance' and 'type': MEASURE_ONLY means report "
+        "the number and form no view; EXTERNAL_CRITERIA means it is only "
+        "meaningful against a supplied rulebook."),
+    input_schema=_readiness.FRAMEWORK_INPUT,
+    output_schema=_readiness.FRAMEWORK_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_readiness.readiness_framework,
+))
+
+register(ToolSpec(
+    name="readiness_metrics",
+    version="1.0.0",
+    description=(
+        "Measure framework facts using the governed concentration-test metric "
+        "library — the same 39 registered evaluators the Risk Limits workspace "
+        "uses. Batch-first."),
+    agent_guidance=(
+        "Ask for several metrics in ONE call. Each result names its "
+        "calculation_source and its numerator and denominator, so you can cite "
+        "how a figure was produced. A metric declared in the library but "
+        "without an evaluator returns unavailable — report that, never an "
+        "estimate."),
+    input_schema=_readiness.METRICS_INPUT,
+    output_schema=_readiness.METRICS_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_readiness.readiness_metrics,
+))
+
+register(ToolSpec(
+    name="valuation_age_profile",
+    version="1.0.0",
+    description=(
+        "How old and how good the collateral evidence is: balance-weighted "
+        "valuation age distribution, physical/indexed method mix, and the share "
+        "of balance with no usable valuation."),
+    agent_guidance=(
+        "Every LTV in the book rests on these observations, so read this before "
+        "quoting any LTV metric. A stale valuation makes the reported LTV "
+        "unreliable rather than making the loan bad — that is a data-quality "
+        "finding, and it calls for different remediation from a credit one. "
+        "Loans with no valuation are silently absent from every LTV figure."),
+    input_schema=_readiness.VALUATION_AGE_INPUT,
+    output_schema=_readiness.VALUATION_AGE_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_readiness.valuation_age_profile,
+))
+
+register(ToolSpec(
+    name="regulatory_readiness",
+    version="1.0.0",
+    description=(
+        "Whether a regulatory submission could be produced from this tape: "
+        "coverage of the regime's required loan-level fields, separating fields "
+        "that may NOT report a No-Data value (hard blockers) from those that "
+        "may."),
+    agent_guidance=(
+        "Read 'blocking_gaps' first — those fields admit no No-Data fallback, "
+        "so no valid submission exists until they are resolved. Fields "
+        "permitting ND1-ND4 weaken the disclosure without blocking it. Never "
+        "let a clean regulatory result imply a sound portfolio, or the "
+        "reverse: they are different questions."),
+    input_schema=_readiness.REGULATORY_INPUT,
+    output_schema=_readiness.REGULATORY_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_readiness.regulatory_readiness,
+))
+
+register(ToolSpec(
+    name="evaluate_rule_packs",
+    version="1.0.0",
+    description=(
+        "Apply every configured rulebook to the SAME measured facts: warehouse "
+        "criteria, Trakt's internal screening thresholds, and any supplied "
+        "securitisation criteria. Each fact is computed once and every pack "
+        "reads it."),
+    agent_guidance=(
+        "Check 'authority' on every result before reporting it. An external "
+        "pack returns pass/breach and is a real requirement; Trakt's screening "
+        "pack returns clear/flag and means only 'worth investigating'. NEVER "
+        "describe a screening flag as a breach, and never add the two counts "
+        "together. If no securitisation criteria pack is configured, the "
+        "assessment cannot conclude the book meets them — say so."),
+    input_schema=_readiness.RULE_PACKS_INPUT,
+    output_schema=_readiness.RULE_PACKS_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_readiness.evaluate_rule_packs,
+))
+
+__all__ = ["_analysis", "_covenants", "_loans", "_movement", "_provenance",
+           "_readiness"]

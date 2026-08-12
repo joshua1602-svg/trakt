@@ -1,0 +1,98 @@
+# =========================================================================
+# EXAMPLE proposed securitisation criteria — SYNTHETIC, demonstration only
+# =========================================================================
+#
+#   THIS IS NOT A REAL TERM SHEET.
+#   THIS IS NOT ANY RATING AGENCY'S METHODOLOGY.
+#   Trakt does not model Moody's, S&P or Fitch criteria and does not predict
+#   ratings.
+#
+# It exists to prove one architectural claim: the SAME measured fact can be
+# tested by three rulebooks at once — a warehouse agreement, Trakt's internal
+# screening, and proposed transaction criteria — with three different verdicts
+# and one computation.
+#
+# The thresholds sit deliberately BETWEEN the warehouse limits and Trakt's
+# screening thresholds on the shared metrics, so a portfolio can legitimately
+# produce:
+#
+#     warehouse    PASS     (28.7% <= 35%)
+#     securitisation BREACH (28.7% >  27%)
+#     Trakt screen FLAG     (28.7% >  25%)
+#
+# all from one number. A real deployment replaces this with the actual proposed
+# criteria for the transaction under discussion.
+
+schema_version: "1.0.0"
+
+pack_id: EXAMPLE_PROPOSED_SECURITISATION
+pack_name: Example Proposed Securitisation Criteria (SYNTHETIC)
+version: 1
+authority: securitisation_criteria
+authority_label: >-
+  SYNTHETIC example securitisation criteria. Invented for demonstration. Not a
+  term sheet, not a rating methodology, and not market convention.
+purpose: eligibility
+source_document: "SYNTHETIC — no source document exists"
+description: >-
+  An invented proposed-transaction rulebook, set tighter than the example
+  warehouse criteria, to demonstrate several rulebooks over one fact.
+
+rules:
+
+  - rule_id: SEC_GEOGRAPHIC_LIMIT
+    framework_metric: CONC_GEOGRAPHIC
+    metric_id: geo_largest_region_share
+    parameters: {}
+    operator: max
+    threshold: 27.0
+    unit: percent
+    severity: critical
+    rationale: >-
+      SYNTHETIC. Chosen to sit between the example warehouse limit (35%) and
+      Trakt's screening threshold (25%), so one portfolio fact can produce a
+      pass, a breach and a flag at once.
+
+  - rule_id: SEC_TOP_10_LOAN_LIMIT
+    framework_metric: CONC_TOP_N_LOANS
+    metric_id: top_n_loans_share
+    parameters: {n: 10}
+    operator: max
+    threshold: 12.0
+    unit: percent
+    severity: critical
+    rationale: SYNTHETIC granularity requirement, tighter than the warehouse.
+
+  - rule_id: SEC_HIGH_LTV_LIMIT
+    framework_metric: COLL_HIGH_LTV_SHARE
+    metric_id: ltv_above_share
+    parameters: {ltv_percent: 80.0, ltv_basis: current, comparison: above}
+    operator: max
+    threshold: 20.0
+    unit: percent
+    severity: high
+    rationale: SYNTHETIC cap on the high-LTV cohort.
+
+  - rule_id: SEC_90_PLUS_EXCLUSION
+    framework_metric: PERF_90_PLUS_SHARE
+    metric_id: perf_arrears_share
+    parameters: {min_days: 90}
+    operator: max
+    threshold: 0.0
+    unit: percent
+    severity: critical
+    rationale: >-
+      SYNTHETIC outright exclusion — 90+ DPD loans are commonly ineligible
+      rather than merely limited.
+
+  - rule_id: SEC_STALE_VALUATION_LIMIT
+    framework_metric: COLL_VALUATION_AGE
+    fact_key: stale_balance_pct
+    parameters: {max_age_months: 24}
+    operator: max
+    threshold: 10.0
+    unit: percent
+    severity: high
+    rationale: >-
+      SYNTHETIC requirement on collateral evidence. Uses the SAME fact key as
+      Trakt's screening rule, so both read one computation of valuation age.
