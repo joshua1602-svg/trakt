@@ -100,7 +100,12 @@ class TestConditionalOverHttp(unittest.TestCase):
             build(Path(cls.tmp.name), months=2, funded_rows=60,
                   weeks=2, pipeline_rows=40)
             fixture = cls.tmp.name
-        from tests.perf.measure import configure_env
+        # configure_env mutates a dozen process-wide variables, including the
+        # auth switch. Snapshot before, restore in tearDownClass — otherwise
+        # every test that runs after this class inherits a fixture's idea of
+        # the environment.
+        from tests.perf.measure import configure_env, snapshot_env
+        cls._env_snapshot = snapshot_env()
         configure_env(Path(fixture))
         from fastapi.testclient import TestClient
         from mi_agent_api.app import app
@@ -113,8 +118,12 @@ class TestConditionalOverHttp(unittest.TestCase):
         try:
             cls.client.__exit__(None, None, None)
         finally:
-            if cls.tmp:
-                cls.tmp.cleanup()
+            try:
+                if cls.tmp:
+                    cls.tmp.cleanup()
+            finally:
+                from tests.perf.measure import restore_env
+                restore_env(cls._env_snapshot)
 
     def test_cold_request_returns_a_validator(self):
         r = self.client.get("/mi/snapshot", params=self.params)
@@ -171,6 +180,21 @@ class TestConditionalRequiresAuthentication(unittest.TestCase):
 
     def test_unauthenticated_conditional_request_is_refused_not_304(self):
         import importlib
+
+        # Capture whatever was set before — including "not set at all" — so the
+        # finally block can put it back exactly.
+        #
+        # The previous version hard-coded "false" on the way out, which is the
+        # value the perf fixture happens to want, not the value this process
+        # started with. In a full-suite run that leaked auth-disabled into every
+        # test that ran afterwards, and
+        # tests/test_agent_identity_and_api.py::
+        # test_the_easy_auth_guard_exempts_the_agent_prefix then found
+        # ``auth_guard`` permitting a path it asserts is guarded. A leaked auth
+        # switch is the worst kind of test pollution: it makes a SECURITY
+        # assertion pass or fail depending on collection order, and it fails in
+        # the permissive direction.
+        previous = os.environ.get("MI_AGENT_AUTH_ENABLED")
         os.environ["MI_AGENT_AUTH_ENABLED"] = "true"
         try:
             from mi_agent_api import auth as auth_mod
@@ -185,7 +209,10 @@ class TestConditionalRequiresAuthentication(unittest.TestCase):
                           "auth must run before any conditional short-circuit")
             self.assertNotEqual(r.status_code, 304)
         finally:
-            os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
+            if previous is None:
+                os.environ.pop("MI_AGENT_AUTH_ENABLED", None)
+            else:
+                os.environ["MI_AGENT_AUTH_ENABLED"] = previous
             from mi_agent_api import auth as auth_mod
             importlib.reload(auth_mod)
 

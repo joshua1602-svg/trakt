@@ -79,8 +79,62 @@ class _PerfSink(logging.Handler):
             pass
 
 
+#: Every environment variable :func:`configure_env` writes or removes.
+#:
+#: Named here, next to the function that mutates them, so a caller that needs to
+#: put the environment back has one list to restore and it cannot fall behind:
+#: adding a variable to ``configure_env`` without adding it here is visible in
+#: the same diff.
+#:
+#: This exists because the mutation genuinely leaks. ``MI_AGENT_AUTH_ENABLED``
+#: is set to "false" below, and a unittest class that called ``configure_env``
+#: in ``setUpClass`` without restoring it disabled authentication for every test
+#: that ran after it in the same process — turning a security assertion in an
+#: unrelated file into a collection-order coin toss. See
+#: ``tests/test_auth_env_order_independence.py``.
+CONFIGURED_ENV_KEYS = (
+    "TRAKT_STORAGE_BACKEND",
+    "TRAKT_LOCAL_BLOB_ROOT",
+    "TRAKT_PROCESSED_CONTAINER",
+    "MI_AGENT_ONBOARDING_OUTPUT_ROOT",
+    "MI_AGENT_PIPELINE_ROOT",
+    "MI_AGENT_PLATFORM_URI",
+    "MI_AGENT_CLIENT_ID",
+    "MI_AGENT_SCRATCH",
+    "MI_AGENT_AUTH_ENABLED",
+    "TRAKT_RUNTIME_MODE",
+    "TRAKT_PERF_INSTRUMENTATION",
+    "MI_AGENT_PIPELINE_URI",
+    "MI_AGENT_PIPELINE_SOURCE",
+)
+
+
+def snapshot_env() -> Dict[str, Optional[str]]:
+    """The current value of every key ``configure_env`` touches.
+
+    ``None`` records "was not set", which must be restored as *absence* rather
+    than as an empty string — an empty ``MI_AGENT_AUTH_ENABLED`` enforces auth,
+    but an empty ``TRAKT_LOCAL_BLOB_ROOT`` is a path that does not exist.
+    """
+    return {key: os.environ.get(key) for key in CONFIGURED_ENV_KEYS}
+
+
+def restore_env(snapshot: Dict[str, Optional[str]]) -> None:
+    """Put back exactly what :func:`snapshot_env` recorded."""
+    for key, value in snapshot.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
 def configure_env(root: Path) -> None:
-    """Point the API at the fixture tree through the filesystem blob backend."""
+    """Point the API at the fixture tree through the filesystem blob backend.
+
+    Mutates the process environment. A test that calls this **must** restore it
+    afterwards with :func:`snapshot_env` / :func:`restore_env`; the variables it
+    writes change the behaviour of unrelated tests later in the same run.
+    """
     os.environ["TRAKT_STORAGE_BACKEND"] = "file"
     os.environ["TRAKT_LOCAL_BLOB_ROOT"] = str(root)
     os.environ["TRAKT_PROCESSED_CONTAINER"] = "processed-v2"

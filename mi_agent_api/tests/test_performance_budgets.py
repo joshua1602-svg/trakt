@@ -46,13 +46,16 @@ class TestWarmRequestBudgets(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from tests.perf.generate_fixture import build
-        from tests.perf.measure import configure_env
+        from tests.perf.measure import configure_env, snapshot_env
 
         cls.tmp = tempfile.TemporaryDirectory()
         # Several periods and several weeks, so a per-period or per-extract
         # regression shows up as a count > 0 rather than being masked.
         build(Path(cls.tmp.name), months=4, funded_rows=80,
               weeks=4, pipeline_rows=50)
+        # Same contract as test_http_conditional: configure_env mutates the
+        # process environment, so snapshot before and restore after.
+        cls._env_snapshot = snapshot_env()
         configure_env(Path(cls.tmp.name))
 
         from fastapi.testclient import TestClient
@@ -71,7 +74,11 @@ class TestWarmRequestBudgets(unittest.TestCase):
         try:
             cls.client.__exit__(None, None, None)
         finally:
-            cls.tmp.cleanup()
+            try:
+                cls.tmp.cleanup()
+            finally:
+                from tests.perf.measure import restore_env
+                restore_env(cls._env_snapshot)
 
     def _warm(self, path: str, **params) -> Dict[str, Any]:
         """Issue the request twice and return the SECOND request's record."""
