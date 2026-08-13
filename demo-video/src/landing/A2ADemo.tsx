@@ -89,7 +89,7 @@ export const A2A_DEMO = {
   fps: 30,
   width: 1200,
   height: 960,
-  duration: 1470,
+  duration: 1500,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -268,23 +268,26 @@ const F = {
   panel: 156,
   mcp: 150,
   /** All thirty done; the reasoning total joins the calculation total. */
-  complete: 939,
-  ret: 963,
-  report: 1026,
+  complete: 921,
+  ret: 945,
+  report: 1008,
   /**
    * The six findings, in the artifact's own order — but the third opens where
    * it sits. Listing all six and then reaching back up to expand one made the
    * reader lose their place; a finding that unfolds in sequence reads as part
    * of the list rather than as an annotation on it.
    */
-  finding: [1050, 1074, 1098, 1284, 1308, 1332] as const,
-  fact: 1128,
-  rule: 1152,
+  finding: [1032, 1052, 1072, 1240, 1260, 1280] as const,
+  fact: 1100,
+  rule: 1122,
   /** One number, three governing documents, resolving one at a time. */
-  verdict: [1176, 1200, 1224] as const,
-  judgement: 1254,
-  diligence: 1362,
-  gaps: 1386,
+  verdict: [1146, 1170, 1194] as const,
+  judgement: 1218,
+  diligence: 1310,
+  gaps: 1332,
+  /** The working surface clears and the close comes up behind it. */
+  clear: 1404,
+  close: 1416,
 } as const;
 
 /** Where each call lights, by segment. Recorded order; compressed time. */
@@ -646,19 +649,16 @@ const McpDescent: React.FC = () => {
 /**
  * The one colour scale on this surface.
  *
- * A row read mint while the result card beside it read amber — "ESMA
- * reporting readiness" ticked green with "14 of 18 required fields missing"
- * next to it. Two scales, one screen, opposite answers. The row now takes its
- * tone from what the check actually returned, so the dot, the label and the
- * card can never disagree: amber where the run recorded something needing
- * attention or refused the request, mint where it answered cleanly.
+ * Amber means one thing in the trace: the governed layer refused the request.
+ * It briefly meant "and also, this result is concerning", which put seven
+ * amber rows on screen against six findings in the assessment that did not
+ * line up with them — the marks came from whichever digests happened to be
+ * surfaced, not from what the specialist concluded. Two of the seven were tool
+ * refusals with no bearing on the portfolio at all.
+ *
+ * So the trace reports and the assessment judges. Severity is stated once,
+ * where it was actually decided, with the findings that carry it.
  */
-const concernOf = (seq: number): Tone => {
-  const call = CALLS.find((c) => c.seq === seq);
-  if (call?.refused) return "amber";
-  return DETAILS.find((d) => d.seq === seq)?.tone === "amber" ? "amber" : "mint";
-};
-
 /**
  * One check in the trace.
  *
@@ -692,7 +692,7 @@ const TraceRow: React.FC<{ call: Call }> = ({ call }) => {
      1,126 ms call visibly outlasts a 0.2 ms one without stalling the edit. */
   const holdFrames = Math.min(18, Math.max(3, Math.round(call.ms / 70) + 3));
   const settled = frame >= at + holdFrames;
-  const tone: Tone = !settled ? "peri" : concernOf(call.seq);
+  const tone: Tone = !settled ? "peri" : call.refused ? "amber" : "mint";
   const tag = settled ? (call.refused ? "refused" : call.adjusted ? "adjusted" : null) : null;
   return (
     <div
@@ -724,7 +724,7 @@ const TraceRow: React.FC<{ call: Call }> = ({ call }) => {
         style={{
           fontSize: T.size.trace,
           whiteSpace: "nowrap",
-          color: settled && concernOf(call.seq) === "amber" ? T.color.amber : T.color.ink200,
+          color: settled && call.refused ? T.color.amber : T.color.ink200,
         }}
       >
         {call.asks}
@@ -818,7 +818,7 @@ const DetailCard: React.FC = () => {
           fontSize: T.size.value,
           fontWeight: 600,
           lineHeight: 1.25,
-          color: TONE_INK[current.tone],
+          color: current.tone === "amber" ? T.color.amber : T.color.ink100,
         }}
       >
         {current.value}
@@ -911,15 +911,49 @@ const Meter: React.FC<{ label: string; value: string; tone?: Tone }> = ({
  * which is the thing this whole surface exists to show.
  */
 const FINDINGS = [
-  { severity: "high", title: "Severe performance deterioration across all arrears bands" },
-  { severity: "high", title: "High-LTV cohort on stale valuations, severe arrears" },
-  { severity: "medium", title: "Geographic concentration, arrears in the same region", open: true },
-  { severity: "high", title: "Regulatory disclosure blocked by missing identifiers" },
-  { severity: "medium", title: "Borrower concentration cannot be assessed" },
-  { severity: "medium", title: "Loans defaulting without a visible delinquency stage" },
+  {
+    severity: "high",
+    title: "Severe performance deterioration across all arrears bands",
+    checks: "10 · 20",
+  },
+  {
+    severity: "high",
+    title: "High-LTV cohort on stale valuations, severe arrears",
+    checks: "8 · 12 · 25",
+  },
+  {
+    severity: "medium",
+    title: "Geographic concentration, arrears in the same region",
+    checks: "16 · 24",
+    open: true,
+  },
+  {
+    severity: "high",
+    title: "Regulatory disclosure blocked by missing identifiers",
+    checks: "7",
+  },
+  {
+    severity: "medium",
+    title: "Borrower concentration cannot be assessed",
+    checks: "6",
+  },
+  {
+    severity: "medium",
+    title: "Loans defaulting without a visible delinquency stage",
+    checks: "14",
+  },
 ] as const;
 
 const SEVERITY_TONE = { high: "rose", medium: "amber" } as const;
+
+/*
+ * Each finding names the checks it rests on, quoted from its own fact field:
+ * finding 1 cites the twelve-month series and the default rate, finding 3 the
+ * concentration test and the arrears filter, finding 5 the warehouse covenant
+ * that came back unavailable. Without them the two halves of the demo were
+ * merely adjacent — thirty checks, then six findings, and nothing on screen
+ * connecting one to the other.
+ */
 
 const SeverityChip: React.FC<{ severity: "high" | "medium" }> = ({ severity }) => (
   <span
@@ -1037,8 +1071,8 @@ const FindingRow: React.FC<{
       <span style={{ fontSize: T.size.trace, color: T.color.ink100, whiteSpace: "nowrap" }}>
         {finding.title}
       </span>
-      {/* Every finding carries the same three fields. Saying so in the row
-          means the one opened below is an example, not an exception. */}
+      {/* The provenance line, and the answer to "do these two screens agree":
+          every finding points back at the numbered checks that produced it. */}
       <span
         style={{
           marginLeft: "auto",
@@ -1047,7 +1081,7 @@ const FindingRow: React.FC<{
           whiteSpace: "nowrap",
         }}
       >
-        fact · rule · judgement
+        {finding.checks.includes("·") ? "checks" : "check"} {finding.checks}
       </span>
     </div>
   </Rise>
@@ -1228,7 +1262,7 @@ const GovernedLayer: React.FC = () => (
         <Between from={F.panel} to={F.report - 24}>
           <TraceView />
         </Between>
-        <Between from={F.report} to={A2A_DEMO.duration}>
+        <Between from={F.report} to={F.clear}>
           <Assessment />
         </Between>
       </div>
@@ -1249,20 +1283,55 @@ const GovernedLayer: React.FC = () => (
    sits lower and the panel has 60px more to fill. */
 const LIFT_PX = 374;
 
+/**
+ * The close.
+ *
+ * Everything worked-through clears, and what is left is the name and what it
+ * does. A demonstration that ends on its own last data frame ends mid-thought;
+ * the viewer needs one beat to be told what they have just watched a product
+ * of. Nothing moves, nothing is claimed that the preceding fifty seconds did
+ * not show.
+ */
+const Close: React.FC = () => {
+  const frame = useCurrentFrame();
+  const opacity = ramp(frame, F.close, F.close + 24);
+  if (frame < F.close) return null;
+  return (
+    <AbsoluteFill
+      style={{
+        opacity,
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+      }}
+    >
+      <p style={{ margin: 0, fontSize: T.size.figure, fontWeight: 600, color: T.color.ink100 }}>
+        Trakt
+      </p>
+      <p style={{ margin: "18px 0 0", fontSize: T.size.keyline, color: T.color.ink300 }}>
+        Agent-to-agent portfolio intelligence
+      </p>
+    </AbsoluteFill>
+  );
+};
+
 const A2ADemo: React.FC = () => {
   const frame = useCurrentFrame();
   const lift = 1 - ramp(frame, F.lift, F.lifted);
   return (
     <AbsoluteFill style={{ background: T.color.surface, fontFamily: T.family }}>
       <style dangerouslySetInnerHTML={{ __html: T.fontFaceCss() }} />
-      <Chrome />
-      <AbsoluteFill style={{ top: 68 }}>
-        <div style={{ transform: `translateY(${lift * LIFT_PX}px)` }}>
-          <Topology />
-        </div>
-        <McpDescent />
-        <GovernedLayer />
+      <AbsoluteFill style={{ opacity: 1 - ramp(frame, F.clear, F.clear + 24) }}>
+        <Chrome />
+        <AbsoluteFill style={{ top: 68 }}>
+          <div style={{ transform: `translateY(${lift * LIFT_PX}px)` }}>
+            <Topology />
+          </div>
+          <McpDescent />
+          <GovernedLayer />
+        </AbsoluteFill>
       </AbsoluteFill>
+      <Close />
     </AbsoluteFill>
   );
 };
