@@ -89,7 +89,7 @@ export const A2A_DEMO = {
   fps: 30,
   width: 1200,
   height: 960,
-  duration: 1350,
+  duration: 1470,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -118,36 +118,42 @@ type Call = {
  * decoration. Where two rows read alike, the arguments differed: 13 splits by
  * `account_status` where 9 asked for `days_past_due`, and 24 and 25 are the
  * same two tools again with filters attached.
+ *
+ * They are all noun phrases, and that is a rule rather than a habit. A list
+ * mixing "Highest-LTV loans" with "Compare high-LTV loans" reads as two
+ * different kinds of thing — one a subject, one an instruction — and the eye
+ * catches on it every time. Thirty labels in one grammatical shape scan as a
+ * single list of what was examined.
  */
 const CALLS: readonly Call[] = [
-  { seq: 1, tool: "portfolio_capabilities", asks: "What can be measured", ms: 71.32 },
+  { seq: 1, tool: "portfolio_capabilities", asks: "Available measures", ms: 71.32 },
   { seq: 2, tool: "portfolio_summary", asks: "Portfolio composition", ms: 15.99 },
-  { seq: 3, tool: "readiness_framework", asks: "Which tests apply", ms: 57.44 },
+  { seq: 3, tool: "readiness_framework", asks: "Applicable readiness tests", ms: 57.44 },
   { seq: 4, tool: "data_completeness", asks: "Data completeness", ms: 3.16 },
   { seq: 5, tool: "evaluate_rule_packs", asks: "Securitisation criteria", ms: 1125.67 },
   { seq: 6, tool: "evaluate_covenants", asks: "Facility covenants", ms: 36.14 },
   { seq: 7, tool: "regulatory_readiness", asks: "ESMA reporting readiness", ms: 4.35 },
-  { seq: 8, tool: "valuation_age_profile", asks: "Age of the valuations", ms: 182.05 },
-  { seq: 9, tool: "stratify", asks: "Split by arrears bucket", ms: 0.8, refused: true },
-  { seq: 10, tool: "portfolio_history", asks: "Twelve months of history", ms: 1134.45 },
-  { seq: 11, tool: "cohort_comparison", asks: "Compare high-LTV loans", ms: 0.66, refused: true },
+  { seq: 8, tool: "valuation_age_profile", asks: "Valuation age", ms: 182.05 },
+  { seq: 9, tool: "stratify", asks: "Arrears bands", ms: 0.8, refused: true },
+  { seq: 10, tool: "portfolio_history", asks: "Twelve-month history", ms: 1134.45 },
+  { seq: 11, tool: "cohort_comparison", asks: "High-LTV cohort", ms: 0.66, refused: true },
   { seq: 12, tool: "cohort_comparison", asks: "Loans above 80% LTV", ms: 204.29, adjusted: true },
-  { seq: 13, tool: "stratify", asks: "Split by account status", ms: 11.81, adjusted: true },
-  { seq: 14, tool: "transition_analysis", asks: "How loans changed status", ms: 11.97 },
+  { seq: 13, tool: "stratify", asks: "Account status split", ms: 11.81, adjusted: true },
+  { seq: 14, tool: "transition_analysis", asks: "Status transitions", ms: 11.97 },
   { seq: 15, tool: "rank_loans", asks: "Highest-LTV loans", ms: 3.92 },
-  { seq: 16, tool: "concentration", asks: "Concentration by region", ms: 6.98 },
+  { seq: 16, tool: "concentration", asks: "Regional concentration", ms: 6.98 },
   { seq: 17, tool: "readiness_metrics", asks: "Largest loan · top-20 share", ms: 5.68 },
-  { seq: 18, tool: "stratify", asks: "Fixed versus variable rate", ms: 4.6 },
+  { seq: 18, tool: "stratify", asks: "Rate type split", ms: 4.6 },
   { seq: 19, tool: "stratify", asks: "LTV by region", ms: 7.12 },
   { seq: 20, tool: "default_analysis", asks: "Default rate", ms: 18.47 },
   { seq: 21, tool: "prepayment_analysis", asks: "Prepayment rate", ms: 3.59 },
-  { seq: 22, tool: "list_validation_exceptions", asks: "Data validation exceptions", ms: 0.2 },
+  { seq: 22, tool: "list_validation_exceptions", asks: "Validation exceptions", ms: 0.2 },
   { seq: 23, tool: "contractual_analytics", asks: "Weighted-average life", ms: 65.23 },
-  { seq: 24, tool: "concentration", asks: "Where the arrears sit", ms: 7.63 },
-  { seq: 25, tool: "stratify", asks: "Where the high-LTV sits", ms: 5.71 },
+  { seq: 24, tool: "concentration", asks: "Arrears by region", ms: 7.63 },
+  { seq: 25, tool: "stratify", asks: "High-LTV by region", ms: 5.71 },
   { seq: 26, tool: "period_change", asks: "Change since last period", ms: 383.02 },
   { seq: 27, tool: "get_loans", asks: "Loan-level detail", ms: 2.54 },
-  { seq: 28, tool: "explain_values", asks: "Where these values came from", ms: 24.39 },
+  { seq: 28, tool: "explain_values", asks: "Value provenance", ms: 24.39 },
   { seq: 29, tool: "rank_loans", asks: "Largest exposures", ms: 5.04 },
   { seq: 30, tool: "loss_analysis", asks: "Loss severity", ms: 1.12 },
 ];
@@ -262,31 +268,33 @@ const F = {
   panel: 156,
   working: 120,
   mcp: 150,
-  concIsolate: 642,
-  concValue: 678,
-  verdict: [735, 790, 845] as const,
-  resume: 900,
-  drill: 990,
-  drillValue: 1032,
-  wrap: 1104,
-  complete: 1164,
-  ret: 1182,
-  received: 1236,
-  end: 1254,
+  /** All thirty done; the reasoning total joins the calculation total. */
+  complete: 945,
+  ret: 975,
+  received: 1029,
+  report: 1050,
+  /** The six findings, listed in the artifact's own order. */
+  finding: [1074, 1098, 1122, 1146, 1170, 1194] as const,
+  fact: 1230,
+  rule: 1254,
+  /** One number, three governing documents, resolving one at a time. */
+  verdict: [1278, 1308, 1338] as const,
+  judgement: 1374,
+  footer: 1398,
 } as const;
 
 /** Where each call lights, by segment. Recorded order; compressed time. */
 const SEGMENTS: readonly { seqs: readonly number[]; from: number; to: number }[] = [
-  { seqs: [1, 2, 3, 4], from: 255, to: 390 },
-  { seqs: [5, 6, 7], from: 390, to: 480 },
-  /* 23 frames a call — the most room any stretch here gets, because a refusal
+  { seqs: [1, 2, 3, 4], from: 255, to: 375 },
+  { seqs: [5, 6, 7], from: 375, to: 465 },
+  /* 23 frames a check — the most room any stretch here gets, because a refusal
      and the adjustment after it are the beat that most needs reading. */
-  { seqs: [8, 9, 10, 11, 12, 13], from: 480, to: 618 },
-  { seqs: [14, 15], from: 618, to: 636 },
-  { seqs: [16], from: 642, to: 654 },
-  { seqs: [17, 18, 19, 20, 21, 22, 23], from: 900, to: 978 },
-  { seqs: [24, 25], from: 1002, to: 1050 },
-  { seqs: [26, 27, 28, 29, 30], from: 1104, to: 1164 },
+  { seqs: [8, 9, 10, 11, 12, 13], from: 465, to: 603 },
+  { seqs: [14, 15], from: 603, to: 639 },
+  { seqs: [16], from: 639, to: 663 },
+  { seqs: [17, 18, 19, 20, 21, 22, 23], from: 663, to: 789 },
+  { seqs: [24, 25], from: 789, to: 837 },
+  { seqs: [26, 27, 28, 29, 30], from: 837, to: 927 },
 ];
 
 const FIRES: ReadonlyMap<number, number> = new Map(
@@ -523,15 +531,23 @@ const Reaching: React.FC<{
 const Connection: React.FC = () => {
   const frame = useCurrentFrame();
   const returning = frame >= F.ret;
+  /* Dead centre of the 84px tiles beside it, less half the rule's own weight.
+     The line used to sit at 34 to leave room for a second line below it for
+     the reply; against a tile whose text is centred, eleven pixels high reads
+     as a mistake. There is one line now, and the arrow reverses along it. */
+  const centre = 41;
   return (
     <div style={{ position: "relative", flex: 1, height: 84 }}>
-      <Reaching from={F.reach} to={F.connected} top={34} />
-      {returning ? <Reaching from={F.ret} to={F.ret + 54} back top={62} /> : null}
+      {returning ? (
+        <Reaching from={F.ret} to={F.ret + 54} back top={centre} />
+      ) : (
+        <Reaching from={F.reach} to={F.connected} top={centre} />
+      )}
 
       <span
         style={{
           position: "absolute",
-          top: 26,
+          top: centre - 15,
           left: "50%",
           transform: "translateX(-50%)",
           padding: "3px 12px",
@@ -547,21 +563,17 @@ const Connection: React.FC = () => {
         A2A
       </span>
 
-      {/* Labels sit still above and below their own line. */}
-      <div style={{ position: "absolute", top: 4, left: 0, right: 0, textAlign: "center" }}>
-        <span style={{ fontSize: T.size.chip, color: T.color.ink300 }}>
-          Assess for securitisation readiness
+      {/* The label sits still above the line and changes with the direction. */}
+      <div style={{ position: "absolute", top: 6, left: 0, right: 0, textAlign: "center" }}>
+        <span
+          style={{
+            fontSize: T.size.chip,
+            color: returning ? T.color.mint : T.color.ink300,
+          }}
+        >
+          {returning ? "Assessment · evidence attached" : "Assess for securitisation readiness"}
         </span>
       </div>
-      {returning ? (
-        <Rise at={F.ret + 40}>
-          <div style={{ position: "absolute", top: 68, left: 0, right: 0, textAlign: "center" }}>
-            <span style={{ fontSize: T.size.chip, color: T.color.mint }}>
-              Assessment · evidence attached
-            </span>
-          </div>
-        </Rise>
-      ) : null}
     </div>
   );
 };
@@ -803,16 +815,25 @@ const DetailCard: React.FC = () => {
   if (!current) return null;
   const call = CALLS.find((c) => c.seq === current.seq);
   return (
-    <Panel style={{ width: 344, padding: "22px 24px", alignSelf: "center" }}>
+    <Panel
+      style={{
+        width: 344,
+        padding: "22px 24px",
+        /* Stretched, not centred on its own height. A card floating in the
+           middle of a tall column with air above and below it looks like a
+           tooltip that lost its anchor. */
+        alignSelf: "stretch",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Label>Result</Label>
-      <p style={{ margin: "12px 0 0", fontSize: T.size.trace, color: T.color.ink200 }}>
-        {call?.tool}
+      {/* Named exactly as the row that produced it. The card used to lead with
+          the tool — `regulatory_readiness` beside a row reading "ESMA
+          reporting readiness" — so the two never visibly belonged together. */}
+      <p style={{ margin: "14px 0 0", fontSize: T.size.trace, color: T.color.ink300 }}>
+        Check {current.seq} · {call?.asks}
       </p>
-      {current.argument ? (
-        <p style={{ margin: "5px 0 0", fontSize: T.size.seq, color: T.color.ink500 }}>
-          {current.argument}
-        </p>
-      ) : null}
       <p
         style={{
           margin: "14px 0 0",
@@ -824,11 +845,27 @@ const DetailCard: React.FC = () => {
       >
         {current.value}
       </p>
-      {current.technical ? (
-        <p style={{ margin: "10px 0 0", fontSize: T.size.seq, color: T.color.ink500 }}>
-          {current.technical}
-        </p>
-      ) : null}
+      {/* The technical record, kept and demoted: this is the evidence for the
+          plain line above it, not a competing headline. */}
+      <div
+        style={{
+          marginTop: "auto",
+          paddingTop: 18,
+          borderTop: `1.5px solid ${T.color.lineSoft}`,
+        }}
+      >
+        <p style={{ margin: 0, fontSize: T.size.seq, color: T.color.ink400 }}>{call?.tool}</p>
+        {current.argument ? (
+          <p style={{ margin: "4px 0 0", fontSize: T.size.seq, color: T.color.ink500 }}>
+            {current.argument}
+          </p>
+        ) : null}
+        {current.technical ? (
+          <p style={{ margin: "4px 0 0", fontSize: T.size.seq, color: T.color.ink500 }}>
+            {current.technical}
+          </p>
+        ) : null}
+      </div>
     </Panel>
   );
 };
@@ -852,7 +889,7 @@ const Meters: React.FC = () => {
     <div style={{ display: "flex", gap: 34, alignItems: "flex-start" }}>
       <Meter label="Checks run" value={`${executed(frame)}`} />
       <Meter label="Calculation time" value={inSeconds(calculation)} />
-      {frame >= F.wrap ? (
+      {frame >= F.complete ? (
         <Rise at={F.complete}>
           <Meter label="Agent reasoning" value={inMinutes(REASONING_S)} tone="peri" />
         </Rise>
@@ -883,10 +920,51 @@ const Meter: React.FC<{ label: string; value: string; tone?: Tone }> = ({
 );
 
 /* ------------------------------------------------------------------ */
-/* The climax — one number, three governing documents                  */
+/* The assessment                                                      */
 /* ------------------------------------------------------------------ */
 
-const VerdictRow: React.FC<{ verdict: (typeof VERDICTS)[number]; at: number }> = ({
+/**
+ * The six findings the specialist returned, in the artifact's own order.
+ *
+ * Titles are the run's, trimmed to one line. Severities are the run's too:
+ * three high, three medium. The concentration finding is the one opened out,
+ * not because it is the gravest — it is a medium — but because it is the one
+ * where three governing documents read the same number three different ways,
+ * which is the thing this whole surface exists to show.
+ */
+const FINDINGS = [
+  { severity: "high", title: "Severe performance deterioration across all arrears bands" },
+  { severity: "high", title: "High-LTV cohort on stale valuations, severe arrears" },
+  { severity: "medium", title: "Geographic concentration, arrears in the same region", open: true },
+  { severity: "high", title: "Regulatory disclosure blocked by missing identifiers" },
+  { severity: "medium", title: "Borrower concentration cannot be assessed" },
+  { severity: "medium", title: "Loans defaulting without a visible delinquency stage" },
+] as const;
+
+const SEVERITY_TONE = { high: "rose", medium: "amber" } as const;
+
+const SeverityChip: React.FC<{ severity: "high" | "medium" }> = ({ severity }) => (
+  <span
+    style={{
+      display: "inline-block",
+      width: 74,
+      textAlign: "center",
+      padding: "3px 0",
+      borderRadius: T.radius.chip,
+      border: `1.5px solid ${TONE_EDGE[SEVERITY_TONE[severity]]}`,
+      color: TONE_INK[SEVERITY_TONE[severity]],
+      background: T.color.raised,
+      fontSize: T.size.seq,
+      fontWeight: 600,
+      flexShrink: 0,
+    }}
+  >
+    {severity}
+  </span>
+);
+
+/** One verdict, as a chip in the opened finding's rule line. */
+const VerdictChip: React.FC<{ verdict: (typeof VERDICTS)[number]; at: number }> = ({
   verdict,
   at,
 }) => {
@@ -894,166 +972,157 @@ const VerdictRow: React.FC<{ verdict: (typeof VERDICTS)[number]; at: number }> =
   const shown = frame >= at;
   return (
     <Rise at={at}>
-      <div
+      <span
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 20,
-          padding: "16px 22px",
-          borderRadius: T.radius.row,
+          display: "inline-block",
+          padding: "7px 16px",
+          borderRadius: T.radius.chip,
           border: `1.5px solid ${shown ? TONE_EDGE[verdict.tone] : T.color.lineSoft}`,
           background: T.color.raised,
+          fontSize: T.size.trace,
+          whiteSpace: "nowrap",
+          color: T.color.ink300,
         }}
       >
-        <p style={{ margin: 0, fontSize: T.size.row, color: T.color.ink200 }}>
-          {verdict.authority}
-        </p>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
-          <span
-            style={{
-              fontSize: T.size.row,
-              color: T.color.ink400,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {verdict.limit}
-          </span>
-          <span
-            style={{
-              fontSize: T.size.value,
-              fontWeight: 600,
-              color: TONE_INK[verdict.tone],
-              minWidth: 96,
-              textAlign: "right",
-            }}
-          >
-            {verdict.outcome}
-          </span>
-        </div>
-      </div>
+        {verdict.authority} {verdict.limit}{" "}
+        <span style={{ color: TONE_INK[verdict.tone], fontWeight: 600 }}>{verdict.outcome}</span>
+      </span>
     </Rise>
   );
 };
 
-/**
- * The concentration card — the demo's whole argument in one panel.
- *
- * Exported because the poster is drawn from it. `at` rebases the internal
- * timing so a still can render it settled.
- */
-export const ConcentrationCard: React.FC<{ at?: number }> = ({ at }) => {
-  const frame = useCurrentFrame();
-  const base = at ?? F.concValue;
-  const verdictAt = at === undefined ? F.verdict : ([at + 12, at + 24, at + 36] as const);
-  const digits = ramp(frame, base, base + 20);
-  return (
-    <Panel style={{ width: 900, padding: "30px 40px 34px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <Label>Concentration · geographic region</Label>
-        <span style={{ fontSize: T.size.chip, color: T.color.ink400 }}>check 16</span>
-      </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          gap: 22,
-          marginTop: 14,
-          paddingBottom: 22,
-          borderBottom: `1.5px solid ${T.color.lineSoft}`,
-        }}
-      >
-        <span
-          style={{
-            fontSize: T.size.figure,
-            fontWeight: 600,
-            color: T.color.ink100,
-            fontVariantNumeric: "tabular-nums",
-            opacity: digits,
-          }}
-        >
-          31%
-        </span>
-        <span style={{ fontSize: T.size.row, color: T.color.ink300, opacity: digits }}>
-          London · of balance · 124 loans
+/** Fact, rule and judgement — the three fields every finding carries. */
+const OpenedFinding: React.FC = () => (
+  <div
+    style={{
+      paddingLeft: 88,
+      /* Padded top AND bottom: without the lower gap the judgement line sat
+         against the next finding's title and read as part of it. */
+      padding: "12px 0 18px 88px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 12,
+    }}
+  >
+    <Rise at={F.fact}>
+      <div style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
+        <FieldLabel>Fact</FieldLabel>
+        <span style={{ fontSize: T.size.trace, color: T.color.ink100 }}>
+          London · 31% of balance · 124 loans
         </span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 22 }}>
+    </Rise>
+    <div style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
+      <Rise at={F.rule}>
+        <FieldLabel>Rule</FieldLabel>
+      </Rise>
+      <div style={{ display: "flex", gap: 10 }}>
         {VERDICTS.map((verdict, i) => (
-          <VerdictRow key={verdict.authority} verdict={verdict} at={verdictAt[i] ?? 0} />
+          <VerdictChip key={verdict.authority} verdict={verdict} at={F.verdict[i] ?? 0} />
         ))}
       </div>
-    </Panel>
+    </div>
+    <Rise at={F.judgement}>
+      <div style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
+        <FieldLabel>Judgement</FieldLabel>
+        <span style={{ fontSize: T.size.trace, color: T.color.ink100 }}>
+          Breaches securitisation by 4 points · warehouse passes
+        </span>
+      </div>
+    </Rise>
+  </div>
+);
+
+const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span
+    style={{
+      width: 88,
+      flexShrink: 0,
+      fontSize: T.size.seq,
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color: T.color.ink500,
+      fontWeight: 600,
+    }}
+  >
+    {children}
+  </span>
+);
+
+const FindingRow: React.FC<{
+  finding: (typeof FINDINGS)[number];
+  at: number;
+}> = ({ finding, at }) => (
+  <Rise at={at}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, height: 40 }}>
+      <SeverityChip severity={finding.severity} />
+      <span style={{ fontSize: T.size.trace, color: T.color.ink100, whiteSpace: "nowrap" }}>
+        {finding.title}
+      </span>
+      {/* Every finding carries the same three fields. Saying so in the row
+          means the one opened below is an example, not an exception. */}
+      <span
+        style={{
+          marginLeft: "auto",
+          fontSize: T.size.seq,
+          color: T.color.ink500,
+          whiteSpace: "nowrap",
+        }}
+      >
+        fact · rule · judgement
+      </span>
+    </div>
+  </Rise>
+);
+
+/**
+ * The assessment, as the client agent received it.
+ *
+ * This replaces three separate screens — one per interesting call, then a
+ * verdict card carrying nothing but a large red line. Those showed the
+ * plumbing and then shouted the conclusion; neither told a lender what they
+ * were being handed. What arrives over A2A is a structured report: six
+ * findings with severities, each carrying fact, rule and judgement, plus the
+ * work the specialist could not do. Showing it truncated is honest and is also
+ * the point — the artifact is bigger than a frame.
+ */
+const Assessment: React.FC = () => {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Label>Securitisation readiness assessment</Label>
+        <Rise at={F.report + 12}>
+          <Chip tone="rose">Material remediation required</Chip>
+        </Rise>
+      </div>
+
+      <div style={{ marginTop: 26, display: "flex", flexDirection: "column" }}>
+        {FINDINGS.map((finding, i) => (
+          <React.Fragment key={finding.title}>
+            <FindingRow finding={finding} at={F.finding[i] ?? 0} />
+            {"open" in finding && finding.open ? <OpenedFinding /> : null}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <Rise at={F.footer} style={{ marginTop: "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            paddingTop: 18,
+            borderTop: `1.5px solid ${T.color.lineSoft}`,
+          }}
+        >
+          <Chip tone="neutral">6 material findings</Chip>
+          <Chip tone="neutral">8 for further diligence</Chip>
+          <Chip tone="amber">4 it could not assess</Chip>
+          <Chip tone="mint">Evidence attached to every figure</Chip>
+        </div>
+      </Rise>
+    </div>
   );
 };
-
-/** What the specialist did next, unprompted: the same region, twice over. */
-const DrillCard: React.FC = () => (
-  <Panel style={{ width: 900, padding: "30px 40px 34px" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-      <Label>Followed up · nobody asked for this</Label>
-      <span style={{ fontSize: T.size.chip, color: T.color.ink400 }}>checks 24 · 25</span>
-    </div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 22 }}>
-      {[
-        { q: "Where the arrears sit", v: "70.8% vs 6.8%", t: "rose" },
-        { q: "Where the high-LTV sits", v: "The same region", t: "amber" },
-      ].map((row, i) => (
-        <Rise key={row.q} at={F.drillValue + i * 30}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 20,
-              padding: "16px 22px",
-              borderRadius: T.radius.row,
-              border: `1.5px solid ${TONE_EDGE[row.t as Tone]}`,
-              background: T.color.raised,
-            }}
-          >
-            <p style={{ margin: 0, fontSize: T.size.row, color: T.color.ink200 }}>{row.q}</p>
-            <span
-              style={{
-                fontSize: T.size.value,
-                fontWeight: 600,
-                color: TONE_INK[row.t as Tone],
-                whiteSpace: "nowrap",
-              }}
-            >
-              {row.v}
-            </span>
-          </div>
-        </Rise>
-      ))}
-    </div>
-  </Panel>
-);
-
-/** The artifact the client agent received. */
-const AssessmentCard: React.FC = () => (
-  // 960, not 900: at 900 the four chips wrapped and left "Evidence attached"
-  // stranded on a line of its own.
-  <Panel style={{ width: 960, padding: "34px 40px 38px" }}>
-    <Label>Assessment received</Label>
-    <p
-      style={{
-        margin: "16px 0 0",
-        fontSize: T.size.keyline,
-        fontWeight: 600,
-        color: T.color.rose,
-      }}
-    >
-      Material remediation required
-    </p>
-    <div style={{ display: "flex", gap: 14, marginTop: 26, flexWrap: "wrap" }}>
-      <Chip tone="neutral">6 material findings</Chip>
-      <Chip tone="neutral">8 for further diligence</Chip>
-      <Chip tone="amber">4 it could not assess</Chip>
-      <Chip tone="mint">Evidence attached</Chip>
-    </div>
-  </Panel>
-);
 
 /* ------------------------------------------------------------------ */
 /* Chrome + assembly                                                   */
@@ -1083,13 +1152,6 @@ export const Chrome: React.FC = () => (
   </div>
 );
 
-const Centred: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div
-    style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
-  >
-    {children}
-  </div>
-);
 
 const TraceView: React.FC = () => (
   <div style={{ display: "flex", gap: 24, height: "100%" }}>
@@ -1115,32 +1177,16 @@ const GovernedLayer: React.FC = () => (
         <Meters />
       </div>
       <div style={{ position: "relative", flex: 1, marginTop: 18 }}>
-        {/* The trace is the panel's resting state; the cards take it over and
-            hand it back. It stays up through the return, because the completed
-            counters are the point of that moment. */}
-        <Between from={F.panel} to={F.concIsolate}>
+        {/* The trace runs unbroken from the first check to the last. It used
+            to be interrupted twice by cards built around single calls, which
+            put the interesting moments in the wrong place: mid-investigation,
+            before the specialist had finished, and framed as "look at this
+            call" rather than "here is what came back". */}
+        <Between from={F.panel} to={F.report - 24}>
           <TraceView />
         </Between>
-        <Between from={F.resume} to={F.drill - 12}>
-          <TraceView />
-        </Between>
-        <Between from={F.wrap} to={F.end - 12}>
-          <TraceView />
-        </Between>
-        <Between from={F.concIsolate} to={F.resume - 12}>
-          <Centred>
-            <ConcentrationCard />
-          </Centred>
-        </Between>
-        <Between from={F.drill} to={F.wrap - 12}>
-          <Centred>
-            <DrillCard />
-          </Centred>
-        </Between>
-        <Between from={F.end} to={A2A_DEMO.duration}>
-          <Centred>
-            <AssessmentCard />
-          </Centred>
+        <Between from={F.report} to={A2A_DEMO.duration}>
+          <Assessment />
         </Between>
       </div>
     </Panel>

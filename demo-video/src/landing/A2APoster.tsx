@@ -148,7 +148,7 @@ const ConcentrationBand: React.FC = () => (
   <div
     style={{
       width: 1064,
-      padding: "16px 30px 8px",
+      padding: "16px 30px 4px",
       background: T.color.inset,
       border: `1.5px solid ${T.color.line}`,
       borderRadius: T.radius.panel,
@@ -165,11 +165,24 @@ const ConcentrationBand: React.FC = () => (
           fontWeight: 600,
         }}
       >
-        Concentration · geographic region
+        Securitisation readiness assessment
       </p>
-      <span style={{ fontSize: T.size.chip, color: T.color.ink400 }}>check 16</span>
+      <span
+        style={{
+          padding: "5px 14px",
+          borderRadius: T.radius.chip,
+          border: `1.5px solid ${TONE_EDGE.rose}`,
+          background: T.color.raised,
+          fontSize: T.size.chip,
+          fontWeight: 500,
+          color: TONE_INK.rose,
+          whiteSpace: "nowrap",
+        }}
+      >
+        Material remediation required
+      </span>
     </div>
-    <div style={{ display: "flex", alignItems: "baseline", gap: 22, marginTop: 6 }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 22, marginTop: 2 }}>
       <span
         style={{
           fontSize: T.size.figure,
@@ -184,7 +197,7 @@ const ConcentrationBand: React.FC = () => (
         London · of balance · 124 loans
       </span>
     </div>
-    <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
+    <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
       {VERDICTS.map((verdict) => (
         <VerdictBadge key={verdict.authority} verdict={verdict} />
       ))}
