@@ -273,6 +273,12 @@ class SecuritisationReadinessA2AServer:
         # Kept beside the task so an auditor can reconstruct the delegation
         # without the specialist's process still being alive.
         task.metadata["governedCalls"] = len(getattr(run, "transcript", []) or [])
+        # The specialist's own wall time, so protocol overhead can be
+        # computed as (total - this) rather than (total - governed time).
+        # Those differ by the whole of the model's thinking, and reporting
+        # the second as "protocol overhead" would blame A2A for the LLM.
+        task.metadata["specialistElapsedS"] = getattr(run, "elapsed_s", None)
+        task.metadata["usage"] = dict(getattr(run, "usage", {}) or {})
         self._transcripts[task.id] = list(getattr(run, "transcript", []) or [])
         task.transition(COMPLETED)
         return task.to_dict()

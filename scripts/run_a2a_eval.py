@@ -150,6 +150,7 @@ def one_run(snaps, index: int) -> Dict[str, Any]:
     transcript = server.transcript_for(outcome.task_id)
     task = server.store.get(outcome.task_id)
     governed_ms = sum(c["elapsed_ms"] for c in transcript)
+    run_efficiency = (outcome.result or {}).get("evidenceTrail") or {}
 
     record["delegation"] = {
         "task_id": outcome.task_id,
@@ -160,12 +161,23 @@ def one_run(snaps, index: int) -> Dict[str, Any]:
         "error": outcome.error,
     }
     record["transcript"] = transcript
+    # Three terms, not two. The first version subtracted governed time from
+    # total and called the remainder "protocol overhead", which silently
+    # attributed every second of model thinking to A2A - 208s of "overhead" on
+    # a protocol that costs about 4ms. Splitting out the specialist's own wall
+    # time is what makes the A2A claim honest.
+    specialist_s = (task.metadata.get("specialistElapsedS")
+                    if task else None) or 0.0
+    total_ms = record["elapsed_s"] * 1000
     record["performance"] = {
         "total_s": record["elapsed_s"],
+        "specialist_s": round(specialist_s, 2),
         "governed_ms": round(governed_ms, 2),
-        "protocol_overhead_ms": round(
-            record["elapsed_s"] * 1000 - governed_ms, 2),
+        "llm_ms": round(specialist_s * 1000 - governed_ms, 2),
+        "protocol_overhead_ms": round(total_ms - specialist_s * 1000, 2),
         "governed_calls": len(transcript),
+        "repeated_calls": (run_efficiency or {}).get("repeated_calls"),
+        "usage": (task.metadata.get("usage") if task else {}) or {},
     }
     record["audit"] = dict(task.metadata) if task else {}
 
@@ -223,8 +235,9 @@ def main() -> int:
         perf = record["performance"]
         print(f"  -> {record['delegation']['state']}; "
               f"{perf['governed_calls']} governed calls; "
-              f"{perf['governed_ms']:.0f}ms Trakt / {perf['total_s']:.1f}s total; "
-              f"overhead {perf['protocol_overhead_ms']:.0f}ms  "
+              f"{perf['governed_ms']:.0f}ms Trakt + {perf['llm_ms']:.0f}ms LLM "
+              f"/ {perf['total_s']:.1f}s total; "
+              f"A2A overhead {perf['protocol_overhead_ms']:.1f}ms  "
               f"[saved {len(records)}]", flush=True)
 
     print(f"\nwrote {len(records)} run(s) to {out}")
