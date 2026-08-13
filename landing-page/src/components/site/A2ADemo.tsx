@@ -1,4 +1,4 @@
-import { cx } from "@/components/ui";
+import { Badge, cx } from "@/components/ui";
 
 /**
  * The agent-to-agent demonstration — 38 seconds, continuous, looping.
@@ -45,10 +45,13 @@ import { cx } from "@/components/ui";
  *
  * On the caller's name
  * --------------------
- * The caller is "Enterprise Agent", unbranded. Naming a real lender on a public
- * page asserts a client relationship, and this repository contains no such
- * deployment — the synthetic environment is ERE. The badge says synthetic once,
- * where it cannot be missed.
+ * The caller is the "Alderbridge Enterprise Agent" — the same synthetic lender
+ * the rest of the landing page demonstrates against, so a visitor who scrolls
+ * from the query demo to this one sees one fictional institution rather than
+ * two. Alderbridge is invented; no real lender is named anywhere here, and
+ * nothing claims a production deployment. The amber `synthetic` badge is the
+ * page's existing convention for exactly this, so it is reused rather than
+ * reinvented.
  */
 
 const LOOP_S = 38;
@@ -196,9 +199,10 @@ export function A2ADemo() {
     <figure
       className="mt-10 overflow-hidden rounded-2xl border border-line-soft bg-navy-900/60"
       aria-label={
-        "Animated demonstration: an enterprise agent discovers the Trakt " +
-        "Securitisation Readiness Agent, delegates an objective, and receives " +
-        "an evidence-backed assessment. A text summary follows the figure."
+        "Animated demonstration: the Alderbridge enterprise agent discovers " +
+        "the Trakt Securitisation Readiness Agent, delegates an objective, and " +
+        "receives an evidence-backed assessment. A text summary follows the " +
+        "figure."
       }
     >
       {/* Generated once, server-rendered, no runtime cost. */}
@@ -222,10 +226,9 @@ function Header() {
           Agent-to-agent delegation
         </p>
       </div>
-      {/* Said once, where it cannot be missed. */}
-      <span className="rounded-full border border-line-soft bg-navy-850 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
-        Synthetic demonstration
-      </span>
+      {/* Said once, where it cannot be missed, in the page's own amber token
+          for synthetic content — the same badge the query demo carries. */}
+      <Badge tone="synthetic">Synthetic data</Badge>
     </div>
   );
 }
@@ -242,7 +245,7 @@ function Topology() {
   return (
     <div className="mx-auto max-w-[46rem]">
       <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[1fr_7rem_1fr]">
-        <Node title="Enterprise Agent" subtitle="Holds the objective"
+        <Node title="Alderbridge Enterprise Agent" subtitle="Holds the objective"
               detail="No knowledge of Trakt's internals" />
         <Wire kind="a2a" label="A2A" />
         <Node title="Trakt" subtitle="Securitisation Readiness Agent"
@@ -431,11 +434,12 @@ function Triad() {
 function Caption() {
   return (
     <figcaption className="border-t border-line-soft px-4 py-3 text-[12px] leading-relaxed text-ink-400 sm:px-6">
-      An enterprise agent discovers the Trakt Securitisation Readiness Agent,
-      delegates the objective “assess this portfolio for securitisation
-      readiness”, and receives a structured, evidence-backed assessment. Trakt
-      chooses what to investigate. Every figure is from one recorded run against
-      a synthetic portfolio — 30 governed queries, six material findings, eight
+      The Alderbridge enterprise agent discovers the Trakt Securitisation
+      Readiness Agent, delegates the objective “assess this portfolio for
+      securitisation readiness”, and receives a structured, evidence-backed
+      assessment. Trakt chooses what to investigate. Alderbridge is a synthetic
+      lender, and every figure is from one recorded run against its synthetic
+      portfolio — 30 governed queries, six material findings, eight
       diligence items and four declared gaps — including the 31% regional
       concentration that passes a warehouse limit, breaches a securitisation
       criterion and flags an internal threshold, and the high-LTV cohort whose
