@@ -245,7 +245,7 @@ const DETAILS: readonly Detail[] = [
     tone: "amber",
   },
   { seq: 25, argument: "filter: current_LTV = 92%", value: "All in one region", tone: "amber" },
-  { seq: 26, value: "Needs two snapshots · only one exists", tone: "neutral" },
+  { seq: 26, value: "Needs two snapshots · only one exists", tone: "amber" },
 ];
 
 /** One number, three governing documents. From the finding's `rule` field. */
@@ -266,12 +266,10 @@ const F = {
   lift: 100,
   lifted: 148,
   panel: 156,
-  working: 120,
   mcp: 150,
   /** All thirty done; the reasoning total joins the calculation total. */
   complete: 945,
   ret: 975,
-  received: 1029,
   report: 1050,
   /** The six findings, listed in the artifact's own order. */
   finding: [1074, 1098, 1122, 1146, 1170, 1194] as const,
@@ -513,11 +511,14 @@ const Reaching: React.FC<{
           background: colour,
         }}
       />
+      {/* Offset by the head's own 8px, so the TIP lands on the tile's edge
+          rather than the head's box. At -2/-6 the arrow finished six pixels
+          inside the enterprise agent instead of touching it. */}
       <span
         style={
           back
-            ? { ...head, right: `calc(${p * 100}% - 2px)`, borderRight: `8px solid ${colour}` }
-            : { ...head, left: `calc(${p * 100}% - 6px)`, borderLeft: `8px solid ${colour}` }
+            ? { ...head, right: `calc(${p * 100}% - 8px)`, borderRight: `8px solid ${colour}` }
+            : { ...head, left: `calc(${p * 100}% - 8px)`, borderLeft: `8px solid ${colour}` }
         }
       />
     </>
@@ -578,44 +579,6 @@ const Connection: React.FC = () => {
   );
 };
 
-/** submitted → working → completed, as the run recorded it. */
-const TaskState: React.FC = () => {
-  const frame = useCurrentFrame();
-  if (frame < F.working) return null;
-  const done = frame >= F.received;
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "flex-end",
-        gap: 10,
-        marginTop: 12,
-        alignItems: "center",
-      }}
-    >
-      <span style={{ fontSize: T.size.seq, color: T.color.ink500 }}>submitted</span>
-      <span style={{ fontSize: T.size.seq, color: T.color.ink500 }}>→</span>
-      <span
-        style={{
-          fontSize: T.size.seq,
-          color: done ? T.color.ink500 : T.color.peri,
-          fontWeight: 600,
-        }}
-      >
-        working
-      </span>
-      {done ? (
-        <>
-          <span style={{ fontSize: T.size.seq, color: T.color.ink500 }}>→</span>
-          <span style={{ fontSize: T.size.seq, color: T.color.mint, fontWeight: 600 }}>
-            completed
-          </span>
-        </>
-      ) : null}
-    </div>
-  );
-};
-
 const Topology: React.FC = () => {
   const frame = useCurrentFrame();
   const traktLit = frame >= F.connected;
@@ -626,7 +589,6 @@ const Topology: React.FC = () => {
         <Connection />
         <Node title="Trakt Securitisation Readiness Agent" lit={traktLit} width={392} />
       </div>
-      <TaskState />
     </div>
   );
 };
@@ -676,6 +638,22 @@ const McpDescent: React.FC = () => {
 /* ------------------------------------------------------------------ */
 
 /**
+ * The one colour scale on this surface.
+ *
+ * A row read mint while the result card beside it read amber — "ESMA
+ * reporting readiness" ticked green with "14 of 18 required fields missing"
+ * next to it. Two scales, one screen, opposite answers. The row now takes its
+ * tone from what the check actually returned, so the dot, the label and the
+ * card can never disagree: amber where the run recorded something needing
+ * attention or refused the request, mint where it answered cleanly.
+ */
+const concernOf = (seq: number): Tone => {
+  const call = CALLS.find((c) => c.seq === seq);
+  if (call?.refused) return "amber";
+  return DETAILS.find((d) => d.seq === seq)?.tone === "amber" ? "amber" : "mint";
+};
+
+/**
  * One check in the trace.
  *
  * A slot exists from the first frame; what it CONTAINS does not. The number is
@@ -708,13 +686,7 @@ const TraceRow: React.FC<{ call: Call }> = ({ call }) => {
      1,126 ms call visibly outlasts a 0.2 ms one without stalling the edit. */
   const holdFrames = Math.min(18, Math.max(3, Math.round(call.ms / 70) + 3));
   const settled = frame >= at + holdFrames;
-  const tone: Tone = !settled
-    ? "peri"
-    : call.refused
-      ? "amber"
-      : call.adjusted
-        ? "mint"
-        : "mint";
+  const tone: Tone = !settled ? "peri" : concernOf(call.seq);
   const tag = settled ? (call.refused ? "refused" : call.adjusted ? "adjusted" : null) : null;
   return (
     <div
@@ -746,7 +718,7 @@ const TraceRow: React.FC<{ call: Call }> = ({ call }) => {
         style={{
           fontSize: T.size.trace,
           whiteSpace: "nowrap",
-          color: call.refused && settled ? T.color.amber : T.color.ink200,
+          color: settled && concernOf(call.seq) === "amber" ? T.color.amber : T.color.ink200,
         }}
       >
         {call.asks}
@@ -1163,7 +1135,7 @@ const TraceView: React.FC = () => (
 /** The governed panel: the trace, or whichever card has taken it over. */
 const GovernedLayer: React.FC = () => (
   <Rise at={F.panel} style={{ padding: "0 32px" }}>
-    <Panel style={{ height: 640, padding: "24px 28px", display: "flex", flexDirection: "column" }}>
+    <Panel style={{ height: 700, padding: "24px 28px", display: "flex", flexDirection: "column" }}>
       <div
         style={{
           display: "flex",
@@ -1202,7 +1174,9 @@ const GovernedLayer: React.FC = () => (
  * anything had happened; starting with two parties and a line being drawn asks
  * them to watch one thing.
  */
-const LIFT_PX = 336;
+/* Dropping the task-state line shortened the topology, so the centred start
+   sits lower and the panel has 60px more to fill. */
+const LIFT_PX = 374;
 
 const A2ADemo: React.FC = () => {
   const frame = useCurrentFrame();
