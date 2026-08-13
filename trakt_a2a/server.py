@@ -131,7 +131,7 @@ class SecuritisationReadinessA2AServer:
 
     def __init__(self, *,
                  endpoint_url: str,
-                 session_factory: Callable[[CallerIdentity, str], Any],
+                 session_factory: Callable[..., Any],
                  assessor: Callable[..., Any],
                  authoriser: Callable[[CallerIdentity, str], None],
                  store: Optional[TaskStore] = None,
@@ -146,6 +146,9 @@ class SecuritisationReadinessA2AServer:
         #: answered from evidence already produced rather than by re-running a
         #: portfolio the caller has already paid to assess.
         self._assessments: Dict[str, Dict[str, Any]] = {}
+        #: taskId -> the specialist's governed-call transcript, so a
+        #: completed delegation stays auditable after the run object is gone.
+        self._transcripts: Dict[str, List[Dict[str, Any]]] = {}
 
     # -- discovery ---------------------------------------------------------- #
     @property
@@ -243,7 +246,14 @@ class SecuritisationReadinessA2AServer:
 
         task.transition(WORKING)
         try:
-            run = self._assessor(self._session_factory(caller, resource))
+            # The task id becomes the correlation id for everything below this
+            # line — the specialist's run, its MCP calls, and every governed
+            # execution's audit event. One identifier, chosen at the boundary
+            # where the work was requested, is what makes the run
+            # reconstructable end to end without a tracing system.
+            session = _make_session(self._session_factory, caller, resource,
+                                    correlation_id=task.id)
+            run = self._assessor(session)
         except Exception as exc:  # noqa: BLE001
             task.transition(FAILED, message="assessment did not complete")
             task.error = {"reason": _bounded(exc)}
@@ -260,8 +270,21 @@ class SecuritisationReadinessA2AServer:
         self._assessments[context_id] = assessment
         task.add_artifact(readiness_artifact(assessment, run=run,
                                              resource=resource))
+        # Kept beside the task so an auditor can reconstruct the delegation
+        # without the specialist's process still being alive.
+        task.metadata["governedCalls"] = len(getattr(run, "transcript", []) or [])
+        self._transcripts[task.id] = list(getattr(run, "transcript", []) or [])
         task.transition(COMPLETED)
         return task.to_dict()
+
+    def transcript_for(self, task_id: str) -> List[Dict[str, Any]]:
+        """Every governed call the specialist made for one task.
+
+        Actions and governed results only — the audit trail deliberately holds
+        no model reasoning, because what the agent *did* is a reconstructable
+        fact and what it *thought* is not evidence.
+        """
+        return list(self._transcripts.get(task_id, []))
 
     # -- tasks/get ---------------------------------------------------------- #
     def tasks_get(self, params: Mapping[str, Any],
@@ -372,6 +395,21 @@ def _finding(finding: Mapping[str, Any]) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
+def _make_session(factory: Callable[..., Any], caller: "CallerIdentity",
+                  resource: str, *, correlation_id: str) -> Any:
+    """Build the specialist's session, passing the correlation id when the
+    factory accepts one.
+
+    Tolerant of a two-argument factory on purpose: a deployment that has no
+    correlation plumbing should still work, and should not be forced to
+    accept a parameter it will ignore.
+    """
+    try:
+        return factory(caller, resource, correlation_id=correlation_id)
+    except TypeError:
+        return factory(caller, resource)
+
+
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:16]}"
 
