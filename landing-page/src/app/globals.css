@@ -247,3 +247,34 @@ body {
   background: var(--color-navy-600);
   border-radius: 999px;
 }
+
+/* ── The agent-to-agent demo ─────────────────────────────────────────────
+ *
+ * Almost all of this demo's timing lives in `A2ADemo.tsx`, which generates one
+ * keyframe per element from the storyboard's own seconds. That indirection is
+ * not decoration: CSS keyframe percentages cannot be driven by a custom
+ * property, so a single shared "fade in, hold, fade out" rule gave every one of
+ * the nine narration beats the same window and stacked them on top of each
+ * other. Only the piece that needs no per-element window stays here.
+ *
+ * The reduced-motion rule above collapses this to its final frame, which is
+ * why it ends lit rather than mid-pulse. */
+
+/* The connection carrying a faint current the whole time, so the network reads
+ * as live rather than as three boxes joined by lines. */
+@keyframes a2a-current {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.a2a-wire {
+  animation-name: a2a-current;
+  animation-duration: 3.2s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}

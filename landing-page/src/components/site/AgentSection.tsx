@@ -1,3 +1,4 @@
+import { A2ADemo } from "@/components/site/A2ADemo";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading, cx } from "@/components/ui";
 
@@ -50,6 +51,10 @@ export function AgentSection() {
 
       <Reveal delay={60}>
         <Topology />
+      </Reveal>
+
+      <Reveal delay={90}>
+        <A2ADemo />
       </Reveal>
     </>
   );
