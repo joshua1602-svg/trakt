@@ -48,12 +48,12 @@ the query demo to the hero, at the page's claim weight, where it frames every
 demo below it. The Delivery Model headline stops restating the layer and names
 the span of its tiles instead. The agent-to-agent section drops its roadmap
 framing: delegation is evidenced, so it is stated in the present tense, the two
-agents are named, and the topology diagram is **deleted** — a picture of the
-exchange beside the sentence describing it was the same idea twice.
+agents are named, and the topology diagram is **deleted** — with a sentence
+stating the claim and `A2ADemo` performing it, a picture of the same exchange
+was the idea a third time.
 
 The proof is the repeated figure. £37,270,061 appears on the hero's Copilot
-preview, in the query demo's answer, and — when it is rendered — must appear in
-the agent-to-agent demo. Nothing on the page points this out and nothing should:
+preview, in the query demo's answer, and must appear in the agent-to-agent demo. Nothing on the page points this out and nothing should:
 the claim is asserted once in the hero and then simply keeps being true.
 
 **Pass 9 closeout — three fixes before merge.** The governance grid drops to a
@@ -349,10 +349,10 @@ governance answer immediately after.
 | Eyebrow: "Agent-to-agent" · heading "Agents don't calculate the portfolio. Trakt does." | Positioning | The commercial statement of the architectural boundary the page already argues: calculation is deterministic and lives in the engine (`mi_workflows/engine.py` — "no I/O, no LLM"), not in a language model. |
 | **"An agent that knows nothing about Trakt can discover it and delegate an objective."** | Evidenced | The section's claim, and the strongest on the page. **Discovery and delegation are the claim** — not that an agent called a known endpoint. Stated once, under the headline, in the page's claim grammar (`text-lg font-medium text-ink-100`). It leads with the part that is hard to believe — no prior knowledge — because that is what makes it a claim rather than a description of an API call. |
 | "Your agents already have somewhere to work. Give them somewhere trustworthy to get credit intelligence." | Positioning | No capability claimed. Supporting line, `ink-400`, below the claim. |
-| Tile — **Securitisation Readiness Agent**: "Warehoused loans against eligibility, coverage and concentration." | Evidenced | Delivery Model tile treatment, one line, noun-led. |
-| Tile — **Portfolio Acquisition Intelligence Agent**: "Portfolio risks traced to evidence, with the open questions." | Evidenced | The source description does three things — investigates risks, traces to evidence, surfaces open questions. Compressed to one line it keeps **evidence-tracing and open questions** and drops "investigates risks": every tool claims to find risks, and almost none will say what it could not resolve. **The full name is kept** although it wraps where its neighbour does not — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry across two headings. |
-| **The topology diagram is deleted** | — | Removed in Pass 10, not hidden or commented out. It was scaffolding drawn while the delegation claim could not be made in words; once it can be, a diagram of the exchange beside the sentence describing it is the same idea twice — the duplication removed from Operating Model, Portfolio Intelligence and Boundaries before it. The two agent tiles are the section's visual. |
-| **Demo slot: still absent, and no placeholder** | — | An empty reserved frame reads as broken however it is labelled. When the Securitisation Readiness footage exists it takes the visual slot and the two agents drop from tiles to named lines beneath it — one visual, as everywhere else on the page. |
+| **`A2ADemo` — the section's one visual** | Demonstration | Built from recorded runs of the delegation exchange (`A2ADemo.tsx`), not a mocked still. It carries its own amber "Synthetic data" pill: Alderbridge is a synthetic lender and every figure comes from one recorded run against its synthetic book. |
+| Named line — **Securitisation Readiness Agent**: "Warehoused loans against eligibility, coverage and concentration." | Evidenced | One line, noun-led, in the Delivery Model's voice. **Named lines, not tiles:** with the demo present a tile row would be a second visual, and the section budget is one. |
+| Named line — **Portfolio Acquisition Intelligence Agent**: "Portfolio risks traced to evidence, with the open questions." | Evidenced | The source description does three things — investigates risks, traces to evidence, surfaces open questions. Compressed to one line it keeps **evidence-tracing and open questions** and drops "investigates risks": every tool claims to find risks, and almost none will say what it could not resolve. **The full name is kept** although it is the longer of the two — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry between two labels. |
+| **The topology diagram is deleted** | — | Removed in Pass 10, not hidden or commented out. It was scaffolding drawn while the delegation claim could not be made in words; with both a sentence stating the claim and a demo performing it, a diagram of the same exchange was the idea a third time — the duplication removed from Operating Model, Portfolio Intelligence and Boundaries before it. **Its removal also deleted the `Fragment` usage that broke the deploy** when the A2A branch and the topology restructure were merged: fewer moving parts in the file that two streams of work both touch. |
 
 ### Constraint on the Securitisation Readiness render
 
