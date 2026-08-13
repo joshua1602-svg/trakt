@@ -120,6 +120,21 @@ const CALLS: readonly Call[] = [
 const MODEL_S = 137;
 
 /**
+ * Time in units a person reads without converting.
+ *
+ * The transcript is in milliseconds and the first cut printed milliseconds,
+ * which is the engineer's unit, not the viewer's: "3,405 ms" has to be divided
+ * by a thousand before it means anything, and the whole point of the pair of
+ * counters is an instant comparison. Seconds against minutes makes it without
+ * arithmetic — a few seconds of governed work inside a couple of minutes of
+ * thinking.
+ */
+const inSeconds = (ms: number): string => `${(ms / 1000).toFixed(1)} sec`;
+
+const inMinutes = (s: number): string =>
+  s < 60 ? `${s} sec` : `${Math.floor(s / 60)} min ${s % 60} sec`;
+
+/**
  * Governed compute after each call, as the real running sum.
  *
  * Not a share of the total by call count: two calls — `evaluate_rule_packs` at
@@ -151,19 +166,25 @@ type Detail = {
   tone: "mint" | "amber" | "rose" | "neutral";
 };
 
+/*
+ * The query line stays in the tool's own vocabulary — that is the technical
+ * register, and it is what makes the trace credible. The RESULT line does not:
+ * it is the one place in each card where a plain reader has to understand what
+ * came back, so it says what the digest means rather than what it is called.
+ */
 const DETAILS: readonly Detail[] = [
-  { seq: 1, value: "27 available · 1 model-required", tone: "neutral" },
-  { seq: 5, value: "screening flags counted separately", tone: "neutral" },
-  { seq: 7, argument: "regime: ESMA_Annex2", value: "14 blocking gaps of 18", tone: "amber" },
-  { seq: 8, value: "12.0% of balance on stale valuations", tone: "amber" },
+  { seq: 1, value: "27 of 28 measures available", tone: "neutral" },
+  { seq: 5, value: "internal flags kept separate from breaches", tone: "neutral" },
+  { seq: 7, argument: "regime: ESMA_Annex2", value: "14 of 18 required fields missing", tone: "amber" },
+  { seq: 8, value: "12% of the book on valuations over 5 years old", tone: "amber" },
   { seq: 9, argument: "dimension: days_past_due", value: "TOOL_INPUT_INVALID", tone: "rose" },
   { seq: 11, argument: "measures: [3]", value: "TOOL_INPUT_INVALID", tone: "rose" },
-  { seq: 12, argument: "measures removed", value: "corrected · returned", tone: "mint" },
-  { seq: 13, argument: "dimension: account_status", value: "corrected · returned", tone: "mint" },
-  { seq: 21, value: "CPR 6.55% · OBSERVED_CPR@v2", tone: "neutral" },
-  { seq: 24, argument: "filter: account_status = Arrears", value: "one region", tone: "amber" },
-  { seq: 25, argument: "filter: current_LTV = 92%", value: "one region", tone: "amber" },
-  { seq: 26, value: "unavailable · one snapshot", tone: "neutral" },
+  { seq: 12, argument: "measures removed", value: "corrected · answered", tone: "mint" },
+  { seq: 13, argument: "dimension: account_status", value: "corrected · answered", tone: "mint" },
+  { seq: 21, value: "6.6% a year repaid early", tone: "neutral" },
+  { seq: 24, argument: "filter: account_status = Arrears", value: "all in one region", tone: "amber" },
+  { seq: 25, argument: "filter: current_LTV = 92%", value: "all in one region", tone: "amber" },
+  { seq: 26, value: "needs two snapshots · only one exists", tone: "neutral" },
 ];
 
 /** One number, three governing documents. From the finding's `rule` field. */
@@ -361,19 +382,28 @@ const Label: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }
 /* The topology — persistent for the whole run                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * An institution in the topology, named and nothing else.
+ *
+ * The tiles used to carry "Holds the objective" and "Decides what to
+ * investigate". Both were true and both were redundant: the objective is
+ * visibly crossing the wire, and thirty calls arriving one at a time is a
+ * better argument that Trakt chose them than a caption claiming it did. Copy
+ * that repeats what the motion already shows is what made the first cut read
+ * as a diagram.
+ */
 const Node: React.FC<{
   title: string;
-  subtitle: string;
   lit: boolean;
   width: number;
-}> = ({ title, subtitle, lit, width }) => (
+}> = ({ title, lit, width }) => (
   <div
     style={{
       width,
       /* Fixed height, contents centred: the Trakt node's name runs to two
          lines and the client's does not, and letting the boxes size to their
          text left the A2A wire meeting them at different heights. */
-      height: 96,
+      height: 84,
       padding: "0 24px",
       display: "flex",
       flexDirection: "column",
@@ -394,7 +424,6 @@ const Node: React.FC<{
     >
       {title}
     </p>
-    <p style={{ margin: "4px 0 0", fontSize: T.size.chip, color: T.color.ink400 }}>{subtitle}</p>
   </div>
 );
 
@@ -415,7 +444,12 @@ const Crossing: React.FC<{
   const frame = useCurrentFrame();
   const p = ramp(frame, at, at + 18);
   if (frame < at - 6 || frame > at + 42) return null;
-  const travel = 168;
+  /* Travel is measured across the whole topology, not the gap between the two
+     tiles. "Assess for securitisation readiness" is wider than that gap, so a
+     chip centred at the end of its run overlapped a tile's name — and the
+     objective is the payload, the one label that must not be abbreviated to
+     fit. It rides its own lane above the tiles instead. */
+  const travel = 300;
   const x = (back ? 1 - p : p) * travel * 2 - travel;
   const opacity = Math.min(ramp(frame, at, at + 5), 1 - ramp(frame, at + 30, at + 42));
   return (
@@ -424,9 +458,9 @@ const Crossing: React.FC<{
         position: "absolute",
         left: "50%",
         top: 0,
-        transform: `translateX(${x - 100}px)`,
+        transform: `translateX(${x - 170}px)`,
         opacity,
-        width: 200,
+        width: 340,
         display: "flex",
         justifyContent: "center",
       }}
@@ -481,29 +515,18 @@ const Topology: React.FC = () => {
   const traktLit = frame >= F.taskLand;
   const clientLit = frame < F.taskLand || frame >= F.received;
   return (
-    <div style={{ padding: "26px 32px 0" }}>
-      <div style={{ display: "flex", alignItems: "flex-start" }}>
-        <Node
-          title="Client enterprise agent"
-          subtitle="Holds the objective"
-          lit={clientLit}
-          width={392}
-        />
-        <Wire label="A2A" lit={frame >= F.task} />
-        <Node
-          title="Trakt Securitisation Readiness Agent"
-          subtitle="Decides what to investigate"
-          lit={traktLit}
-          width={392}
-        />
+    <div style={{ padding: "14px 32px 0" }}>
+      {/* The payload lane. Above the tiles rather than between them, so a long
+          label crosses the full width without ever meeting a tile's name. */}
+      <div style={{ position: "relative", height: 34 }}>
+        <Crossing at={F.task} text="Assess for securitisation readiness" />
+        <Crossing at={F.accepted} text="Accepted" tone="mint" back />
+        <Crossing at={F.ret} text="Assessment · evidence attached" tone="peri" back />
       </div>
-      {/* The crossings ride the wire's band, not the nodes. */}
-      <div style={{ position: "relative", height: 0 }}>
-        <div style={{ position: "absolute", left: 0, right: 0, top: -84 }}>
-          <Crossing at={F.task} text="Assess for securitisation readiness" />
-          <Crossing at={F.accepted} text="Accepted" tone="mint" back />
-          <Crossing at={F.ret} text="Assessment · evidence attached" tone="peri" back />
-        </div>
+      <div style={{ display: "flex", alignItems: "flex-start" }}>
+        <Node title="Client enterprise agent" lit={clientLit} width={392} />
+        <Wire label="A2A" lit={frame >= F.task} />
+        <Node title="Trakt Securitisation Readiness Agent" lit={traktLit} width={392} />
       </div>
       <TaskState />
     </div>
@@ -765,10 +788,10 @@ const Meters: React.FC = () => {
   return (
     <div style={{ display: "flex", gap: 34, alignItems: "flex-start" }}>
       <Meter label="Governed calls" value={`${done} / ${CALLS.length}`} />
-      <Meter label="Governed compute" value={`${governed.toLocaleString("en-GB")} ms`} />
+      <Meter label="Governed compute" value={inSeconds(governed)} />
       {frame >= F.wrap ? (
         <Rise at={F.complete}>
-          <Meter label="Model time" value={`${MODEL_S} s`} tone="peri" />
+          <Meter label="Model time" value={inMinutes(MODEL_S)} tone="peri" />
         </Rise>
       ) : null}
     </div>
@@ -915,6 +938,7 @@ const DrillCard: React.FC = () => (
       {[
         { q: "concentration · filter: account_status = Arrears", v: "70.8% vs 6.8%", t: "rose" },
         { q: "stratify · filter: current_LTV = 92%", v: "one region · all of it", t: "amber" },
+        /* Query in the tool's words, answer in anyone's. */
       ].map((row, i) => (
         <Rise key={row.q} at={F.drillValue + i * 30}>
           <div
@@ -949,7 +973,9 @@ const DrillCard: React.FC = () => (
 
 /** The artifact the client agent received. */
 const AssessmentCard: React.FC = () => (
-  <Panel style={{ width: 900, padding: "34px 40px 38px" }}>
+  // 960, not 900: at 900 the four chips wrapped and left "Evidence attached"
+  // stranded on a line of its own.
+  <Panel style={{ width: 960, padding: "34px 40px 38px" }}>
     <Label>Assessment received</Label>
     <p
       style={{
@@ -961,10 +987,13 @@ const AssessmentCard: React.FC = () => (
     >
       Material remediation required
     </p>
+    {/* "4 declared gaps" was accurate and meant nothing to a reader who does
+        not already know the artifact's schema. What it records is the agent
+        saying so when it cannot answer, which is worth stating plainly. */}
     <div style={{ display: "flex", gap: 14, marginTop: 26, flexWrap: "wrap" }}>
       <Chip tone="neutral">6 material findings</Chip>
-      <Chip tone="neutral">8 diligence items</Chip>
-      <Chip tone="amber">4 declared gaps</Chip>
+      <Chip tone="neutral">8 for further diligence</Chip>
+      <Chip tone="amber">4 it could not assess</Chip>
       <Chip tone="mint">Evidence attached</Chip>
     </div>
   </Panel>
@@ -1023,7 +1052,7 @@ const TraceView: React.FC = () => (
 const GovernedLayer: React.FC = () => {
   return (
     <Rise at={F.panel} style={{ padding: "0 32px" }}>
-      <Panel style={{ height: 654, padding: "24px 28px", display: "flex", flexDirection: "column" }}>
+      <Panel style={{ height: 640, padding: "24px 28px", display: "flex", flexDirection: "column" }}>
         <div
           style={{
             display: "flex",

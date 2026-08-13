@@ -41,15 +41,15 @@ export const A2A_POSTER = {
 /** The run's totals, as the loop ends on them. */
 const COUNTERS = [
   { label: "Governed calls", value: "30 / 30" },
-  { label: "Governed compute", value: "3,405 ms" },
-  { label: "Model time", value: "137 s" },
+  { label: "Governed compute", value: "3.4 sec" },
+  { label: "Model time", value: "2 min 17 sec" },
 ] as const;
 
-const Node: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => (
+const Node: React.FC<{ title: string }> = ({ title }) => (
   <div
     style={{
       width: 372,
-      height: 88,
+      height: 80,
       padding: "0 22px",
       display: "flex",
       flexDirection: "column",
@@ -63,14 +63,13 @@ const Node: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }
     <p style={{ margin: 0, fontSize: T.size.node, fontWeight: 600, color: T.color.ink100 }}>
       {title}
     </p>
-    <p style={{ margin: "4px 0 0", fontSize: T.size.chip, color: T.color.ink400 }}>{subtitle}</p>
   </div>
 );
 
 /** The topology, resolved — nothing in flight, both ends lit. */
 const RestingTopology: React.FC = () => (
   <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-    <Node title="Client enterprise agent" subtitle="Holds the objective" />
+    <Node title="Client enterprise agent" />
     <div
       style={{
         width: 132,
@@ -105,10 +104,7 @@ const RestingTopology: React.FC = () => (
         A2A
       </span>
     </div>
-    <Node
-      title="Trakt Securitisation Readiness Agent"
-      subtitle="Decides what to investigate"
-    />
+    <Node title="Trakt Securitisation Readiness Agent" />
   </div>
 );
 
