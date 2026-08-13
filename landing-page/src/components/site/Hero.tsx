@@ -50,6 +50,17 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           specialist lenders.
         </p>
 
+        {/* The page's central claim, promoted out of a 13px caption under the
+            query demo where it read as commentary on one demo. Here it frames
+            every demo below it — and it sits beside the Copilot preview, which
+            is the first of the four surfaces to show £37,270,061. The reader
+            meets the claim and its first instance together.
+            Same treatment as the risk & controls and governance claim lines:
+            the page has one grammar for "this is a claim". */}
+        <p className="mt-4 text-lg font-medium leading-relaxed text-ink-100">
+          Same question. Same calculation. Same answer.
+        </p>
+
         {/* The reconciliation line now leads the governance section — too
             abstract for a first screen, exactly right as the proof beneath
             the page's claims. */}

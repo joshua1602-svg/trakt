@@ -41,6 +41,21 @@ the controls demo (section 4). Neither autoplays and neither loops silently:
 from the homepage — reporting claims survive in the platform output chips,
 and onboarding detail now belongs to a product page, not this one.
 
+**Pass 10 — one claim, stated once, demonstrated four times.** The page was
+making its central argument in four vocabularies and demonstrating it in none.
+"Same question. Same calculation. Same answer." moves from a 13px caption under
+the query demo to the hero, at the page's claim weight, where it frames every
+demo below it. The Delivery Model headline stops restating the layer and names
+the span of its tiles instead. The agent-to-agent section drops its roadmap
+framing: delegation is evidenced, so it is stated in the present tense, the two
+agents are named, and the topology diagram is **deleted** — with a sentence
+stating the claim and `A2ADemo` performing it, a picture of the same exchange
+was the idea a third time.
+
+The proof is the repeated figure. £37,270,061 appears on the hero's Copilot
+preview, in the query demo's answer, and must appear in the agent-to-agent demo. Nothing on the page points this out and nothing should:
+the claim is asserted once in the hero and then simply keeps being true.
+
 **Pass 9 closeout — three fixes before merge.** The governance grid drops to a
 single column below `lg`: five cards in two columns rendered 2+2+1, leaving
 "Agent-addressable" alone at half width, which is the same rendering-fault look
@@ -123,6 +138,7 @@ flags which appear on the desktop bar.
 | **Eyebrow — the strapline: "Agentic portfolio intelligence. Deterministic by design."** | Positioning | Adopted in Pass 8, replacing "Trakt for specialist lending". Two halves doing two jobs: the category the product competes in, and the property that separates it from everything else in that category. "Deterministic" is not a marketing word here — it is the page's most-evidenced claim (`mi_workflows/engine.py` "no I/O, no LLM"; `mi_agent_api/tests/test_channel_parity.py`). **Stated on the page exactly once.** It is a strapline, not a section heading, and must not be repeated as body copy. Type treatment is the eyebrow's existing style, measured at 555px against a 656px column at 1440 and 770px at 834; at 390 the column is 350px and the second sentence is a `block` below `sm` so the wrap lands on the full stop by construction. |
 | "One governed view of your lending portfolios." | Positioning | The operating-layer claim, plural deliberately: multi-book is the differentiator. Leads on the governed layer rather than on reporting or on AI — both are outputs. |
 | "Connect loan data, documents and funding requirements once. Trakt turns them into live portfolio monitoring, forecasting, controls and reporting **for specialist lenders**." | Evidenced | Layer: ingest→canonical→validate→output pipeline (`engine/orchestrator/trakt_run.py`, gates in `README.md`). Monitoring: `mi_agent/risk_monitor/`, `frontend/mi-agent-ui/`. Forecasting: `mi_agent_api/pipeline_prep.py`, `forecast_bridge.py`, `evolution.py`. Covenant controls: `mi_agent/concentration_tests/`, `config/risk/concentration_test_library.yaml`. Reporting: `mi_agent_pptx/`, `engine/gate_5_delivery/`. Funding requirements → controls: `mi_agent/risk_monitor/schedule8_extractor.py` + `config/clients/client_001/risk_limits_extracted.yaml`. "Live" means continuously monitored against the current book — never "real-time"; the pipeline is batch and snapshot-based. **"for specialist lenders" was added in Pass 8**: the strapline took the eyebrow's slot, and without this the page named no audience above the fold — the headline says "lending portfolios", not *specialist* lending, and `<title>`/description are not visible. Audience scope is unchanged and unextended (see the footer descriptor). |
+| **"Same question. Same calculation. Same answer."** — beneath the sub-copy, above the proof chips | Evidenced | `mi_agent_api/mi_service.py` is the single analytical implementation behind every channel; `mi_agent_api/tests/test_channel_parity.py` asserts the channels agree. **Promoted here in Pass 10** from a 13px caption under the query demo, where it was the page's central claim doing footnote duty and read as commentary on one demo. In the hero it frames all four surfaces below it, and it sits beside the Copilot preview — the first place the reader sees £37,270,061. Treatment is `text-lg font-medium text-ink-100`, the page's established claim grammar (risk & controls, governance, agent-to-agent), not a fourth style. **Stated once on the page.** |
 | Proof point: "One governed portfolio model" | Evidenced | `trakt_core/portfolio.py` registry and scope resolution; the canonical model in `config/system/fields_registry.yaml`. |
 | Proof point: "Deterministic, traceable calculations" | Evidenced | Deterministic parser + executor (`mi_agent/llm_query_parser.py` deterministic path, `mi_agent/mi_query_executor.py`); channel parity (`mi_agent_api/tests/test_channel_parity.py`); lineage (`engine/gate_2_transform/lineage_tracker.py`). |
 | Proof point: "Reporting, controls and AI from the same data" | Evidenced | One analytical implementation behind every output (`mi_agent_api/mi_service.py`); decks render from the same MI payloads (`mi_agent_pptx/mi_api.py`); controls evaluate the same governed frame (`mi_agent/concentration_tests/`). |
@@ -147,7 +163,8 @@ until the visitor presses "Watch query demo".
 | "Trakt declines what it cannot derive." — **inside this section, beneath the demo frame**, with the two example prompts as buttons | Evidenced | `RefusalSection.tsx`. It has moved twice, and both moves were corrections. It began inside the demo card, where it sat behind a play control and was visible only as text in a still. Pass 8 made it its own section (§2b), which over-promoted a sub-claim of the demo into a destination and put it in adjacent territory to the agent-to-agent headline. **Pass 9 folded it back in**, above a rule and at `h3` scale — the conclusion the demo has just earned, not a caption. Pressing a prompt dispatches `ASK_EVENT` to `QueryDemo`, which starts the demo and asks it, so the visitor watches Trakt decline rather than being told it does. Stated once on the page; the poster replica does not repeat it. Refusal paths unchanged (`src/lib/intents.ts`). **Guarded:** the e2e suite asserts `#refusal` no longer exists, that the claim appears exactly once, that a prompt still drives the demo to a refusal, and that the computed font size is ≥18px — so a later pass cannot quietly return it to small print. |
 | The SPV1 row note is a real toggle, not a `title` tooltip | Demonstration | `RowNote` in `Artifacts.tsx`: a button with `aria-expanded` revealing the note inline. Native tooltips never open on touch, which made the explanation unreachable at phone width — asserted now in the mobile Playwright run. |
 | The poster before start | Demonstration | A non-interactive replica of the demo surface carrying the real synthetic scope (client, books, exposure count, as-at date) from `data/demo-pack.json`. |
-| "Same question. Same calculation. Same answer." | Evidenced | `mi_agent_api/mi_service.py` single implementation; `test_channel_parity.py`. |
+| *("Same question. Same calculation. Same answer." has moved to the hero — see §1. It was the page's central claim rendered at 13px under one demo.)* | — | — |
+| **Total rows in an answer table render as totals** — semibold, `ink-100` | Demonstration | `isTotalRow` in `Artifacts.tsx`. Not tidiness: the sponsor total is £37,270,061, the same figure the hero's Copilot preview already showed, and the hero's claim is that every surface returns the same answer. Rendered as one plain 14px cell among five identical rows, the repetition was invisible unless the reader was already looking for it. Keyed off the first column's own label rather than a flag on the data, because the demo pack is engine-generated and hash-checked and should not carry styling hints. In the committed pack this matches four rows across two artifacts — the platform and sponsor totals in the balance and movement tables — and nothing else. |
 | "The portfolios are wholly synthetic, and the page accepts no uploads." | Demonstration | True by construction — no upload endpoint exists. **Single instance on the page**, moved here with the demo it describes. |
 | Everything inside the interactive demo (answers, refusals, report previews, session counter) | Evidenced / Demonstration | Unchanged — see the Pass-2 appendix, which remains accurate for the demo surface. |
 
@@ -308,7 +325,7 @@ is a server component.
 | Copy | Class | Evidence |
 |---|---|---|
 | Body line: **"Approved risk findings are pushed to Teams."** | Evidenced | Carried over verbatim from the deleted §6 in Pass 8 — the one claim its chips made that the tiles do not. Placed as the section's body line rather than inside the Copilot tile for two reasons: it is evidenced by the Teams outbox, not the Copilot agent (`trakt_notifications/` — 19 modules: `cards.py`, `teams_client.py`, `outbox.py`, `delivery.py`, `trigger.py`, `recipients.py`; approval writes intent, a worker delivers, dedup/supersession by deterministic batch id; timer-driven drain at `function_app.py:83`; `tests/notifications/test_end_to_end.py`; `docs/teams_proactive_notifications.md`), so a Copilot tile would misattribute it; and every tile is one line, so a two-line tile would read as a mistake. It is also the one delivery behaviour that is not user-initiated — every tile describes somewhere a person goes to ask; this is the case where Trakt arrives unasked. **Asserted to appear exactly once on the page.** |
-| Headline **unchanged**: "Every mode reads the same governed layer." | Positioning | Considered and rejected in Pass 8: absorbing the deleted section's "where your team already works" would trade the differentiating claim for one every vendor makes, and the §6c agent-to-agent section argues from *same governed layer* directly. The tiles name Teams and Microsoft 365 in their own copy, so the where is carried without the headline. |
+| Headline: **"From a managed service to your own agents."** | Positioning | **Rewritten in Pass 10.** "Every mode reads the same governed layer" was the third statement of one argument — the platform section makes it as architecture, §6c makes it for agents, and the hero now makes it for the whole page. Repetition in different vocabularies reads as padding, not emphasis. This headline introduces the row instead: it names the span in the tiles' own order, survives the row changing (unlike "four ways"), and hands off directly to the agent-to-agent section beneath it. **Consequence, accepted:** the delivery section no longer says *why* four modes agreeing matters — the hero claim line now carries that for the whole page. |
 
 | Tile | Class | Evidence |
 |---|---|---|
@@ -319,23 +336,37 @@ is a server component.
 
 ---
 
-## 6c. Agent-to-agent — a roadmap section (`AgentSection.tsx`)
+## 6c. Agent-to-agent (`AgentSection.tsx`)
 
-New in Pass 7. Sits after the delivery model and before governance, so the
-reader meets the delivery surfaces first and the governance answer
-immediately after. Everything in it is **Roadmap**; the section carries a
-"Roadmap" label in `ink-500`, and "Trakt **is designed to**" is deliberate
-roadmap phrasing that must not be tightened into a present-tense claim in a
-later pass.
+New in Pass 7 as a roadmap section. **Pass 10 removed the roadmap framing**:
+delegation is proven, so the claim is present tense, the "Roadmap" label is
+gone and the "is designed to" hedge with it. Sits after the delivery model and
+before governance, so the reader meets the delivery surfaces first and the
+governance answer immediately after.
 
 | Copy | Class | Evidence |
 |---|---|---|
-| Eyebrow: "Agent-to-agent" · heading "Agents don't calculate the portfolio. Trakt does." | Positioning | The commercial statement of the architectural boundary the page already argues: calculation is deterministic and lives in the engine (`mi_workflows/engine.py` — "no I/O, no LLM"), not in a language model. True of the shipped product today; the *agent access* to it is what is roadmap. |
-| "Your agents already have somewhere to work. Give them somewhere trustworthy to get credit intelligence." | Positioning | No capability claimed. |
-| "Trakt is designed to make governed portfolio intelligence available to enterprise agents — with controlled access, deterministic calculations and evidence behind every result." | Roadmap (worded as design intent) | `trakt_core/context.py` reserved channels `CHANNEL_ENTERPRISE_AGENT` / `CHANNEL_AGENT_TO_AGENT`; `docs/governed_capability_architecture.md` documents the adapter shape; only a test fixture exists. The three qualities named are each evidenced for the live channels (tenancy `trakt_core/tenancy.py`; determinism `test_channel_parity.py`; lineage `lineage_tracker.py`) — what is unbuilt is the agent channel that would expose them. |
-| Topology: External agent —*A2A*→ Client enterprise agent —*Governed tool calls*→ Trakt | Roadmap | Three nodes on one line; protocol names appear as connector labels only, never as a claim of a shipped integration. **No vendor mark is used as an actor** — Microsoft and Copilot are surfaces Trakt is *reached through*, named in prose elsewhere, and are not parties in this exchange. The platform section owns the multi-tier stack shape; this is deliberately not a second one. |
-| **The topology is temporary, and the demo replaces it** | — | Decided in the Pass 9 closeout. When the Securitisation Readiness Agent footage exists it takes the section's one visual and the topology comes out: footage of the exchange plus a diagram of the same exchange is the duplication this page has removed three times already (Operating Model, Portfolio Intelligence, Boundaries). It was squared up anyway rather than left ragged — "temporary" is not a date, and it is the live page's only agent-to-agent visual until the render happens. Fixes: nodes and connectors are separate list items so all three nodes are `flex-1 basis-0` and share the row equally (previously each box was sized by the label beside it, and Trakt came out smallest despite being the subject); `items-stretch` so the boxes match height when "Client enterprise agent" wraps at tablet width; connector labels in sentence case and `whitespace-nowrap` so "Governed tool calls" holds one line instead of wrapping to three; Trakt keeps a full-strength `peri-500` border and a lighter panel. Measured equal at 1760 / 1440 / 1024 / 834 / 390. |
-| **Demo slot: deliberately absent** | — | The Securitisation Readiness Agent footage does not exist. A mocked still — invented agent messages, figures nobody computed — would be the one thing on the page that fabricates a capability. An empty reserved frame was built and rejected: at ~700px under a diagram it reads as broken however it is labelled, and it breaches the one-visual-per-section budget. The topology is the section's only visual until there is real footage. Do not re-add a placeholder frame. |
+| Eyebrow: "Agent-to-agent" · heading "Agents don't calculate the portfolio. Trakt does." | Positioning | The commercial statement of the architectural boundary the page already argues: calculation is deterministic and lives in the engine (`mi_workflows/engine.py` — "no I/O, no LLM"), not in a language model. |
+| **"An agent that knows nothing about Trakt can discover it and delegate an objective."** | Evidenced | The section's claim, and the strongest on the page. **Discovery and delegation are the claim** — not that an agent called a known endpoint. Stated once, under the headline, in the page's claim grammar (`text-lg font-medium text-ink-100`). It leads with the part that is hard to believe — no prior knowledge — because that is what makes it a claim rather than a description of an API call. |
+| "Your agents already have somewhere to work. Give them somewhere trustworthy to get credit intelligence." | Positioning | No capability claimed. Supporting line, `ink-400`, below the claim. |
+| **`A2ADemo` — the section's one visual** | Demonstration | Built from recorded runs of the delegation exchange (`A2ADemo.tsx`), not a mocked still. It carries its own amber "Synthetic data" pill: Alderbridge is a synthetic lender and every figure comes from one recorded run against its synthetic book. |
+| Named line — **Securitisation Readiness Agent**: "Warehoused loans against eligibility, coverage and concentration." | Evidenced | One line, noun-led, in the Delivery Model's voice. **Named lines, not tiles:** with the demo present a tile row would be a second visual, and the section budget is one. |
+| Named line — **Portfolio Acquisition Intelligence Agent**: "Portfolio risks traced to evidence, with the open questions." | Evidenced | The source description does three things — investigates risks, traces to evidence, surfaces open questions. Compressed to one line it keeps **evidence-tracing and open questions** and drops "investigates risks": every tool claims to find risks, and almost none will say what it could not resolve. **The full name is kept** although it is the longer of the two — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry between two labels. |
+| **The topology diagram is deleted** | — | Removed in Pass 10, not hidden or commented out. It was scaffolding drawn while the delegation claim could not be made in words; with both a sentence stating the claim and a demo performing it, a diagram of the same exchange was the idea a third time — the duplication removed from Operating Model, Portfolio Intelligence and Boundaries before it. **Its removal also deleted the `Fragment` usage that broke the deploy** when the A2A branch and the topology restructure were merged: fewer moving parts in the file that two streams of work both touch. |
+
+### Constraint on the Securitisation Readiness render
+
+**Its result must land on £37,270,061 — the sponsor total — not a new figure.**
+
+The hero asserts "Same question. Same calculation. Same answer." and the page
+then demonstrates it by showing the same number on surface after surface: the
+hero's Copilot preview, the query demo's answer table (now emphasised as a
+total so the repetition is visible), the controls demo's portfolio, and finally
+an agent's response. A fourth surface returning a *different* number would
+quietly refute the page's central claim, and no caption could repair it.
+
+This binds the render, not the copy. Nothing on the page points the repetition
+out and nothing should — the claim is asserted once and then keeps being true.
 
 ---
 
@@ -370,7 +401,7 @@ deployment arrangement.
 | Copy | Class | Evidence |
 |---|---|---|
 | `<title>` — "Trakt \| Agentic portfolio intelligence. Deterministic by design." | Positioning | The strapline verbatim, as the title, because this is what a search result and a link preview surface. Was "Trakt \| Governed Portfolio Intelligence". |
-| Meta / OpenGraph / Twitter description — the strapline, then the existing sentence ("Trakt connects portfolio data … for specialist lenders.") | Positioning + Evidenced | One `STRAPLINE` constant feeds the title and opens the description, so the two cannot drift. The second sentence is unchanged and still carries the audience. |
+| Meta / OpenGraph / Twitter description — the strapline, the existing sentence ("Trakt connects portfolio data … for specialist lenders."), then **"Enterprise agents discover Trakt's agents and delegate an objective, and get an evidence-backed result."** | Positioning + Evidenced | One `STRAPLINE` constant feeds the title and opens the description, so the two cannot drift. The delegation clause was added in Pass 10 to the **description only** — title, OpenGraph title and the strapline are unchanged, because delegation is a proof of the "agentic" category the strapline already claims rather than a different position. |
 | OpenGraph image (`opengraph-image.tsx`) — **untouched** | — | It renders the headline ("One governed view."), not the eyebrow, so the strapline change does not reach it. Its `alt` export deliberately still reads "Trakt \| Governed Portfolio Intelligence"; change it only alongside the image itself. |
 | `trakt:pack` meta tag | — | Unchanged. Deploy-gate provenance, not copy. |
 
