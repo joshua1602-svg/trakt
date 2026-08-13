@@ -247,6 +247,17 @@ test.describe("Trakt landing page", () => {
       .poll(async () => video.evaluate((v: HTMLVideoElement) => !v.paused && v.currentTime > 0))
       .toBe(true);
 
+    // The transport must not stand on the film. It used to be pinned across
+    // the bottom of the frame for the whole run, and the A2A demo draws to
+    // the frame edge, so its closing lines were covered from the moment play
+    // was pressed. Measured, not read from a class name.
+    const frameBox = await video.boundingBox();
+    const transport = await controls.getByRole("progressbar").boundingBox();
+    expect(transport, "no transport while playing").not.toBeNull();
+    expect(transport!.y, "the transport overlaps the film").toBeGreaterThanOrEqual(
+      frameBox!.y + frameBox!.height - 1,
+    );
+
     // Pause and resume are the visitor's.
     await controls.getByRole("button", { name: /pause demo/i }).click();
     expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
@@ -313,10 +324,21 @@ test.describe("Trakt landing page", () => {
     }
     await expect(delivery.getByRole("heading", { level: 3 })).toHaveCount(names.length);
 
-    // Availability is stated per tile: three shipped, two roadmap.
-    await expect(delivery.getByText("Available today")).toHaveCount(3);
-    // One roadmap tile, not two: the agent section shows both patterns.
-    await expect(delivery.getByText("Roadmap")).toHaveCount(1);
+    // The availability labels are gone. They drew a line between three
+    // shipped channels and one roadmap channel, and that line stopped being
+    // true once agent-to-agent delegation was demonstrated. Four identical
+    // "Available today" labels would be noise; a grey fourth tile would be
+    // wrong.
+    await expect(delivery.getByText("Available today")).toHaveCount(0);
+    await expect(delivery.getByText("Roadmap")).toHaveCount(0);
+
+    // Availability is carried by the outline instead, on every tile — and the
+    // numerals run 01→04, the ladder the headline describes.
+    await expect(delivery.getByText(/^0[1-4]$/)).toHaveCount(4);
+    for (const [index, name] of names.entries()) {
+      const tile = delivery.locator("li").filter({ hasText: name });
+      await expect(tile.getByText(String(index + 1).padStart(2, "0"))).toBeVisible();
+    }
 
     // No expand/collapse interaction anywhere in the section.
     await expect(delivery.getByRole("button")).toHaveCount(0);
@@ -415,13 +437,25 @@ test.describe("Trakt landing page", () => {
     await expect(agents.getByText("Roadmap", { exact: true })).toHaveCount(0);
     await expect(agents.getByText(/is designed to/i)).toHaveCount(0);
 
-    // The two agents are named lines beneath the demo, not a second tile row:
-    // the demo is the section's one visual.
-    for (const agent of [
+    // The two agents are the section's products, so they lead it. As small
+    // named lines under a fifty-second film they were furniture nobody
+    // reached — ranked below a recording of one of them.
+    const AGENT_NAMES = [
       "Securitisation Readiness Agent",
       "Portfolio Acquisition Intelligence Agent",
-    ]) {
-      await expect(agents.getByRole("term").filter({ hasText: agent })).toBeVisible();
+    ];
+    for (const agent of AGENT_NAMES) {
+      await expect(agents.getByRole("heading", { name: agent, level: 3 })).toBeVisible();
+    }
+
+    // Above the demo, and asserted by geometry rather than by DOM order: a
+    // grid change could reorder them visually while the markup still read
+    // correctly.
+    const frame = await agents.locator("video").boundingBox();
+    for (const agent of AGENT_NAMES) {
+      const tile = await agents.getByRole("heading", { name: agent, level: 3 }).boundingBox();
+      expect(tile, `no box for ${agent}`).not.toBeNull();
+      expect(tile!.y, `${agent} is not above the demo`).toBeLessThan(frame!.y);
     }
 
     // The topology is deleted, not hidden. It was a diagram of the exchange
@@ -663,8 +697,9 @@ test.describe("Trakt landing page", () => {
   test("green marks system state and nothing else", async ({ page }) => {
     // The allow-list is declared in the components themselves, not here: a
     // container marks itself `data-state-colour` when what it renders is a
-    // system state. Three exist — delivery availability, the control
-    // preview's evaluation rows, and the lead form's success panel.
+    // system state. Four exist — delivery availability, agent availability,
+    // the control preview's evaluation rows, and the lead form's success
+    // panel.
     const offenders = async () =>
       page.evaluate(
         new Function(

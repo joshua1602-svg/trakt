@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, type ReactNode } from "react";
 
-import { buttonStyles } from "@/components/ui";
+import { buttonStyles, cx } from "@/components/ui";
 
 /**
  * The controlled demo player: poster first, motion only on request.
@@ -96,14 +96,6 @@ export function DemoPlayer({
           <source src={mp4Src} type="video/mp4" onError={() => setFailed(true)} />
         </video>
 
-        {state === "ended" ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-navy-950/60">
-            <button type="button" onClick={replay} className={buttonStyles.primary}>
-              <ReplayGlyph /> Watch again
-            </button>
-          </div>
-        ) : null}
-
         {state === "idle" ? (
           /* The still stays at full contrast and sharpness — a global overlay
              made working software look disabled — and the plate is fully
@@ -131,40 +123,65 @@ export function DemoPlayer({
           </div>
         ) : null}
 
-        {state === "playing" || state === "paused" ? (
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-navy-950/70 px-3 py-2">
-            <button
-              type="button"
-              onClick={state === "playing" ? pause : play}
-              aria-label={state === "playing" ? "Pause demo" : "Resume demo"}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-navy-850 text-ink-100 hover:border-peri-500"
-            >
-              {state === "playing" ? <PauseGlyph /> : <PlayGlyph />}
-            </button>
+      </div>
+
+      {/* The transport sits BELOW the frame, not across the bottom of it.
+          Overlaid, it stood on the last rows of the film for the whole run —
+          the A2A demo draws to the frame edge, so its closing lines were
+          simply not readable. Auto-hiding is the usual answer and it is a bad
+          one here: on a phone there is no hover, so the controls come back
+          only by tapping the thing you are trying to watch, and a pause
+          control you cannot find is worse than one that costs 40px.
+
+          "Watch again" is in this strip too, for the same reason. As a
+          centred button on a scrim over the frame it covered the film's last
+          frame — which, for a demo that ends on its assessment, is the frame
+          most worth reading. Ending now leaves the picture alone. */}
+      {state === "idle" ? null : (
+        <div className="mt-2 flex items-center gap-2">
+          {state === "ended" ? (
             <button
               type="button"
               onClick={replay}
-              aria-label="Restart demo from the beginning"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-navy-850 text-ink-100 hover:border-peri-500"
+              className={cx(buttonStyles.secondary, "shrink-0")}
             >
-              <ReplayGlyph />
+              <ReplayGlyph /> Watch again
             </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={state === "playing" ? pause : play}
+                aria-label={state === "playing" ? "Pause demo" : "Resume demo"}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-navy-850 text-ink-100 hover:border-peri-500"
+              >
+                {state === "playing" ? <PauseGlyph /> : <PlayGlyph />}
+              </button>
+              <button
+                type="button"
+                onClick={replay}
+                aria-label="Restart demo from the beginning"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-navy-850 text-ink-100 hover:border-peri-500"
+              >
+                <ReplayGlyph />
+              </button>
+            </>
+          )}
+          <div
+            role="progressbar"
+            aria-label="Demo progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            className="h-1 flex-1 overflow-hidden rounded-full bg-navy-800"
+          >
             <div
-              role="progressbar"
-              aria-label="Demo progress"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(progress * 100)}
-              className="h-1 flex-1 overflow-hidden rounded-full bg-navy-800"
-            >
-              <div
-                className="h-full rounded-full bg-peri-400"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+              className="h-full rounded-full bg-peri-400"
+              style={{ width: `${progress * 100}%` }}
+            />
           </div>
-        ) : null}
-      </div>
+        </div>
+      )}
 
       {caption ? (
         <figcaption className="mt-3 text-[11px] leading-relaxed text-ink-500">
