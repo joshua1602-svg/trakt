@@ -268,17 +268,23 @@ const F = {
   panel: 156,
   mcp: 150,
   /** All thirty done; the reasoning total joins the calculation total. */
-  complete: 945,
-  ret: 975,
-  report: 1050,
-  /** The six findings, listed in the artifact's own order. */
-  finding: [1074, 1098, 1122, 1146, 1170, 1194] as const,
-  fact: 1230,
-  rule: 1254,
+  complete: 939,
+  ret: 963,
+  report: 1026,
+  /**
+   * The six findings, in the artifact's own order — but the third opens where
+   * it sits. Listing all six and then reaching back up to expand one made the
+   * reader lose their place; a finding that unfolds in sequence reads as part
+   * of the list rather than as an annotation on it.
+   */
+  finding: [1050, 1074, 1098, 1284, 1308, 1332] as const,
+  fact: 1128,
+  rule: 1152,
   /** One number, three governing documents, resolving one at a time. */
-  verdict: [1278, 1308, 1338] as const,
-  judgement: 1374,
-  footer: 1398,
+  verdict: [1176, 1200, 1224] as const,
+  judgement: 1254,
+  diligence: 1362,
+  gaps: 1386,
 } as const;
 
 /** Where each call lights, by segment. Recorded order; compressed time. */
@@ -1048,6 +1054,62 @@ const FindingRow: React.FC<{
 );
 
 /**
+ * The rest of the artifact, in its own words.
+ *
+ * The footer used to state three counts — six findings, eight diligence
+ * items, four it could not assess — under a list that showed only the six.
+ * Two of the three numbers described things the reader had no sight of, which
+ * makes a summary into an assertion. These are the run's own diligence items
+ * and declared gaps, trimmed to their subject and visibly cut off, so every
+ * number on the page refers to something on the page.
+ */
+/* Three each, trimmed to the subject: at full length the row ran past the
+   panel and cut off its own "+5 more", which is the one word that makes it
+   a truncation rather than a claim to be complete. */
+const DILIGENCE = [
+  "Refresh Scotland valuations",
+  "Direct-to-default transitions",
+  "Borrower identifiers",
+] as const;
+
+const GAPS = [
+  "Borrower concentration",
+  "Seasoning / vintage",
+  "Period-on-period change",
+] as const;
+
+const Section: React.FC<{
+  label: string;
+  count: number;
+  items: readonly string[];
+  at: number;
+}> = ({ label, count, items, at }) => (
+  <Rise at={at}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 20, height: 38 }}>
+      <span
+        style={{
+          width: 200,
+          flexShrink: 0,
+          fontSize: T.size.seq,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: T.color.ink500,
+          fontWeight: 600,
+        }}
+      >
+        {label} · {count}
+      </span>
+      <span style={{ fontSize: T.size.trace, color: T.color.ink300, whiteSpace: "nowrap" }}>
+        {items.join("  ·  ")}
+      </span>
+      <span style={{ fontSize: T.size.trace, color: T.color.ink500, whiteSpace: "nowrap" }}>
+        · +{count - items.length} more
+      </span>
+    </div>
+  </Rise>
+);
+
+/**
  * The assessment, as the client agent received it.
  *
  * This replaces three separate screens — one per interesting call, then a
@@ -1068,7 +1130,21 @@ const Assessment: React.FC = () => {
         </Rise>
       </div>
 
-      <div style={{ marginTop: 26, display: "flex", flexDirection: "column" }}>
+      <div style={{ marginTop: 22 }}>
+        <span
+          style={{
+            fontSize: T.size.seq,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: T.color.ink500,
+            fontWeight: 600,
+          }}
+        >
+          Material findings · 6
+        </span>
+      </div>
+
+      <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
         {FINDINGS.map((finding, i) => (
           <React.Fragment key={finding.title}>
             <FindingRow finding={finding} at={F.finding[i] ?? 0} />
@@ -1077,21 +1153,16 @@ const Assessment: React.FC = () => {
         ))}
       </div>
 
-      <Rise at={F.footer} style={{ marginTop: "auto" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            paddingTop: 18,
-            borderTop: `1.5px solid ${T.color.lineSoft}`,
-          }}
-        >
-          <Chip tone="neutral">6 material findings</Chip>
-          <Chip tone="neutral">8 for further diligence</Chip>
-          <Chip tone="amber">4 it could not assess</Chip>
-          <Chip tone="mint">Evidence attached to every figure</Chip>
-        </div>
-      </Rise>
+      <div
+        style={{
+          marginTop: "auto",
+          paddingTop: 18,
+          borderTop: `1.5px solid ${T.color.lineSoft}`,
+        }}
+      >
+        <Section label="Further diligence" count={8} items={DILIGENCE} at={F.diligence} />
+        <Section label="Could not assess" count={4} items={GAPS} at={F.gaps} />
+      </div>
     </div>
   );
 };
