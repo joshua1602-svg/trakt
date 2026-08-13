@@ -17,6 +17,8 @@ import React from "react";
 import { Composition } from "remotion";
 
 import Film from "./Film";
+import A2ADemo, { A2A_DEMO } from "./landing/A2ADemo";
+import A2APoster, { A2A_POSTER } from "./landing/A2APoster";
 import ControlsDemo, { CONTROLS_DEMO } from "./landing/ControlsDemo";
 import ControlsPoster, { CONTROLS_POSTER } from "./landing/ControlsPoster";
 import { FPS, totalFrames } from "./timeline";
@@ -64,6 +66,25 @@ export const RemotionRoot: React.FC = () => (
       fps={CONTROLS_DEMO.fps}
       width={CONTROLS_DEMO.width}
       height={CONTROLS_DEMO.height}
+    />
+    {/* The landing page's Agent-to-agent loop, and its poster. Same frame and
+        the same tokens as the controls pair, drawn entirely from one recorded
+        Sprint 4 delegation. See src/landing/A2ADemo.tsx. */}
+    <Composition
+      id={A2A_POSTER.id}
+      component={A2APoster}
+      durationInFrames={A2A_POSTER.duration}
+      fps={A2A_POSTER.fps}
+      width={A2A_POSTER.width}
+      height={A2A_POSTER.height}
+    />
+    <Composition
+      id={A2A_DEMO.id}
+      component={A2ADemo}
+      durationInFrames={A2A_DEMO.duration}
+      fps={A2A_DEMO.fps}
+      width={A2A_DEMO.width}
+      height={A2A_DEMO.height}
     />
   </>
 );
