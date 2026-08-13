@@ -59,6 +59,9 @@ type Beat = {
   until: number;
   label: string;
   lines: readonly string[];
+  /** A quieter second line. Only the closing beat needs one — the capability
+   *  claim reads as the headline's footnote, not as another headline. */
+  note?: string;
   tone?: "neutral" | "breach" | "verdict";
   extra?: "rulebooks" | "triad";
 };
@@ -86,8 +89,12 @@ const BEATS: readonly Beat[] = [
   { at: 31.8, until: 35.6, label: "Assessment received ✓", tone: "verdict",
     lines: ["Material remediation required",
             "6 material findings · 8 diligence items · 4 declared gaps"] },
+  // Only securitisation readiness is claimed. Two further agents sit on the
+  // roadmap; putting them on screen — even dimmed — would invite the reader to
+  // assume they exist, and one delegated capability is what Sprint 4 proved.
   { at: 35.8, until: 37.9, label: "Agent-ready",
-    lines: ["Specialist lending intelligence."] },
+    lines: ["Specialist lending intelligence."],
+    note: "Enterprise agents can discover, delegate work to and receive governed intelligence from Trakt." },
 ];
 
 /** The capabilities the specialist reached, in the order the run reached them. */
@@ -362,6 +369,11 @@ function Narration() {
               {line}
             </p>
           ))}
+          {beat.note ? (
+            <p className="mt-1.5 max-w-[36rem] text-balance text-[11px] leading-snug text-ink-400 sm:text-[12px]">
+              {beat.note}
+            </p>
+          ) : null}
           {beat.extra === "rulebooks" ? <Rulebooks /> : null}
           {beat.extra === "triad" ? <Triad /> : null}
         </div>
