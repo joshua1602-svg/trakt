@@ -244,75 +244,76 @@ export function ControlPreview() {
 /**
  * Four delivery modes, stated once each. A static row: no expand, no
  * collapse, no keyboard handling — the whole section is legible in one pass,
- * which is the point. Mint marks what ships; grey marks what does not.
+ * which is the point.
+ *
+ * The per-tile availability labels are gone. They existed to separate three
+ * shipped channels from one roadmap channel, and that distinction stopped
+ * being true when agent-to-agent delegation was demonstrated: all four are
+ * available, so a label repeating "Available today" four times said nothing
+ * and the grey fourth tile said something false. The mint outline now carries
+ * availability for the row — still system state, just no longer varying.
+ *
+ * The numerals are the section's argument in the margin: the headline is
+ * "From a managed service to your own agents", and 01→04 is that ladder,
+ * least autonomous to most. They are structure, not state, so they take peri
+ * rather than mint.
+ *
+ * Copy states capability rather than category. "Dashboards, charting and
+ * drill-through" described a reporting tool from 2015; what is actually
+ * there is natural-language questioning over figures the engine calculated
+ * deterministically, which is the whole difference.
  *
  * The channel strip that used to precede this row, in its own Portfolio
  * Intelligence section, is gone: "Trakt workspace" and "Trakt Agent" were the
- * same surface named twice, and Copilot appeared in both. The tiles carry
- * availability themselves, so the strip's "Available today" label went with
- * it; its proactive-Teams claim is now the section's body line.
+ * same surface named twice, and Copilot appeared in both. Its proactive-Teams
+ * claim is now the section's body line.
  */
 const DELIVERY_MODES = [
   {
     name: "Managed service",
     // Longer than its neighbours on purpose: it is the only line that
     // separates a managed service from automated software.
-    copy: "Reporting run by Trakt, not your team.",
-    available: true,
+    copy: "Your reporting produced, reconciled and delivered by Trakt — no platform for your team to run.",
   },
   {
     name: "Trakt Agent",
-    copy: "Dashboards, charting and drill-through.",
-    available: true,
+    copy: "Ask in your own words. Get charts, cohorts and drill-through built on deterministic figures, not estimates.",
   },
   {
     name: "Copilot",
-    copy: "Portfolio questions inside Teams and Microsoft 365.",
-    available: true,
+    copy: "Trakt inside Teams and Microsoft 365, answering in the thread — and raising what changed before anyone asks.",
   },
   {
-    // One roadmap tile, not two: the agent-to-agent section below shows both
-    // patterns — client-owned agents and cross-institution exchange — in a
-    // single topology, so splitting them here made the distinction twice and
-    // less well.
+    // One tile, not two: the agent-to-agent section below covers both
+    // patterns — client-owned agents and cross-institution exchange — so
+    // splitting them here made the distinction twice and less well.
     name: "Agent access",
-    copy: "Client and counterparty agents querying Trakt directly.",
-    available: false,
+    copy: "Your agents delegate an objective and get back an evidence-backed assessment, every figure traced to its calculation.",
   },
 ] as const;
 
 export function DeliveryModes() {
   return (
     <ul
-      // A system-state context: mint marks availability, grey marks roadmap.
+      // A system-state context: mint outlines what is available, and all four
+      // channels now are.
       data-state-colour="delivery-availability"
       className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
     >
       {DELIVERY_MODES.map((mode, index) => (
         <li key={mode.name}>
           <Reveal delay={index * 60} className="h-full">
-            <Card
-              className={cx(
-                "flex h-full flex-col",
-                mode.available ? "border-mint-400/25" : "border-line-soft bg-navy-900/40",
-              )}
-            >
+            <Card className="flex h-full flex-col border-mint-400/55">
+              {/* `aria-hidden`: the numeral is a visual position in the
+                  ladder, and read aloud before every heading it would be
+                  four stray numbers. */}
               <p
-                className={cx(
-                  "text-[11px] font-semibold uppercase tracking-wider",
-                  mode.available ? "text-mint-400" : "text-ink-500",
-                )}
+                aria-hidden="true"
+                className="text-2xl font-semibold tabular-nums leading-none text-peri-300"
               >
-                {mode.available ? "Available today" : "Roadmap"}
+                {String(index + 1).padStart(2, "0")}
               </p>
-              <h3
-                className={cx(
-                  "mt-2 text-[15px] font-semibold",
-                  mode.available ? "text-ink-100" : "text-ink-300",
-                )}
-              >
-                {mode.name}
-              </h3>
+              <h3 className="mt-3 text-[15px] font-semibold text-ink-100">{mode.name}</h3>
               <p className="mt-2 text-sm leading-relaxed text-ink-400">{mode.copy}</p>
             </Card>
           </Reveal>

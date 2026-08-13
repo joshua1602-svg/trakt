@@ -190,12 +190,12 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
               </dd>
             </div>
           </dl>
-
-          {/* One confirmatory provenance signal; the as-at date and the
+          {/* Nothing sits under the sponsor total. A lone "Deterministic"
+              label used to, as a provenance signal, but with no figure to
+              qualify and no rule beside it, it read as a stray word below the
+              totals rather than a claim about them. The claim is made in the
+              hero copy and demonstrated by the demo; the as-at date and the
               synthetic disclosure live once, in the demo's portfolio header. */}
-          <p className="mt-3 border-t border-line-soft pt-2 text-[10px] font-medium text-ink-400">
-            Deterministic
-          </p>
         </div>
       </div>
     </div>

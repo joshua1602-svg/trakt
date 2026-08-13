@@ -1,7 +1,7 @@
 import { A2APreview } from "@/components/site/A2APreview";
 import { DemoPlayer } from "@/components/site/DemoPlayer";
 import { Reveal } from "@/components/site/Reveal";
-import { SectionHeading } from "@/components/ui";
+import { Card, SectionHeading } from "@/components/ui";
 
 /**
  * Agent-to-agent.
@@ -27,22 +27,30 @@ import { SectionHeading } from "@/components/ui";
  * `Fragment` usage with it, which is what the deploy tripped over when two
  * branches merged.
  *
- * The two agents are named lines beneath the demo rather than tiles: with a
- * demo present, a tile row would be a second visual, and the section budget
- * is one.
+ * The two agents sit ABOVE the demo, as outlined tiles rather than the small
+ * named lines they were. Underneath a fifty-second film they were furniture
+ * nobody reached — the products of the section, ranked below a recording of
+ * one of them. Above it they are the claim, and the film is the evidence for
+ * the claim, which is the right order for both.
+ *
+ * Their outline is mint, matching the delivery tiles: same statement, that
+ * this is available. Their glyphs are peri, because a glyph marks what a
+ * thing is, not what state it is in.
  */
 
 const AGENTS = [
   {
     name: "Securitisation Readiness Agent",
-    copy: "Warehoused loans against eligibility, coverage and concentration.",
+    copy: "Points it at a warehouse and it works the whole book — eligibility, coverage, concentration — and tells you what would fail a deal before the arranger does.",
+    Glyph: TrancheGlyph,
   },
   {
     // The full name is kept although it is the longer of the two: "Portfolio"
     // is what separates this from corporate M&A diligence, which is worth
     // more than symmetry between two labels.
     name: "Portfolio Acquisition Intelligence Agent",
-    copy: "Portfolio risks traced to evidence, with the open questions.",
+    copy: "Reads a portfolio you are buying, finds what the seller's summary leaves out, and hands back every risk with the evidence behind it — and the questions still open.",
+    Glyph: DiligenceGlyph,
   },
 ] as const;
 
@@ -65,7 +73,27 @@ export function AgentSection() {
         </p>
       </Reveal>
 
-      <Reveal delay={60}>
+      <ul
+        // Mint says the same thing here it says on the delivery tiles: this is
+        // available. That makes it system state, which is why the row declares
+        // itself to the colour guard rather than being excused by it.
+        data-state-colour="agent-availability"
+        className="mt-8 grid gap-4 sm:grid-cols-2"
+      >
+        {AGENTS.map((agent, index) => (
+          <li key={agent.name}>
+            <Reveal delay={index * 60} className="h-full">
+              <Card className="flex h-full flex-col border-mint-400/55">
+                <agent.Glyph />
+                <h3 className="mt-3 text-base font-semibold text-ink-100">{agent.name}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-300">{agent.copy}</p>
+              </Card>
+            </Reveal>
+          </li>
+        ))}
+      </ul>
+
+      <Reveal delay={120}>
         <div className="mt-8">
           <DemoPlayer
             overlayLabel="Watch the delegation demo"
@@ -80,17 +108,54 @@ export function AgentSection() {
           />
         </div>
       </Reveal>
-
-      <Reveal delay={120}>
-        <dl className="mt-8 grid gap-x-8 gap-y-4 sm:grid-cols-2">
-          {AGENTS.map((agent) => (
-            <div key={agent.name}>
-              <dt className="text-[15px] font-semibold text-ink-100">{agent.name}</dt>
-              <dd className="mt-1 text-sm leading-relaxed text-ink-400">{agent.copy}</dd>
-            </div>
-          ))}
-        </dl>
-      </Reveal>
     </>
+  );
+}
+
+/**
+ * Two line glyphs, drawn here rather than imported: the page carries no icon
+ * dependency and does not need one for two marks. Each says what its agent
+ * operates on — a tranched stack, and a portfolio under examination.
+ */
+
+function TrancheGlyph() {
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="text-peri-300"
+    >
+      <rect x="3" y="4" width="18" height="4.5" rx="1.2" />
+      <rect x="3" y="10.5" width="18" height="4.5" rx="1.2" />
+      <rect x="3" y="17" width="11" height="4.5" rx="1.2" />
+    </svg>
+  );
+}
+
+function DiligenceGlyph() {
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="text-peri-300"
+    >
+      <path d="M4 20V9M9 20V4M14 20v-7" />
+      <circle cx="18" cy="12" r="3.4" />
+      <path d="M20.5 14.5L23 17" />
+    </svg>
   );
 }

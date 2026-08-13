@@ -195,7 +195,7 @@ compressed all of this into the words "limit monitoring".
 | "Know what is breached today — and what the portfolio is moving toward." | Positioning | The commercial statement of the three-state evaluation above. Carries the green accent as the page's key forward-risk claim. |
 | The requirement → reviewed → active lifecycle | Evidenced | The extractor → review → approved-configuration → evaluation chain above. **Pass 4 removed the static path-chips row**: the lifecycle is carried inside the demo itself (its review/activation scene), so it is not stated twice. Activation remains visibly a human decision in the film. |
 | Demo heading: "See a portfolio requirement become a live control." · caption "From documented requirement to live monitoring. Figures illustrative." | Positioning / Illustrative | The demo component's own label ("Risk & controls demo") and caption; the illustrative provenance stays in DOM text as well as in the film's burned-in stamp. |
-| **Demo behaviour: user-started, never autoplaying, never looping** | Demonstration | `DemoPlayer.tsx`: poster + "Watch controls demo" overlay (`~18 sec`), play/pause/restart controls, a progress bar, and a "Watch again" overlay on completion. `preload="none"` — the asset costs nothing until requested. Reduced-motion visitors see no motion they did not ask for; the static `ControlPreview` renders only if no source is playable. |
+| **Demo behaviour: user-started, never autoplaying, never looping** | Demonstration | `DemoPlayer.tsx`: poster + "Watch controls demo" overlay (`~18 sec`), play/pause/restart controls, a progress bar, and "Watch again" on completion. `preload="none"` — the asset costs nothing until requested. Reduced-motion visitors see no motion they did not ask for; the static `ControlPreview` renders only if no source is playable. **Pass 11 moved the transport out of the frame.** It had been pinned across the bottom of the picture for the whole run, and the A2A film draws to the frame edge, so its closing lines were covered from the moment play was pressed; the completion state was worse, putting a scrim and a centred button over the last frame — which, for a demo that ends on its assessment, is the frame most worth reading. Auto-hiding was rejected: on a phone there is no hover, so the controls would return only by tapping the thing you are trying to watch. Cost is ~40px of layout below the frame while playing. **Guarded by measurement** — the progress bar's box must not overlap the video's. |
 | Control preview: Geographic concentration ≤ 30% — Funded 24.1% Pass · Expected forecast 28.7% Warning · Including full pipeline 31.4% Projected breach · horizon Nov 2026 · Single obligor 6.2% Pass | Illustrative | The **workflow** depicted is live (rows above); the **figures** are not engine output and the card is labelled "Illustrative" on the page. This is the single sanctioned exception to "every number on the page comes from the engine" — see the Excluded list. Inside this product depiction the product's RAG semantics apply (mint pass / amber warning / rose projected breach) — documented in `app/globals.css`. |
 
 ### The demo loop (`/controls-demo.webm` + `/controls-demo.mp4`)
@@ -327,12 +327,34 @@ is a server component.
 | Body line: **"Approved risk findings are pushed to Teams."** | Evidenced | Carried over verbatim from the deleted §6 in Pass 8 — the one claim its chips made that the tiles do not. Placed as the section's body line rather than inside the Copilot tile for two reasons: it is evidenced by the Teams outbox, not the Copilot agent (`trakt_notifications/` — 19 modules: `cards.py`, `teams_client.py`, `outbox.py`, `delivery.py`, `trigger.py`, `recipients.py`; approval writes intent, a worker delivers, dedup/supersession by deterministic batch id; timer-driven drain at `function_app.py:83`; `tests/notifications/test_end_to_end.py`; `docs/teams_proactive_notifications.md`), so a Copilot tile would misattribute it; and every tile is one line, so a two-line tile would read as a mistake. It is also the one delivery behaviour that is not user-initiated — every tile describes somewhere a person goes to ask; this is the case where Trakt arrives unasked. **Asserted to appear exactly once on the page.** |
 | Headline: **"From a managed service to your own agents."** | Positioning | **Rewritten in Pass 10.** "Every mode reads the same governed layer" was the third statement of one argument — the platform section makes it as architecture, §6c makes it for agents, and the hero now makes it for the whole page. Repetition in different vocabularies reads as padding, not emphasis. This headline introduces the row instead: it names the span in the tiles' own order, survives the row changing (unlike "four ways"), and hands off directly to the agent-to-agent section beneath it. **Consequence, accepted:** the delivery section no longer says *why* four modes agreeing matters — the hero claim line now carries that for the whole page. |
 
+**Pass 11 — the availability labels are gone, and the copy states capability.**
+"Available today" appeared on three tiles and "Roadmap" on the fourth. That
+distinction stopped being true when agent-to-agent delegation was demonstrated:
+four identical labels say nothing, and a grey fourth tile says something false.
+Availability is carried by the mint outline instead, on every tile — still
+system state under the colour rules of §9, just no longer varying, which is why
+the row keeps its `data-state-colour` marker rather than being excused from the
+guard.
+
+**The numerals 01–04** replace the labels. They are the section's argument in
+the margin: the headline is "From a managed service to your own agents", and
+01→04 is that ladder, least autonomous to most. They are structure rather than
+state, so they take peri, and they are `aria-hidden` — read aloud before every
+heading they would be four stray numbers.
+
+**The copy was rewritten** in the same pass. "Dashboards, charting and
+drill-through" described a reporting tool from 2015; what is there is
+natural-language questioning over figures the engine calculated
+deterministically, which is the entire difference. The lines are longer than
+they were and that is the trade accepted: a four-word category label is quicker
+to read and tells a lender nothing they did not assume.
+
 | Tile | Class | Evidence |
 |---|---|---|
-| Managed service — "Reporting run by Trakt, not your team." (Available today) | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. Deliberately the longest line in the row: it is the only one that separates a managed service from automated software. |
-| Trakt Agent — "Dashboards, charting and drill-through." (Available today) | Evidenced | `frontend/mi-agent-ui/src/components/`. |
-| Copilot — "Portfolio questions inside Teams and Microsoft 365." (Available today) | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py`. |
-| Agent access — "Client and counterparty agents querying Trakt directly." (Roadmap, grey) | Roadmap | Replaces the former "Enterprise agent" and "Agent-to-agent" tiles. `trakt_core/context.py` reserves `CHANNEL_ENTERPRISE_AGENT` and `CHANNEL_AGENT_TO_AGENT`; a test fixture is the only implementation of either. Outbound Teams delivery exists (`trakt_notifications/`); agent callback does not. Labelled Roadmap on the page, never mixed with live capability. |
+| 01 Managed service — "Your reporting produced, reconciled and delivered by Trakt — no platform for your team to run." | Evidenced | `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. Still the line that separates a managed service from automated software; "no platform for your team to run" states the buyer-side consequence the old line left implicit. |
+| 02 Trakt Agent — "Ask in your own words. Get charts, cohorts and drill-through built on deterministic figures, not estimates." | Evidenced | `frontend/mi-agent-ui/src/components/` (charting, cohort and drill-through UI); natural-language questioning `mi_agent/mi_query_executor.py` + `mi_agent/interpreter/`. **"not estimates" is the load-bearing half**: every competitor offers a chat box over a model's best guess at the number. Trakt's charts are drawn on figures `mi_workflows/engine.py` calculated. |
+| 03 Copilot — "Trakt inside Teams and Microsoft 365, answering in the thread — and raising what changed before anyone asks." | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`, `mi_agent_api/teams_bot.py` (answering in the thread); `trakt_notifications/` (the unasked half). Deliberately does **not** reuse the section's body line "Approved risk findings are pushed to Teams." — that claim is asserted to appear exactly once on the page, so this tile alludes to the same behaviour in different words. |
+| 04 Agent access — "Your agents delegate an objective and get back an evidence-backed assessment, every figure traced to its calculation." | Evidenced | **Reclassified from Roadmap in Pass 11.** The demonstrated delegation run is the evidence — see §6c: an agent with no prior knowledge of Trakt discovers a Trakt agent, delegates an objective and receives a structured assessment. `trakt_core/context.py`'s `CHANNEL_ENTERPRISE_AGENT` / `CHANNEL_AGENT_TO_AGENT` are no longer fixture-only. The copy states what the run does, not what the channel is called. |
 
 ---
 
@@ -350,8 +372,29 @@ governance answer immediately after.
 | **"An agent that knows nothing about Trakt can discover it and delegate an objective."** | Evidenced | The section's claim, and the strongest on the page. **Discovery and delegation are the claim** — not that an agent called a known endpoint. Stated once, under the headline, in the page's claim grammar (`text-lg font-medium text-ink-100`). It leads with the part that is hard to believe — no prior knowledge — because that is what makes it a claim rather than a description of an API call. |
 | "Your agents already have somewhere to work. Give them somewhere trustworthy to get credit intelligence." | Positioning | No capability claimed. Supporting line, `ink-400`, below the claim. |
 | **The delegation film — the section's one visual** | Demonstration | `demo-video/src/landing/A2ADemo.tsx`, composition `LandingA2ADemo` (1200×960, 50s), rendered by `scripts/render.mjs --preset=a2a --preset=a2a-webm`; poster from the dedicated `LandingA2APoster` composition via `still-a2a.mjs`. Embedded through `DemoPlayer` exactly as the controls film is: poster, play control, pause and replay, `preload="none"`, and `A2APreview` as the text equivalent when no source is playable. **It replaces an animated CSS component** that shipped in the same PR and was superseded within it — that component autoplayed, had no poster and no controls, which the page's own rule forbids. The film's disclosure is burned into every frame as "Illustrative · synthetic data", so the amber pill returns to being stated exactly once on the page, in the query demo. |
-| Named line — **Securitisation Readiness Agent**: "Warehoused loans against eligibility, coverage and concentration." | Evidenced | One line, noun-led, in the Delivery Model's voice. **Named lines, not tiles:** with the demo present a tile row would be a second visual, and the section budget is one. |
-| Named line — **Portfolio Acquisition Intelligence Agent**: "Portfolio risks traced to evidence, with the open questions." | Evidenced | The source description does three things — investigates risks, traces to evidence, surfaces open questions. Compressed to one line it keeps **evidence-tracing and open questions** and drops "investigates risks": every tool claims to find risks, and almost none will say what it could not resolve. **The full name is kept** although it is the longer of the two — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry between two labels. |
+| Tile — **Securitisation Readiness Agent**: "Points it at a warehouse and it works the whole book — eligibility, coverage, concentration — and tells you what would fail a deal before the arranger does." | Evidenced | The agent the recorded run exercises, so its evidence is the run itself. **"before the arranger does"** is the line's whole point: the agent is not summarising a book, it is anticipating the counterparty who will reject it. |
+| Tile — **Portfolio Acquisition Intelligence Agent**: "Reads a portfolio you are buying, finds what the seller's summary leaves out, and hands back every risk with the evidence behind it — and the questions still open." | Evidenced | The source description does three things — investigates risks, traces to evidence, surfaces open questions — and the line keeps all three now that it has room. **"what the seller's summary leaves out"** is the diligence buyer's actual fear, stated plainly; **"the questions still open"** is the part almost no tool will admit to. **The full name is kept** although it is the longer of the two — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry between two labels. |
+
+**Pass 11 — the agents lead the section; the film follows.** They were small
+named lines *beneath* a fifty-second video: the products of the section, ranked
+below a recording of one of them, in a position most readers never reach. They
+are now outlined tiles above the demo, with a line glyph each, and the reader
+meets the claim before the evidence for it. Asserted by geometry in the e2e
+suite — each tile's box must sit above the video's — because a grid change
+could reorder them visually while the markup still read correctly.
+
+**Their outline is mint**, matching the delivery tiles, and it makes the same
+statement: this is available. **Flagged, and reversible in one line:** the
+Securitisation Readiness Agent is evidenced by the recorded run; the Portfolio
+Acquisition Intelligence Agent is not separately demonstrated on the page, so
+its mint outline asserts availability that rests on the shared A2A mechanism
+rather than on its own footage. If that is wrong, the fix is to drop the tile's
+`border-mint-400/55` — the guard reads the rendered colour, not a list.
+
+**The glyphs are peri, not mint**, because a glyph marks what a thing *is*, not
+what state it is in. Two inline SVGs in `AgentSection.tsx` — a tranched stack
+and a portfolio under examination — rather than an icon dependency for two
+marks.
 | **The topology diagram is deleted** | — | Removed in Pass 10, not hidden or commented out. It was scaffolding drawn while the delegation claim could not be made in words; with both a sentence stating the claim and a demo performing it, a diagram of the same exchange was the idea a third time — the duplication removed from Operating Model, Portfolio Intelligence and Boundaries before it. **Its removal also deleted the `Fragment` usage that broke the deploy** when the A2A branch and the topology restructure were merged: fewer moving parts in the file that two streams of work both touch. |
 
 ### Constraint on the Securitisation Readiness render
@@ -479,13 +522,16 @@ in Pass 9, so nobody restores them believing they were an oversight:
 | Tick marks and borders on the three hero proof points | Decoration, not a state. Ticks are now `peri-300`, borders `border-line`. |
 | "Every figure is reconciled by construction rather than by comparison." | A claim, not a state. Now `ink-100` at `text-lg font-medium`. |
 | "Know what is breached today — and what the portfolio is moving toward." | Same. Weight through type, not colour. |
-| "Deterministic" in the hero preview footer | A provenance label, not a state. Now `ink-400`. |
+| "Deterministic" in the hero preview footer | A provenance label, not a state. Recoloured to `ink-400` in Pass 9 and **deleted outright in Pass 11**: with no figure to qualify and no rule beside it, a lone word under the sponsor total read as a stray label rather than a claim about the numbers above it. The claim is made in the hero copy and demonstrated by the demo. |
 | Borders on the refusal prompts and the demo suggestion chips | Affordance styling. Worse than arbitrary: green on a *refusal* control read as a success state. Now `border-line` with a `peri-500` hover. |
 
-**Retained**, because each is genuinely a system state: the "Available today"
-label and tile border, the "Pass" row in the control preview, and the lead
-form's success panel. Each sits inside a container declaring
-`data-state-colour`, which is what the e2e guard reads.
+**Retained**, because each is genuinely a system state: the delivery tile
+borders, the agent tile borders (Pass 11), the "Pass" row in the control
+preview, and the lead form's success panel. Each sits inside a container
+declaring `data-state-colour`, which is what the e2e guard reads. **The
+"Available today" label itself went in Pass 11** — see §6b: the outline now
+carries availability on its own, because the distinction the labels drew
+stopped being true.
 
 Contrast: 8.5:1 on `navy-950`, 8.0:1 on `navy-900` — WCAG AA/AAA. The chart
 fill green `#2E7D5B` is still never used as type (3.8:1, fails AA).
@@ -502,7 +548,8 @@ as an isolated change.
 |---|---|
 | **The session-limit CTA still reads "Book a portfolio walkthrough."** Two instances — `CopilotDemo.tsx` and `ReportPreview.tsx` — both pointing at `#book-a-demo`, shown only when a visitor exhausts the demo's question allowance. Pass 8 unified the nav and hero controls on "Demo on your portfolio" and left these alone; they are now the only place the retired label survives. Aligning them is a two-line change, but it lands inside the demo, so it should be verified by actually reaching the limit rather than by reading the diff. | The next pass that touches the query demo. |
 | **`LandingControlsPoster` vertical rhythm.** Centring the play plate meant shifting the monitoring card up and the closing keyline down, which left roughly 170px of dead space below the keyline. This is the same void problem already fixed on the query poster (which takes its natural content height rather than a fixed ratio) and should be tightened for consistency. Contained entirely in `demo-video/src/landing/ControlsPoster.tsx` — the card scale and the keyline's `at` offset. | The Remotion re-render for the **Securitisation Readiness Agent** demo. Do not render the poster twice. |
-| **The §6c agent-to-agent demo slot.** No frame, no placeholder, no "in build" line — the topology is the section's only visual, by decision. When the footage exists, the section takes a real demo the way §2 and §4 do. | The same Securitisation Readiness Agent render. |
+| **The A2A poster's vertical rhythm**, the same defect as the controls poster above: the delegation poster's content sits in the upper two-thirds of a 1200×960 frame, leaving visible dead space beneath it once the play plate is centred. `demo-video/src/landing/A2APoster.tsx`. | The next Remotion render. Both posters together, once. |
+| **The hero's third proof chip.** "Agent-addressable, with evidence behind every answer" was proposed and not signed off; the chip is unchanged. | The next hero pass. |
 
 ---
 
@@ -522,7 +569,7 @@ as an isolated change.
 | "Multi-tenant SaaS" | Isolation is code-enforced, but deployments are single-tenant per client and `config/tenancy.yaml` does not exist. |
 | Any named asset class as supported today (beyond the demo's synthetic scope), or "every lending asset class" | The hardening framework proves the architecture, not production coverage. |
 | Regime/annex names on the homepage | They anchor an asset class and jurisdiction; product pages carry them. |
-| Enterprise-agent or agent-to-agent availability | Reserved channels; labelled Roadmap in §7. |
+| ~~Enterprise-agent or agent-to-agent availability~~ | **No longer excluded.** Withheld while the channels were fixture-only; claimed from Pass 10 on the strength of the recorded delegation run, and unlabelled from Pass 11 — see §6b tile 04 and §6c. |
 | Uptime or SLA figures | None agreed. |
 | Named clients, logos, testimonials, customer counts | None available. |
 | "Real-time" | The pipeline is batch and snapshot-based. |
