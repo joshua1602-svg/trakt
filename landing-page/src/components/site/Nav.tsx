@@ -12,19 +12,20 @@ import { track } from "@/lib/analytics";
  *
  * "Demo" is gone as a label: the page carries more than one, so a nav entry
  * named after the format rather than the section told the reader nothing.
+ * "Boundaries" is gone as an entry: the refusal claim now lives inside the
+ * query demo section, where it is a sub-claim rather than a destination.
  */
 const LINKS = [
   { href: "#query-demo", label: "Portfolio query", desktop: false },
-  { href: "#refusal", label: "Boundaries", desktop: false },
   { href: "#platform", label: "Platform", desktop: true },
-  { href: "#controls", label: "Risk & controls", desktop: true },
   { href: "#delivery", label: "Delivery", desktop: true },
+  { href: "#controls", label: "Risk & controls", desktop: true },
   { href: "#agents", label: "Agent-to-agent", desktop: true },
   { href: "#governance", label: "Governance", desktop: true },
 ] as const;
 
 /**
- * The desktop bar takes five of the seven. Measured at 1024 — the narrowest
+ * The desktop bar takes five of the six. Measured at 1024 — the narrowest
  * width the bar now appears at — these five come to 525px against a 589px
  * budget once the wordmark and the CTA are subtracted.
  *

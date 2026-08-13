@@ -41,6 +41,34 @@ the controls demo (section 4). Neither autoplays and neither loops silently:
 from the homepage — reporting claims survive in the platform output chips,
 and onboarding detail now belongs to a product page, not this one.
 
+**Pass 9 closeout — three fixes before merge.** The governance grid drops to a
+single column below `lg`: five cards in two columns rendered 2+2+1, leaving
+"Agent-addressable" alone at half width, which is the same rendering-fault look
+the five-column row was introduced to remove. Verified at 1760 / 1440 / 1024 /
+834 / 390 and now guarded — the orphan has appeared twice, so the e2e suite
+measures the rendered rows at every breakpoint rather than trusting the class
+list. The refusal block is tightened onto the demo it belongs to: the demo
+figure's own `max-w-4xl`, a soft rule at half the previous gap, type unchanged.
+And the agent-to-agent topology is squared up — see §6c.
+
+**Pass 9 also adopted a colour system** — one colour, one job. Recorded below
+under "The colour system", and enforced by two e2e guards. Read that section
+before changing any accent on the page.
+
+**Pass 9 — section order and the Boundaries fold.** The standalone Boundaries
+section is gone; the refusal claim now sits inside the query-demo section,
+beneath the frame, above a rule and at heading scale — a sub-claim of the demo
+rather than a destination, and no longer in adjacent territory to the
+agent-to-agent headline ("Agents don't calculate the portfolio. Trakt does.").
+It is **not** small print: the e2e suite measures its computed font size and
+fails below 18px. Delivery Model moves above Risk & Controls, so the reader
+learns how they would consume Trakt before being shown a capability demo. The
+order is now: hero · portfolio query demo (with the refusal claim) · platform ·
+delivery model · risk & controls · agent-to-agent · governance · contact.
+Governance stays second to last deliberately — reassurance placed early answers
+a question the reader has not formed yet. The two demos stay apart, each beside
+the claim it proves; batched, three posters read as one repeated thing.
+
 **Pass 8 — strapline, merge, nav, CTA.** The strapline "Agentic portfolio
 intelligence. Deterministic by design." is adopted in three places and three
 only: the hero eyebrow, the site metadata, and the footer descriptor's opening
@@ -80,8 +108,8 @@ flags which appear on the desktop bar.
 
 | Copy | Class | Evidence |
 |---|---|---|
-| **Mobile menu (7, page order):** Portfolio query · Boundaries · Platform · Risk & controls · Delivery · Agent-to-agent · Governance | Positioning | — |
-| **Desktop bar (5):** Platform · Risk & controls · Delivery · Agent-to-agent · Governance | Positioning | Measured: 525px against a 589px budget at 1024, the narrowest width the bar now appears at. Portfolio query is dropped because it opens the page and the hero's primary button already points at it; Boundaries because it is a sub-claim of that demo, not a destination. Agent-to-agent is on the bar deliberately — it is the section a technical reader arrives looking for. |
+| **Mobile menu (6, page order):** Portfolio query · Platform · Delivery · Risk & controls · Agent-to-agent · Governance | Positioning | Boundaries was removed in Pass 9 with the section itself; Delivery moved above Risk & controls with the page order. |
+| **Desktop bar (5):** Platform · Delivery · Risk & controls · Agent-to-agent · Governance | Positioning | Measured: 525px against a 589px budget at 1024, the narrowest width the bar now appears at. Portfolio query is dropped because it opens the page and the hero's primary button already points at it; Boundaries is no longer a section at all. Agent-to-agent is on the bar deliberately — it is the section a technical reader arrives looking for. |
 | **Breakpoint moved `md` → `lg`** | — | At 768 the bar's contents measured 701px inside a 704px row. Between 768 and 1023 the page now uses the menu button. |
 | **Nav CTA: "Demo on your portfolio"** (was "Book a demo") | Positioning | The page carries demos of its own, so inviting a visitor to book one implied those did not count. The distinction the CTA sells is that it runs against *their* portfolio rather than the synthetic one. **The hero secondary carries the identical label and the identical anchor**, so the page offers this one destination under one name; the e2e suite asserts the two controls agree on both wording and target, because they had already drifted into three names ("Book a demo", "Book a portfolio walkthrough", "Book a tailored demonstration"). The closing CTA keeps "Book a tailored demonstration" deliberately — it sits above the form itself, where it has its own context and competes with nothing. |
 | *("Demo" as a nav label is retired: the page carries more than one, so a label naming the format rather than the section told the reader nothing.)* | — | — |
@@ -116,7 +144,7 @@ until the visitor presses "Watch query demo".
 | The scripted opening: starting the demo asks "Show the funded balance by book." | Demonstration | `QueryDemo.tsx` mounts `CopilotDemo` with `initialQuestion` (the `balance_by_book` intent); one-shot, consumes one session question, never replays on Reset. The visitor sees query → governed answer from frame zero. |
 | The compressed answer: "Both totals are correct — they answer different questions, so Trakt returns both rather than choosing one." + the table | Evidenced | `_balance_by_book` in `scripts/build_demo_pack.py`; the two-totals reasoning is unchanged, the prose is one sentence. The SPV1 story ("originated by the sponsor, securitised and sold; servicing, risk retention and investor reporting retained") moved to a tooltip on the SPV1 row (`row.tooltip`, rendered by `Artifacts.tsx` with `title` + `aria-label`, keyboard-focusable). The former "interpreted" line and the dangling coverage note were removed. |
 | Answer footers carry the client name only | Demonstration | `PORTFOLIO_SCOPE` in `api/demo/query/route.ts` is `demoPack.client.name` — no internal portfolio identifier. |
-| "Trakt declines what it cannot derive." — **its own page section** (§2b), with the two example prompts as buttons | Evidenced | Extracted from the demo card (`RefusalSection.tsx`): inside the card it sat behind a play control and was visible only as text in a still. Pressing a prompt dispatches to `QueryDemo`, which starts the demo and asks it — so the visitor watches Trakt decline rather than being told it does. Stated once on the page; the poster replica no longer repeats it. Refusal paths unchanged (`src/lib/intents.ts`). |
+| "Trakt declines what it cannot derive." — **inside this section, beneath the demo frame**, with the two example prompts as buttons | Evidenced | `RefusalSection.tsx`. It has moved twice, and both moves were corrections. It began inside the demo card, where it sat behind a play control and was visible only as text in a still. Pass 8 made it its own section (§2b), which over-promoted a sub-claim of the demo into a destination and put it in adjacent territory to the agent-to-agent headline. **Pass 9 folded it back in**, above a rule and at `h3` scale — the conclusion the demo has just earned, not a caption. Pressing a prompt dispatches `ASK_EVENT` to `QueryDemo`, which starts the demo and asks it, so the visitor watches Trakt decline rather than being told it does. Stated once on the page; the poster replica does not repeat it. Refusal paths unchanged (`src/lib/intents.ts`). **Guarded:** the e2e suite asserts `#refusal` no longer exists, that the claim appears exactly once, that a prompt still drives the demo to a refusal, and that the computed font size is ≥18px — so a later pass cannot quietly return it to small print. |
 | The SPV1 row note is a real toggle, not a `title` tooltip | Demonstration | `RowNote` in `Artifacts.tsx`: a button with `aria-expanded` revealing the note inline. Native tooltips never open on touch, which made the explanation unreachable at phone width — asserted now in the mobile Playwright run. |
 | The poster before start | Demonstration | A non-interactive replica of the demo surface carrying the real synthetic scope (client, books, exposure count, as-at date) from `data/demo-pack.json`. |
 | "Same question. Same calculation. Same answer." | Evidenced | `mi_agent_api/mi_service.py` single implementation; `test_channel_parity.py`. |
@@ -306,6 +334,7 @@ later pass.
 | "Your agents already have somewhere to work. Give them somewhere trustworthy to get credit intelligence." | Positioning | No capability claimed. |
 | "Trakt is designed to make governed portfolio intelligence available to enterprise agents — with controlled access, deterministic calculations and evidence behind every result." | Roadmap (worded as design intent) | `trakt_core/context.py` reserved channels `CHANNEL_ENTERPRISE_AGENT` / `CHANNEL_AGENT_TO_AGENT`; `docs/governed_capability_architecture.md` documents the adapter shape; only a test fixture exists. The three qualities named are each evidenced for the live channels (tenancy `trakt_core/tenancy.py`; determinism `test_channel_parity.py`; lineage `lineage_tracker.py`) — what is unbuilt is the agent channel that would expose them. |
 | Topology: External agent —*A2A*→ Client enterprise agent —*Governed tool calls*→ Trakt | Roadmap | Three nodes on one line; protocol names appear as connector labels only, never as a claim of a shipped integration. **No vendor mark is used as an actor** — Microsoft and Copilot are surfaces Trakt is *reached through*, named in prose elsewhere, and are not parties in this exchange. The platform section owns the multi-tier stack shape; this is deliberately not a second one. |
+| **The topology is temporary, and the demo replaces it** | — | Decided in the Pass 9 closeout. When the Securitisation Readiness Agent footage exists it takes the section's one visual and the topology comes out: footage of the exchange plus a diagram of the same exchange is the duplication this page has removed three times already (Operating Model, Portfolio Intelligence, Boundaries). It was squared up anyway rather than left ragged — "temporary" is not a date, and it is the live page's only agent-to-agent visual until the render happens. Fixes: nodes and connectors are separate list items so all three nodes are `flex-1 basis-0` and share the row equally (previously each box was sized by the label beside it, and Trakt came out smallest despite being the subject); `items-stretch` so the boxes match height when "Client enterprise agent" wraps at tablet width; connector labels in sentence case and `whitespace-nowrap` so "Governed tool calls" holds one line instead of wrapping to three; Trakt keeps a full-strength `peri-500` border and a lighter panel. Measured equal at 1760 / 1440 / 1024 / 834 / 390. |
 | **Demo slot: deliberately absent** | — | The Securitisation Readiness Agent footage does not exist. A mocked still — invented agent messages, figures nobody computed — would be the one thing on the page that fabricates a capability. An empty reserved frame was built and rejected: at ~700px under a diagram it reads as broken however it is labelled, and it breaches the one-visual-per-section budget. The topology is the section's only visual until there is real footage. Do not re-add a placeholder frame. |
 
 ---
@@ -347,27 +376,85 @@ deployment arrangement.
 
 ---
 
-## The green accent
+## The colour system — a standing rule
 
-`mint-400` / `#36c2a8`, taken verbatim from
-`frontend/mi-agent-ui/src/index.css:21` — the MI Agent's UI green. In the
-product it marks a proven state; it does the same job here and no other.
+Adopted in Pass 9 after an audit found **green doing six unrelated jobs**:
+availability on the delivery tiles, pass state in the control preview, emphasis
+on two claim lines, hero tick marks, a provenance label, and the border on
+refusal prompts and demo suggestion chips. A colour with six jobs signals
+nothing. Each family below now has exactly one role; adding a second is a
+regression, not a refinement. Full rationale and contrast figures live in the
+token block at the top of `src/app/globals.css`.
 
-| Where | Why |
+| Colour | Sole role | Where it may appear |
+|---|---|---|
+| **Green** `mint-400` | **System state**: pass, available, healthy | The "Available today" label and tile border (`DeliveryModes`) · a passing evaluation in `ControlPreview` · the lead form's success panel. Nowhere else. |
+| **Amber** `amber-400` | **Disclosure**, and warning state | The "Synthetic data" badge · a book marked sold and derecognised · the declined-answer treatment · a warning evaluation in the control preview |
+| **Red** `rose-400` | **Something is wrong** | A breached or projected-breach limit · a rejected form input · a failed request |
+| **Blue** `peri-400` | **Meaning: section eyebrows only** | `SectionHeading`'s eyebrow, and the hero eyebrow carrying the strapline |
+| **Blue** `peri-300` / `peri-500` | **Structure and interaction** | Buttons, hover borders, progress bar, platform arrows, proof-point ticks, the Trakt node outline in the topology |
+| **White** `ink-100` | **Every claim and emphasis line** | The risk & controls line and the governance line, at `text-lg font-medium` |
+
+Three points that the wording has to keep, because each one is how a system
+like this drifts:
+
+1. **Amber is DISCLOSURE, not status.** "This book is off balance sheet" is a
+   disclosure — the reader is being told something about the nature of what
+   they are looking at. Written as "status", a later pass will colour arrears
+   or maturity amber and the family is gone.
+2. **The periwinkle rank matters.** `peri-400` is meaning; `peri-300` and
+   `peri-500` are structure. Never reach for `peri-500` as an accent on type:
+   it measures 5.67:1 on navy-950, which is fine behind a border and fails as
+   body copy.
+3. **A claim is not a state.** Where a claim needs weight it takes type — size,
+   weight, spacing — never an accent.
+
+**Guards** (`e2e/landing.spec.ts`), the same class as the transparency sweep:
+
+- *"green marks system state and nothing else"* — walks every element on the
+  rendered page and fails on any mint outside a container that declares itself
+  `data-state-colour`. The allow-list lives in the components, not the test.
+  Run twice: on load, and again with the query demo running, because the
+  suggestion chips and answer cards only exist after it starts.
+- *"peri-500 is a border and structural colour, never type"* — fails if
+  `peri-500` is the computed text colour of anything that is not inside an
+  `aria-hidden` subtree. The platform arrows are aria-hidden glyphs, so the
+  page's own markup separates a structural mark from type.
+
+**Both guards resolve colours by painting, not by string matching.** Tailwind
+emits opacity modifiers as `oklab(… / .35)` and Chromium reports that verbatim,
+so the first version of the green guard — which looked for `rgb(54, 194, 168`
+— passed happily while a green border still sat on the refusal prompts. Filling
+the same colour over black and over white recovers the source channels and the
+alpha whatever colour space the value arrived in. **Both guards were verified
+by reintroducing the drift and watching them fail**; a guard that has never
+failed is not known to work.
+
+**No re-render needed.** The controls film and its poster use mint for a
+passing evaluation, amber for a warning and rose for a projected breach — the
+state rule exactly — and the burned-in "Illustrative · synthetic data" stamp is
+amber, the disclosure rule exactly. The video was audited against the system
+and conflicts with none of it.
+
+---
+
+## The green accent — superseded by the colour system above
+
+Kept as a record of what changed, and of the four usages that were **removed**
+in Pass 9, so nobody restores them believing they were an oversight:
+
+| Removed | Why it went |
 |---|---|
-| The three trust proof points (tick marks; borders from `sm` upward) | Proven properties of the engine. |
-| "Every figure is reconciled by construction rather than by comparison." | The page's strongest verification claim. |
-| "Know what is breached today — and what the portfolio is moving toward." | The page's key forward-risk claim, backed by the three-state evaluation. |
-| "Available today" and the three delivery chips it heads | A shipped/not-shipped signal. Roadmap stays muted grey. |
-| "Trakt declines what it cannot derive." | A governance guarantee. |
-| "Deterministic" in the hero preview footer | A confirmatory provenance signal. |
-| "Pass" states inside the control preview | Product RAG semantics inside an interface depiction — see the amber note. |
+| Tick marks and borders on the three hero proof points | Decoration, not a state. Ticks are now `peri-300`, borders `border-line`. |
+| "Every figure is reconciled by construction rather than by comparison." | A claim, not a state. Now `ink-100` at `text-lg font-medium`. |
+| "Know what is breached today — and what the portfolio is moving toward." | Same. Weight through type, not colour. |
+| "Deterministic" in the hero preview footer | A provenance label, not a state. Now `ink-400`. |
+| Borders on the refusal prompts and the demo suggestion chips | Affordance styling. Worse than arbitrary: green on a *refusal* control read as a success state. Now `border-line` with a `peri-500` hover. |
 
-The amber token remains "synthetic, or a boundary Trakt will not cross", with
-one documented exception: inside interface previews that depict product UI,
-the product's own RAG semantics apply (amber warning, rose projected breach).
-The control preview is provenance-labelled "Illustrative" so neither meaning
-leaks into page prose. See `app/globals.css`.
+**Retained**, because each is genuinely a system state: the "Available today"
+label and tile border, the "Pass" row in the control preview, and the lead
+form's success panel. Each sits inside a container declaring
+`data-state-colour`, which is what the e2e guard reads.
 
 Contrast: 8.5:1 on `navy-950`, 8.0:1 on `navy-900` — WCAG AA/AAA. The chart
 fill green `#2E7D5B` is still never used as type (3.8:1, fails AA).

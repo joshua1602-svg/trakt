@@ -18,11 +18,8 @@ import { SectionHeading, cx } from "@/components/ui";
  * deliverable until there is something real to put in it.
  */
 
-const NODES = [
-  { label: "External agent", connector: "A2A" },
-  { label: "Client enterprise agent", connector: "Governed tool calls" },
-  { label: "Trakt", connector: null },
-] as const;
+const NODES = ["External agent", "Client enterprise agent", "Trakt"] as const;
+const CONNECTORS = ["A2A", "Governed tool calls"] as const;
 
 export function AgentSection() {
   return (
@@ -65,39 +62,49 @@ export function AgentSection() {
  * multi-tier stack: the platform section owns that shape. No vendor mark is
  * used as an actor — Copilot is a surface Trakt is reached through, named in
  * prose elsewhere, not a party in this exchange.
+ *
+ * Nodes and connectors are separate list items so the nodes can share the row
+ * equally: with the connector inside the node's item, each box was sized by
+ * the length of the label beside it, and Trakt — the subject of the section —
+ * came out the smallest of the three. Now every node is `flex-1 basis-0`, the
+ * connectors are fixed-width and `shrink-0`, and the labels are sentence case
+ * and `whitespace-nowrap` so "Governed tool calls" holds one line instead of
+ * wrapping into three lines of small grey type.
  */
 function Topology() {
   return (
     <ol
-      className="mt-9 flex flex-col items-stretch gap-2 md:flex-row md:items-center"
+      // `items-stretch`, not `items-center`: at tablet width "Client
+      // enterprise agent" wraps to two lines, and centred items left it 20px
+      // taller than its neighbours.
+      className="mt-9 flex flex-col items-stretch gap-2 md:flex-row"
       aria-label="Agent-to-agent topology"
     >
-      {NODES.map((node, index) => (
-        <li
-          key={node.label}
-          className={cx("flex flex-col gap-2 md:flex-row md:items-center", index === 2 && "md:flex-1")}
-        >
-          <div
-            className={cx(
-              "rounded-xl border px-5 py-4 text-center md:min-w-[13rem]",
-              index === 2
-                ? "border-peri-500/60 bg-navy-850 text-ink-100"
-                : "border-line-soft bg-navy-900/50 text-ink-300",
-            )}
-          >
-            <p className="text-sm font-semibold">{node.label}</p>
-          </div>
-          {node.connector ? (
+      {NODES.map((label, index) => (
+        <Fragment key={label}>
+          <li className="md:flex-1 md:basis-0">
             <div
+              className={cx(
+                "h-full rounded-xl border px-5 py-4 text-center",
+                index === 2
+                  ? "border-peri-500 bg-navy-800 text-ink-100"
+                  : "border-line-soft bg-navy-900/50 text-ink-300",
+              )}
+            >
+              <p className="text-sm font-semibold">{label}</p>
+            </div>
+          </li>
+          {CONNECTORS[index] ? (
+            <li
               aria-hidden="true"
-              className="flex items-center justify-center gap-2 px-2 text-[11px] font-medium uppercase tracking-wider text-ink-500 md:flex-col md:gap-1"
+              className="flex shrink-0 items-center justify-center gap-2 px-1 text-[11px] font-medium text-ink-400 md:flex-col md:gap-0.5 md:self-center md:px-3"
             >
               <span className="md:hidden">↓</span>
-              <span>{node.connector}</span>
+              <span className="whitespace-nowrap">{CONNECTORS[index]}</span>
               <span className="hidden md:inline">→</span>
-            </div>
+            </li>
           ) : null}
-        </li>
+        </Fragment>
       ))}
     </ol>
   );
