@@ -62,9 +62,11 @@ type Beat = {
   until: number;
   label: string;
   lines: readonly string[];
-  /** A quieter second line. Only the closing beat needs one — the capability
-   *  claim reads as the headline's footnote, not as another headline. */
+  /** A quieter second line — the claim as the headline's footnote, not as
+   *  another headline. */
   note?: string;
+  /** A single measured proof point, in a chip. Used once. */
+  proof?: string;
   tone?: "neutral" | "breach" | "verdict";
   extra?: "rulebooks" | "triad";
 };
@@ -81,23 +83,35 @@ const BEATS: readonly Beat[] = [
     lines: ["Securitisation · Credit · Portfolio · Risk · Structured finance · Due diligence"] },
   { at: 8.2, until: 12.0, label: "Delegated",
     lines: ["Identity ✓   Portfolio entitlement ✓   submitted → working"] },
+  // The heart of the demo: the difference between delegating an outcome and
+  // prescribing a method. The caller knew no tool id, no metric id and no
+  // investigation sequence — it sent one business sentence — and the specialist
+  // then ran thirty governed calls of its own choosing.
   { at: 12.2, until: 20.6, label: "Investigating",
-    lines: ["30 governed queries, chosen by the specialist"] },
+    lines: ["30 governed queries, chosen by the specialist"],
+    note: "Alderbridge delegated the outcome. Trakt determined how to investigate it." },
   { at: 20.8, until: 24.4, label: "Concentration found", tone: "breach",
     lines: ["London — 31% of balance"], extra: "rulebooks" },
   { at: 24.6, until: 27.0, label: "Investigating related exposure",
     lines: ["12% above 80% LTV — the same loans carry the stale valuations"] },
   { at: 27.2, until: 31.6, label: "Fact · Rule · Judgement", tone: "verdict",
     lines: [], extra: "triad" },
-  { at: 31.8, until: 35.6, label: "Assessment received ✓", tone: "verdict",
+  { at: 31.8, until: 34.9, label: "Assessment received ✓", tone: "verdict",
     lines: ["Material remediation required",
             "6 material findings · 8 diligence items · 4 declared gaps"] },
   // Only securitisation readiness is claimed. Two further agents sit on the
   // roadmap; putting them on screen — even dimmed — would invite the reader to
   // assume they exist, and one delegated capability is what Sprint 4 proved.
-  { at: 35.8, until: 37.9, label: "Agent-ready",
+  //
+  // The 5/5 is the one measurement allowed on screen. Discovery rates, token
+  // counts and protocol latencies all exist and all stay off: a viewer who
+  // starts reading a scoreboard has stopped watching a capability. "Completed
+  // successfully" is the claim a lender actually cares about, and it is the one
+  // the five recorded delegations support without qualification.
+  { at: 35.1, until: 37.9, label: "Agent-ready",
     lines: ["Specialist lending intelligence."],
-    note: "Enterprise agents can discover, delegate work to and receive governed intelligence from Trakt." },
+    note: "Enterprise agents can discover Trakt, delegate specialist lending objectives, and receive governed, evidence-backed conclusions — with no Trakt-specific implementation knowledge.",
+    proof: "5/5 delegated assessments completed successfully" },
 ];
 
 /** The capabilities the specialist reached, in the order the run reached them. */
@@ -120,22 +134,49 @@ const RULEBOOKS = [
 
 type Packet = { at: number; label: string; wire: "a2a" | "mcp"; back: boolean };
 
-/** Marks crossing the connections. Labelled in business words — never protocol
- *  detail — and timed so the network is busy whenever the story says it is. */
+/**
+ * Marks crossing the connections. Labelled in business words — never protocol
+ * detail — and timed so the network is busy whenever the story says it is.
+ *
+ * How long a packet is in flight is itself a claim
+ * -----------------------------------------------
+ * A2A crossings are quick and MCP crossings linger, because that is the shape
+ * of the measurement: the protocol accounts for tens of milliseconds of a run
+ * that takes minutes, and effectively all of the visible time is the specialist
+ * working. Giving both wires the same pace would have implied the boundary
+ * costs something.
+ *
+ * The investigation is deliberately dense
+ * ---------------------------------------
+ * Down and up traffic alternate every 0.8s in the 12–21s window, so a packet is
+ * almost always in flight and often two are. The first version sent six polite
+ * round trips and read as request → calculate → reply, which is precisely the
+ * thing this demo exists to distinguish itself from. Thirty calls are not drawn
+ * — thirty labels would be noise — but the density has to make thirty
+ * believable. The vocabulary widens for the same reason: a specialist that only
+ * ever says "Query" is running a report, not an investigation.
+ */
 const PACKETS: readonly Packet[] = [
   { at: 8.3, label: "Task", wire: "a2a", back: false },
   { at: 10.4, label: "Accepted", wire: "a2a", back: true },
   { at: 12.5, label: "Query", wire: "mcp", back: false },
-  { at: 14.1, label: "Fact", wire: "mcp", back: true },
-  { at: 15.7, label: "Query", wire: "mcp", back: false },
-  { at: 17.3, label: "Evidence", wire: "mcp", back: true },
+  { at: 13.3, label: "Fact", wire: "mcp", back: true },
+  { at: 14.1, label: "Query", wire: "mcp", back: false },
+  { at: 14.9, label: "Metric", wire: "mcp", back: true },
+  { at: 15.7, label: "Rule check", wire: "mcp", back: false },
+  { at: 16.5, label: "Result", wire: "mcp", back: true },
+  { at: 17.3, label: "Drill-down", wire: "mcp", back: false },
+  { at: 18.1, label: "Evidence", wire: "mcp", back: true },
   { at: 18.9, label: "Query", wire: "mcp", back: false },
-  { at: 20.5, label: "Evidence", wire: "mcp", back: true },
-  { at: 24.9, label: "Drill-down", wire: "mcp", back: false },
-  { at: 26.3, label: "Evidence", wire: "mcp", back: true },
+  { at: 19.7, label: "Fact", wire: "mcp", back: true },
+  { at: 24.9, label: "Further investigation", wire: "mcp", back: false },
+  { at: 26.0, label: "Evidence", wire: "mcp", back: true },
   { at: 31.9, label: "Result", wire: "a2a", back: true },
   { at: 34.0, label: "Received", wire: "a2a", back: false },
 ];
+
+/** Seconds in flight. A2A is brisk; a governed calculation is not. */
+const DWELL_S = { a2a: 0.9, mcp: 1.4 } as const;
 
 const pc = (seconds: number) =>
   `${(Math.min(Math.max(seconds, 0), LOOP_S) / LOOP_S * 100).toFixed(3)}%`;
@@ -176,11 +217,12 @@ function timelineCss(): string {
   PACKETS.forEach((packet, i) => {
     const from = packet.wire === "a2a"
       ? `translateX(${packet.back ? "2.6rem" : "-2.6rem"})`
-      : `translateY(${packet.back ? "1.5rem" : "-1.5rem"})`;
+      : `translateY(${packet.back ? "1rem" : "-1rem"})`;
     const to = packet.wire === "a2a"
       ? `translateX(${packet.back ? "-2.6rem" : "2.6rem"})`
-      : `translateY(${packet.back ? "-1.5rem" : "1.5rem"})`;
-    rules.push(windowFrames(`a2ap${i}`, packet.at, packet.at + 1.7,
+      : `translateY(${packet.back ? "-1rem" : "1rem"})`;
+    rules.push(windowFrames(`a2ap${i}`, packet.at,
+                            packet.at + DWELL_S[packet.wire],
                             from, to, "none"));
   });
 
@@ -312,7 +354,10 @@ function Wire({ kind, label }: { kind: "a2a" | "mcp"; label: string }) {
         <span
           key={`${packet.label}-${i}`}
           className={cx(
-            "absolute whitespace-nowrap rounded-full border border-peri-500/50 bg-navy-850 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-peri-200",
+            // z-20 so a packet at the end of its travel rides over the node
+            // below rather than sliding under its border, which read as a
+            // clipping bug rather than as something arriving.
+            "absolute z-20 whitespace-nowrap rounded-full border border-peri-500/50 bg-navy-850 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-peri-200",
             // Offset clear of the wire label so the two never overlap.
             // Beside the wire, never on it: the label and the packet in the
             // same place read as a rendering fault rather than as traffic.
@@ -353,11 +398,11 @@ function Capabilities() {
  */
 function Narration() {
   return (
-    // Tall enough on mobile for the longest beat — the Fact/Rule/Judgement
-    // triad, whose judgement wraps at 390px. Sized for the worst case rather
-    // than the average, because a band that clips its own evidence is worse
-    // than one carrying some empty space on the shorter beats.
-    <div className="relative mx-auto mt-4 h-[6.75rem] max-w-[46rem] sm:h-[5rem]">
+    // Tall enough for the longest beat at each width — the closing statement on
+    // mobile, where its supporting sentence wraps to four lines. Sized for the
+    // worst case rather than the average, because a band that clips its own
+    // evidence is worse than one carrying empty space on the shorter beats.
+    <div className="relative mx-auto mt-4 h-[9.5rem] max-w-[46rem] sm:h-[6.5rem]">
       {BEATS.map((beat, i) => (
         <div key={beat.label}
              className="absolute inset-0 flex flex-col items-center justify-start text-center"
@@ -376,6 +421,11 @@ function Narration() {
             <p className="mt-1.5 max-w-[36rem] text-balance text-[11px] leading-snug text-ink-400 sm:text-[12px]">
               {beat.note}
             </p>
+          ) : null}
+          {beat.proof ? (
+            <span className="mt-2 rounded-full border border-line bg-navy-850 px-2.5 py-1 text-[10px] font-medium tracking-wide text-ink-300">
+              {beat.proof}
+            </span>
           ) : null}
           {beat.extra === "rulebooks" ? <Rulebooks /> : null}
           {beat.extra === "triad" ? <Triad /> : null}
