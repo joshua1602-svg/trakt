@@ -25,6 +25,7 @@ export function DemoPlayer({
   description,
   caption,
   fallback,
+  plateId,
 }: {
   /** The play-overlay button text, e.g. "Watch controls demo". */
   overlayLabel: string;
@@ -39,6 +40,12 @@ export function DemoPlayer({
   caption?: string;
   /** Rendered instead of the player when no source is playable. */
   fallback: ReactNode;
+  /**
+   * Identifies this player's play plate to the geometry guards. There is more
+   * than one player on the page now, so a shared hook would resolve to every
+   * plate at once and the guard would measure whichever came first.
+   */
+  plateId: string;
 }) {
   const [state, setState] = useState<PlayerState>("idle");
   const [failed, setFailed] = useState(false);
@@ -111,7 +118,7 @@ export function DemoPlayer({
                 positioning container — measuring the container told the guard
                 the plate filled the frame. */}
             <div
-              data-plate="controls"
+              data-plate={plateId}
               className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-navy-950 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]"
             >
               <button type="button" onClick={play} className={buttonStyles.primary}>

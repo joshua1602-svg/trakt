@@ -137,6 +137,7 @@ export function ForwardControls() {
             description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
             caption="From documented requirement to live monitoring."
             fallback={<ControlPreview />}
+            plateId="controls"
           />
         </div>
       </Reveal>

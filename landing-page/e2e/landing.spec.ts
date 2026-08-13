@@ -430,9 +430,12 @@ test.describe("Trakt landing page", () => {
       await expect(agents.getByText(node, { exact: true })).toHaveCount(0);
     }
 
-    // The A2A demo is the section's visual, and it is real: built from
-    // recorded runs, not a mocked still.
-    await expect(agents.getByText("Agent-to-agent delegation")).toBeVisible();
+    // The film is the section's visual, and it is user-started like every
+    // other demo here: a poster and a play control, nothing playing on load.
+    await expect(
+      agents.getByRole("button", { name: /watch the delegation demo/i }),
+    ).toBeVisible();
+    await expect(agents.locator("video")).toHaveAttribute("preload", "none");
 
     // No vendor mark is used as an actor: Copilot is a surface Trakt is
     // reached through, named in prose elsewhere, not a party in this exchange.
@@ -528,35 +531,25 @@ test.describe("Trakt landing page", () => {
   });
 
   /**
-   * The synthetic disclosure is the amber pill, and it is stated **once per
-   * demo surface** — not once per page.
+   * The synthetic disclosure is the amber pill, stated exactly once.
    *
-   * The original rule was "exactly once on the page", written when there was
-   * one interactive demo. The A2A demo shows synthetic figures of its own and
-   * carries its own pill, which is right: the rule exists to stop the same
-   * disclosure being repeated as noise around one portfolio, not to leave a
-   * demonstration unlabelled. What must not come back is a second wording —
-   * "wholly synthetic", "Synthetic portfolio" — or a loose pill in page prose
-   * belonging to no demo.
+   * It briefly became twice when the agent section carried a CSS demo with a
+   * pill of its own. That demo is gone, replaced by the film, which carries
+   * its disclosure burned into every frame as "Illustrative · synthetic data"
+   * — the same treatment as the controls film. So the original rule holds: one
+   * pill, on the query demo's portfolio header, and no second wording.
    */
-  test("the synthetic disclosure is the amber pill, once per demo surface", async ({
+  test("the synthetic disclosure is the amber pill, stated exactly once", async ({
     page,
   }) => {
-    const pills = page.getByText("Synthetic data", { exact: true });
-
-    // One in the query demo, one in the agent-to-agent demo, none loose.
-    await expect(pills).toHaveCount(2);
+    await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
     await expect(page.locator("#query-demo").getByText("Synthetic data", { exact: true })).toHaveCount(1);
-    await expect(page.locator("#agents").getByText("Synthetic data", { exact: true })).toHaveCount(1);
-
-    // One wording only, and no second disclaimer in prose.
     await expect(page.getByText(/wholly synthetic/i)).toHaveCount(0);
     await expect(page.getByText("Synthetic portfolio", { exact: true })).toHaveCount(0);
 
-    // Starting the query demo moves its pill from the poster to the live
-    // header — it does not add one.
+    // After it starts: still exactly one, now on the live demo's header.
     await startQueryDemo(page);
-    await expect(pills).toHaveCount(2);
+    await expect(page.getByText("Synthetic data", { exact: true })).toHaveCount(1);
   });
 
   test("the refusal claim sits inside the query demo section and drives it", async ({
