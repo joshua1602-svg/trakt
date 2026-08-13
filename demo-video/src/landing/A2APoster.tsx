@@ -40,9 +40,9 @@ export const A2A_POSTER = {
 
 /** The run's totals, as the loop ends on them. */
 const COUNTERS = [
-  { label: "Governed calls", value: "30 / 30" },
-  { label: "Governed compute", value: "3.4 sec" },
-  { label: "Model time", value: "2 min 17 sec" },
+  { label: "Checks run", value: "30" },
+  { label: "Calculation time", value: "3.4 sec" },
+  { label: "Agent reasoning", value: "2 min 17 sec" },
 ] as const;
 
 const Node: React.FC<{ title: string }> = ({ title }) => (
@@ -167,7 +167,7 @@ const ConcentrationBand: React.FC = () => (
       >
         Concentration · geographic region
       </p>
-      <span style={{ fontSize: T.size.chip, color: T.color.ink400 }}>seq 16 · concentration</span>
+      <span style={{ fontSize: T.size.chip, color: T.color.ink400 }}>check 16</span>
     </div>
     <div style={{ display: "flex", alignItems: "baseline", gap: 22, marginTop: 6 }}>
       <span
