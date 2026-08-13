@@ -77,6 +77,14 @@ class ErrorCode:
 
     # -- input ------------------------------------------------------------- #
     INVALID_INPUT = "INVALID_INPUT"
+    #: The caller named a tool that is not in the agent tool registry. Tool names
+    #: are public (they are published in the tool catalogue and the OpenAPI
+    #: document), so this does not have to be indistinguishable from "not
+    #: authorised" the way :data:`RESOURCE_NOT_AUTHORISED` does.
+    TOOL_NOT_FOUND = "TOOL_NOT_FOUND"
+    #: The arguments did not satisfy the tool's declared input schema. The
+    #: details carry the failing paths so an agent can correct and retry.
+    TOOL_INPUT_INVALID = "TOOL_INPUT_INVALID"
 
     # -- capability / question --------------------------------------------- #
     UNSUPPORTED_QUESTION = "UNSUPPORTED_QUESTION"
@@ -98,6 +106,12 @@ class ErrorCode:
     # -- infrastructure ------------------------------------------------------ #
     STORAGE_UNAVAILABLE = "STORAGE_UNAVAILABLE"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    #: A tool handler raised something it did not classify. Deliberately an
+    #: INFRASTRUCTURE 500 rather than a 200 capability outcome: an unhandled
+    #: exception is a defect, and returning it as a well-formed "no answer" would
+    #: hide it from monitoring. A handler that knows why it cannot answer raises
+    #: :data:`CALCULATION_FAILED` (or another typed code) instead.
+    TOOL_EXECUTION_FAILED = "TOOL_EXECUTION_FAILED"
 
 
 @dataclass(frozen=True)
@@ -138,6 +152,8 @@ _CODES: Dict[str, _CodeSpec] = {
     ErrorCode.ENTITLEMENTS_NOT_RESOLVED: _CodeSpec(ErrorCategory.AUTHORISATION, False, 403),
 
     ErrorCode.INVALID_INPUT: _CodeSpec(ErrorCategory.INPUT, False, 400),
+    ErrorCode.TOOL_NOT_FOUND: _CodeSpec(ErrorCategory.INPUT, False, 404),
+    ErrorCode.TOOL_INPUT_INVALID: _CodeSpec(ErrorCategory.INPUT, False, 400),
 
     ErrorCode.UNSUPPORTED_QUESTION: _CodeSpec(ErrorCategory.CAPABILITY, False, 200),
     ErrorCode.AMBIGUOUS_QUESTION: _CodeSpec(ErrorCategory.CAPABILITY, False, 200),
@@ -155,6 +171,7 @@ _CODES: Dict[str, _CodeSpec] = {
 
     ErrorCode.STORAGE_UNAVAILABLE: _CodeSpec(ErrorCategory.INFRASTRUCTURE, True, 503),
     ErrorCode.INTERNAL_ERROR: _CodeSpec(ErrorCategory.INFRASTRUCTURE, True, 500),
+    ErrorCode.TOOL_EXECUTION_FAILED: _CodeSpec(ErrorCategory.INFRASTRUCTURE, True, 500),
 }
 
 _UNKNOWN = _CodeSpec(ErrorCategory.INFRASTRUCTURE, False, 500)

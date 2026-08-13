@@ -19,6 +19,20 @@ import pandas as pd
 import yaml
 
 
+def _run_metadata_fields() -> List[str]:
+    """Canonical fields stamped from RUN metadata rather than a source column.
+
+    Read from ``engine.provenance``, the single source of truth for them, so the
+    index says "stamped at onboarding" instead of "unknown origin" for a field
+    that never had a source column to be mapped from.
+    """
+    try:
+        from engine.provenance import PROVENANCE_FIELDS
+        return list(PROVENANCE_FIELDS)
+    except Exception:  # noqa: BLE001 - the index is additive
+        return []
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -260,6 +274,15 @@ def parse_args() -> argparse.Namespace:
 
     # Optional: print a short banner (useful in orchestrator logs)
     ap.add_argument("--quiet", action="store_true", default=False)
+    # Snapshot binding for the compact lineage index. Optional: an index written
+    # without them still describes the fields, and trakt_core.lineage refuses to
+    # serve it for a tenant or snapshot it does not name.
+    ap.add_argument("--tenant-id", default=None,
+                    help="Tenant the canonical belongs to (binds the lineage index)")
+    ap.add_argument("--snapshot-id", default=None,
+                    help="Snapshot id the canonical belongs to (binds the lineage index)")
+    ap.add_argument("--content-hash", default=None,
+                    help="Content hash of the canonical (binds the lineage index)")
 
     return ap.parse_args()
 
@@ -367,6 +390,49 @@ def main() -> int:
     field_path = outdir / "field_lineage.json"
     field_path.write_text(json.dumps(field_lineage, indent=2, sort_keys=True), encoding="utf-8")
 
+    # Compact per-FIELD provenance index, alongside the full document above.
+    #
+    # `field_lineage.json` is the complete record and stays exactly as it was.
+    # This is a summary of it: one entry per canonical field, so a caller asking
+    # "where did current_outstanding_balance come from?" reads a small document
+    # instead of parsing the whole lineage report. It is per field and never per
+    # cell — mapping, transformation and validation are properties of the field
+    # within a snapshot, so a 130-column tape has a 130-entry index.
+    index_path: Optional[Path] = None
+    try:
+        try:
+            from trakt_core.lineage import (
+                LINEAGE_INDEX_NAME,
+                build_index_from_field_lineage,
+            )
+        except ModuleNotFoundError:  # pragma: no cover - path bootstrap
+            # This module is invoked as a SCRIPT by the orchestrator
+            # (``trakt_run.py`` runs it via ``python <path>``), so the repository
+            # root is not on ``sys.path``. Same bootstrap as
+            # ``engine/platform_assembler.py``.
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+            from trakt_core.lineage import (
+                LINEAGE_INDEX_NAME,
+                build_index_from_field_lineage,
+            )
+
+        index = build_index_from_field_lineage(
+            field_lineage,
+            tenant_id=ns.tenant_id or "",
+            snapshot_id=ns.snapshot_id,
+            content_hash=ns.content_hash,
+            source_dataset=Path(str(ns.canonical)).name,
+            generated_at=field_lineage.get("generated_at_utc"),
+            registry_fields=(field_specs if isinstance(field_specs, dict) else None),
+            run_metadata_fields=_run_metadata_fields(),
+        )
+        index_path = index.write(outdir / LINEAGE_INDEX_NAME)
+    except Exception as exc:  # noqa: BLE001 - the index is additive; never fail a run
+        if not ns.quiet:
+            print(f"[Lineage] index not written: {exc}")
+
     # Optional value-level trace
     trace_ids: List[str] = [str(x) for x in (ns.trace_loan_id or [])]
     trace_fields: List[str] = [str(x) for x in (ns.trace_field or []) if str(x) in df.columns]
@@ -401,6 +467,7 @@ def main() -> int:
         # ASCII-only, Windows cp1252 safe
         msg = (
             f"[Lineage] Wrote: {field_path}"
+            + (f" | {index_path}" if index_path else "")
             + (f" | {value_path}" if value_path else "")
             + f" | observed_fields={len(present_fields)}"
             + (f" | contract_fields={len(contract_fields)} | core_fields={len(core_fields)}" if contract_fields else "")

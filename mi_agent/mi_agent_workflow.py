@@ -158,6 +158,87 @@ def _detect_unsupported_concept(question, semantics, available_columns):
     return None
 
 
+def _capability_explanation(question: str, frame, history_periods: int = 1
+                            ) -> Optional[str]:
+    """Why Trakt cannot answer a question about a KNOWN capability.
+
+    Returns None unless the question names a registered capability that is not
+    AVAILABLE for this dataset. A capability that IS available is left alone —
+    the ordinary query path owns those, and answering here would be a second
+    route to the same number.
+    """
+    try:
+        from trakt_core.capability import (
+            AVAILABLE,
+            describe_portfolio,
+            load_registry,
+            match_capability,
+            resolve_capability,
+        )
+    except Exception:
+        return None
+
+    try:
+        registry = load_registry()
+        capability = match_capability(question, registry=registry)
+        if capability is None:
+            return None
+
+        if frame is None:
+            return None
+        shape = describe_portfolio(frame, history_periods=history_periods)
+        outcome = resolve_capability(capability, shape)
+    except Exception:
+        return None
+
+    if outcome.status == AVAILABLE:
+        if not capability.owned_kpi:
+            # A field-plus-aggregation capability: the ordinary query path
+            # owns it and computes it correctly. Answering here would be a
+            # second route to the same number.
+            return None
+        # An owned KPI that IS available. Naming its methodology is better
+        # than "I couldn't map this question", which is what the caller would
+        # otherwise fall through to — and far better than letting a generic
+        # aggregation produce a number of its own.
+        where = capability.calculation_source or "the shared analytics layer"
+        return (
+            f"{capability.name} is an owned Trakt metric "
+            f"({capability.methodology or 'versioned methodology'}) and is "
+            f"AVAILABLE for this portfolio. It is not computed by the ad-hoc "
+            f"query path: it comes from {where}, via the governed tool that "
+            "wraps it. Request it there so the approved methodology — not a "
+            "generic aggregation over a similarly named field — produces the "
+            "number.")
+
+    # MI Query is a SINGLE-FRAME engine: one dataset in, one answer out. A
+    # capability needing consecutive snapshots therefore cannot be executed
+    # here whatever the deployment holds, and saying "1 snapshot is available"
+    # would misreport a limitation of this path as a gap in the data.
+    needs_history = any(c.type == "history_periods" and c.minimum > 1
+                        for c in capability.conditions)
+    if needs_history and outcome.reason_code == "INSUFFICIENT_HISTORY":
+        where = capability.calculation_source or "the shared analytics layer"
+        return (
+            f"{capability.name} is measured ACROSS governed snapshots and MI "
+            "Query answers from a single dataset, so it cannot be computed on "
+            f"this path. It is an owned Trakt metric "
+            f"({capability.methodology or 'versioned methodology'}) served by "
+            f"{where}; request it through the governed history tools, where "
+            "the snapshot window is resolved. No value has been computed and "
+            "no other measure has been substituted for the one you asked "
+            "about.")
+
+    parts = [f"{capability.name} is {outcome.status} for this portfolio."]
+    if outcome.explanation:
+        parts.append(outcome.explanation)
+    if outcome.missing_inputs:
+        parts.append("Missing input(s): " + ", ".join(outcome.missing_inputs) + ".")
+    parts.append("No value has been computed and no other measure has been "
+                 "substituted for the one you asked about.")
+    return " ".join(parts)
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -289,7 +370,15 @@ def run_mi_agent_query(
     # just because it mentions a portfolio. The measure the user asked for does
     # not exist here, and no other measure may stand in for it.
     if parse_meta.get("note") == "unresolved_metric":
-        msg = (
+        # Before refusing, ask the capability registry whether the question
+        # names something Trakt KNOWS ABOUT but cannot produce for THIS book.
+        # "What is the contractual WAL of this ERM portfolio?" deserves the
+        # reason — repayment is contingent on a borrower event — not "that
+        # measure does not exist here", which is both wrong and unhelpful.
+        # This resolves no value and substitutes no measure; it only makes a
+        # refusal explain itself.
+        capability_msg = _capability_explanation(question, df)
+        msg = capability_msg or (
             f"{spec.explanation} I haven't computed an answer, and I have not "
             "substituted a different measure for the one you asked about. Ask "
             "for a governed measure — e.g. balance, LTV, interest rate, borrower "
@@ -315,7 +404,13 @@ def run_mi_agent_query(
     if (result["parser_mode"] == "deterministic"
             and parse_meta.get("note") == "unmapped"
             and not _portfolio_lens.mentions_portfolio(question)):
-        msg = (
+        # Sprint 2.5E wired the capability explanation only into the
+        # `unresolved_metric` branch. Tracing the real path in the close-out
+        # pass showed CPR, contractual WAL, YTM and default rate all arrive
+        # HERE instead, so the explanation never fired for any of them and the
+        # 2.5E report overstated the integration. Both branches consult it now.
+        capability_msg = _capability_explanation(question, df)
+        msg = capability_msg or (
             "I couldn't map this question to a governed analytic, so I haven't "
             "computed an answer (nothing was guessed). Try a metric by a "
             "dimension — e.g. 'balance by region', 'weighted average LTV by "

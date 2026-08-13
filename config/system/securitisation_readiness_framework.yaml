@@ -1,0 +1,1124 @@
+# =========================================================================
+# Securitisation Readiness Framework v1
+# =========================================================================
+#
+# What a competent securitisation professional would investigate in a FIRST-PASS
+# review of a credit portfolio, expressed as a registry of metrics that Trakt can
+# actually measure from data it actually holds.
+#
+# This is not a rating model. It does not predict a rating, it does not replicate
+# any agency methodology, and it does not decide whether a transaction will
+# price. It answers a narrower and more useful question: is this book broadly in
+# a state where a securitisation process could sensibly begin, and what would an
+# experienced reviewer want to look at first?
+#
+# ------------------------------------------------------------------------
+# The four categories that must never be blurred
+# ------------------------------------------------------------------------
+#
+#   FACT                 Measured by Trakt from governed data.
+#                        "27.4% of balance is secured in London."
+#
+#   EXTERNAL CRITERION   Supplied by a warehouse agreement, transaction
+#                        document, rating methodology or client mandate.
+#                        "Proposed transaction maximum London share = 30%."
+#
+#   TRAKT SCREENING RULE A configurable INTERNAL threshold whose only purpose is
+#                        to draw attention. Not a market rule, not a
+#                        requirement, and never to be reported as one.
+#                        "Flag geographic concentration above 25% for review."
+#
+#   JUDGEMENT            Interpretation by the agent or a human.
+#                        "Elevated London share is not a breach but warrants
+#                         analysis given the high-LTV overlap."
+#
+# `type` below records which of these apply to each metric:
+#
+#   MEASURE_ONLY       report the number; Trakt forms no view
+#   TRAKT_SCREEN       a versioned internal screening threshold exists
+#   EXTERNAL_CRITERIA  only evaluated when a real criterion is supplied
+#   HYBRID             both a screening threshold and external criteria apply
+#
+# A metric with no defensible screening default is MEASURE_ONLY. Inventing a
+# threshold to fill a column would manufacture false precision, and the agent
+# would then report a number Trakt made up as though it meant something.
+#
+# ------------------------------------------------------------------------
+# One calculation, many rulebooks
+# ------------------------------------------------------------------------
+# `calculation_source` names the SINGLE deterministic implementation. Warehouse
+# criteria, Trakt screening and future securitisation criteria all read the same
+# computed fact — see config/system/rule_packs/ and trakt_core/readiness.py.
+# There is deliberately no securitisation-specific calculation anywhere.
+#
+# `fact_tool` is the governed tool an agent calls to obtain the fact.
+#
+# ------------------------------------------------------------------------
+# status
+# ------------------------------------------------------------------------
+#   READY          data, calculation and tool all exist
+#   EXPOSE         calculation exists; needs governed tool exposure
+#   SMALL_GAP      a small deterministic calculation is missing
+#   DATA_GAP       the canonical tape does not carry what is needed
+#   JUDGEMENT_ONLY no deterministic calculation should exist; the agent
+#                  interprets facts that other metrics already supply
+
+schema_version: "1.0.0"
+framework_version: 1
+framework_id: SECURITISATION_READINESS
+framework_name: Securitisation Readiness Framework
+authority: trakt_internal
+authority_note: >-
+  Trakt's own first-pass review framework. It is NOT a rating agency
+  methodology, NOT a regulatory requirement and NOT a transaction document.
+  Anything sourced from a real agreement arrives as an external criteria pack.
+
+categories:
+  composition:   Portfolio composition
+  collateral:    Leverage and collateral
+  borrower:      Borrower characteristics
+  performance:   Performance
+  concentration: Concentrations
+  data_quality:  Data quality and readiness
+  regulatory:    Regulatory readiness
+  eligibility:   Eligibility and transaction criteria
+  trend:         Trend and deterioration
+
+metrics:
+
+  # ===================================================================
+  # A. PORTFOLIO COMPOSITION
+  # Almost entirely MEASURE_ONLY: a book being large or small, seasoned or
+  # new, is not by itself good or bad. These are the numbers every later
+  # judgement is made against.
+  # ===================================================================
+  - id: COMP_TOTAL_BALANCE
+    capability: total_balance
+    name: Total portfolio balance
+    category: composition
+    description: Aggregate current principal balance of the governed population.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: portfolio_summary
+    calculation_source: trakt_tools.handlers.analysis.portfolio_summary
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      The denominator for every share in this framework. Establish it first;
+      a percentage means nothing until the reader knows what it is a
+      percentage of.
+    status: READY
+
+  - id: COMP_LOAN_COUNT
+    capability: loan_count
+    name: Loan count
+    category: composition
+    description: Number of distinct loans in the governed population.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: portfolio_summary
+    calculation_source: trakt_tools.handlers.analysis.portfolio_summary
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Read alongside total balance. A small pool concentrates idiosyncratic
+      risk however good the individual loans are.
+    status: READY
+
+  - id: COMP_AVERAGE_LOAN_SIZE
+    capability: average_loan_size
+    name: Average loan size
+    category: composition
+    description: Mean current balance per loan.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.field_average
+    metric_id: balance_average
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Compare with the maximum and the top-N share. A mean well below the
+      maximum means the book has a tail worth looking at.
+    status: READY
+
+  - id: COMP_MAX_LOAN_SIZE
+    name: Largest loan
+    category: composition
+    description: Largest single current balance.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.field_maximum
+    metric_id: balance_maximum
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, loan_identifier]
+    agent_investigation_guidance: >-
+      Warehouse and transaction documents commonly cap a single exposure.
+      Where no criterion is supplied, report it and move on.
+    status: READY
+
+  - id: COMP_SEASONING
+    name: Seasoning distribution
+    category: composition
+    description: Share of balance originated within a given number of years.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.vintage_share
+    metric_id: composition_vintage_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Very new books have not yet demonstrated performance; the absence of
+      arrears in an unseasoned pool is not evidence of quality. Say so rather
+      than reading a clean performance record as a strength.
+    status: READY
+
+  - id: COMP_PRODUCT_MIX
+    name: Product mix
+    category: composition
+    description: Share of balance by product type.
+    asset_class_applicability: [cross_asset]
+    type: EXTERNAL_CRITERIA
+    fact_tool: stratify
+    calculation_source: analytics_lib.stratify.stratify
+    metric_id: product_type_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Eligibility criteria frequently exclude particular products outright.
+      Without supplied criteria this is composition, not a concern.
+    status: READY
+
+  - id: COMP_RATE_TYPE_MIX
+    name: Fixed / variable mix
+    category: composition
+    description: Share of balance by interest rate type.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: stratify
+    calculation_source: analytics_lib.stratify.stratify
+    metric_id: rate_type_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Relevant to structuring and hedging rather than to portfolio quality.
+      Report it; do not judge it.
+    status: READY
+
+  - id: COMP_ORIGINATOR_MIX
+    name: Originator mix
+    category: composition
+    description: Share of balance by originating entity, where the tape carries one.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: stratify
+    calculation_source: analytics_lib.stratify.stratify
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Where several originators contribute, compare their performance
+      separately before treating the book as homogeneous.
+    status: READY
+
+  - id: COMP_MATURITY_PROFILE
+    name: Maturity within horizon
+    category: composition
+    description: Share of balance maturing within a given horizon.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.maturity_horizon_share
+    metric_id: maturity_within_horizon_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Loans maturing inside the expected transaction life are a structuring
+      question, and transaction documents usually cap them.
+    status: READY
+
+  - id: COMP_CONTRACTUAL_WAL
+    capability: contractual_wal
+    name: Contractual weighted average life
+    category: composition
+    description: >-
+      Principal-weighted average time to contractual principal repayment,
+      derived from the amortisation type the contract states.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: MEASURE_ONLY
+    fact_tool: contractual_analytics
+    calculation_source: analytics_lib.contractual.portfolio_wal
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      CONTRACTUAL, not expected. This is what the contract fixes, and it takes
+      no view on prepayment — compare it against the OBSERVED CPR before
+      drawing any conclusion about how long the book will actually last.
+      Read the status before the number. A bullet or fixed-amortisation loan
+      keeps its WAL on a floating rate, because its principal series does not
+      depend on the rate; a French or German loan does not, because there the
+      contract fixes the total instalment and the principal split moves with
+      the rate. Deliberately NOT applicable to equity release: repayment is
+      contingent on a borrower event, so no contractual WAL exists and the
+      legal long-stop maturity must never be substituted for one.
+    status: READY
+
+  - id: COMP_CONTRACTUAL_YTM
+    capability: contractual_ytm
+    name: Contractual yield to maturity (periodic)
+    category: composition
+    description: >-
+      Balance-weighted contractual yield from purchase price (RREL34) and the
+      contractual cash flows, discounted at the payment frequency.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: MEASURE_ONLY
+    fact_tool: contractual_analytics
+    calculation_source: analytics_lib.contractual.contractual_ytm
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      PERIODIC, and say so when quoting it: day_count_convention exists only
+      as CREL122 on Annex 3, so a day-count-exact yield cannot be computed for
+      a residential tape and is not invented. Available only where the rate is
+      contractually fixed — a floating exposure reports ASSUMPTION_REQUIRED
+      rather than using today's rate as though it were fixed. On a book bought
+      at par, RREL34 is 100 and the yield collapses to the coupon: that is a
+      correct answer that reads like a broken one.
+    status: READY
+
+  # ===================================================================
+  # B. LEVERAGE AND COLLATERAL
+  # Where screening thresholds are most defensible, because a very high LTV
+  # is a recognised concern independent of any particular transaction.
+  # ===================================================================
+  - id: COLL_WA_LTV
+    capability: wa_current_ltv
+    name: Weighted-average current LTV
+    category: collateral
+    description: Balance-weighted average current loan-to-value.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage, equity_release]
+    type: HYBRID
+    fact_tool: portfolio_summary
+    calculation_source: concentration_tests.metrics.weighted_average
+    metric_id: ltv_weighted_average
+    screening_rule: SCREEN_WA_LTV
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, valuation_selection]
+    agent_investigation_guidance: >-
+      Balance-weighted, never a simple mean: a 95% LTV on a large loan moves
+      the book more than a 50% LTV on a small one. Check which valuation
+      observations back it before quoting it — an LTV resting on indexed
+      valuations is a weaker number than the same figure resting on recent
+      physical ones.
+    status: READY
+
+  - id: COLL_HIGH_LTV_SHARE
+    name: High-LTV cohort share
+    category: collateral
+    description: Share of balance with current LTV above a given percentage.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.share_of_balance_numeric
+    metric_id: ltv_above_share
+    screening_rule: SCREEN_HIGH_LTV_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, valuation_selection, affected_balance]
+    agent_investigation_guidance: >-
+      The single most productive thread in a first-pass review. Having found
+      the cohort, ask where it is, how old its valuations are, whether its
+      arrears differ from the rest of the book, and whether it is concentrated
+      in a few loans.
+    status: READY
+
+  - id: COLL_MAX_LTV
+    name: Maximum current LTV
+    category: collateral
+    description: Highest current LTV on any single loan.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.field_maximum
+    metric_id: ltv_maximum
+    screening_rule: SCREEN_MAX_LTV
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, loan_identifier, valuation_selection]
+    agent_investigation_guidance: >-
+      One extreme loan is an outlier, not a portfolio characteristic. Check
+      the affected balance before treating it as material.
+    status: READY
+
+  - id: COLL_NEGATIVE_EQUITY_SHARE
+    name: Negative-equity share
+    category: collateral
+    description: Share of balance where current LTV exceeds 100%.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage, equity_release]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.share_of_balance_numeric
+    metric_id: ltv_above_share
+    screening_rule: SCREEN_NEGATIVE_EQUITY
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [snapshot, valuation_selection, affected_balance]
+    agent_investigation_guidance: >-
+      Any negative equity is worth a look, and its size determines whether it
+      is a finding or a footnote. Verify the valuations first — apparent
+      negative equity on a stale valuation is often a data issue rather than
+      an economic one, and the two call for different responses.
+    status: READY
+
+  - id: COLL_VALUATION_AGE
+    name: Valuation age distribution
+    category: collateral
+    description: >-
+      Share of balance whose selected valuation is older than a given number of
+      months, plus the age distribution of the selected observations.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage, equity_release]
+    type: HYBRID
+    fact_tool: valuation_age_profile
+    calculation_source: analytics_lib.valuation_age.valuation_age_profile
+    screening_rule: SCREEN_STALE_VALUATION_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, valuation_selection, affected_balance]
+    agent_investigation_guidance: >-
+      Every LTV in the book rests on these observations. A stale valuation
+      does not make a loan bad, it makes the reported LTV unreliable — which
+      is a data-quality finding, not a credit one. Distinguish the two
+      explicitly, because remediation differs.
+    status: READY
+
+  - id: COLL_VALUATION_METHOD_MIX
+    name: Valuation method mix
+    category: collateral
+    description: Share of balance by the method of the selected valuation.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage, equity_release]
+    type: HYBRID
+    fact_tool: valuation_age_profile
+    calculation_source: analytics_lib.valuation_age.valuation_age_profile
+    screening_rule: SCREEN_INDEXED_VALUATION_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, valuation_selection]
+    agent_investigation_guidance: >-
+      A book valued predominantly by index has weaker collateral evidence than
+      one valued by inspection, even at identical LTVs. Transaction documents
+      often restrict which methods are acceptable.
+    status: READY
+
+  - id: COLL_MISSING_VALUATION_SHARE
+    name: Missing valuation share
+    category: collateral
+    description: Share of balance with no usable valuation observation.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage, equity_release]
+    type: HYBRID
+    fact_tool: valuation_age_profile
+    calculation_source: analytics_lib.valuation_age.valuation_age_profile
+    screening_rule: SCREEN_MISSING_VALUATION_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, affected_balance]
+    agent_investigation_guidance: >-
+      A loan with no valuation has no LTV, so it is silently absent from every
+      LTV metric. Always read the LTV figures together with this one, or the
+      book will look better than the data supports.
+    status: READY
+
+  - id: COLL_WA_PROPERTY_VALUE
+    name: Weighted-average property value
+    category: collateral
+    description: Balance-weighted average of the selected valuation amount.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: MEASURE_ONLY
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.weighted_average
+    metric_id: property_wa_valuation
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Context for the property-value concentration metrics rather than a
+      concern in itself.
+    status: READY
+
+  - id: COLL_PROPERTY_CONCENTRATION
+    name: Largest single property exposure
+    category: collateral
+    description: Share of balance secured on the largest single property.
+    asset_class_applicability: [commercial_mortgage, residential_mortgage]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.largest_by_field_share
+    metric_id: property_largest_exposure_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, affected_balance]
+    agent_investigation_guidance: >-
+      Material in commercial books, usually immaterial in granular
+      residential ones. Judge by the share, not by its existence.
+    status: READY
+
+  # ===================================================================
+  # C. BORROWER
+  # No screening thresholds. Borrower concentration matters only against a
+  # supplied limit, and borrower characteristics are composition.
+  # ===================================================================
+  - id: BORR_LARGEST_SHARE
+    name: Largest borrower exposure
+    category: borrower
+    description: Share of balance attributable to the single largest borrower.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: concentration
+    calculation_source: analytics_lib.concentration.top_n_concentration
+    metric_id: borrower_largest_share
+    screening_rule: SCREEN_LARGEST_BORROWER_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, affected_balance, loan_identifier]
+    agent_investigation_guidance: >-
+      Aggregate across the borrower's loans; a borrower holding five modest
+      loans can exceed one holding a single large one.
+    status: READY
+
+  - id: BORR_MULTI_LOAN_SHARE
+    name: Multi-loan borrower share
+    category: borrower
+    description: Share of balance held by borrowers with more than one loan.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.multi_loan_borrower_share
+    metric_id: borrower_multi_loan_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Tells you whether loan-level and borrower-level concentration differ.
+      Where the share is high, loan-level metrics understate concentration.
+    status: READY
+
+  - id: BORR_MAX_LOANS
+    name: Maximum loans per borrower
+    category: borrower
+    description: Largest number of loans held by any one borrower.
+    asset_class_applicability: [cross_asset]
+    type: EXTERNAL_CRITERIA
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.max_count_per_group
+    metric_id: borrower_max_loans
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Commonly capped in eligibility criteria. Without a supplied cap it is
+      merely descriptive.
+    status: READY
+
+  - id: BORR_GEOGRAPHY
+    name: Borrower geographic distribution
+    category: borrower
+    description: Share of balance by borrower region.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: stratify
+    calculation_source: analytics_lib.stratify.stratify
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Usually tracks collateral geography. Where the two diverge materially,
+      that divergence is itself worth a question.
+    status: READY
+
+  - id: BORR_AGE_PROFILE
+    name: Borrower age profile
+    category: borrower
+    description: Share of balance by borrower age band, where the tape carries age.
+    asset_class_applicability: [equity_release, residential_mortgage]
+    type: EXTERNAL_CRITERIA
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.share_of_balance_numeric
+    metric_id: borrower_age_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Material in equity release, where age drives expected redemption.
+      Evaluate only against supplied criteria — Trakt forms no view on
+      borrower age, and no screening default is appropriate.
+    status: READY
+
+  # ===================================================================
+  # D. PERFORMANCE
+  # ===================================================================
+  - id: PERF_ARREARS_SHARE
+    name: Arrears share
+    category: performance
+    description: Share of balance in arrears beyond a given number of days.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.arrears_share
+    metric_id: perf_arrears_share
+    screening_rule: SCREEN_ARREARS_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, affected_balance]
+    agent_investigation_guidance: >-
+      Measure at 30, 60 and 90 days rather than once — the shape of the
+      distribution says more than any single figure. Read against seasoning:
+      low arrears in an unseasoned book is not yet evidence of anything.
+    status: READY
+
+  - id: PERF_90_PLUS_SHARE
+    name: 90+ DPD share
+    category: performance
+    description: Share of balance 90 or more days in arrears.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.arrears_share
+    metric_id: perf_arrears_share
+    screening_rule: SCREEN_90_PLUS_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [snapshot, affected_balance, loan_identifier]
+    agent_investigation_guidance: >-
+      Usually an outright eligibility exclusion rather than a limit. Identify
+      the loans, not just the percentage.
+    status: READY
+
+  - id: PERF_STATUS_MIX
+    name: Account status mix
+    category: performance
+    description: Share of balance by account status.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: stratify
+    calculation_source: analytics_lib.stratify.stratify
+    metric_id: perf_status_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Reconcile against the arrears metrics. A status mix that disagrees with
+      the days-in-arrears distribution is a data-quality finding.
+    status: READY
+
+  - id: PERF_DEFAULT_SHARE
+    name: Defaulted balance share
+    category: performance
+    description: Share of balance flagged as defaulted.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: stratify
+    calculation_source: analytics_lib.stratify.stratify
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [snapshot, affected_balance]
+    agent_investigation_guidance: >-
+      Almost always an eligibility exclusion. Confirm against the default date
+      and amount fields rather than status alone.
+    status: READY
+
+  - id: PERF_DEFAULT_RATE
+    capability: default_rate
+    name: Default rate (annualised CDR)
+    category: performance
+    description: >-
+      Balance entering default during the period over non-defaulted opening
+      balance, annualised. A FLOW, and deliberately separate from
+      PERF_DEFAULT_SHARE, which is the stock.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: default_analysis
+    calculation_source: analytics_lib.history.default_rate
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [snapshot, prior_snapshot]
+    agent_investigation_guidance: >-
+      Read this WITH PERF_DEFAULT_SHARE, never instead of it: a book can carry
+      a large stock of legacy defaults and have a default rate of zero, and
+      the two answer different questions. The methodology is ESMA's own
+      (Annex 12 AnlsdCstDfltRate), so the numerator and denominator are quoted
+      rather than chosen. This is an OBSERVED rate and is not a probability of
+      default — do not present it as forward-looking.
+    status: READY
+
+  - id: PERF_CURE_RATE
+    capability: cure_rate
+    name: Cure rate
+    category: performance
+    description: >-
+      Delinquent balance returning to current, over the delinquent balance
+      able to cure at the opening.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: cure_analysis
+    calculation_source: analytics_lib.history.cure_rate
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, prior_snapshot]
+    agent_investigation_guidance: >-
+      Read improved_not_cured_balance beside the rate. A book whose loans move
+      from 90+ to 30 days has improved without curing, and reporting that as a
+      cure overstates the recovery — that movement is a roll, which
+      transition_analysis measures. Unlike the default rate, this convention
+      is Trakt's own: ESMA defines no loan-level cure concept, so say so when
+      quoting it externally.
+    status: READY
+
+  - id: PERF_LOSSES
+    capability: observed_loss_rate
+    name: Cumulative losses
+    category: performance
+    description: Allocated losses as a share of original balance.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: loss_analysis
+    calculation_source: analytics_lib.history.loss_and_recovery
+    metric_id: perf_cumulative_loss_share
+    supersedes_library_metric: true
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, prior_snapshot]
+    agent_investigation_guidance: >-
+      Computable across governed snapshots via loss_analysis, which is the
+      observed-loss measurement (OBSERVED_LOSS@v1), not a modelled one. It
+      reports four denominators — original, opening, current balance, and
+      recoveries over losses — and deliberately chooses none, because the
+      market quotes all four and they differ materially on the same book.
+      State which denominator you are quoting. The single-snapshot library
+      metric perf_cumulative_loss_share remains unimplemented and is
+      superseded by this tool: a loss rate needs two periods, not one.
+    status: READY
+
+  - id: PERF_PREPAYMENT
+    capability: observed_cpr
+    name: Prepayment rate
+    category: performance
+    description: Prepayments as a share of balance.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: prepayment_analysis
+    calculation_source: analytics_lib.history.prepayment_rate
+    metric_id: perf_prepayment_share
+    supersedes_library_metric: true
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot, prior_snapshot]
+    agent_investigation_guidance: >-
+      Computable across governed snapshots via prepayment_analysis, which
+      reports single monthly mortality and the annualised CPR
+      (OBSERVED_SMM@v2 / OBSERVED_CPR@v2). The denominator is the opening
+      balance net of scheduled principal, which is the market convention;
+      each period publishes denominator_basis so a reader can see which was
+      used. Read unknown_exit_balance before quoting the rate — an
+      unexplained disappearance is excluded from the numerator and is a
+      data-quality finding, not a prepayment. The single-snapshot library
+      metric perf_prepayment_share remains unimplemented and is superseded by
+      this tool: a prepayment rate needs two periods, not one.
+    status: READY
+
+  # ===================================================================
+  # E. CONCENTRATIONS
+  # ===================================================================
+  - id: CONC_GEOGRAPHIC
+    capability: geographic_concentration
+    name: Geographic concentration
+    category: concentration
+    description: Share of balance in the largest single region.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: concentration
+    calculation_source: analytics_lib.concentration.top_n_concentration
+    metric_id: geo_largest_region_share
+    screening_rule: SCREEN_GEOGRAPHIC_CONCENTRATION
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, affected_balance]
+    agent_investigation_guidance: >-
+      Regional concentration is normal in specialist lending and is not by
+      itself a defect. It matters most where it OVERLAPS another concern —
+      high LTV, stale valuations, weaker performance — so test that overlap
+      before forming a view.
+    status: READY
+
+  - id: CONC_POSTCODE
+    name: Postcode-area concentration
+    category: concentration
+    description: Share of balance in the largest single postcode area.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.postcode_area_share
+    metric_id: geo_postcode_area_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, affected_balance]
+    agent_investigation_guidance: >-
+      A finer lens than region, and the one that exposes a book concentrated
+      in a single development or town within an otherwise diverse region.
+    status: READY
+
+  - id: CONC_REGION_COUNT
+    name: Distinct region count
+    category: concentration
+    description: Number of distinct regions represented.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.distinct_group_count
+    metric_id: geo_region_count
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: null
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Breadth, as a counterweight to the largest-region share.
+    status: READY
+
+  - id: CONC_TOP_N_LOANS
+    name: Top-N loan concentration
+    category: concentration
+    description: Combined share of balance of the largest N loans.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.top_n_share
+    metric_id: top_n_loans_share
+    screening_rule: SCREEN_TOP_10_LOAN_SHARE
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, affected_balance, loan_identifier]
+    agent_investigation_guidance: >-
+      Granularity, which drives how much idiosyncratic risk survives pooling.
+      Where the top-10 share is material, examine those loans individually —
+      it is a bounded and highly informative piece of work.
+    status: READY
+
+  - id: CONC_LARGE_LOAN_SHARE
+    name: Large-loan share
+    category: concentration
+    description: Share of balance in loans above a given size.
+    asset_class_applicability: [cross_asset]
+    type: HYBRID
+    fact_tool: readiness_metrics
+    calculation_source: concentration_tests.metrics.share_of_balance_numeric
+    metric_id: balance_above_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, affected_balance]
+    agent_investigation_guidance: >-
+      The threshold is transaction-specific, so this is normally evaluated
+      only against supplied criteria.
+    status: READY
+
+  - id: CONC_PROPERTY_TYPE
+    name: Property/collateral type concentration
+    category: concentration
+    description: Share of balance in the largest collateral type.
+    asset_class_applicability: [residential_mortgage, commercial_mortgage]
+    type: HYBRID
+    fact_tool: concentration
+    calculation_source: analytics_lib.concentration.top_n_concentration
+    metric_id: composition_largest_group_share
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Near-total concentration in one property type is normal for a
+      residential book and notable for a mixed one.
+    status: READY
+
+  # ===================================================================
+  # F. DATA QUALITY AND READINESS
+  # The category most likely to stop a transaction and least likely to be
+  # examined first, which is exactly why it is in the framework.
+  # ===================================================================
+  - id: DQ_FIELD_COMPLETENESS
+    name: Canonical field completeness
+    category: data_quality
+    description: Population rate of each canonical field across the portfolio.
+    asset_class_applicability: [cross_asset]
+    type: TRAKT_SCREEN
+    fact_tool: data_completeness
+    calculation_source: trakt_tools.handlers.analysis.data_completeness
+    screening_rule: SCREEN_CRITICAL_FIELD_COMPLETENESS
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [snapshot, field_list]
+    agent_investigation_guidance: >-
+      Distinguish a field that is absent from the tape from one present and
+      empty; they call for different remediation. Weight by whether the field
+      is needed for a metric anyone relies on.
+    status: READY
+
+  - id: DQ_VALIDATION_EXCEPTIONS
+    name: Validation exceptions
+    category: data_quality
+    description: Canonical fields failing or warning in validation.
+    asset_class_applicability: [cross_asset]
+    type: TRAKT_SCREEN
+    fact_tool: list_validation_exceptions
+    calculation_source: trakt_tools.handlers.analysis.list_validation_exceptions
+    screening_rule: SCREEN_VALIDATION_FAILURES
+    external_criteria_supported: false
+    severity_if_flagged: high
+    evidence_required: [snapshot, rule_ids]
+    agent_investigation_guidance: >-
+      A failure on a field that feeds LTV or arrears undermines the metrics
+      built on it. Trace which framework metrics depend on a failing field
+      before quoting them.
+    status: READY
+
+  - id: DQ_PROVENANCE_QUALITY
+    name: Provenance quality
+    category: data_quality
+    description: Whether material values can be traced to source and method.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: explain_values
+    calculation_source: trakt_tools.handlers.provenance.explain_values
+    screening_rule: null
+    external_criteria_supported: false
+    severity_if_flagged: medium
+    evidence_required: [snapshot, lineage_index]
+    agent_investigation_guidance: >-
+      Sample the values behind material findings. A snapshot with no lineage
+      index means provenance is UNKNOWN, which is not the same as absent and
+      must not be reported as clean.
+    status: READY
+
+  - id: DQ_SNAPSHOT_CURRENCY
+    name: Snapshot currency
+    category: data_quality
+    description: Age of the reporting snapshot being assessed.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: portfolio_summary
+    calculation_source: trakt_core.envelope.SnapshotRef
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Every finding is as at this date. State it; an assessment without a
+      date cannot be relied on later.
+    status: READY
+
+  # ===================================================================
+  # G. REGULATORY READINESS
+  # One category, not the whole framework. Annex completeness is necessary
+  # for issuance and is not evidence that a book is good.
+  # ===================================================================
+  - id: REG_MANDATORY_FIELD_COVERAGE
+    name: Mandatory regulatory field coverage
+    category: regulatory
+    description: >-
+      Coverage of Annex-required fields, separating those that may fall back to
+      a No-Data value from those that may not.
+    asset_class_applicability: [cross_asset]
+    type: TRAKT_SCREEN
+    fact_tool: regulatory_readiness
+    calculation_source: trakt_tools.handlers.regulatory.regulatory_readiness
+    screening_rule: SCREEN_MANDATORY_FIELD_COVERAGE
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [snapshot, field_list]
+    agent_investigation_guidance: >-
+      A field that may NOT carry a No-Data value is a hard blocker: no
+      submission is possible without it. One that may is a quality question.
+      Separate them, because conflating them turns a blocker into a footnote
+      or a footnote into a blocker.
+    status: READY
+
+  - id: REG_SCHEMA_VALIDATION
+    name: Regulatory schema validation
+    category: regulatory
+    description: Whether projected regulatory output passes schema validation.
+    asset_class_applicability: [cross_asset]
+    type: TRAKT_SCREEN
+    fact_tool: regulatory_readiness
+    calculation_source: trakt_tools.handlers.regulatory.regulatory_readiness
+    screening_rule: null
+    external_criteria_supported: false
+    severity_if_flagged: critical
+    evidence_required: [snapshot]
+    agent_investigation_guidance: >-
+      Validation state is about the SUBMISSION, not the portfolio. Never let a
+      clean regulatory result imply a sound book, or the reverse.
+    status: READY
+
+  - id: REG_SUBMISSION_STATE
+    name: Submission acceptance state
+    category: regulatory
+    description: Accepted / rejected state of the most recent submission.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: null
+    calculation_source: null
+    screening_rule: null
+    external_criteria_supported: false
+    severity_if_flagged: medium
+    evidence_required: [submission_receipt]
+    agent_investigation_guidance: >-
+      External evidence Trakt does not hold. Report it as outstanding
+      information rather than inferring acceptance from a clean projection.
+    status: DATA_GAP
+
+  # ===================================================================
+  # H. ELIGIBILITY AND TRANSACTION CRITERIA
+  # Entirely EXTERNAL_CRITERIA by definition.
+  # ===================================================================
+  - id: ELIG_APPROVED_TESTS
+    name: Approved concentration and covenant tests
+    category: eligibility
+    description: The operator-approved limit tests for this book.
+    asset_class_applicability: [cross_asset]
+    type: EXTERNAL_CRITERIA
+    fact_tool: evaluate_covenants
+    calculation_source: mi_agent_api.concentration_tests_api.compute_concentration_tests
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [configuration_version, approver, snapshot]
+    agent_investigation_guidance: >-
+      These carry an approver and a configuration version. They are the only
+      results in this framework that are operator-approved, and a breach here
+      outranks any screening flag.
+    status: READY
+
+  - id: ELIG_BREACH_DRILLTHROUGH
+    name: Breach contributing population
+    category: eligibility
+    description: The loans making up a breached test's numerator.
+    asset_class_applicability: [cross_asset]
+    type: EXTERNAL_CRITERIA
+    fact_tool: covenant_drillthrough
+    calculation_source: mi_agent_api.concentration_tests_api.compute_drillthrough
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: critical
+    evidence_required: [test_id, configuration_version, loan_identifier]
+    agent_investigation_guidance: >-
+      Always follow a breach into its population, and check `reconciles`
+      before attributing the reported figure to those loans.
+    status: READY
+
+  - id: ELIG_CRITERIA_SUPPLIED
+    name: Securitisation criteria supplied
+    category: eligibility
+    description: Whether any proposed securitisation criteria pack is loaded.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: evaluate_rule_packs
+    calculation_source: trakt_core.readiness.evaluate_packs
+    screening_rule: null
+    external_criteria_supported: false
+    severity_if_flagged: high
+    evidence_required: [pack_manifest]
+    agent_investigation_guidance: >-
+      If no securitisation criteria are supplied, the assessment CANNOT
+      conclude that the book meets them. Say so explicitly and list it as
+      outstanding information — an absent rulebook is not a passed one.
+    status: READY
+
+  # ===================================================================
+  # I. TREND AND DETERIORATION
+  # ===================================================================
+  - id: TREND_PERIOD_MOVEMENT
+    name: Period-on-period movement
+    category: trend
+    description: Movement in portfolio metrics between two governed periods.
+    asset_class_applicability: [cross_asset]
+    type: MEASURE_ONLY
+    fact_tool: period_change
+    calculation_source: mi_agent_api.period_change_route.analyse_period_change
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: medium
+    evidence_required: [snapshot, prior_snapshot, period_resolution]
+    agent_investigation_guidance: >-
+      Read the period resolution and the stated limitations before quoting any
+      movement. A comparison across a changed population answers a different
+      question from the one asked.
+    status: READY
+
+  - id: TREND_COVENANT_DETERIORATION
+    name: Covenant deterioration
+    category: trend
+    description: Approved tests that worsened against the prior period.
+    asset_class_applicability: [cross_asset]
+    type: EXTERNAL_CRITERIA
+    fact_tool: evaluate_covenants
+    calculation_source: mi_agent_api.concentration_tests_api.compute_concentration_tests
+    screening_rule: null
+    external_criteria_supported: true
+    severity_if_flagged: high
+    evidence_required: [configuration_version, prior_snapshot]
+    agent_investigation_guidance: >-
+      A test still within its limit but with shrinking headroom is a forward
+      concern that a point-in-time reading misses entirely.
+    status: READY
+
+  - id: TREND_DATA_QUALITY_DRIFT
+    name: Data-quality drift
+    category: trend
+    description: Change in completeness or validation outcomes between periods.
+    asset_class_applicability: [cross_asset]
+    type: JUDGEMENT_ONLY
+    fact_tool: data_completeness
+    calculation_source: null
+    screening_rule: null
+    external_criteria_supported: false
+    severity_if_flagged: medium
+    evidence_required: [snapshot, prior_snapshot]
+    agent_investigation_guidance: >-
+      Compare completeness across periods yourself from two calls. No
+      deterministic drift metric should be added: what counts as material
+      drift depends on which fields moved and why, and that is a judgement.
+    status: JUDGEMENT_ONLY

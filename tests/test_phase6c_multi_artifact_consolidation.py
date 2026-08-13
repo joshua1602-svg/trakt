@@ -368,25 +368,12 @@ def test_no_forbidden_imports():
         assert s != "import analytics" and not s.startswith("import analytics."), s
 
 
-def test_no_regulatory_or_annex2_files_modified():
-    import subprocess
-    try:
-        if subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse",
-                           "--verify", "main"], capture_output=True).returncode != 0:
-            pytest.skip("no 'main' ref")
-        diff = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "diff", "--name-only", "main"],
-            capture_output=True, text=True, check=True).stdout.split()
-        status = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
-            capture_output=True, text=True, check=True).stdout.splitlines()
-    except Exception as exc:  # pragma: no cover
-        pytest.skip(f"git not available: {exc}")
-    changed = set(diff) | {ln[3:].strip() for ln in status if ln.strip()}
-    bad_prefixes = ("config/regime/", "config/delivery/", "engine/gate_",
-                    "engine/delivery_xml_agent/", "engine/projection_agent/")
-    bad_substr = ("annex2", "annex_2", "annex12", "_xsd", ".xsd")
-    for path in changed:
-        low = path.lower()
-        assert not any(low.startswith(p) for p in bad_prefixes), path
-        assert not any(s in low for s in bad_substr), path
+# ``test_no_regulatory_or_annex2_files_modified`` lived here. It diffed the
+# branch against the local ``main`` ref and vetoed any changed path under
+# ``engine/gate_``, ``config/regime/``, ``config/delivery/`` or containing
+# "annex2" — a property of a DIFF rather than of the code, evaluated against
+# whatever ``main`` happened to point at. Its subject, "the Phase N change
+# set", stopped existing when that work merged. The durable invariant it was
+# reaching for is asserted once, on the source, in
+# ``tests/test_mi_regulatory_separation.py``.
+

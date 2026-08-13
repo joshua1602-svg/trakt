@@ -449,7 +449,18 @@ def _origination_labels(df, grain: str = "Y"):
 #: Loan identifier columns, in preference order. Cohort membership is a set of
 #: these; without one, a static pool cannot be formed and the service says so
 #: rather than falling back to a per-period filter that only looks like one.
-_LOAN_ID_COLS = ("unique_identifier", "loan_id", "account_id", "loan_reference")
+#:
+#: The order mirrors ``engine.platform_assembler.LOAN_KEY_FIELDS``, which is what
+#: actually keys a platform canonical: ``loan_identifier`` first (the core
+#: canonical analytics identifier every governed tape carries), then
+#: ``unique_identifier`` (the ESMA Annex 2 RREL1 regulatory identifier, present
+#: only on a regime-projected book). Reading only the regulatory name meant a
+#: funded MI client with no regime projection had no identifier here at all, so
+#: every period after formation was emptied and the progression reported a book
+#: collapsing to zero. ``tests/test_evolution.py`` pins this against the
+#: assembler's contract. The trailing raw-source names are legacy tolerance.
+_LOAN_ID_COLS = ("loan_identifier", "unique_identifier",
+                 "loan_id", "account_id", "loan_reference")
 
 #: Bumped whenever the membership rule or the emitted contract changes, so every
 #: channel can assert it is reading the same methodology.

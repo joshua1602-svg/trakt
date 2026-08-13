@@ -1,0 +1,33 @@
+# Development organisation registry — WHO IS ASKING.
+#
+# See config/dev/README.md for why this is not at config/organisations.yaml.
+# Wire it with TRAKT_ORGANISATIONS_CONFIG=config/dev/organisations.yaml.
+#
+# The GUIDs below are deliberately non-routable placeholders in the reserved
+# 0000-…-0000 space. They are not real Entra directories, so this file cannot
+# accidentally authenticate anybody if it is ever loaded outside development.
+
+organisations:
+
+  # The originator whose data this deployment holds. Registering it does not give
+  # it its data — tenancy.yaml and the dataset root still decide that.
+  - organisation_id: ere
+    display_name: Equity Release Europe
+    organisation_type: originator
+    microsoft_tenant_ids:
+      - "00000000-0000-4000-8000-0000000000e1"
+    enabled: true
+
+  # The Sprint 1 machine identity. An external agent — a Claude or OpenAI
+  # harness, a client's own agent — calling with client credentials from this
+  # directory is `a2a_test_agent`.
+  #
+  # Registering it grants NOTHING. Its access is exactly the grants written in
+  # entitlements.yaml, and its ExecutionContext scopes are derived from those
+  # grants rather than defaulted to a human's scope set.
+  - organisation_id: a2a_test_agent
+    display_name: A2A Test Agent
+    organisation_type: investor
+    microsoft_tenant_ids:
+      - "00000000-0000-4000-8000-00000000a2a7"
+    enabled: true

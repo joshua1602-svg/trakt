@@ -68,6 +68,15 @@ COPILOT_PATH_PREFIX = "/v1/copilot"
 # closed when it is unconfigured.
 TEAMS_BOT_PATH_PREFIX = "/v1/teams"
 
+# The external agent tool API is called by a MACHINE with an Entra
+# client-credentials token, so there is no signed-in user and no Easy Auth header
+# on those requests. It validates the token itself (see agent_auth.py), requires
+# the Trakt agent app role, and fails closed when it is unconfigured — the same
+# reasoning as the two prefixes above. The router is also mounted only when
+# TRAKT_AGENT_API_ENABLED is set, so on a deployment that has not switched the
+# surface on this prefix resolves to 404 rather than to an unguarded route.
+AGENT_PATH_PREFIX = "/v1/agent"
+
 # Claim types that carry the role in App Service Easy Auth principals.
 _ROLE_CLAIM_TYPES = {
     "roles",
@@ -222,6 +231,12 @@ async def auth_guard(request: Request) -> None:
         # Bot Framework activities are guarded by
         # teams_bot.validate_activity_token (channel-issued token validation,
         # fail closed). Same reasoning as the Copilot prefix above.
+        return
+    if path.startswith(AGENT_PATH_PREFIX):
+        # Agent tool calls are guarded by agent_auth.agent_auth_guard (Entra
+        # client-credentials validation plus the required app role, fail closed).
+        # A machine identity carries no Easy Auth principal, so applying this
+        # guard would refuse every agent call before its own guard ran.
         return
 
     if not _auth_enabled():

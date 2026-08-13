@@ -68,6 +68,33 @@ def compute_sum(df: pd.DataFrame, fields: List[str]) -> Optional[float]:
             found = True
     return total if found else None
 
+def bucket_share(df: pd.DataFrame, source_field: str, filter_field: str,
+                 minimum: float, maximum: float) -> Optional[float]:
+    """The share of the pool sitting in one arrears band, in percentage points.
+
+    The denominator is the regulator's, quoted from the Annex 12 schema
+    (``DRAFT1auth.098.001.04``, ``ArrearsData2/Fr30To59Days``):
+
+        "The percentage is calculated as the total outstanding principal
+        amount as at the data cut-off date of the exposures in this category
+        of arrears, relative to the total outstanding principal amount of
+        **all** exposures as at the data cut-off date."
+
+    So the denominator is the whole pool, not the arrears book, and the
+    bounds are inclusive at both ends ("between 30 and 59 days (inclusive)").
+    ``PercentageRate`` is percentage points — the schema's own example is
+    "7.0 is 7%" — so this scales by 100.
+    """
+    if source_field not in df.columns or filter_field not in df.columns:
+        return None
+    balances = pd.to_numeric(df[source_field], errors="coerce").fillna(0.0)
+    days = pd.to_numeric(df[filter_field], errors="coerce").fillna(0.0)
+    pool = float(balances.sum())
+    if pool <= 0:
+        return None
+    in_band = float(balances[(days >= minimum) & (days <= maximum)].sum())
+    return in_band / pool * 100.0
+
 def normalize_keys(section: Dict[str, Any]) -> Dict[str, Any]:
     """Converts 'IVSS1_description' keys to 'IVSS1'."""
     normalized = {}
@@ -374,6 +401,13 @@ def main():
             if v is not None:
                 computed[code] = float(v)
                 
+        elif method == "BUCKET_SHARE":
+            v = bucket_share(
+                df, spec.get("source_field"), spec.get("filter_field"),
+                spec.get("min", -math.inf), spec.get("max", math.inf))
+            if v is not None:
+                computed[code] = float(v)
+
         elif method == "BUCKET_SUM":
             src = spec.get("source_field")
             flt = spec.get("filter_field")

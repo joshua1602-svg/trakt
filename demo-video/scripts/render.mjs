@@ -77,6 +77,21 @@ const PRESETS = {
     crf: 28,
     label: "1200x960 landing-page controls loop (H.264, Safari/iOS)",
   },
+  a2a: {
+    composition: "LandingA2ADemo",
+    file: "a2a-demo.mp4",
+    /** Same reasoning as `controls`: it ships inside the landing page, and the
+        frames are flat panels, hairlines and static type. */
+    crf: 28,
+    label: "1200x960 landing-page agent-to-agent loop (H.264, Safari/iOS)",
+  },
+  "a2a-webm": {
+    composition: "LandingA2ADemo",
+    file: "a2a-demo.webm",
+    codec: "vp9",
+    crf: 36,
+    label: "1200x960 landing-page agent-to-agent loop (VP9)",
+  },
   "controls-webm": {
     composition: "LandingControlsDemo",
     file: "controls-demo.webm",

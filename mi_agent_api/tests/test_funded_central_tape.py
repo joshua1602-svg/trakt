@@ -18,6 +18,7 @@ source at the resulting 18_central_lender_tape.csv.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -169,8 +170,24 @@ class TestFundedCentralTapeServedByApi(unittest.TestCase):
         body = TestClient(app).get("/health").json()
         self.assertTrue(body["dataAvailable"])
         self.assertEqual(body["dataSourceKind"], data_source.KIND_PREPARED)
-        self.assertEqual(body["dataSourceInfo"]["run_id"], "mi_2025_10")
         self.assertEqual(body["dataSource"], "18_central_lender_tape.csv")
+        # The run id is checked in-process, not over HTTP. /health used to echo
+        # the whole data_source_info() dict as "dataSourceInfo"; that carried the
+        # server-side dataset PATH, and the payload was deliberately narrowed to
+        # non-sensitive summary fields. Reading the run id from the service keeps
+        # what this test is for without asking for the leak back.
+        self.assertEqual(data_source.data_source_info()["run_id"], "mi_2025_10")
+
+    def test_health_does_not_leak_the_dataset_path(self):
+        """The narrowing above is the assertion, not a footnote to one."""
+        from fastapi.testclient import TestClient
+        from mi_agent_api.app import app
+        self._serve(self.oct_tape, run_id="mi_2025_10")
+        body = TestClient(app).get("/health").json()
+        self.assertNotIn("dataSourceInfo", body)
+        path = str(data_source.data_source_info().get("path", ""))
+        self.assertTrue(path, "the service must know its own path")
+        self.assertNotIn(path, json.dumps(body))
 
     # --- query envelope the React renderer consumes ---
     def _summary_kpis(self, tape: Path, run_id: str):

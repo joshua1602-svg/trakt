@@ -1,0 +1,29 @@
+# Development principal registry — WHICH INDIVIDUAL.
+#
+# Wire it with TRAKT_PRINCIPALS_CONFIG=config/dev/principals.yaml.
+#
+# Deliberately EMPTY, and that is a decision rather than an omission.
+#
+# Enforcement in this registry is per directory and opting in is an act: a
+# directory with no entries here is not checked, and a directory with any entry
+# is checked and refuses unregistered or disabled object ids. Registering one
+# individual therefore gates that individual's whole directory.
+#
+# Two consequences for Sprint 1:
+#
+#   * `a2a_test_agent`'s directory must stay unlisted. A service principal's
+#     `oid` is an APPLICATION, not a person. Registering it would make machines
+#     look like staff; leaving the directory ungated but adding a human to it
+#     would refuse the agent. `identity.context_from_agent_principal` does not
+#     consult this registry at all, which is the honest expression of the same
+#     point — an agent acting on behalf of a NAMED USER is a separate mechanism
+#     (an on_behalf_of claim), not this one.
+#
+#   * ERE's directory is also unlisted, so the human channels behave in
+#     development exactly as they do in the current production deployment.
+#
+# Add entries here when developing the per-individual kill switch — for example
+# to prove that disabling one analyst refuses them while their organisation
+# stays entitled.
+
+principals: []

@@ -63,6 +63,7 @@ from trakt_core.context import (
     ACTOR_SERVICE,
     ACTOR_USER,
     CHANNEL_COPILOT,
+    CHANNEL_ENTERPRISE_AGENT,
     CHANNEL_REACT,
     DEFAULT_MI_SCOPES,
     ExecutionContext,
@@ -255,6 +256,111 @@ def resolve_principal(
     reg = registry if registry is not None else load_principal_registry()
     return reg.resolve(microsoft_tenant_id, microsoft_object_id,
                        request_id=request_id)
+
+
+def scopes_from_entitlements(
+    entitlements: Optional[ResolvedEntitlements],
+) -> frozenset:
+    """The scopes a machine identity holds: the union of what it is granted.
+
+    A human gets :data:`DEFAULT_MI_SCOPES` — a fixed set for a role. A machine
+    must not, and derivation is what avoids inventing a second place to write
+    permissions down: an agent may attempt exactly the verbs some grant already
+    gives it against some resource, and nothing more.
+
+    The two axes still both apply and the narrowing is still per resource.
+    ``scopes`` only decides *may this caller attempt this verb at all*;
+    :func:`trakt_core.entitlement.authorise_resource_access` then decides *may it
+    against this resource*. So an agent granted ``risk:read`` on Portfolio A and
+    nothing on Portfolio B passes the scope gate for both and is refused at the
+    resource gate for B — which is the correct place, and the one that returns
+    ``RESOURCE_NOT_AUTHORISED`` rather than leaking that B exists.
+
+    An agent with no entitlements resolves to an EMPTY scope set and can do
+    nothing. Empty is a real answer here, never a fallback to the default set.
+    """
+    if entitlements is None:
+        return frozenset()
+    granted: set = set()
+    for _ref, caps in entitlements.entries:
+        granted |= set(caps)
+    return frozenset(granted)
+
+
+def context_from_agent_principal(
+    principal: Any,
+    *,
+    tenant_id: str,
+    request_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+    organisation_registry: Optional[OrganisationRegistry] = None,
+    entitlement_store: Optional[EntitlementStore] = None,
+) -> ExecutionContext:
+    """Build a context from a validated **machine** identity (``agent_auth``).
+
+    The service-identity counterpart to :func:`context_from_copilot_principal`,
+    and it differs in exactly three ways, each deliberate:
+
+    * ``actor_type=ACTOR_SERVICE`` and ``channel=CHANNEL_ENTERPRISE_AGENT``, so
+      an audit line says a machine asked, through the agent surface;
+    * **scopes are derived from grants**, not defaulted — see
+      :func:`scopes_from_entitlements`. A machine never inherits a human's scope
+      set;
+    * the **principal registry is not consulted**. It binds individuals by
+      ``(tid, oid)``; a service principal's ``oid`` is an application, and
+      treating it as a person would either refuse every agent on a
+      principal-gated directory or register machines as staff. An agent acting
+      *for* a named user is a separate mechanism.
+
+    ``tenant_id`` — whose data is served — remains deployment configuration. The
+    verified directory resolves the *organisation* and nothing else.
+
+    An unregistered or disabled directory raises, exactly as on the Copilot path:
+    there is no permissive branch for machines either.
+    """
+    if principal is None:
+        raise TraktError(ErrorCode.AUTHENTICATION_REQUIRED,
+                         "A validated agent identity is required.")
+
+    microsoft_tenant_id = normalise_directory_id(
+        getattr(principal, "directory_id", None))
+
+    organisation = resolve_organisation(
+        microsoft_tenant_id, registry=organisation_registry, request_id=request_id)
+    if organisation is None:
+        # Compatibility mode (no organisation config) is a legitimate posture for
+        # the human channels, which authorise through the tenant/portfolio path.
+        # It is NOT one for the agent surface: every tool call authorises through
+        # entitlements, and entitlements hang off an organisation. Without one
+        # there is nothing to check, so the honest answer is to refuse rather than
+        # serve an unattributed machine.
+        raise TraktError(
+            ErrorCode.ORGANISATION_NOT_REGISTERED,
+            "This agent's directory is not registered as a Trakt organisation, "
+            "so no entitlements can be resolved for it.",
+            request_id=request_id,
+            details={"microsoft_tenant_id": microsoft_tenant_id})
+
+    entitlements: Optional[ResolvedEntitlements] = resolve_entitlements(
+        organisation.organisation_id, store=entitlement_store)
+
+    actor_id = (getattr(principal, "subject", None)
+                or getattr(principal, "name", None)
+                or "unknown-agent")
+
+    return ExecutionContext(
+        tenant_id=tenant_id,
+        actor_id=str(actor_id),
+        actor_type=ACTOR_SERVICE,
+        channel=CHANNEL_ENTERPRISE_AGENT,
+        scopes=scopes_from_entitlements(entitlements),
+        request_id=request_id or new_request_id(),
+        correlation_id=correlation_id,
+        actor_label=getattr(principal, "name", None),
+        organisation_id=organisation.organisation_id,
+        microsoft_tenant_id=microsoft_tenant_id,
+        entitlements=entitlements,
+    )
 
 
 def context_from_copilot_principal(

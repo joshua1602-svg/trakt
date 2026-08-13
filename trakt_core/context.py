@@ -73,6 +73,13 @@ SCOPE_RISK_READ = "risk:read"
 #: "where permissioned", so it has to be grantable separately from the current
 #: position rather than riding along with it.
 SCOPE_FORECAST_READ = "forecast:read"
+#: Loan-level records and the evidence behind an individual value. Deliberately
+#: separate from :data:`SCOPE_MI_QUERY`: aggregate MI tells you a book's shape,
+#: whereas this exposes individual obligations, so a counterparty may reasonably
+#: be granted the first and not the second. It is NOT in
+#: :data:`DEFAULT_MI_SCOPES` — loan-level access is granted deliberately or not
+#: at all.
+SCOPE_LOAN_READ = "loan:read"
 
 #: The scope set granted to an authenticated MI user or an internal caller. New
 #: scopes should be added here only when a capability genuinely gates on them.
@@ -100,6 +107,7 @@ DEFAULT_MI_SCOPES: FrozenSet[str] = frozenset({
 KNOWN_CAPABILITIES: FrozenSet[str] = frozenset({
     SCOPE_PORTFOLIO_READ, SCOPE_MI_QUERY, SCOPE_ARTEFACT_READ,
     SCOPE_ARTEFACT_GENERATE, SCOPE_RISK_READ, SCOPE_FORECAST_READ,
+    SCOPE_LOAN_READ,
 })
 
 

@@ -1771,3 +1771,13 @@ from . import teams_bot as _teams_bot  # noqa: E402
 if _teams_bot.enabled():
     app.include_router(_teams_bot.router)
     logger.info("Teams bot messaging endpoint mounted at /v1/teams/bot/messages")
+
+# The external agent tool API — machine identity, typed tools, governed results.
+# Mounted only when explicitly switched on: exposing a machine-callable surface
+# is a deployment decision, not a consequence of the code shipping.
+from . import agent_api as _agent_api  # noqa: E402
+
+if _agent_api.enabled():
+    app.include_router(_agent_api.router)
+    logger.info("Agent tool API mounted at /v1/agent/tools (%d tools)",
+                len(_agent_api.trakt_tools.tool_names()))

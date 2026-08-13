@@ -1,0 +1,671 @@
+# =========================================================================
+# MI Capability Registry v1
+# =========================================================================
+#
+# The catalogue of portfolio intelligence Trakt can produce, and — just as
+# importantly — the reasons it sometimes cannot.
+#
+# WHAT THIS IS NOT
+# ----------------
+# Not a fourth metadata store. Three registries already exist and each is
+# authoritative for its own thing:
+#
+#   config/system/fields_registry.yaml          what a canonical FIELD is
+#   config/business_semantics_registry.yaml     what a field MEANS analytically
+#   config/risk/concentration_test_library.yaml how a covenant METRIC is measured
+#   mi_agent/mi_semantics_field_registry.yaml   how MI Query resolves a field
+#
+# This registry adds the one thing none of them holds: **whether a given
+# analytical capability can be produced for a given portfolio, and why not.**
+# It references the others by id rather than restating them, so a methodology
+# lives in exactly one place.
+#
+# ASSET-AGNOSTIC BY CONSTRUCTION
+# ------------------------------
+# There is no `if asset_class == ...` anywhere in the resolver. A capability
+# declares the ECONOMIC CONDITIONS it needs — fields, history, determinism —
+# and any portfolio meeting them gets the capability. Where a restriction is
+# genuinely economic (LTV needs collateral; a contractual WAL needs a
+# contractual repayment date) it is expressed as a condition, not as an asset
+# label. Onboarding a new asset class requires no code here.
+#
+# AVAILABILITY STATES
+# -------------------
+#   AVAILABLE            can be calculated correctly from governed data
+#   UNAVAILABLE          applicable, but required input or history is missing
+#   NOT_APPLICABLE       economically meaningless for this portfolio
+#   ASSUMPTION_REQUIRED  needs an unknown future variable (a rate path)
+#   MODEL_REQUIRED       needs behavioural modelling (mortality, redemption)
+#   METHODOLOGY_NOT_APPROVED
+#                        Trakt holds the data and has NOT settled the
+#                        definition. Deliberately distinct from UNAVAILABLE:
+#                        "we lack a field" and "we have not decided what this
+#                        means" call for entirely different responses, and
+#                        publishing a plausible formula to close the gap is
+#                        exactly what Sprint 2.5C found going wrong.
+#
+# The distinction is load-bearing for an autonomous consumer. "This portfolio
+# has no WAL", "Trakt lacks a field", "WAL is conceptually inappropriate" and
+# "WAL would require assumptions" are four different findings, and an agent
+# that cannot tell them apart will either invent a number or abandon a line of
+# investigation that was actually open.
+#
+# CONDITIONS
+# ----------
+# Conditions are named predicates implemented once in trakt_core/capability.py.
+# They are deliberately CHEAP — column presence, snapshot count, a single
+# value_counts over an enum column. Capability discovery must never compute the
+# metrics it is describing: "can calculate" is not "calculate now".
+
+schema_version: "1.0.0"
+registry_version: 1
+registry_id: MI_CAPABILITY_REGISTRY
+
+categories:
+  exposure:     Exposure and composition
+  collateral:   Collateral and leverage
+  delinquency:  Arrears and delinquency
+  prepayment:   Prepayment
+  loss:         Default, loss and recovery
+  pricing:      Rate and pricing
+  cashflow:     Contractual cash-flow analytics
+  history:      Historical and cohort
+  data_quality: Data quality and regulatory readiness
+
+capabilities:
+
+  # ===================================================================
+  # Exposure and composition
+  # ===================================================================
+  - id: total_balance
+    name: Total portfolio balance
+    description: Aggregate current principal balance of the governed population.
+    category: exposure
+    unit: currency
+    basis: observed
+    time_basis: point_in_time
+    aggregation: sum
+    calculation_source: trakt_tools.handlers.analysis.portfolio_summary
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+
+  - id: loan_count
+    name: Loan count
+    description: Number of distinct exposures in the governed population.
+    category: exposure
+    unit: count
+    basis: observed
+    time_basis: point_in_time
+    aggregation: count
+    calculation_source: trakt_tools.handlers.analysis.portfolio_summary
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [loan_identifier]
+
+  - id: average_loan_size
+    name: Average loan size
+    description: Mean current balance per exposure.
+    category: exposure
+    unit: currency
+    basis: observed
+    time_basis: point_in_time
+    aggregation: mean
+    metric_id: balance_average
+    calculation_source: concentration_tests.metrics.field_average
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+
+  - id: geographic_concentration
+    name: Largest geographic concentration
+    description: Share of balance in the single largest region.
+    category: exposure
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    aggregation: max_group_share
+    weighting: current_balance
+    metric_id: geo_largest_region_share
+    # Two entry points reach this concept and they are NOT a duplicated
+    # formula: the `concentration` tool returns a top-N table (of which the
+    # largest region is the n=1 case) while the covenant library evaluates a
+    # single share against a threshold with denominator options and floors.
+    # calculation_source names the tool route, which is what a consumer of
+    # this capability calls; metric_id names the covenant route. The overlap
+    # is pre-existing and recorded in the 2.5E report rather than merged here.
+    calculation_source: analytics_lib.concentration.top_n_concentration
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+      - type: fields_present
+        any_of: [collateral_geography, geographic_region_collateral,
+                 geographic_region_obligor]
+        reason_code: NO_GEOGRAPHY
+        status_when_absent: NOT_APPLICABLE
+        explanation: >-
+          No geographic dimension is carried for this portfolio, so a
+          geographic concentration is not a missing measurement — there is
+          nothing to concentrate by.
+
+  - id: top_n_exposure
+    name: Top-N exposure share
+    description: Share of balance held by the largest N exposures.
+    category: exposure
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    weighting: current_balance
+    metric_id: top_n_loans_share
+    calculation_source: concentration_tests.metrics.top_n_share
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+
+  # ===================================================================
+  # Collateral and leverage
+  # ===================================================================
+  - id: current_ltv
+    name: Current loan-to-value
+    description: Current balance over the governed selected collateral value.
+    category: collateral
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    methodology: CURRENT_LTV@v1
+    calculation_source: trakt_core.valuation
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+      - type: collateral_present
+        reason_code: NO_COLLATERAL
+        status_when_absent: NOT_APPLICABLE
+        explanation: >-
+          The portfolio carries no collateral valuation, so a loan-to-VALUE
+          has no denominator. This is an unsecured exposure, not a data gap:
+          reporting it as missing would suggest a field could be supplied to
+          fix it.
+
+  - id: wa_current_ltv
+    synonyms: ["wa ltv", "weighted average ltv", "average ltv"]
+    name: Weighted-average current LTV
+    description: Balance-weighted mean current LTV.
+    category: collateral
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    weighting: current_balance
+    metric_id: ltv_weighted_average
+    calculation_source: concentration_tests.metrics.weighted_average
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+      - type: collateral_present
+        reason_code: NO_COLLATERAL
+        status_when_absent: NOT_APPLICABLE
+        explanation: >-
+          No collateral valuation is carried, so there is no value to weight
+          a loan against.
+
+  - id: high_ltv_exposure
+    name: High-LTV exposure share
+    description: Share of balance above a stated LTV threshold.
+    category: collateral
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    weighting: current_balance
+    metric_id: ltv_above_share
+    calculation_source: concentration_tests.metrics.share_of_balance_numeric
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+      - type: collateral_present
+        reason_code: NO_COLLATERAL
+        status_when_absent: NOT_APPLICABLE
+        explanation: >-
+          No collateral valuation is carried, so there is no LTV to threshold.
+          An unsecured exposure has no loan-to-value at any level, which is a
+          property of the product rather than a field that could be supplied.
+
+  - id: valuation_age
+    name: Valuation age profile
+    description: >-
+      Balance-weighted age of the collateral evidence behind every LTV, and
+      the share of balance with no usable valuation.
+    category: collateral
+    unit: months
+    basis: observed
+    time_basis: point_in_time
+    calculation_source: analytics_lib.valuation_age.valuation_age_profile
+    consumers: [react, copilot, agent_tools, readiness]
+    conditions:
+      - type: collateral_present
+        reason_code: NO_COLLATERAL
+        status_when_absent: NOT_APPLICABLE
+        explanation: >-
+          No collateral valuations exist, so there is no valuation evidence to
+          age.
+
+  # ===================================================================
+  # Arrears and delinquency
+  # ===================================================================
+  - id: arrears_stock
+    name: Arrears balance
+    description: >-
+      The arrears amount carried on the tape (ESMA RREL67), as a stock rather
+      than a rate.
+    category: delinquency
+    unit: currency
+    basis: observed
+    time_basis: point_in_time
+    aggregation: sum
+    consumers: [mi_query, copilot, agent_tools]
+    conditions:
+      - type: fields_present
+        any_of: [arrears_balance]
+
+  - id: arrears_30_plus
+    name: 30+ days past due
+    description: >-
+      Share of balance 30 or more days in arrears. Inclusive lower bound, per
+      the ESMA Annex 12 band definition ("between 30 and 59 days (inclusive)").
+    category: delinquency
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    weighting: current_balance
+    metric_id: perf_arrears_share
+    calculation_source: concentration_tests.metrics.arrears_share
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [number_of_days_in_arrears]
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+
+  - id: arrears_90_plus
+    name: 90+ days past due
+    description: >-
+      Share of balance 90 or more days in arrears. NOT a regulatory default
+      rate: CRR Article 178 requires MORE than 90 days on a MATERIAL
+      obligation over CONSECUTIVE days, none of which this applies.
+    category: delinquency
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    weighting: current_balance
+    metric_id: perf_arrears_share
+    calculation_source: concentration_tests.metrics.arrears_share
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [number_of_days_in_arrears]
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+
+  - id: arrears_transition
+    owned_kpi: true
+    synonyms: ["roll rate", "roll rates", "transition analysis", "migration"]
+    name: Arrears transition / roll analysis
+    description: State migration between two governed snapshots.
+    category: delinquency
+    unit: matrix
+    basis: observed
+    time_basis: period_flow
+    calculation_source: mi_agent.risk_monitor.migration.migration_matrix
+    consumers: [copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [account_status, number_of_days_in_arrears]
+      - type: history_periods
+        minimum: 2
+
+  - id: default_rate
+    owned_kpi: true
+    synonyms: ["default rate", "periodic default rate", "cdr",
+               "constant default rate", "annualised default rate"]
+    name: Default rate (periodic / annualised CDR)
+    description: >-
+      Balance classified as defaulted DURING the period, over the balance of
+      non-defaulted exposures at the beginning of it, annualised
+      geometrically. ESMA's own definition, quoted rather than chosen.
+    category: loss
+    unit: percent
+    basis: observed
+    time_basis: period_flow
+    methodology: OBSERVED_DEFAULT_RATE_CDR@v1
+    calculation_source: analytics_lib.history.default_rate
+    authority: >-
+      ESMA Annex 12 investor-report schema, AnlsdCstDfltRate
+      (DRAFT1auth.098.001.04)
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: history_periods
+        minimum: 2
+        explanation: >-
+          A default RATE compares two points in time. A single snapshot
+          supports the default STOCK, which is a different measure and is not
+          served under this name.
+      - type: fields_present
+        any_of: [default_date, account_status]
+        explanation: >-
+          A default event needs evidence — default_date (RREL72) or a
+          defaulted account_status (RREL69). It is not inferred from days past
+          due, which is a different definition, nor from a loan disappearing.
+
+  - id: cure_rate
+    owned_kpi: true
+    synonyms: ["cure rate", "cures", "cure performance"]
+    name: Cure rate
+    description: >-
+      Delinquent balance that returned to CURRENT, over the delinquent balance
+      able to cure at the opening. Improvement to a better but still
+      delinquent bucket is a roll, not a cure, and is reported separately.
+    category: delinquency
+    unit: percent
+    basis: observed
+    time_basis: period_flow
+    methodology: OBSERVED_CURE_RATE@v1
+    calculation_source: analytics_lib.history.cure_rate
+    authority: >-
+      Trakt-selected market convention. ESMA defines NO loan-level cure
+      concept — its cure fields are covenant and trigger cure periods — so
+      unlike the default rate this is not quoted from a regulator.
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: history_periods
+        minimum: 2
+        explanation: >-
+          A cure is a movement between two points in time.
+      - type: fields_present
+        any_of: [number_of_days_in_arrears]
+        explanation: >-
+          Delinquency must be observable (RREL68) before a return from it can
+          be.
+
+  # ===================================================================
+  # Prepayment
+  # ===================================================================
+  - id: observed_smm
+    owned_kpi: true
+    synonyms: ["smm", "single monthly mortality"]
+    name: Single monthly mortality (observed)
+    description: >-
+      Unscheduled principal over the beginning balance net of scheduled
+      principal — the market-standard exposed denominator.
+    category: prepayment
+    unit: percent
+    basis: observed
+    time_basis: period_flow
+    methodology: OBSERVED_SMM@v2
+    calculation_source: analytics_lib.history.prepayment_rate
+    consumers: [copilot, agent_tools, readiness]
+    conditions:
+      - type: history_periods
+        minimum: 2
+      - type: fields_present
+        any_of: [unscheduled_principal_collections, redemptions_received_in_period,
+                 loan_redemption_flag]
+        reason_code: MISSING_REQUIRED_INPUT
+        explanation: >-
+          No evidence of unscheduled principal. ESMA carries
+          unscheduled_principal_collections only as CREL98 — an Annex 3 (CRE)
+          code — so a residential tape must supply redemption evidence
+          instead. Disappearance from the tape is never read as prepayment.
+
+  - id: observed_cpr
+    owned_kpi: true
+    synonyms: ["cpr", "constant prepayment rate", "prepayment rate", "prepayment speed"]
+    name: Constant prepayment rate (observed)
+    description: Annualised prepayment speed, 1 - (1 - SMM)^12.
+    category: prepayment
+    unit: percent
+    basis: observed
+    time_basis: period_flow
+    methodology: OBSERVED_CPR@v2
+    calculation_source: analytics_lib.history.prepayment_rate
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: history_periods
+        minimum: 2
+      - type: fields_present
+        any_of: [unscheduled_principal_collections, redemptions_received_in_period,
+                 loan_redemption_flag]
+        reason_code: MISSING_REQUIRED_INPUT
+        explanation: >-
+          No evidence of unscheduled principal or redemption for this
+          portfolio.
+
+  # ===================================================================
+  # Loss and recovery
+  # ===================================================================
+  - id: observed_loss_rate
+    owned_kpi: true
+    synonyms: ["loss rate", "realised loss rate", "realized loss rate", "cumulative loss"]
+    name: Realised loss rate (observed)
+    description: >-
+      Cumulative allocated losses over each of four defensible denominators,
+      none of which is chosen for the reader.
+    category: loss
+    unit: percent
+    basis: observed
+    time_basis: cumulative
+    methodology: OBSERVED_LOSS@v2
+    calculation_source: analytics_lib.history.loss_and_recovery
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [allocated_losses]
+      - type: history_periods
+        minimum: 2
+
+  - id: observed_recovery_rate
+    owned_kpi: true
+    synonyms: ["recovery rate", "recoveries"]
+    name: Recovery rate on defaulted exposure (observed)
+    description: Cumulative recoveries (RREL74) over defaulted exposure (RREL71).
+    category: loss
+    unit: percent
+    basis: observed
+    time_basis: cumulative
+    methodology: OBSERVED_RECOVERY@v2
+    calculation_source: analytics_lib.history.loss_and_recovery
+    consumers: [mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [cumulative_recoveries]
+      - type: fields_present
+        any_of: [default_amount]
+      - type: history_periods
+        minimum: 2
+
+  - id: observed_loss_severity
+    owned_kpi: true
+    synonyms: ["loss severity", "severity"]
+    name: Loss severity (observed)
+    description: >-
+      Allocated losses (RREL73, already net of sale proceeds) over the balance
+      at default (RREL71, gross before proceeds).
+    category: loss
+    unit: percent
+    basis: observed
+    time_basis: cumulative
+    methodology: OBSERVED_LOSS_SEVERITY@v1
+    calculation_source: analytics_lib.history.loss_and_recovery
+    consumers: [mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [allocated_losses]
+      - type: fields_present
+        any_of: [default_amount]
+      - type: history_periods
+        minimum: 2
+
+  # ===================================================================
+  # Rate and pricing
+  # ===================================================================
+  - id: wa_coupon
+    name: Weighted-average coupon
+    description: Balance-weighted mean current interest rate.
+    category: pricing
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    weighting: current_balance
+    metric_id: rate_gross_wac
+    calculation_source: concentration_tests.metrics.weighted_average
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_interest_rate]
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+
+  # ===================================================================
+  # Contractual cash-flow analytics
+  # ===================================================================
+  - id: contractual_wal
+    owned_kpi: true
+    synonyms: ["contractual wal", "wal", "weighted average life", "average life", "contractual weighted average life"]
+    name: Contractual weighted average life
+    description: >-
+      Principal-weighted time to contractual principal repayment. Contractual,
+      not expected: it takes no view on prepayment.
+    category: cashflow
+    unit: years
+    basis: contractual
+    time_basis: point_in_time
+    methodology: CONTRACTUAL_WAL@v1
+    calculation_source: analytics_lib.contractual.portfolio_wal
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+      - type: fields_present
+        any_of: [maturity_date]
+      - type: fields_present
+        any_of: [amortisation_type]
+      - type: fields_present
+        any_of: [scheduled_principal_payment_frequency,
+                 scheduled_interest_payment_frequency]
+      - type: principal_series_deterministic
+
+  - id: contractual_ytm
+    owned_kpi: true
+    synonyms: ["contractual ytm", "ytm", "yield to maturity", "contractual yield", "yield"]
+    name: Contractual yield to maturity (periodic)
+    description: >-
+      Contractual yield from purchase price (RREL34) and the contractual cash
+      flows, discounted at the payment frequency. Periodic, not day-count
+      exact — day_count_convention is CREL122 and exists on Annex 3 only.
+    category: cashflow
+    unit: percent
+    basis: contractual
+    time_basis: point_in_time
+    methodology: CONTRACTUAL_YTM_PERIODIC@v1
+    calculation_source: analytics_lib.contractual.contractual_ytm
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [current_principal_balance, current_outstanding_balance]
+      - type: fields_present
+        any_of: [maturity_date]
+      - type: fields_present
+        any_of: [amortisation_type]
+      - type: fields_present
+        any_of: [current_interest_rate]
+      - type: fields_present
+        any_of: [purchase_price]
+      - type: principal_series_deterministic
+      - type: interest_series_deterministic
+
+  - id: expected_wal
+    owned_kpi: true
+    synonyms: ["expected wal", "expected weighted average life", "expected life", "behavioural wal"]
+    name: Expected weighted average life
+    description: >-
+      Life after expected borrower behaviour. Registered so a consumer can
+      learn WHY it does not exist, not because it is planned.
+    category: cashflow
+    unit: years
+    basis: modelled
+    time_basis: point_in_time
+    consumers: []
+    status_override: MODEL_REQUIRED
+    reason_code: BEHAVIOURAL_MODEL_REQUIRED
+    explanation: >-
+      An expected life requires prepayment and, for equity release, mortality
+      and morbidity assumptions. Trakt holds no such assumptions and builds no
+      such model. Use contractual_wal for what the contract fixes and
+      observed_cpr for what borrowers have actually done; the two together are
+      the deterministic answer to the question expected WAL is usually asked
+      for.
+
+  # ===================================================================
+  # Historical and cohort
+  # ===================================================================
+  - id: cohort_comparison
+    name: Vintage / cohort performance
+    description: One cohort measured against the rest of the book.
+    category: history
+    unit: mixed
+    basis: observed
+    time_basis: period_flow
+    methodology: OBSERVED_SERIES@v1
+    calculation_source: analytics_lib.history.compare_cohorts
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: fields_present
+        any_of: [origination_date]
+      - type: history_periods
+        minimum: 1
+
+  - id: portfolio_history
+    name: Historical performance series
+    description: Named measures across governed snapshots.
+    category: history
+    unit: mixed
+    basis: observed
+    time_basis: period_flow
+    methodology: OBSERVED_SERIES@v1
+    calculation_source: analytics_lib.history.portfolio_series
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions:
+      - type: history_periods
+        minimum: 2
+
+  # ===================================================================
+  # Data quality and regulatory readiness
+  # ===================================================================
+  - id: canonical_completeness
+    name: Canonical completeness
+    description: Population of the canonical fields this portfolio should carry.
+    category: data_quality
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    calculation_source: trakt_tools.handlers.analysis.data_completeness
+    consumers: [react, mi_query, copilot, agent_tools, readiness]
+    conditions: []
+
+  - id: regulatory_readiness
+    name: Regulatory field readiness
+    description: >-
+      Coverage of a disclosure regime's required loan-level fields, separating
+      hard blockers from fields that may report a No-Data value.
+    category: data_quality
+    unit: percent
+    basis: observed
+    time_basis: point_in_time
+    calculation_source: trakt_core.regulatory_regime
+    consumers: [copilot, agent_tools, readiness]
+    conditions: []

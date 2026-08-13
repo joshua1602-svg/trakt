@@ -67,10 +67,18 @@ from typing import (
     Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple, Union,
 )
 
+from . import config_cache
 from .context import KNOWN_CAPABILITIES, ExecutionContext
 from .errors import ErrorCode, TraktError
-from .organisation import OrganisationRegistry, load_organisation_registry
+from .organisation import (
+    DEFAULT_ORGANISATION_CONFIG,
+    ORGANISATION_CONFIG_ENV,
+    OrganisationRegistry,
+    load_organisation_registry,
+)
 from .resource import (
+    DEFAULT_RESOURCE_CONFIG,
+    RESOURCE_CONFIG_ENV,
     ResolvedResource,
     ResourceCatalogue,
     ResourceRef,
@@ -601,10 +609,44 @@ def load_entitlement_store(
     what, which is worse than a visible outage of the new surface. It never
     raises, so a bad file cannot stop the process starting or disturb the legacy
     path.
+
+    Parsed and **validated** once per content version — see
+    :mod:`trakt_core.config_cache`. Validation is the expensive half: every grant
+    is checked against the organisation registry and the resource catalogue, so
+    the cost is linear in the number of grants and was previously paid on every
+    request.
+
+    Caching is skipped entirely when a caller injects ``organisations`` or
+    ``resources``, because the result then depends on objects this module cannot
+    fingerprint. Tests that inject fixtures therefore behave exactly as before.
     """
     path = Path(config_path
                 or os.environ.get(ENTITLEMENT_CONFIG_ENV)
                 or DEFAULT_ENTITLEMENT_CONFIG)
+    if organisations is not None or resources is not None:
+        return _load_entitlement_store(path, organisations=organisations,
+                                       resources=resources)
+    # The store is validated against the other two registries, so its identity is
+    # theirs as well as its own: a resource catalogue edit can invalidate a grant
+    # without the entitlements file changing at all.
+    return config_cache.get_or_load(
+        "entitlements", path,
+        lambda: _load_entitlement_store(path, organisations=None, resources=None),
+        extra_key=(config_cache.file_identity(
+                       Path(os.environ.get(ORGANISATION_CONFIG_ENV)
+                            or DEFAULT_ORGANISATION_CONFIG)),
+                   config_cache.file_identity(
+                       Path(os.environ.get(RESOURCE_CONFIG_ENV)
+                            or DEFAULT_RESOURCE_CONFIG))))
+
+
+def _load_entitlement_store(
+    path: Path,
+    *,
+    organisations: Optional[OrganisationRegistry] = None,
+    resources: Optional[ResourceCatalogue] = None,
+) -> EntitlementStore:
+    """The uncached load. Behaviour is unchanged from before caching existed."""
     if not path.exists():
         return EntitlementStore((), configured=False)
 

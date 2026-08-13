@@ -19,7 +19,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-IN_DIR="$ROOT/synthetic_demo/input/multibook"
+IN_DIR="$ROOT/synthetic_demo/multibook_input"
 OUT_DIR="$ROOT/synthetic_demo/output/multibook"
 VAL_DIR="$OUT_DIR/validation"
 CFG="$ROOT/synthetic_demo/config/config_client_SYNTHETIC_MULTIBOOK.yaml"

@@ -741,7 +741,18 @@ def _eval_arrears_share(df, lib, metric, params, external=None):
             return MetricComputation.missing(
                 "days_past_due", role_candidates(lib, "days_past_due"),
                 unit=metric.unit, total_loans=len(df))
-        mask = (coerce_numeric(df[col]) > float(min_days)).fillna(False)
+        # Boundary is EXPLICIT. Every consumer labels this "N+ DPD", and "30+"
+        # means 30 or more — so the default is inclusive. The exclusive form is
+        # still reachable for a contract that genuinely says "more than N days",
+        # but it must now be asked for rather than inherited from a `>`.
+        #
+        # Sprint 2.5C: this was `>`, which made `min_days=30` mean 31+. On a book
+        # with loans at exactly 30 days it reported half the arrears a consumer
+        # labelling it "30+ DPD" expected.
+        boundary = str(params.get("dpd_boundary") or "inclusive").lower()
+        days = coerce_numeric(df[col])
+        mask = ((days >= float(min_days)) if boundary != "exclusive"
+                else (days > float(min_days))).fillna(False)
         resolved = {"days_past_due": col}
     else:
         col = resolve_role_column(df, lib, "arrears_balance")

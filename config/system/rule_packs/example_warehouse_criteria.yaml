@@ -1,0 +1,92 @@
+# =========================================================================
+# EXAMPLE warehouse facility criteria — SYNTHETIC, for demonstration only
+# =========================================================================
+#
+#   THIS IS NOT A REAL AGREEMENT.
+#
+# Invented thresholds, published so the rule-pack architecture can be
+# demonstrated and tested end to end: the same measured fact evaluated by a
+# warehouse rulebook, by Trakt's internal screening, and by proposed
+# securitisation criteria, each reaching its own verdict without any of them
+# recalculating the number.
+#
+# A real deployment replaces this file with the actual facility's criteria,
+# extracted and approved through the operations-control concentration-test
+# workflow, which carries an approver and a configuration version. This file
+# carries neither, deliberately — nothing here should ever be mistaken for an
+# approved limit.
+#
+# The vocabulary matters: because `authority` is external, results from this
+# pack are PASS or BREACH. Trakt's own screening pack returns CLEAR or FLAG.
+# The two can never be confused in a report.
+
+schema_version: "1.0.0"
+
+pack_id: EXAMPLE_WAREHOUSE
+pack_name: Example Warehouse Facility Criteria (SYNTHETIC)
+version: 1
+authority: warehouse_agreement
+authority_label: >-
+  SYNTHETIC example warehouse criteria. Not a real facility agreement and not
+  approved by anyone. For demonstration and testing only.
+purpose: eligibility
+source_document: "SYNTHETIC — no source document exists"
+description: >-
+  An invented warehouse rulebook, deliberately set LOOSER than Trakt's screening
+  thresholds on the shared metrics, so that the same portfolio can pass here and
+  flag there.
+
+rules:
+
+  # Same metric as SCREEN_GEOGRAPHIC_CONCENTRATION, looser threshold.
+  # A book at 28% passes the warehouse and flags Trakt's screen — which is the
+  # whole point of keeping the two apart.
+  - rule_id: WH_GEOGRAPHIC_LIMIT
+    framework_metric: CONC_GEOGRAPHIC
+    metric_id: geo_largest_region_share
+    parameters: {}
+    operator: max
+    threshold: 35.0
+    unit: percent
+    severity: critical
+    rationale: SYNTHETIC facility limit on single-region concentration.
+
+  - rule_id: WH_TOP_10_LOAN_LIMIT
+    framework_metric: CONC_TOP_N_LOANS
+    metric_id: top_n_loans_share
+    parameters: {n: 10}
+    operator: max
+    threshold: 15.0
+    unit: percent
+    severity: critical
+    rationale: SYNTHETIC facility limit on granularity.
+
+  - rule_id: WH_WA_LTV_LIMIT
+    framework_metric: COLL_WA_LTV
+    metric_id: ltv_weighted_average
+    parameters: {ltv_basis: current}
+    operator: max
+    threshold: 80.0
+    unit: percent
+    severity: critical
+    rationale: SYNTHETIC facility limit on balance-weighted LTV.
+
+  - rule_id: WH_ARREARS_LIMIT
+    framework_metric: PERF_ARREARS_SHARE
+    metric_id: perf_arrears_share
+    parameters: {min_days: 30}
+    operator: max
+    threshold: 10.0
+    unit: percent
+    severity: critical
+    rationale: SYNTHETIC facility limit on 30+ DPD balance.
+
+  - rule_id: WH_LARGEST_BORROWER_LIMIT
+    framework_metric: BORR_LARGEST_SHARE
+    metric_id: borrower_largest_share
+    parameters: {}
+    operator: max
+    threshold: 5.0
+    unit: percent
+    severity: critical
+    rationale: SYNTHETIC facility limit on single-obligor exposure.

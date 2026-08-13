@@ -8,7 +8,12 @@ static_pools:
       metric: "interest_rate"
       agg: "mean"
       y_axis_label: "Coupon (%)"
-    - title: "Prepayment Speed (CPR)"
+    # Sprint 2.5C: was titled "Prepayment Speed (CPR)". The spec below sums an
+    # AMOUNT in pounds; CPR is an annualised rate. The title claimed a
+    # methodology that did not exist behind it. Renamed to what it actually
+    # shows. Genuine SMM/CPR is analytics_lib.history.prepayment_rate, exposed
+    # by the prepayment_analysis tool.
+    - title: "Cumulative Redemptions by Cohort"
       metric: "prepayment_amount"
       agg: "sum"
       y_axis_label: "Cumulative Redemptions (£)"

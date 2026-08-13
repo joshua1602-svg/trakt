@@ -64,6 +64,15 @@ export const size = {
   keyline: 34,
   arrow: 30,
   tick: 15,
+  /* Added for the agent-to-agent composition. It shows a governed call trace —
+     thirty rows of tool names — which needs a step below `chip` to fit two
+     columns without truncating `list_validation_exceptions`, and a display
+     size for the one number the whole sequence drives to. */
+  seq: 14,
+  trace: 17,
+  node: 21,
+  meter: 22,
+  figure: 62,
 } as const;
 
 export const motion = {

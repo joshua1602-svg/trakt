@@ -15,6 +15,7 @@ and every workflow can be reconstructed from the container alone.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
@@ -29,6 +30,7 @@ from apps.blob_trigger_app.storage import (
     open_storage,
 )
 
+from .audit_chain import append_to_chain
 from .contracts import (
     DEC_OPEN,
     GovernedAgentResult,
@@ -127,6 +129,15 @@ class OpsLayout:
     def audit_head_uri(self, client_id: str) -> str:
         return self._c(client_id, "audit", "_head.json")
 
+    def audit_key_uri(self, client_id: str, key: str) -> str:
+        """Idempotency markers live OUTSIDE the audit prefix on purpose.
+
+        ``list_audit`` lists that prefix recursively, so a marker stored under it
+        would be read back as an audit record.
+        """
+        safe = "".join(c if (c.isalnum() or c in "-_.") else "_" for c in key)
+        return self._c(client_id, "audit-keys", f"{safe}.json")
+
     # -- publications / history --------------------------------------------- #
     def publication_uri(self, client_id: str, reporting_period: str) -> str:
         return self._c(client_id, "history", reporting_period, "publication.json")
@@ -140,6 +151,9 @@ class OpsLayout:
 
     def workflow_index_uri(self, client_id: str) -> str:
         return self._c(client_id, "workflow-runs", "index.json")
+
+
+logger = logging.getLogger("operations_control.stores")
 
 
 def _read_json(storage: Storage, uri: str) -> Optional[Dict[str, Any]]:
@@ -156,6 +170,26 @@ def _read_json(storage: Storage, uri: str) -> Optional[Dict[str, Any]]:
                 raise
             time.sleep(0.02 * (attempt + 1))
     return None
+
+
+def _create_exclusive(storage: Storage, uri: str, text: str) -> bool:
+    """Create ``uri`` only if absent. ``True`` when this call created it.
+
+    Delegates to the backend primitive (``O_CREAT | O_EXCL`` on the filesystem,
+    a conditional PUT on Blob). The fallback exists only for a substituted
+    storage double in a test that predates the primitive; it is *not* safe under
+    concurrency, and says so, because a silent unsafe fallback here would
+    reintroduce the lost-update defect on whichever backend lacked the method.
+    """
+    creator = getattr(storage, "create_exclusive", None)
+    if creator is not None:
+        return bool(creator(uri, text))
+    logger.warning("storage backend %s has no create_exclusive; audit appends "
+                   "are NOT concurrency-safe on it", type(storage).__name__)
+    if storage.exists(uri):
+        return False
+    storage.write_text(uri, text)
+    return True
 
 
 def _write_json(storage: Storage, uri: str, doc: Dict[str, Any]) -> str:
@@ -371,25 +405,46 @@ class OpsStore:
     def append_audit(self, client_id: str, event: str, *, actor: str,
                      detail: Optional[Dict[str, Any]] = None,
                      workflow_id: str = "", decision_id: str = "",
-                     rule_id: str = "") -> Dict[str, Any]:
-        head = _read_json(self.storage, self.layout.audit_head_uri(client_id)) or {}
-        seq = int(head.get("seq") or 0) + 1
-        prev_hash = head.get("record_hash") or ""
-        record = {
-            "seq": seq, "event": event, "actor": actor, "at": now_iso(),
-            "client_id": client_id, "workflow_id": workflow_id,
-            "decision_id": decision_id, "rule_id": rule_id,
-            "detail": detail or {}, "prev_hash": prev_hash,
-            "schema_version": SCHEMA_VERSION,
-        }
-        record["record_hash"] = stable_hash(
-            canonical_json({k: record[k] for k in
-                            ("seq", "event", "actor", "at", "client_id",
-                             "workflow_id", "decision_id", "rule_id",
-                             "detail", "prev_hash")}))
-        _write_json(self.storage, self.layout.audit_uri(client_id, seq), record)
-        _write_json(self.storage, self.layout.audit_head_uri(client_id),
-                    {"seq": seq, "record_hash": record["record_hash"]})
+                     rule_id: str = "", idempotency_key: str = "") -> Dict[str, Any]:
+        """Append one audit event. Safe under concurrent writers.
+
+        Sequence allocation is an atomic exclusive create rather than a
+        read-modify-write, so two simultaneous appends can never claim the same
+        slot and silently lose one of the records. See
+        :mod:`operations_control.audit_chain`.
+
+        ``idempotency_key`` makes a retry return the ORIGINAL record instead of
+        appending a second one. Without it every call appends, because two
+        separate actions that happen to look alike are two events.
+        """
+        at = now_iso()
+
+        def _build(seq: int, prev_hash: str) -> Dict[str, Any]:
+            return {
+                "seq": seq, "event": event, "actor": actor, "at": at,
+                "client_id": client_id, "workflow_id": workflow_id,
+                "decision_id": decision_id, "rule_id": rule_id,
+                "detail": detail or {}, "prev_hash": prev_hash,
+                "schema_version": SCHEMA_VERSION,
+            }
+
+        def _hash(record: Dict[str, Any]) -> str:
+            return stable_hash(canonical_json(
+                {k: record[k] for k in
+                 ("seq", "event", "actor", "at", "client_id", "workflow_id",
+                  "decision_id", "rule_id", "detail", "prev_hash")}))
+
+        record, _seq, _created = append_to_chain(
+            read_json=lambda uri: _read_json(self.storage, uri),
+            create_exclusive=lambda uri, text: _create_exclusive(
+                self.storage, uri, text),
+            write_json=lambda uri, doc: _write_json(self.storage, uri, doc),
+            head_uri=self.layout.audit_head_uri(client_id),
+            record_uri=lambda seq: self.layout.audit_uri(client_id, seq),
+            build_record=_build,
+            record_hash_of=_hash,
+            idempotency_key=idempotency_key,
+            key_uri=lambda key: self.layout.audit_key_uri(client_id, key))
         return record
 
     def list_audit(self, client_id: str) -> List[Dict[str, Any]]:

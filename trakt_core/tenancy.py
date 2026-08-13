@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, Optional, Tuple
 
 from .context import SCOPE_PORTFOLIO_READ, ExecutionContext
+from . import config_cache
 from .errors import ErrorCode, TraktError
 
 #: A portfolio selector / run id is a plain slug. Anchored, no separators, so a
@@ -172,8 +173,26 @@ def load_tenant_registry(
     Never raises on a malformed or unreadable config: a broken tenancy file falls
     back to the single-tenant registry rather than taking the API down, and the
     dataset resolver still scopes reads to the context tenant.
+
+    Parsed once per content version — see :mod:`trakt_core.config_cache`. This is
+    the registry the MI Query path loads on **every** request through
+    ``mi_agent_api.dependencies.build_dependencies``, so it is the one the human
+    channels feel. ``default_tenant_id`` is part of the cache key because it
+    changes the result for identical file content.
     """
     path = Path(config_path or os.environ.get(TENANCY_CONFIG_ENV) or DEFAULT_TENANCY_CONFIG)
+    return config_cache.get_or_load(
+        "tenancy", path,
+        lambda: _load_tenant_registry(path, default_tenant_id=default_tenant_id),
+        extra_key=(default_tenant_id,))
+
+
+def _load_tenant_registry(
+    path: Path,
+    *,
+    default_tenant_id: Optional[str] = None,
+) -> TenantRegistry:
+    """The uncached load. Behaviour is unchanged from before caching existed."""
     records: Dict[str, TenantRecord] = {}
     configured = False
 

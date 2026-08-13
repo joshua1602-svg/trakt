@@ -461,6 +461,47 @@ python -m engine.assembler_agent \
 an MI or Regime run), invoke the Assembler Agent over the client's canonical
 output root, then point the MI / Regime step at the central canonical it returns.
 
+## Agent tool API (external AI agents)
+
+`trakt_tools/` is the governed surface an **external** AI agent — Claude, an
+OpenAI-based agent, Copilot, or a client's own — reaches Trakt through. One
+registry declares every agent-callable capability; it is the single source for
+the REST surface, the generated OpenAPI document and (later) an MCP server.
+
+```
+external agent ──HTTPS + Entra client credentials──► /v1/agent/tools
+                                                   ► /v1/agent/tools/{name}
+                                                       │
+   execute_governed_tool: tool exists → schema → capability → entitlement over
+   the NAMED RESOURCE → data approved → EXISTING implementation → GovernedResult
+   → audit
+```
+
+The rule that makes it worth having: **no tool computes anything**. Every handler
+wraps an implementation the UI already calls, so an agent and the workspace
+cannot be given different numbers. `evaluate_covenants` calls the same
+`compute_concentration_tests` that `GET /mi/concentration-tests` does, and
+re-keys the result into a typed contract.
+
+```bash
+source scripts/agent_dev_env.sh                    # config/dev/README.md
+uvicorn mi_agent_api.app:app --port 8000
+
+python scripts/agent_reference_client.py \
+    --resource ERE/source_portfolio/direct_001 \
+    --provider scripted        # or anthropic / openai
+
+python scripts/build_agent_openapi.py              # regenerate the contract
+```
+
+An agent names a **resource** (`{tenant}/{kind}/{id}`), never a dataset or a
+file; its scopes are derived from its grants rather than defaulted; and a
+resource it is not granted is refused identically to one that does not exist.
+The surface is **off unless `TRAKT_AGENT_API_ENABLED` is set**.
+
+Full documentation, including how to add a tool: [`docs/agent_tool_api.md`](docs/agent_tool_api.md).
+Strategy and sequencing: [`docs/a2a_architecture_readiness_review.md`](docs/a2a_architecture_readiness_review.md).
+
 ## Agentic Orchestration
 
 `engine/orchestrator_agent/` is the **governed conductor** that runs the whole

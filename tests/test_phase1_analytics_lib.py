@@ -53,6 +53,9 @@ def full_df():
     return pd.DataFrame({
         "loan_id": [f"L{i}" for i in range(6)],
         "current_loan_to_value": [0.15, 0.25, 0.55, 0.95, 1.05, 0.45],
+        # Below current LTV throughout: a lifetime mortgage rolls up, so the
+        # advance is always a smaller fraction of value than today's balance.
+        "original_loan_to_value": [0.10, 0.18, 0.35, 0.60, 0.65, 0.30],
         "youngest_borrower_age": [50, 57, 62, 72, 90, 68],
         "current_interest_rate": [0.02, 0.045, 0.08, 0.035, 0.061, 0.049],
         "probability_of_default": [0.001, 0.003, 0.05, 0.30, 0.012, 0.07],
@@ -78,6 +81,20 @@ def test_bucket_config_loads(bucket_config):
 # --------------------------------------------------------------------------- #
 # 2. Every declared bucket applies, or reports a clear unavailable-field issue
 # --------------------------------------------------------------------------- #
+
+
+def test_the_full_frame_carries_every_declared_source_field(full_df, bucket_config):
+    """The fixture's contract, asserted before the behaviour that depends on it.
+
+    ``original_ltv_bucket`` was declared in the bucket config and the fixture was
+    never extended, so the test below failed with "original_ltv_bucket did not
+    materialise" — a fixture gap wearing the costume of an engine defect. Declare
+    a new bucket and this fails first, naming the field to add.
+    """
+    missing = sorted({spec["source_field"] for spec in bucket_config.values()}
+                     - set(full_df.columns))
+    assert not missing, (
+        f"full_df must carry every declared bucket source field; missing: {missing}")
 
 
 def test_every_bucket_applies_on_full_frame(full_df, bucket_config):

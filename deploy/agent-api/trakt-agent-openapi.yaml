@@ -1,0 +1,1954 @@
+# GENERATED FILE — do not edit by hand.
+#
+# Built from the Trakt agent tool registry by
+# scripts/build_agent_openapi.py. Add or change a tool in
+# trakt_tools/handlers/, then regenerate.
+#
+# tests/test_agent_openapi_document.py fails when this file is stale.
+#
+# Set servers[0].url to the deployment base URL before handing this to a
+# client.
+openapi: 3.0.3
+info:
+  title: Trakt Agent Tools
+  version: 1.0.0
+  description: 'Governed, deterministic credit capabilities for an external AI agent.
+
+
+    Every figure these tools return is computed by Trakt from governed data under an operator-approved
+    definition, and carries the snapshot and configuration provenance needed to trust it. Never compute
+    a portfolio figure yourself — call a tool.
+
+
+    Authorisation is per resource. An agent holds capabilities against named resources and nothing else;
+    a resource it is not granted is refused identically to one that does not exist.'
+servers:
+- url: https://trakt-mi-api.example.azurewebsites.net
+  description: Set to your deployment URL before use.
+security:
+- entraBearer: []
+paths:
+  /v1/agent/tools:
+    get:
+      operationId: listTraktTools
+      summary: List the Trakt tools this identity may call
+      description: 'Returns the tool catalogue narrowed to the capabilities this agent''s grants confer,
+        each with its JSON Schema, plus the closed set of resource references it may name. Call this first:
+        it removes any need to guess an identifier.'
+      responses:
+        '200':
+          description: The authorised tool catalogue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ToolDeclaration'
+                  tool_count:
+                    type: integer
+                  resources:
+                    type: object
+                    description: capability -> the resource references this agent may use it against.
+                  organisation_id:
+                    type:
+                    - string
+                    - 'null'
+                  tenant_id:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/cohort_comparison:
+    post:
+      operationId: invoke_cohort_comparison
+      summary: One cohort against the REST of the portfolio on the same measures — by vintage, region,
+        LTV band or any canonical field
+      description: 'One cohort against the REST of the portfolio on the same measures — by vintage, region,
+        LTV band or any canonical field. Bounded to two groups.
+
+
+        This is how a flagged cohort becomes a finding. ''The high-LTV cohort has 4% arrears'' is a number;
+        ''4.0% against 1.2% for the rest of the book'' is something a reviewer can act on. Always compare
+        before concluding, and never retrieve loans to do it yourself.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Compare a cohort against the REST of the portfolio on the same measures. Optionally
+                across periods.
+              properties:
+                resource: &id001
+                  type: string
+                  description: The portfolio resource, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                cohort_field:
+                  type: string
+                  description: The canonical field defining the cohort, e.g. 'portfolio_cohort' for vintage
+                    or 'geographic_region_collateral' for region.
+                cohort_value:
+                  type:
+                  - string
+                  - 'null'
+                  description: The value identifying the cohort. Omit with 'above'/'below' to define a
+                    numeric cohort.
+                  default: null
+                above:
+                  type:
+                  - number
+                  - 'null'
+                  description: 'Numeric cohort: values strictly above this.'
+                  default: null
+                below:
+                  type:
+                  - number
+                  - 'null'
+                  description: 'Numeric cohort: values strictly below this.'
+                  default: null
+                measures:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  default: null
+                period:
+                  type:
+                  - string
+                  - 'null'
+                  description: Which snapshot. Omit for the most recent.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - cohort_field
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/concentration:
+    post:
+      operationId: invoke_concentration
+      summary: 'How concentrated a portfolio is in one dimension: the combined balance and count share
+        of the top-N groups, with the contributing groups'
+      description: 'How concentrated a portfolio is in one dimension: the combined balance and count share
+        of the top-N groups, with the contributing groups.
+
+
+        This reports the measured SHARE, not a pass or fail. Whether a share breaches a limit is an operator-approved
+        covenant test — call evaluate_covenants for that, which carries the approved threshold, its approver
+        and its configuration version.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How concentrated a portfolio is in one dimension: the top-N groups'' combined
+                share of balance and count.'
+              properties:
+                resource: &id002
+                  type: string
+                  description: The portfolio resource to analyse, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                dimension:
+                  type: string
+                  description: What to measure concentration in, e.g. 'borrower_identifier', 'geographic_region_collateral'.
+                top_n:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  description: How many leading groups to combine.
+                  default: 10
+                filters: &id008
+                  type:
+                  - object
+                  - 'null'
+                  description: 'Optional equality filters as {canonical_field: value} or {canonical_field:
+                    [values]}. Applied before aggregation.'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - dimension
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/contractual_analytics:
+    post:
+      operationId: invoke_contractual_analytics
+      summary: Contractual weighted average life and periodic yield, derived only from terms the contract
+        fixes — amortisation type (RREL35), rate type (RREL42), frequency, maturity, balloon and price
+        (RREL34)
+      description: 'Contractual weighted average life and periodic yield, derived only from terms the
+        contract fixes — amortisation type (RREL35), rate type (RREL42), frequency, maturity, balloon
+        and price (RREL34). One schedule pass serves both metrics.
+
+
+        CONTRACTUAL, not observed: this is what the contract says will happen, not what borrowers do.
+        Read the status before the number. NOT_APPLICABLE on a lifetime mortgage is the correct answer
+        and not a gap — repayment is contingent on death or sale, so no contractual WAL exists and the
+        legal maturity must not be substituted for one. ASSUMPTION_REQUIRED means a floating rate makes
+        the answer unknowable, not that Trakt failed. Note that a bullet or fixed-amortisation loan keeps
+        its WAL even when floating, because its principal series does not depend on the rate.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Contractual weighted average life and yield, derived only from terms the contract
+                fixes. Nothing here forecasts: floating-rate exposures report ASSUMPTION_REQUIRED and
+                lifetime mortgages report NOT_APPLICABLE rather than producing a number from a legal maturity.'
+              properties:
+                resource:
+                  type: string
+                  description: The portfolio resource, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                metrics:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                    - contractual_wal
+                    - contractual_ytm_periodic
+                  description: Which metrics to return. Both are built from one schedule pass, so asking
+                    for both costs no more than asking for one.
+                  default:
+                  - contractual_wal
+                price_percent_of_par:
+                  type:
+                  - number
+                  - 'null'
+                  description: Override the price for yield, as a percentage of par on the RREL34 scale
+                    (100 = par). Omitted, each loan's own purchase_price is used and a loan without one
+                    reports FIELD_GAP rather than assuming par.
+                  default: null
+                explain_loan_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Return the full cash-flow schedule and methodology explanation for one
+                    named exposure.
+                  default: null
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/covenant_drillthrough:
+    post:
+      operationId: invoke_covenant_drillthrough
+      summary: The loans contributing to one covenant or concentration test's numerator, with the numerator
+        and denominator they reconcile to
+      description: 'The loans contributing to one covenant or concentration test''s numerator, with the
+        numerator and denominator they reconcile to.
+
+
+        Call this after evaluate_covenants reports a breach, using the same test_id and the same as_of_run_id.
+        Check ''reconciles'': when it is false, the population and the reported figure disagree and you
+        must not attribute the figure to these loans. Do not reconstruct a covenant''s population yourself
+        — it is defined by a registered metric, not by a field comparison.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The loans contributing to ONE covenant or concentration test's numerator. Use
+                this after evaluate_covenants tells you a test is breached or close to its limit.
+              properties:
+                resource: &id007
+                  type: string
+                  description: The resource the test was evaluated against, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                test_id:
+                  type: string
+                  description: The test to drill into, as returned in evaluate_covenants' tests[].test_id.
+                as_of_run_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional governed run. Omit for the current approved reporting position.
+                    Use the SAME value you passed to evaluate_covenants, or the two will not reconcile.
+                  default: null
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  description: Rows to return, at most 500.
+                  default: 100
+              additionalProperties: false
+              required:
+              - resource
+              - test_id
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/cure_analysis:
+    post:
+      operationId: invoke_cure_analysis
+      summary: 'Observed cure rate: delinquent balance returning to CURRENT over the delinquent balance
+        able to cure at the opening'
+      description: 'Observed cure rate: delinquent balance returning to CURRENT over the delinquent balance
+        able to cure at the opening. Improvement within delinquency is reported separately and is not
+        a cure.
+
+
+        Read improved_not_cured_balance alongside the rate. A book whose loans move from 90+ to 30 days
+        has improved without curing, and reporting that as a cure would overstate the recovery. Unlike
+        the default rate this convention is Trakt''s own — ESMA defines no loan-level cure concept — so
+        say so when quoting it externally.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id003
+              type: object
+              description: Observed losses and recoveries, reported on every defensible denominator rather
+                than one chosen for you.
+              properties:
+                resource: *id001
+                months:
+                  type:
+                  - integer
+                  - 'null'
+                  minimum: 1
+                  maximum: 60
+                  default: null
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/data_completeness:
+    post:
+      operationId: invoke_data_completeness
+      summary: 'How populated each canonical field is across a portfolio: populated count, missing count
+        and completeness percentage, worst first'
+      description: 'How populated each canonical field is across a portfolio: populated count, missing
+        count and completeness percentage, worst first.
+
+
+        The first diligence question about any tape: what is actually there. Use ''max_completeness_pct''
+        to see only the gaps. A field being absent from the tape is different from being present and empty
+        — this distinguishes them.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How populated the canonical fields are across a portfolio. The first diligence
+                question about any tape: what is actually there.'
+              properties:
+                resource: *id002
+                fields:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical fields to report on. Omit for every field the tape carries.
+                  default: null
+                max_completeness_pct:
+                  type:
+                  - number
+                  - 'null'
+                  description: Report only fields populated at or below this percentage — the gaps, rather
+                    than the whole tape.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/default_analysis:
+    post:
+      operationId: invoke_default_analysis
+      summary: 'Observed default rate across governed snapshots: balance classified as defaulted DURING
+        the period over non-defaulted opening balance, annualised — ESMA''s own CDR definition — plus
+        the default stock, reported separately because it is a level and not a rate'
+      description: 'Observed default rate across governed snapshots: balance classified as defaulted DURING
+        the period over non-defaulted opening balance, annualised — ESMA''s own CDR definition — plus
+        the default stock, reported separately because it is a level and not a rate.
+
+
+        OBSERVED, not a probability of default: this is what happened. The rate and the stock are different
+        questions — a book can carry a large stock of legacy defaults and have a default rate of zero
+        — so say which you are quoting. Default is read from default_date or account_status, never inferred
+        from days past due or from a loan disappearing from the tape.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id003
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/evaluate_covenants:
+    post:
+      operationId: invoke_evaluate_covenants
+      summary: Evaluate the operator-approved concentration and covenant tests for a portfolio resource
+      description: 'Evaluate the operator-approved concentration and covenant tests for a portfolio resource.
+        Returns each test''s current value, threshold, operator, utilisation, headroom, breach amount,
+        status and movement against the prior governed reporting period, plus the configuration version
+        and approver that produced them.
+
+
+        Use this to find out whether a book is within its concentration limits and covenants, and by how
+        much. Every number is computed by Trakt from governed data under an operator-approved definition
+        — never estimate or recompute one yourself. Check ''source'': only ''approved_configuration''
+        is operator-approved.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Evaluate the operator-approved concentration and covenant tests for one authorised
+                resource.
+              properties:
+                resource:
+                  type: string
+                  description: The resource to evaluate, as '{tenant}/{kind}/{resource_id}' — for example
+                    'ERE/source_portfolio/direct_001'. Call GET /v1/agent/tools to see the resources you
+                    may name.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                as_of_run_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional governed run to evaluate as at. Omit for the current approved
+                    reporting position.
+                  default: null
+                category:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional category filter, e.g. 'geographic'. Omit for every active test.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/evaluate_rule_packs:
+    post:
+      operationId: invoke_evaluate_rule_packs
+      summary: 'Apply every configured rulebook to the SAME measured facts: warehouse criteria, Trakt''s
+        internal screening thresholds, and any supplied securitisation criteria'
+      description: 'Apply every configured rulebook to the SAME measured facts: warehouse criteria, Trakt''s
+        internal screening thresholds, and any supplied securitisation criteria. Each fact is computed
+        once and every pack reads it.
+
+
+        Check ''authority'' on every result before reporting it. An external pack returns pass/breach
+        and is a real requirement; Trakt''s screening pack returns clear/flag and means only ''worth investigating''.
+        NEVER describe a screening flag as a breach, and never add the two counts together. If no securitisation
+        criteria pack is configured, the assessment cannot conclude the book meets them — say so.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Apply every configured rulebook to the same measured facts: warehouse criteria,
+                Trakt''s internal screening thresholds, and any supplied securitisation criteria.'
+              properties:
+                resource: &id009
+                  type: string
+                  description: The portfolio resource to assess, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                packs:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Pack ids to evaluate. Omit for every configured pack.
+                  default: null
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/explain_value:
+    post:
+      operationId: invoke_explain_value
+      summary: Return the evidence behind ONE value
+      description: 'Return the evidence behind ONE value. A convenience wrapper over explain_values.
+
+
+        Use only for a single figure. To evidence several, call explain_values once instead.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Return the evidence behind ONE value. For several values call explain_values
+                once instead.
+              properties:
+                resource: &id004
+                  type: string
+                  description: The resource the values were read from.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                loan_id:
+                  type: string
+                canonical_field:
+                  type: string
+              additionalProperties: false
+              required:
+              - resource
+              - loan_id
+              - canonical_field
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/explain_values:
+    post:
+      operationId: invoke_explain_values
+      summary: 'Return the evidence behind several values: the source dataset and field, snapshot identity
+        and content hash, mapping method and version, any derivation rule, validation status, and the
+        calculation method where the value is calculated'
+      description: 'Return the evidence behind several values: the source dataset and field, snapshot
+        identity and content hash, mapping method and version, any derivation rule, validation status,
+        and the calculation method where the value is calculated. At most 500 per call.
+
+
+        Use this to justify the figures you report. It is the primitive: to evidence several values call
+        it ONCE with a list. Provenance is bound to the snapshot the value was read from, so an answer
+        always states which dataset it came from.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Return the evidence behind SEVERAL values in one call. This is the primitive:
+                to justify more than one figure, call this once rather than explain_value repeatedly.'
+              properties:
+                resource: *id004
+                requests:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                  description: Objects of {loan_id, canonical_field}, at most 500 per call. Answers are
+                    returned in the order requested.
+              additionalProperties: false
+              required:
+              - resource
+              - requests
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/get_loan:
+    post:
+      operationId: invoke_get_loan
+      summary: Retrieve ONE loan
+      description: 'Retrieve ONE loan. A convenience wrapper over get_loans — same implementation, same
+        governed frame.
+
+
+        Use only for a single loan you are already investigating. For several loans call get_loans once
+        instead.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Retrieve ONE loan you are already investigating. For several loans call get_loans
+                once instead — it is the same work in one request.
+              properties:
+                resource: &id005
+                  type: string
+                  description: The resource holding the loans, as '{tenant}/{kind}/{resource_id}'. Call
+                    GET /v1/agent/tools to see the resources you may name.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                loan_id:
+                  type: string
+                  description: The loan identifier.
+                fields: &id006
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical field names to return. Omit for a curated default projection;
+                    ask for only what you need — a canonical tape carries over a hundred columns.
+                  default: null
+                shape:
+                  type: string
+                  enum:
+                  - flat
+                  - structured
+                  description: See get_loans.
+                  default: flat
+                include:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                    enum:
+                    - valuations
+                  description: See get_loans.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - loan_id
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/get_loans:
+    post:
+      operationId: invoke_get_loans
+      summary: Retrieve several loans from a portfolio resource in one call
+      description: 'Retrieve several loans from a portfolio resource in one call. Returns a flat, typed
+        projection of canonical fields per loan, in the order requested, plus an explicit list of identifiers
+        that matched nothing. At most 500 loans per call.
+
+
+        This is the loan-retrieval primitive: to look at more than one loan, call this ONCE with a list
+        rather than calling get_loan repeatedly — it is the same work in a single request. Ask for only
+        the fields you need. For a whole portfolio do not retrieve rows at all: use stratify, concentration
+        or rank_loans, which return aggregates.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Retrieve several loans in ONE call. This is the primitive: to look at more
+                than one loan, call this once rather than get_loan repeatedly.'
+              properties:
+                resource: *id005
+                loan_ids:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                  maxItems: 500
+                  description: Loan identifiers, at most 500 per call. Results are returned in the order
+                    requested.
+                fields: *id006
+                shape:
+                  type: string
+                  enum:
+                  - flat
+                  - structured
+                  description: '''flat'' returns canonical fields as one object per loan. ''structured''
+                    groups them into the credit objects they belong to — loan, borrower, collateral (with
+                    valuations), contract, performance — which is usually what you want to reason about.'
+                  default: flat
+                include:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                    enum:
+                    - valuations
+                  description: Repeating children to include. Only meaningful with shape='structured'.
+                    Omit for scalar sections only.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - loan_ids
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/list_validation_exceptions:
+    post:
+      operationId: invoke_list_validation_exceptions
+      summary: Which canonical fields failed or warned in this snapshot's validation, with the rules that
+        fired and the error counts
+      description: 'Which canonical fields failed or warned in this snapshot''s validation, with the rules
+        that fired and the error counts. Field-level, which is the grain validation is recorded at.
+
+
+        Read ''lineage_available'' first. When it is false, an empty list means the validation outcome
+        is UNKNOWN for this snapshot — it does not mean the tape is clean.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Which canonical fields failed validation in this snapshot, with the rules that
+                failed and how many errors each raised.
+              properties:
+                resource: *id002
+                status:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                    enum:
+                    - failed
+                    - warning
+                    - passed
+                    - not_validated
+                  description: Which validation outcomes to return. Omit for failures and warnings only.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/loss_analysis:
+    post:
+      operationId: invoke_loss_analysis
+      summary: 'Observed cumulative and period losses and recoveries, reported on every defensible denominator:
+        original balance, opening balance, current balance, and recoveries over losses'
+      description: 'Observed cumulative and period losses and recoveries, reported on every defensible
+        denominator: original balance, opening balance, current balance, and recoveries over losses.
+
+
+        Several loss denominators are legitimate and each answers a different question, so all are returned
+        and none is chosen for you. State which one you are quoting. Losses come from the governed field
+        and are never inferred from balance movement.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id003
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/period_change:
+    post:
+      operationId: invoke_period_change
+      summary: 'What changed between two governed reporting periods: metric movements, distribution shifts
+        and the balance bridge, with the period resolution that says why the two periods are comparable'
+      description: 'What changed between two governed reporting periods: metric movements, distribution
+        shifts and the balance bridge, with the period resolution that says why the two periods are comparable.
+
+
+        Use this for any ''has it got worse'', ''since last quarter'' or ''what moved'' question. Trakt
+        resolves which periods are comparable — do NOT compare a figure from one call against one you
+        remember from another, because the population may have changed between them. Read ''limitations''
+        before quoting a movement.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: What changed between two governed reporting periods, and why. Trakt resolves
+                which periods are comparable — do not compare figures you gathered from separate calls
+                yourself.
+              properties:
+                resource: *id007
+                fields:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical fields to analyse. Omit for the portfolio overview, which selects
+                    the fields that moved.
+                  default: null
+                as_of_run_id:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional end run. Omit for the current position.
+                  default: null
+                include_bridge:
+                  type: boolean
+                  description: Include the balance bridge — how the opening balance became the closing
+                    one (redemptions, additions, amortisation).
+                  default: true
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/portfolio_capabilities:
+    post:
+      operationId: invoke_portfolio_capabilities
+      summary: 'What analytical capabilities Trakt can produce for this portfolio, and for each one it
+        cannot, the reason: UNAVAILABLE (an input is missing), NOT_APPLICABLE (economically meaningless
+        here), ASSUMPTION_REQUIRED (needs an unknown future rate), MODEL_REQUIRED (needs behavioural modelling)
+        or METHODOLOGY_NOT_APPROVED (the data exists and the definition is unsettled)'
+      description: 'What analytical capabilities Trakt can produce for this portfolio, and for each one
+        it cannot, the reason: UNAVAILABLE (an input is missing), NOT_APPLICABLE (economically meaningless
+        here), ASSUMPTION_REQUIRED (needs an unknown future rate), MODEL_REQUIRED (needs behavioural modelling)
+        or METHODOLOGY_NOT_APPROVED (the data exists and the definition is unsettled).
+
+
+        Call this FIRST. It tells you what is worth asking for before you ask, and it does not compute
+        anything, so surveying a portfolio is cheap. The five refusal states are not interchangeable:
+        UNAVAILABLE means a field could be requested from the client, NOT_APPLICABLE means no field would
+        help because the metric does not apply to this product, ASSUMPTION_REQUIRED means Trakt will not
+        guess a rate path, MODEL_REQUIRED means Trakt does not model behaviour, and METHODOLOGY_NOT_APPROVED
+        means Trakt has the data and has not settled the definition — report it as an open decision, not
+        as a gap. Every refusal carries missing_inputs or an explanation you can quote.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The analytical capabilities Trakt can produce for this portfolio, and the reason
+                for each one it cannot. Resolved from the governed data without computing any of the metrics.
+              properties:
+                resource:
+                  type: string
+                  description: The portfolio resource, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                categories:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Restrict to named categories — exposure, collateral, delinquency, prepayment,
+                    loss, pricing, cashflow, history, data_quality.
+                  default: null
+                status:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Restrict to named availability states. Asking for AVAILABLE alone gives
+                    the working set; asking for everything else gives the reasons.
+                  default: null
+                include_definition:
+                  type: boolean
+                  description: Include each capability's methodology, calculation source, unit and basis
+                    alongside its status.
+                  default: false
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/portfolio_history:
+    post:
+      operationId: invoke_portfolio_history
+      summary: How named measures have moved across governed snapshots — balance, loan count, weighted-average
+        LTV, arrears at 30/60/90 days, defaults, high-LTV share, largest-region share and stale-valuation
+        share
+      description: 'How named measures have moved across governed snapshots — balance, loan count, weighted-average
+        LTV, arrears at 30/60/90 days, defaults, high-LTV share, largest-region share and stale-valuation
+        share. One call covers every measure and every period.
+
+
+        Use this for any ''how has X changed'' question. Ask for several measures at once — it costs one
+        pass per snapshot, not one per measure. There is no expression language: ask for a named measure.
+        A single-period window means no movement can be observed, which is an absence of history rather
+        than evidence of stability.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: How named measures have moved across governed snapshots. One call covers every
+                measure and every period.
+              properties:
+                resource: *id001
+                measures:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Named measures. Omit for the standard set. There is no expression language
+                    — ask for a named measure.
+                  default: null
+                months:
+                  type:
+                  - integer
+                  - 'null'
+                  minimum: 1
+                  maximum: 60
+                  description: Most recent N periods.
+                  default: null
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  description: Applied to every snapshot before measuring.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/portfolio_summary:
+    post:
+      operationId: invoke_portfolio_summary
+      summary: 'The headline shape of a portfolio in one call: loan count, total balance, balance-weighted
+        average LTV and interest rate, arrears, and the composition by status, IFRS 9 stage, region and
+        collateral type'
+      description: 'The headline shape of a portfolio in one call: loan count, total balance, balance-weighted
+        average LTV and interest rate, arrears, and the composition by status, IFRS 9 stage, region and
+        collateral type.
+
+
+        Start here for any book you have not seen. It answers most first questions in a single call, and
+        tells you which dimensions are worth stratifying. Never compute a portfolio average by retrieving
+        loans.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'The headline shape of a whole portfolio in ONE call: size, balance, weighted
+                averages, arrears and stage mix.'
+              properties:
+                resource: *id002
+                filters: *id008
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/prepayment_analysis:
+    post:
+      operationId: invoke_prepayment_analysis
+      summary: 'Observed prepayment and redemption: single-monthly mortality and its annualised form,
+        from the canonical unscheduled-principal field, with per-period detail'
+      description: 'Observed prepayment and redemption: single-monthly mortality and its annualised form,
+        from the canonical unscheduled-principal field, with per-period detail.
+
+
+        The rate is measured from unscheduled principal and full redemptions, over the OPENING balance
+        of each period. Scheduled amortisation, maturity and default-related reduction are excluded —
+        they are not prepayment. Never infer a rate from the change in total balance, and if this returns
+        unavailable, report that rather than estimating.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Observed prepayment and redemption, from the canonical unscheduled-principal
+                field. Never inferred from balance movement.
+              properties:
+                resource: *id001
+                months:
+                  type:
+                  - integer
+                  - 'null'
+                  minimum: 2
+                  maximum: 60
+                  description: Most recent N periods.
+                  default: null
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  default: null
+                include_redemptions:
+                  type: boolean
+                  description: Count full redemptions alongside partial prepayment.
+                  default: true
+                annualise:
+                  type: boolean
+                  description: Also report the annualised (CPR) form.
+                  default: true
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/rank_loans:
+    post:
+      operationId: invoke_rank_loans
+      summary: The N loans at the top or bottom of a metric, as identifiers and the ranked value — without
+        retrieving the population
+      description: 'The N loans at the top or bottom of a metric, as identifiers and the ranked value
+        — without retrieving the population. Reports how much of the book carries the metric at all. At
+        most 200 loans.
+
+
+        This is how you find the loans worth looking at. Rank first, then call get_loans ONCE with the
+        identifiers you want to investigate. Never retrieve a population to sort it yourself.
+
+
+        Tool version 1.0.0. Requires the `loan:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Find the N loans at the top or bottom of a metric WITHOUT retrieving the population.
+                Returns identifiers and the ranked value; follow up with one get_loans call for the ones
+                that matter.
+              properties:
+                resource: *id002
+                metric:
+                  type: string
+                  description: The canonical field to rank by, e.g. 'current_loan_to_value'.
+                direction:
+                  type: string
+                  enum:
+                  - highest
+                  - lowest
+                  description: Which end of the distribution.
+                  default: highest
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  description: How many loans to return (at most 200).
+                  default: 20
+                filters: *id008
+                include_fields:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Extra canonical fields to carry on each ranked loan. Keep it short — this
+                    is a shortlist, not a retrieval.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - metric
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/readiness_framework:
+    post:
+      operationId: invoke_readiness_framework
+      summary: 'The Securitisation Readiness Framework: every metric a first-pass review assesses, which
+        tool supplies each fact, which are only meaningful against supplied criteria, and Trakt''s deterministic
+        coverage of the framework overall and by category'
+      description: 'The Securitisation Readiness Framework: every metric a first-pass review assesses,
+        which tool supplies each fact, which are only meaningful against supplied criteria, and Trakt''s
+        deterministic coverage of the framework overall and by category.
+
+
+        Call this FIRST when assessing readiness — it tells you what to investigate and what Trakt can
+        actually measure, so you neither invent a checklist nor assume a gap. Read each metric''s ''agent_investigation_guidance''
+        and ''type'': MEASURE_ONLY means report the number and form no view; EXTERNAL_CRITERIA means it
+        is only meaningful against a supplied rulebook.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'The Securitisation Readiness Framework: what a first-pass review assesses,
+                which of it Trakt can measure deterministically, and which tool supplies each fact.'
+              properties:
+                resource: *id009
+                category:
+                  type:
+                  - string
+                  - 'null'
+                  description: Optional category filter.
+                  default: null
+                asset_class:
+                  type:
+                  - string
+                  - 'null'
+                  description: Narrow to metrics applicable to this asset class.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/readiness_metrics:
+    post:
+      operationId: invoke_readiness_metrics
+      summary: Measure framework facts using the governed concentration-test metric library — the same
+        39 registered evaluators the Risk Limits workspace uses
+      description: 'Measure framework facts using the governed concentration-test metric library — the
+        same 39 registered evaluators the Risk Limits workspace uses. Batch-first.
+
+
+        Ask for several metrics in ONE call. Each result names its calculation_source and its numerator
+        and denominator, so you can cite how a figure was produced. A metric declared in the library but
+        without an evaluator returns unavailable — report that, never an estimate.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Measure one or more framework facts using the governed concentration-test
+                metric library. Batch-first: ask for several in one call.'
+              properties:
+                resource: *id009
+                requests:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                  description: Objects of {metric_id, parameters?, label?}. metric_id names a metric in
+                    the governed library.
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  description: Optional equality filters applied first.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+              - requests
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/regulatory_readiness:
+    post:
+      operationId: invoke_regulatory_readiness
+      summary: 'Whether a regulatory submission could be produced from this tape: coverage of the regime''s
+        required loan-level fields, separating fields that may NOT report a No-Data value (hard blockers)
+        from those that may'
+      description: 'Whether a regulatory submission could be produced from this tape: coverage of the
+        regime''s required loan-level fields, separating fields that may NOT report a No-Data value (hard
+        blockers) from those that may.
+
+
+        Read ''blocking_gaps'' first — those fields admit no No-Data fallback, so no valid submission
+        exists until they are resolved. Fields permitting ND1-ND4 weaken the disclosure without blocking
+        it. Never let a clean regulatory result imply a sound portfolio, or the reverse: they are different
+        questions.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Whether a regulatory submission could be produced from this tape: coverage
+                of the regime''s required loan-level fields, separating hard blockers from fields that
+                may report a No-Data value.'
+              properties:
+                resource: *id009
+                regime:
+                  type: string
+                  description: The disclosure regime. ESMA Annex 2 is the loan-level template.
+                  default: ESMA_Annex2
+                include_field_detail:
+                  type: boolean
+                  description: Return per-field coverage as well as the summary.
+                  default: false
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/stratify:
+    post:
+      operationId: invoke_stratify
+      summary: 'Break a portfolio down by one canonical dimension: loan count, balance, balance share
+        and optional balance-weighted averages per category, ordered by balance'
+      description: 'Break a portfolio down by one canonical dimension: loan count, balance, balance share
+        and optional balance-weighted averages per category, ordered by balance.
+
+
+        Use this for any ''by region'', ''by product'', ''by stage'' question. It is bounded to 200 categories
+        and says so when it truncates. Do not retrieve loans and group them yourself — the answer would
+        be yours rather than Trakt''s.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Break a portfolio down by ONE dimension and return balance and count per category.
+                Use this instead of retrieving loans and grouping them yourself.
+              properties:
+                resource: *id002
+                dimension:
+                  type: string
+                  description: The canonical field to group by, e.g. 'geographic_region_collateral', 'account_status'.
+                weighted_metrics:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+                  description: Canonical fields to report as balance-weighted averages per category, e.g.
+                    ['current_loan_to_value'].
+                  default: null
+                filters: *id008
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  description: Maximum categories to return (at most 200).
+                  default: 50
+              additionalProperties: false
+              required:
+              - resource
+              - dimension
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/transition_analysis:
+    post:
+      operationId: invoke_transition_analysis
+      summary: 'How loans moved between states across two governed snapshots: deterioration, cures, entries
+        and exits'
+      description: 'How loans moved between states across two governed snapshots: deterioration, cures,
+        entries and exits. Wraps the Risk Monitor''s existing migration matrix.
+
+
+        Use this to tell a rising arrears figure caused by NEW delinquency from one caused by existing
+        cases worsening — they call for different responses. Cures appear as improving transitions. A
+        loan absent from one snapshot is an entry or an exit, not a state change.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How loans moved between states across two governed snapshots: DPD deterioration,
+                cures, entries and exits.'
+              properties:
+                resource: *id001
+                dimension:
+                  type: string
+                  description: The state to track, e.g. 'account_status' or 'ifrs9_stage'.
+                  default: account_status
+                from_period:
+                  type:
+                  - string
+                  - 'null'
+                  description: Baseline snapshot. Omit for the earliest.
+                  default: null
+                to_period:
+                  type:
+                  - string
+                  - 'null'
+                  description: Current snapshot. Omit for the latest.
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/valuation_age_profile:
+    post:
+      operationId: invoke_valuation_age_profile
+      summary: 'How old and how good the collateral evidence is: balance-weighted valuation age distribution,
+        physical/indexed method mix, and the share of balance with no usable valuation'
+      description: 'How old and how good the collateral evidence is: balance-weighted valuation age distribution,
+        physical/indexed method mix, and the share of balance with no usable valuation.
+
+
+        Every LTV in the book rests on these observations, so read this before quoting any LTV metric.
+        A stale valuation makes the reported LTV unreliable rather than making the loan bad — that is
+        a data-quality finding, and it calls for different remediation from a credit one. Loans with no
+        valuation are silently absent from every LTV figure.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How old and how good the collateral evidence is: valuation age distribution,
+                method mix and missing-valuation share, all balance-weighted.'
+              properties:
+                resource: *id009
+                stale_after_months:
+                  type: integer
+                  minimum: 1
+                  maximum: 600
+                  description: Months at or beyond which a valuation counts as stale. Defaults to the
+                    governed selection policy's own limit.
+                  default: 24
+                filters:
+                  type:
+                  - object
+                  - 'null'
+                  default: null
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  securitySchemes:
+    entraBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Microsoft Entra client-credentials token. The calling application's service principal
+        must be assigned the Trakt agent app role, and its directory must be registered as a Trakt organisation.
+  schemas:
+    GovernedResult:
+      type: object
+      description: The stable envelope every tool returns. `result` carries the tool's own output; everything
+        else is the governance context needed to trust it.
+      properties:
+        capability:
+          type: string
+          example: tool.evaluate_covenants
+        schema_version:
+          type: string
+          example: 1.1.0
+        status:
+          type: string
+          enum:
+          - success
+          - partial_success
+          - blocked
+          - error
+          description: '`blocked` means governance refused (permission or policy). `error` means the capability
+            could not produce an answer. The two are different situations for an autonomous caller: do
+            not retry a `blocked` call.'
+        request_id:
+          type: string
+        correlation_id:
+          type:
+          - string
+          - 'null'
+          description: Echoes the inbound X-Correlation-Id.
+        tenant_id:
+          type: string
+        portfolio_id:
+          type:
+          - string
+          - 'null'
+          description: The resource reference this call named.
+        snapshot:
+          type:
+          - object
+          - 'null'
+          description: 'Which governed dataset answered: label, snapshot id, content hash, reporting date.'
+        result:
+          type:
+          - object
+          - 'null'
+        warnings:
+          type: array
+          items:
+            type: string
+        policy:
+          type: object
+          description: What governance decided.
+        provenance:
+          type:
+          - object
+          - 'null'
+        audit:
+          type:
+          - object
+          - 'null'
+        error:
+          oneOf:
+          - &id010
+            type: object
+            description: A governed failure. Branch on `code`, never on `message`.
+            properties:
+              code:
+                type: string
+                description: Stable machine-readable error code.
+              message:
+                type: string
+              category:
+                type: string
+                enum:
+                - authentication
+                - authorisation
+                - input
+                - policy
+                - data
+                - capability
+                - infrastructure
+              retryable:
+                type: boolean
+                description: Whether waiting and retrying could help.
+              request_id:
+                type: string
+              details:
+                type: object
+            required:
+            - code
+            - message
+            - category
+            - retryable
+          - type: 'null'
+      required:
+      - capability
+      - schema_version
+      - status
+      - request_id
+      - tenant_id
+    TraktError: *id010
+    ToolDeclaration:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        agent_guidance:
+          type: string
+        required_capability:
+          type: string
+        resource_argument:
+          type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+      required:
+      - name
+      - version
+      - description
+      - required_capability
+      - input_schema
+  responses:
+    InvalidArguments:
+      description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
+      content: &id011
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GovernedResult'
+    Unauthorized:
+      description: The bearer token is missing, invalid or expired.
+      content: *id011
+    Forbidden:
+      description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
+        RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
+      content: *id011
+    UnknownTool:
+      description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
+      content: *id011
+    Unavailable:
+      description: The agent API or the governed data source is not available. Retryable.
+      content: *id011

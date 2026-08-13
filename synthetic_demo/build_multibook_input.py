@@ -64,7 +64,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _HERE = Path(__file__).resolve()
 _REPO_ROOT = _HERE.parents[1]
-OUTPUT_DIR = _HERE.parent / "input" / "multibook"
+OUTPUT_DIR = _HERE.parent / "multibook_input"
 
 #: Fixed seed. Two runs of the same code produce byte-identical files.
 RANDOM_SEED = 20260630

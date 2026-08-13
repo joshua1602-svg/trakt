@@ -72,6 +72,15 @@ def _rich_loan(n: int = 33, with_source_ltv: bool = False) -> pd.DataFrame:
         "Geo Region": [_REGIONS[i % 4] for i in range(n)],
         "channel": [["Direct", "Broker"][i % 2] for i in range(n)],
         "broker": [["BrokerA", "BrokerB"][i % 2] for i in range(n)],
+        # Second-applicant presence is what borrower_type is derived FROM, and
+        # borrower_type is a declared core funded dimension. Blank on every third
+        # loan so the derivation has both outcomes to produce: joint where a
+        # second applicant exists, single where none does. Without this column
+        # the dimension is not derivable — correctly reported as missing rather
+        # than defaulted to "single", which would fabricate a risk attribute on
+        # a book whose NNEG exposure is joint-life.
+        "Borrower 2 DOB": ["" if i % 3 == 0 else f"19{50 + i % 20}-04-{1 + i % 27:02d}"
+                           for i in range(n)],
     }
     if with_source_ltv:
         d["Cur LTV %"] = [40 + (i % 10) for i in range(n)]   # explicit source LTV (percent)
@@ -144,6 +153,13 @@ class TestFullEnrichmentReachesDimensions(unittest.TestCase):
                     "geographic_region_obligor", "origination_channel"):
             self.assertIn(dim, avail, dim)
         self.assertEqual(self.report["missing_dimensions"], [])
+
+    def test_borrower_type_is_derived_from_second_applicant_presence(self):
+        """Not just present — actually split. A dimension that materialises as a
+        single constant value is available and useless."""
+        self.assertIn("borrower_type", set(self.report["dimensions_available"]))
+        self.assertEqual(set(self.prep["borrower_type"].dropna().unique()),
+                         {"joint", "single"})
 
     def test_health_shows_dimensions_available(self):
         from fastapi.testclient import TestClient
