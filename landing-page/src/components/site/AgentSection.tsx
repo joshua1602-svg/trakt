@@ -33,15 +33,18 @@ import { Card, SectionHeading } from "@/components/ui";
  * one of them. Above it they are the claim, and the film is the evidence for
  * the claim, which is the right order for both.
  *
- * Their outline is mint, matching the delivery tiles: same statement, that
- * this is available. Their glyphs are peri, because a glyph marks what a
- * thing is, not what state it is in.
+ * Their outline is `border-line`, not mint. Mint means available, and the
+ * capability matrix above differentiates these two agents on evidence:
+ * Securitisation Readiness ships, Portfolio Acquisition DD is marked roadmap.
+ * A mint outline on both would have this section contradicting the matrix two
+ * screens up. Their glyphs are peri, because a glyph marks what a thing is,
+ * not what state it is in.
  */
 
 const AGENTS = [
   {
     name: "Securitisation Readiness Agent",
-    copy: "Points it at a warehouse and it works the whole book — eligibility, coverage, concentration — and tells you what would fail a deal before the arranger does.",
+    copy: "Point it at a warehouse and it works the whole book — eligibility, coverage, concentration — and tells you what would fail a deal before the arranger does.",
     Glyph: TrancheGlyph,
   },
   {
@@ -73,17 +76,11 @@ export function AgentSection() {
         </p>
       </Reveal>
 
-      <ul
-        // Mint says the same thing here it says on the delivery tiles: this is
-        // available. That makes it system state, which is why the row declares
-        // itself to the colour guard rather than being excused by it.
-        data-state-colour="agent-availability"
-        className="mt-8 grid gap-4 sm:grid-cols-2"
-      >
+      <ul className="mt-8 grid gap-4 sm:grid-cols-2">
         {AGENTS.map((agent, index) => (
           <li key={agent.name}>
             <Reveal delay={index * 60} className="h-full">
-              <Card className="flex h-full flex-col border-mint-400/55">
+              <Card className="flex h-full flex-col">
                 <agent.Glyph />
                 <h3 className="mt-3 text-base font-semibold text-ink-100">{agent.name}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-300">{agent.copy}</p>

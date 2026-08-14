@@ -189,7 +189,7 @@ test.describe("Trakt landing page", () => {
     ).toHaveCount(0);
   });
 
-  test("the platform section explains the layer and its outputs", async ({ page }) => {
+  test("the platform section explains the layer and indexes the matrix", async ({ page }) => {
     const platform = page.locator("#platform");
     await platform.scrollIntoViewIfNeeded();
 
@@ -200,15 +200,26 @@ test.describe("Trakt landing page", () => {
     await expect(
       platform.getByText("One governed portfolio layer", { exact: true }),
     ).toBeVisible();
-    for (const output of [
+
+    // Three boxes, not two: the arrow motif between them is drawn for three.
+    await expect(platform.locator("ol > li")).toHaveCount(3);
+
+    // The third box indexes the capability matrix below rather than making its
+    // own ungrouped claims. The six chips it used to carry are gone — and with
+    // them "Forecasting", which claimed funded-book forecasting the page does
+    // not do.
+    await expect(platform.getByText("Every output", { exact: true })).toBeVisible();
+    await expect(
+      platform.getByText("Portfolio, control, reporting, investigation and delivery."),
+    ).toBeVisible();
+    for (const chip of [
       "Portfolio MI",
-      "Forecasting",
       "Risk & covenant controls",
       "Investor reporting",
       "Regulatory reporting",
       "AI & Copilot",
     ]) {
-      await expect(platform.getByText(output, { exact: true })).toBeVisible();
+      await expect(platform.getByText(chip, { exact: true })).toHaveCount(0);
     }
   });
 
@@ -309,41 +320,106 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator("main")).not.toContainText(/instant/i);
   });
 
-  test("the delivery model is four static tiles, with nothing to open", async ({ page }) => {
-    const delivery = page.locator("#delivery");
-    await delivery.scrollIntoViewIfNeeded();
+  /**
+   * The capability matrix. Sixteen items in five groups, replacing both the
+   * Delivery Model section and the platform diagram's six ungrouped output
+   * chips. The items are asserted verbatim because two of them are load-
+   * bearing distinctions the page must not lose: "Pipeline" rather than a
+   * generic "Forecasting" (Trakt forecasts the pipeline, not the funded
+   * book), and "Securitisation reporting" kept distinct from "Securitisation
+   * Readiness" two groups along.
+   */
+  const CAPABILITY_GROUPS: [string, string[]][] = [
+    ["Portfolio", ["Pipeline", "Total AUM", "Portfolio / asset / SPV views"]],
+    ["Control", ["Concentration limits", "Proactive risk watchlist", "Governance & lineage"]],
+    ["Report", ["Management MI", "Warehouse reporting", "Securitisation reporting"]],
+    ["Investigate", ["MI Query", "Securitisation Readiness", "Portfolio Acquisition DD"]],
+    [
+      "Delivery",
+      [
+        "Managed service",
+        "Trakt",
+        "Microsoft Copilot",
+        "Microsoft Teams",
+        "Enterprise agent A2A",
+      ],
+    ],
+  ];
+
+  test("the capability matrix names seventeen items in five groups", async ({ page }) => {
+    const capability = page.locator("#capability");
+    await capability.scrollIntoViewIfNeeded();
 
     await expect(
-      delivery.getByRole("heading", { name: /from a managed service to your own agents\./i }),
+      capability.getByRole("heading", { name: /one portfolio\. every workflow\./i }),
     ).toBeVisible();
 
-    // All five modes readable in one pass, in order, at every breakpoint.
-    const names = ["Managed service", "Trakt Agent", "Copilot", "Agent access"];
-    for (const name of names) {
-      await expect(delivery.getByRole("heading", { name, level: 3 })).toBeVisible();
-    }
-    await expect(delivery.getByRole("heading", { level: 3 })).toHaveCount(names.length);
-
-    // The availability labels are gone. They drew a line between three
-    // shipped channels and one roadmap channel, and that line stopped being
-    // true once agent-to-agent delegation was demonstrated. Four identical
-    // "Available today" labels would be noise; a grey fourth tile would be
-    // wrong.
-    await expect(delivery.getByText("Available today")).toHaveCount(0);
-    await expect(delivery.getByText("Roadmap")).toHaveCount(0);
-
-    // Availability is carried by the outline instead, on every tile — and the
-    // numerals run 01→04, the ladder the headline describes.
-    await expect(delivery.getByText(/^0[1-4]$/)).toHaveCount(4);
-    for (const [index, name] of names.entries()) {
-      const tile = delivery.locator("li").filter({ hasText: name });
-      await expect(tile.getByText(String(index + 1).padStart(2, "0"))).toBeVisible();
+    for (const [group, items] of CAPABILITY_GROUPS) {
+      const card = capability.locator("[data-grid='capability'] > li").filter({
+        has: page.getByRole("heading", { name: group, exact: true, level: 3 }),
+      });
+      await expect(card).toHaveCount(1);
+      for (const item of items) {
+        await expect(card.getByText(item, { exact: true })).toBeVisible();
+      }
+      // No item descriptions: each item is its own list entry and nothing else.
+      await expect(card.locator("ul > li")).toHaveCount(items.length);
     }
 
-    // No expand/collapse interaction anywhere in the section.
-    await expect(delivery.getByRole("button")).toHaveCount(0);
-    await expect(delivery.locator("details")).toHaveCount(0);
-    await expect(delivery.locator("[aria-expanded]")).toHaveCount(0);
+    // No paragraph beneath the cards, and nothing to open.
+    await expect(capability.getByRole("button")).toHaveCount(0);
+    await expect(capability.locator("details")).toHaveCount(0);
+
+    // No item in the matrix may be a generic "Forecasting": Trakt forecasts
+    // the pipeline, not the funded book, and "Pipeline" is the honest word.
+    // Scoped to the matrix and the diagram box whose chips it replaced — the
+    // hero sub-copy and the site metadata still use the word in the older,
+    // broader sense, which is recorded in the content map as an open item
+    // rather than quietly rewritten here.
+    await expect(
+      capability.locator("[data-grid='capability'] ul > li").filter({ hasText: /^Forecasting$/ }),
+    ).toHaveCount(0);
+    await expect(page.locator("#platform").getByText(/forecasting/i)).toHaveCount(0);
+  });
+
+  test("roadmap items are marked, and only the two that are not shipped", async ({ page }) => {
+    const capability = page.locator("#capability");
+    await capability.scrollIntoViewIfNeeded();
+
+    // Visible label, not shade alone: a reader who misses a grey step reads
+    // seventeen shipped items.
+    const marked = capability.locator("[data-grid='capability'] ul > li").filter({
+      hasText: /Roadmap/,
+    });
+    await expect(marked).toHaveCount(2);
+    await expect(marked.nth(0)).toContainText("Portfolio Acquisition DD");
+    await expect(marked.nth(1)).toContainText("Enterprise agent A2A");
+
+    // And machine-readable, so the status survives a reader who cannot see the
+    // label and an edit that drops it.
+    await expect(capability.locator("[data-grid='capability'] .sr-only")).toHaveCount(2);
+
+    // Everything else is unmarked.
+    await expect(capability.locator("[data-grid='capability'] ul > li")).toHaveCount(17);
+  });
+
+  /**
+   * The Delivery Model section is deleted, not hidden. Its four tiles said
+   * what the matrix's DELIVERY column says in five items, two sections apart —
+   * the same duplication removed from Operating Model, Portfolio Intelligence
+   * and Boundaries before it.
+   */
+  test("the delivery model section is gone and nothing restates it", async ({ page }) => {
+    await expect(page.locator("#delivery")).toHaveCount(0);
+    await expect(page.getByText(/from a managed service to your own agents/i)).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Agent access" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Trakt Agent" })).toHaveCount(0);
+    // Its one uncovered claim survives, in Risk & Controls, exactly once.
+    const teams = page.getByText("Approved risk findings are pushed to Teams.");
+    await expect(teams).toHaveCount(1);
+    await expect(page.locator("#controls").getByText(
+      "Approved risk findings are pushed to Teams.",
+    )).toBeVisible();
   });
 
   /**
@@ -353,23 +429,43 @@ test.describe("Trakt landing page", () => {
    * from the rendered boxes at every breakpoint the grid changes at, rather
    * than trusted to the class list.
    */
-  test("no governance card is left alone on its own row", async ({ page, viewport }) => {
-    for (const width of [1760, 1440, 1024, 834, 390]) {
-      await page.setViewportSize({ width, height: 900 });
-      const rows = await page.locator("#governance ul > li").evaluateAll((nodes) => {
-        const byRow = new Map<number, number>();
-        for (const node of nodes) {
-          const top = Math.round(node.getBoundingClientRect().top);
-          byRow.set(top, (byRow.get(top) ?? 0) + 1);
-        }
-        return [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([, count]) => count);
-      });
-      const columns = Math.max(...rows);
-      const tail = rows[rows.length - 1];
-      expect(
-        columns > 1 && rows.length > 1 && tail === 1,
-        `at ${width}px the cards lay out ${rows.join("+")} — one card orphaned`,
-      ).toBe(false);
+  test("no five-card grid leaves a card alone on its own row", async ({ page, viewport }) => {
+    // Both five-card grids on the page, measured together: governance, and the
+    // capability matrix, which walked into the same trap by construction.
+    for (const selector of ["#governance ul > li", "[data-grid='capability'] > li"]) {
+      for (const width of [1760, 1440, 1024, 834, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        const layout = await page.locator(selector).evaluateAll((nodes) => {
+          const byRow = new Map<number, { count: number; width: number }>();
+          for (const node of nodes) {
+            const box = node.getBoundingClientRect();
+            const top = Math.round(box.top);
+            const row = byRow.get(top) ?? { count: 0, width: 0 };
+            byRow.set(top, { count: row.count + 1, width: row.width + box.width });
+          }
+          const rows = [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+          return {
+            counts: rows.map((r) => r.count),
+            // The widest row is a full row by definition; a tail that matches
+            // it fills its row however many cards are in it.
+            fullWidth: Math.max(...rows.map((r) => r.width)),
+            tailWidth: rows[rows.length - 1].width,
+          };
+        });
+        const { counts, fullWidth, tailWidth } = layout;
+        const columns = Math.max(...counts);
+        const tail = counts[counts.length - 1];
+        // A single card that spans its whole row is not orphaned — it is a
+        // deliberate full-width card, which is how the capability matrix
+        // resolves five cards in a two-column grid. Gaps mean the sum of
+        // widths falls short of a full row by the gap total, so allow 10%.
+        const spansTheRow = tailWidth >= fullWidth * 0.9;
+        expect(
+          columns > 1 && counts.length > 1 && tail === 1 && !spansTheRow,
+          `${selector} at ${width}px lays out ${counts.join("+")} — one card orphaned ` +
+            `(tail ${Math.round(tailWidth)}px of ${Math.round(fullWidth)}px)`,
+        ).toBe(false);
+      }
     }
     if (viewport) await page.setViewportSize(viewport);
   });
@@ -399,7 +495,7 @@ test.describe("Trakt landing page", () => {
     await expect(governance.getByText(/microsoft entra id/i)).toBeVisible();
     // Extensibility survives as one line answering the objection; it is an
     // architecture claim, never a coverage claim. The agentic direction is
-    // cut — the Delivery Model tiles show it in grey instead.
+    // cut — the capability matrix marks the roadmap items instead.
     await expect(
       governance.getByText("New asset classes are added through configuration, not a rebuild."),
     ).toBeVisible();
@@ -539,29 +635,30 @@ test.describe("Trakt landing page", () => {
     await expect(cta.getByRole("status")).toContainText(/thank you/i);
   });
 
-  test("delivery states each channel once, and the intelligence section is gone", async ({
+  test("no section restates another, and the intelligence section is gone", async ({
     page,
   }) => {
-    // The Portfolio Intelligence section named the same surfaces as the tiles
-    // below it, in a second format. It must not come back.
+    // The Portfolio Intelligence section named the same surfaces as the
+    // delivery tiles below it, in a second format. Both are now gone; the
+    // capability matrix is the single place channels are named.
     await expect(page.locator("#intelligence")).toHaveCount(0);
     await expect(page.getByText("Trakt workspace")).toHaveCount(0);
 
-    const delivery = page.locator("#delivery");
-    await delivery.scrollIntoViewIfNeeded();
-
-    for (const mode of ["Managed service", "Trakt Agent", "Copilot", "Agent access"]) {
-      await expect(delivery.getByRole("heading", { name: mode, exact: true })).toBeVisible();
+    const capability = page.locator("#capability");
+    await capability.scrollIntoViewIfNeeded();
+    for (const channel of [
+      "Managed service",
+      "Trakt",
+      "Microsoft Copilot",
+      "Microsoft Teams",
+      "Enterprise agent A2A",
+    ]) {
+      await expect(capability.getByText(channel, { exact: true })).toHaveCount(1);
     }
-    // The claim carried over from the deleted section: push, not pull, and
-    // governed by approval. Stated once on the page.
-    await expect(page.getByText("Approved risk findings are pushed to Teams.")).toHaveCount(1);
-    await expect(
-      delivery.getByText("Approved risk findings are pushed to Teams."),
-    ).toBeVisible();
-    // The query demo lives in section 2 — no duplicate here.
-    await expect(delivery.locator("#example")).toHaveCount(0);
-    await expect(delivery.locator("video")).toHaveCount(0);
+    // The matrix carries no demo and no descriptions — depth lives in the
+    // sections around it.
+    await expect(capability.locator("#example")).toHaveCount(0);
+    await expect(capability.locator("video")).toHaveCount(0);
   });
 
   /**
@@ -624,7 +721,7 @@ test.describe("Trakt landing page", () => {
     for (const id of [
       "query-demo",
       "platform",
-      "delivery",
+      "capability",
       "controls",
       "agents",
       "governance",
@@ -697,9 +794,10 @@ test.describe("Trakt landing page", () => {
   test("green marks system state and nothing else", async ({ page }) => {
     // The allow-list is declared in the components themselves, not here: a
     // container marks itself `data-state-colour` when what it renders is a
-    // system state. Four exist — delivery availability, agent availability,
-    // the control preview's evaluation rows, and the lead form's success
-    // panel.
+    // system state. Two exist — the control preview's evaluation rows and the
+    // lead form's success panel. The delivery and agent tile borders were the
+    // other two; both rows are gone or de-tinted, because green means
+    // available and the capability matrix now states availability in words.
     const offenders = async () =>
       page.evaluate(
         new Function(
@@ -1028,7 +1126,7 @@ test.describe("without JavaScript", () => {
   test("every section still renders at full opacity", async ({ page }) => {
     await page.goto("/");
 
-    for (const id of ["platform", "delivery", "controls", "agents", "governance"]) {
+    for (const id of ["platform", "capability", "controls", "agents", "governance"]) {
       const painted = await page.locator(`#${id}`).evaluate((node) => {
         const target = node.querySelector("[data-reveal]") ?? node;
         return {

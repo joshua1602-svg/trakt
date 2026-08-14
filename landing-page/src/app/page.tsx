@@ -1,11 +1,7 @@
 import { AgentSection } from "@/components/site/AgentSection";
 import { AttributionCapture } from "@/components/site/AttributionCapture";
-import {
-  Architecture,
-  DeliveryModes,
-  ForwardControls,
-  Governance,
-} from "@/components/site/Content";
+import { Capability } from "@/components/site/Capability";
+import { Architecture, ForwardControls, Governance } from "@/components/site/Content";
 import { Footer } from "@/components/site/Footer";
 import { Hero } from "@/components/site/Hero";
 import { LeadForm } from "@/components/site/LeadForm";
@@ -27,13 +23,15 @@ import { buildMeta } from "@/lib/demo-pack";
  *
  * The narrative, in the order a first-time visitor asks their questions:
  * what is it → show me, and what will it refuse (query demo) → how does it
- * work → how would I consume it → what does it control (controls demo) →
+ * work → what does it actually cover → what does it control (controls demo) →
  * where is it going → why trust it → what next.
  *
- * Delivery sits above risk & controls deliberately: a capability demonstrated
- * before the reader knows which channel they would reach it through is a
- * capability with nowhere to land. The two demos stay apart, each beside the
- * claim it proves; both are user-started and neither autoplays.
+ * The capability matrix sits above risk & controls deliberately: a capability
+ * demonstrated before the reader knows the shape of what Trakt does — and
+ * which channel they would reach it through — is a capability with nowhere to
+ * land. It replaced the Delivery Model section in that slot. The two demos
+ * stay apart, each beside the claim it proves; both are user-started and
+ * neither autoplays.
  */
 export default function Page() {
   const meta = buildMeta();
@@ -90,6 +88,14 @@ export default function Page() {
           <Architecture />
         </Section>
 
+        {/* 3b — What "everywhere" means. The platform section makes the claim;
+            this is the only place on the page that answers it. Directly after
+            it by design: a matrix of sixteen capabilities read before the
+            layer that produces them is a feature list. */}
+        <Section id="capability" className="pb-16 sm:pb-20">
+          <Capability />
+        </Section>
+
         {/* The Operating Model section is gone: its claim ("no separate
             datasets to reconcile") now sits in the platform diagram's step 2,
             where the governed layer is actually described. */}
@@ -100,34 +106,10 @@ export default function Page() {
             format, two sections apart. Its one uncovered claim, proactive
             Teams delivery, is now the delivery section's body line. */}
 
-        {/* 6b — The delivery model: four modes, stated once each, live and
-            roadmap kept visually distinct. Static — nothing to open. */}
-        <Section id="delivery" className="pb-16 sm:pb-20">
-          <Reveal>
-            {/* The headline names the span of the tiles below it rather than
-                restating the layer. "Every mode reads the same governed layer"
-                was the third statement of one argument — the platform section
-                makes it as architecture, the agent section makes it for
-                agents, and the hero now makes it for the whole page. This one
-                introduces the row instead, and hands off to the agent section
-                beneath it.
-
-                The body line is the one delivery behaviour the tiles cannot
-                carry: every tile describes somewhere a person goes to ask, and
-                this is the case where Trakt arrives without being asked. It is
-                the Teams outbox (`trakt_notifications/`), not the Copilot
-                agent, so it belongs to the section rather than to a tile. */}
-            <SectionHeading
-              id="delivery"
-              eyebrow="Delivery model"
-              title="From a managed service to your own agents."
-              intro="Approved risk findings are pushed to Teams."
-            />
-          </Reveal>
-          <div className="mt-9">
-            <DeliveryModes />
-          </div>
-        </Section>
+        {/* The Delivery Model section is gone. Its four tiles said what the
+            capability matrix's DELIVERY column says in five items, two
+            sections further down; its body line moved to Risk & Controls,
+            beside the demo that produces the finding. See Content.tsx. */}
 
         {/* 4 — Risk & controls, with Demo 2. Below the delivery model by
             design: a reader meeting a controls demo before they know how they
