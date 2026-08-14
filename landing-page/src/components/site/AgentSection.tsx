@@ -1,7 +1,7 @@
 import { A2APreview } from "@/components/site/A2APreview";
 import { DemoPlayer } from "@/components/site/DemoPlayer";
 import { Reveal } from "@/components/site/Reveal";
-import { Card, SectionHeading } from "@/components/ui";
+import { Card, SectionHeading, cx } from "@/components/ui";
 
 /**
  * Agent-to-agent.
@@ -27,10 +27,11 @@ import { Card, SectionHeading } from "@/components/ui";
  * `Fragment` usage with it, which is what the deploy tripped over when two
  * branches merged.
  *
- * The two agents sit ABOVE the demo, as outlined tiles rather than the small
+ * The agents sit ABOVE the demo, as outlined tiles rather than the small
  * named lines they were. Underneath a fifty-second film they were furniture
  * nobody reached — the products of the section, ranked below a recording of
- * one of them. Above it they are the claim, and the film is the evidence for
+ * one of them. A third joined them in Pass 13: MI Query, the capability the
+ * React dashboard and Copilot already carry, reachable by an agent. Above it they are the claim, and the film is the evidence for
  * the claim, which is the right order for both.
  *
  * Their outline is `border-line`, not mint. Mint means available, and the
@@ -55,6 +56,17 @@ const AGENTS = [
     copy: "Reads the portfolio you are buying, finds what the seller's summary leaves out — and what it cannot resolve.",
     Glyph: DiligenceGlyph,
   },
+  {
+    // The same MI query capability the React dashboard and Copilot already
+    // carry, reachable by an agent instead of a person. Named "Agent" like its
+    // neighbours because what an agent delegates to is an agent, not an
+    // endpoint — and the matrix two sections above lists the underlying
+    // capability as "MI Query" without the suffix, which is the overview /
+    // depth split the rest of this section keeps to.
+    name: "MI Query Agent",
+    copy: "Your agents ask the portfolio questions your team already asks — over the same governed calculation.",
+    Glyph: QueryGlyph,
+  },
 ] as const;
 
 export function AgentSection() {
@@ -76,9 +88,16 @@ export function AgentSection() {
         </p>
       </Reveal>
 
-      <ul className="mt-8 grid gap-4 sm:grid-cols-2">
+      {/* Three tiles, and three is the number that orphans in a two-column
+          grid. Resolved the way the capability matrix resolves five: the last
+          card spans both columns at sm rather than sitting alone at half width
+          beside an empty cell, and the grid opens to three at lg. */}
+      <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {AGENTS.map((agent, index) => (
-          <li key={agent.name}>
+          <li
+            key={agent.name}
+            className={cx(index === AGENTS.length - 1 && "sm:col-span-2 lg:col-span-1")}
+          >
             <Reveal delay={index * 60} className="h-full">
               <Card className="flex h-full flex-col">
                 <agent.Glyph />
@@ -132,6 +151,29 @@ function TrancheGlyph() {
       <rect x="3" y="4" width="18" height="4.5" rx="1.2" />
       <rect x="3" y="10.5" width="18" height="4.5" rx="1.2" />
       <rect x="3" y="17" width="11" height="4.5" rx="1.2" />
+    </svg>
+  );
+}
+
+function QueryGlyph() {
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="text-peri-300"
+    >
+      {/* A question put and an answer returned — deliberately not another
+          magnifier, which the diligence tile already uses. */}
+      <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v3A2.5 2.5 0 0 1 14.5 12H8l-3.5 3v-3H5.5A2.5 2.5 0 0 1 3 9.5z" />
+      <path d="M12.5 20h6.5a2 2 0 0 0 2-2v-2.5" />
+      <path d="M15 17.5 12.5 20l2.5 2.5" />
     </svg>
   );
 }

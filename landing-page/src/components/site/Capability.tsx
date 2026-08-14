@@ -22,12 +22,12 @@ import { Card, SectionHeading, cx } from "@/components/ui";
  * A2A at the other. Its body line moved to Risk & Controls, where the finding
  * being pushed is actually produced.
  *
- * **Status is marked, not implied.** Fifteen of the seventeen items ship today;
- * two do not, and they carry the page's existing ROADMAP convention — grey
- * caps, the same treatment the deleted Delivery tiles used for exactly this.
- * Grey shading alone was considered and rejected: a reader who misses the
- * shade reads seventeen shipped items. Every item's grounding is recorded in
- * `docs/content-map.md`.
+ * **No status markers.** Portfolio Acquisition DD and Enterprise agent A2A
+ * carried a ROADMAP label for one pass and it was removed by decision: the
+ * matrix now reads as one flat capability set. What that costs is recorded
+ * plainly in `docs/content-map.md` beside each item's grounding, including the
+ * two whose repository evidence does not yet match a shipped claim — the
+ * ledger is where the qualification lives now that the page carries none.
  *
  * **Deliberately excluded: a generic "Forecasting" item.** Trakt forecasts the
  * pipeline (`analytics/pipeline_expected_funding.py`,
@@ -36,42 +36,40 @@ import { Card, SectionHeading, cx } from "@/components/ui";
  * is the honest word and it is the first item in the first group.
  */
 
-type Item = { readonly label: string; readonly roadmap?: true };
-
-const GROUPS: readonly { readonly label: string; readonly items: readonly Item[] }[] = [
+const GROUPS: readonly { readonly label: string; readonly items: readonly string[] }[] = [
   {
     label: "Portfolio",
     items: [
-      { label: "Pipeline" },
-      { label: "Total AUM" },
-      { label: "Portfolio / asset / SPV views" },
+      "Pipeline",
+      "Total AUM",
+      "Portfolio / asset / SPV views",
     ],
   },
   {
     label: "Control",
     items: [
-      { label: "Concentration limits" },
-      { label: "Proactive risk watchlist" },
-      { label: "Governance & lineage" },
+      "Concentration limits",
+      "Proactive risk watchlist",
+      "Governance & lineage",
     ],
   },
   {
     label: "Report",
     items: [
-      { label: "Management MI" },
-      { label: "Warehouse reporting" },
+      "MI Analytics",
+      "Warehouse reporting",
       // Never shortened to "Securitisation": it has to stay distinguishable
       // from "Securitisation Readiness" two columns to the right, which is a
       // different thing done by a different component.
-      { label: "Securitisation reporting" },
+      "Securitisation reporting",
     ],
   },
   {
     label: "Investigate",
     items: [
-      { label: "MI Query" },
-      { label: "Securitisation Readiness" },
-      { label: "Portfolio Acquisition DD", roadmap: true },
+      "MI Query",
+      "Securitisation Readiness",
+      "Portfolio Acquisition DD",
     ],
   },
   {
@@ -80,11 +78,11 @@ const GROUPS: readonly { readonly label: string; readonly items: readonly Item[]
     // Delivery Model section goes — and the ladder loses its bottom rung.
     label: "Delivery",
     items: [
-      { label: "Managed service" },
-      { label: "Trakt" },
-      { label: "Microsoft Copilot" },
-      { label: "Microsoft Teams" },
-      { label: "Enterprise agent A2A", roadmap: true },
+      "Managed service",
+      "Trakt",
+      "Microsoft Copilot",
+      "Microsoft Teams",
+      "Enterprise agent A2A",
     ],
   },
 ];
@@ -123,28 +121,8 @@ export function Capability() {
                 </h3>
                 <ul className="mt-4 space-y-2">
                   {group.items.map((item) => (
-                    <li
-                      key={item.label}
-                      className={cx(
-                        "text-sm leading-snug",
-                        item.roadmap ? "text-ink-500" : "text-ink-300",
-                      )}
-                    >
-                      <span>{item.label}</span>
-                      {item.roadmap ? (
-                        <>
-                          {/* Grey caps, the page's existing roadmap
-                              convention — carried over from the Delivery tiles
-                              that used to make this distinction. */}
-                          <span className="ml-2 align-[0.1em] text-[10px] font-semibold uppercase tracking-wider text-ink-500">
-                            Roadmap
-                          </span>
-                          {/* Machine-readable too, so the status survives a
-                              reader who cannot see the label and a future edit
-                              that drops it. */}
-                          <span className="sr-only"> (roadmap)</span>
-                        </>
-                      ) : null}
+                    <li key={item} className="text-sm leading-snug text-ink-300">
+                      {item}
                     </li>
                   ))}
                 </ul>

@@ -200,12 +200,28 @@ controls, §6c for the agents. **Overview here, depth there**, which is the
 relationship the INVESTIGATE column and §6c are in deliberately: the matrix
 names the two agents, §6c gives them bodies and a recorded run.
 
-**Status is marked, not implied.** Fifteen items ship; two do not, and those
-carry the page's existing ROADMAP convention — grey caps, `text-ink-500`, the
-same treatment the deleted Delivery tiles used for exactly this distinction —
-plus an `sr-only` "(roadmap)" so the status is machine-readable and survives an
-edit that drops the label. Grey shading alone was considered and rejected: a
-reader who misses a shade reads seventeen shipped items.
+**No status markers, from Pass 13.** Portfolio Acquisition DD and Enterprise
+agent A2A carried a ROADMAP label for one pass — grey caps plus an `sr-only`
+"(roadmap)" — and both were removed by decision. The matrix now reads as one
+flat capability set, and the e2e suite asserts that: no label, no `sr-only`, and
+every item resolving to a single colour, because a muted item with no label
+would be the worst of both.
+
+**What that costs, stated once and not re-argued.** Two items' repository
+evidence does not match an unqualified shipped claim, and the qualification now
+lives only here:
+
+  * **Portfolio Acquisition DD** — no implementation found. `due_diligence/`
+    holds Trakt's own internal review documents and an Annex 2 mapping-impact
+    script; there is no agent, session or tool that assesses a portfolio being
+    acquired.
+  * **Enterprise agent A2A** — the mechanism is demonstrated (`trakt_a2a/`,
+    `enterprise_agent/client.py`, `tests/test_a2a_delegation.py`, one recorded
+    run) but the card advertises a single skill and this is a proof rather than
+    a channel a client uses.
+
+The page is the client's to state; the ledger's job is to record what the
+repository shows, and it does.
 
 **No colour is spent here.** Group labels are `peri-400`, the eyebrow role;
 items are `ink-300`; roadmap items `ink-500`. No mint, because the matrix
@@ -221,17 +237,17 @@ states availability in words and does not need to state it twice.
 | Control | Concentration limits | Evidenced | `mi_workflows/concentration_analysis.py`, `operations_control/concentration.py`, `mi_agent_pptx/concentration.py`. Demonstrated on the page by the controls film. |
 | Control | Proactive risk watchlist | Evidenced | `mi_agent_pptx/watchlist.py`; `trakt_notifications/risk_review.py`, which produces a risk review for every approved update *including the empty ones* — "a silent week is indistinguishable from a broken pipeline". The delivery half is `trakt_notifications/` (outbox, dedup, timer drain). |
 | Control | Governance & lineage | Evidenced | `engine/provenance.py`, `engine/validation_agent/`, `operations_control/audit_chain.py`, `trakt_tools/handlers/provenance.py`. Also the claim §7 makes in full. |
-| Report | Management MI | Evidenced | `mi_agent_pptx/` — 20 modules: deck builder, chart and metric resolvers, cohorts, movement, insights, preflight. |
+| Report | MI Analytics | Evidenced | `mi_agent_pptx/` — 20 modules: deck builder, chart and metric resolvers, cohorts, movement, insights, preflight — and `analytics/` for the measures beneath them. **Renamed from "Management MI" in Pass 13:** the old label named an audience, and what the group lists is what the thing produces. |
 | Report | Warehouse reporting | Evidenced | `config/organisations.example.yaml` and `config/entitlements.example.yaml` model `organisation_type: warehouse_funder` as a party that signs in *from its own Microsoft directory* and sees its funded population only; enforced by `trakt_core/entitlement.py`. Reporting **to** a warehouse funder, scoped by entitlement — not a report template. |
 | Report | Securitisation reporting | Evidenced | `operations_control/annex2/` — governed wrappers over the proven Annex 2 route: `engine/gate_4_projection/regime_projector.py`, `engine/gate_4b_delivery/annex2_delivery_normalizer.py`, `engine/gate_5_delivery/xml_builder_annex2.py`, validated against the ESMA XSD. **Never shortened to "Securitisation":** it has to stay distinguishable from "Securitisation Readiness" two groups along, which is a different thing done by a different component. |
 | Investigate | MI Query | Evidenced | `mi_agent/mi_query_executor.py` + `mi_agent/interpreter/`. Demonstrated on the page by §2. |
 | Investigate | Securitisation Readiness | Evidenced | `readiness_agent/` (agent, session) over `trakt_tools/registry.py` and its handlers. Demonstrated on the page by §6c's recorded run. |
-| Investigate | **Portfolio Acquisition DD** | **Roadmap** | **No implementation.** `due_diligence/` holds Trakt's own internal review documents plus `build_annex2_impact_report.py`, which is Annex 2 mapping impact — not an assessment of a portfolio being acquired. No agent, no session, no tools. Marked ROADMAP. |
+| Investigate | **Portfolio Acquisition DD** | **Unmarked — see the status note above** | **No implementation.** `due_diligence/` holds Trakt's own internal review documents plus `build_annex2_impact_report.py`, which is Annex 2 mapping impact — not an assessment of a portfolio being acquired. No agent, no session, no tools. |
 | Delivery | Managed service | Evidenced | `operations_control/` (67 modules — the OCC: intervention, approval, population, preflight, stages), `apps/blob_trigger_app`, `mi_agent_pptx/cli.py`, `export_audit_pack.py`. **First in the column deliberately:** it is the primary commercial delivery mode, and deleting the Delivery Model section would otherwise have removed it from the page entirely. |
 | Delivery | Trakt | Evidenced | `frontend/mi-agent-ui/src/components/`. |
 | Delivery | Microsoft Copilot | Evidenced | `deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`. |
 | Delivery | Microsoft Teams | Evidenced | `mi_agent_api/teams_bot.py` (asking); `trakt_notifications/` (arriving unasked — the claim now stated in §3). |
-| Delivery | **Enterprise agent A2A** | **Roadmap** | The mechanism is demonstrated — `trakt_a2a/` (server, card, identity, tasks), `enterprise_agent/client.py`, `tests/test_a2a_delegation.py`, and one recorded run — but it is a proof, not a channel a client uses today. **Availability and demonstration are different claims**, and this column states availability. Marked ROADMAP. §6c's tiles were de-tinted to match; see there. |
+| Delivery | **Enterprise agent A2A** | **Unmarked — see the status note above** | The mechanism is demonstrated — `trakt_a2a/` (server, card, identity, tasks), `enterprise_agent/client.py`, `tests/test_a2a_delegation.py`, and one recorded run — but it is a proof, not a channel a client uses today. **Availability and demonstration are different claims.** The ROADMAP marker that stated the difference was removed in Pass 13. |
 
 ### Responsive behaviour
 
@@ -433,6 +449,14 @@ supporting line in the same block. The grammar slip in the first tile
 
 | Tile — **Securitisation Readiness Agent**: "Point it at a warehouse: eligibility, coverage, concentration — and what fails a deal, before the arranger says so." | Evidenced | The agent the recorded run exercises, so its evidence is the run itself. **"before the arranger says so"** is the line's whole point: the agent is not summarising a book, it is anticipating the counterparty who will reject it. **Trimmed 28 → 18 words in Pass 12.** The clause that went — "it works the whole book" — was already implied by naming the three checks. |
 | Tile — **Portfolio Acquisition Intelligence Agent**: "Reads the portfolio you are buying, finds what the seller's summary leaves out — and what it cannot resolve." | Evidenced | **"What the seller's summary leaves out"** is the diligence buyer's actual fear, stated plainly; **"what it cannot resolve"** is the part almost no tool will admit to. **Trimmed 29 → 18 words in Pass 12, and evidence-tracing is what was dropped** — deliberately. It is the page's ambient claim, made by the hero, by §7 and by the A2A demo's own description, whereas the seller's-summary line is unique to this tile. **The full name is kept** although it is the longer of the two — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry between two labels. |
+
+| Tile — **MI Query Agent**: "Your agents ask the portfolio questions your team already asks — over the same governed calculation." | Deployment | **New in Pass 13.** The capability is evidenced — `mi_agent/mi_query_executor.py` + `mi_agent/interpreter/`, reachable today from the React dashboard (`frontend/mi-agent-ui/`) and from Copilot (`deploy/copilot-agent/`, `mi_agent_api/copilot_actions.py`) — and it is the same capability §2 demonstrates live on the page. **What is new is the route, not the calculation**, which is what the copy says. Classified Deployment rather than Evidenced because `trakt_a2a/card.py` advertises exactly one skill today, `securitisation_readiness_assessment`; exposing MI Query over A2A is a card entry and a handler binding on an existing boundary, not new analytics. Named "Agent" like its neighbours because what an agent delegates to is an agent, not an endpoint. §3b lists the underlying capability as plain "MI Query" — the same overview / depth split the rest of this section keeps to. |
+
+**Pass 13 — a third tile, and the grid changes with it.** Three cards orphan in
+a two-column layout exactly as five do, so the last tile takes
+`sm:col-span-2 lg:col-span-1` and the grid opens to three columns at `lg` — the
+resolution the capability matrix already uses. The row-occupancy guard now runs
+over three grids: governance, the matrix, and these tiles.
 
 **Pass 11 — the agents lead the section; the film follows.** They were small
 named lines *beneath* a fifty-second video: the products of the section, ranked
