@@ -18,7 +18,7 @@ import { track } from "@/lib/analytics";
 const LINKS = [
   { href: "#query-demo", label: "Portfolio query", desktop: false },
   { href: "#platform", label: "Platform", desktop: true },
-  { href: "#delivery", label: "Delivery", desktop: true },
+  { href: "#capability", label: "Capability", desktop: true },
   { href: "#controls", label: "Risk & controls", desktop: true },
   { href: "#agents", label: "Agent-to-agent", desktop: true },
   { href: "#governance", label: "Governance", desktop: true },
@@ -27,7 +27,10 @@ const LINKS = [
 /**
  * The desktop bar takes five of the six. Measured at 1024 — the narrowest
  * width the bar now appears at — these five come to 525px against a 589px
- * budget once the wordmark and the CTA are subtracted.
+ * budget once the wordmark and the CTA are subtracted. "Delivery" became
+ * "Capability" when that section was replaced, which is two characters wider
+ * and still inside the budget; the e2e suite measures the bar rather than
+ * trusting this note.
  *
  * Portfolio query is dropped because it opens the page and the hero's own
  * primary button already points at it; Boundaries because it is a sub-claim of

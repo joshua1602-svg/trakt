@@ -122,7 +122,9 @@ describe("Nav", () => {
     for (const label of [
       "Platform",
       "Risk & controls",
-      "Delivery",
+      // "Delivery" until Pass 12, when the Delivery Model section was replaced
+      // by the capability matrix in the same slot.
+      "Capability",
       "Agent-to-agent",
       "Governance",
     ]) {

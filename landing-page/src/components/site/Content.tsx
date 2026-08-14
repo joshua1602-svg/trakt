@@ -36,15 +36,23 @@ const FLOW = [
   },
 ] as const;
 
-/** Six peer outputs of one layer — chips, not cards. */
-const OUTPUTS = [
-  "Portfolio MI",
-  "Forecasting",
-  "Risk & covenant controls",
-  "Investor reporting",
-  "Regulatory reporting",
-  "AI & Copilot",
-] as const;
+/**
+ * Step 3's six chips are gone: *Portfolio MI · Forecasting · Risk & covenant
+ * controls · Investor reporting · Regulatory reporting · AI & Copilot*. They
+ * were an ungrouped, weaker version of the capability matrix that now sits
+ * directly beneath this section — and one of them, an unqualified
+ * "Forecasting", claimed something the page must not: Trakt forecasts the
+ * pipeline, not the funded book.
+ *
+ * The box keeps its place rather than becoming a bare pointer. The arrow motif
+ * between the boxes (`→` at lg, `↓` below) is drawn for three; two boxes and
+ * one arrow reads as an unfinished diagram. What it carries instead is a bare
+ * enumeration of the five groups — no verb, no claim, just the index — so the
+ * diagram names the shape and the matrix below expands it. Naming the five
+ * groups as chips was the obvious alternative and was rejected: it would put
+ * the identical five words twice within 200px, which is the duplication this
+ * page has removed three times already.
+ */
 
 export function Architecture() {
   return (
@@ -82,16 +90,9 @@ export function Architecture() {
           <Reveal delay={120} className="h-full">
             <Card className="h-full">
               <h3 className="text-[15px] font-semibold text-ink-100">Every output</h3>
-              <ul className="mt-3 flex flex-wrap gap-1.5">
-                {OUTPUTS.map((output) => (
-                  <li
-                    key={output}
-                    className="rounded-full border border-line bg-navy-850 px-2.5 py-1 text-[11px] font-medium text-ink-300"
-                  >
-                    {output}
-                  </li>
-                ))}
-              </ul>
+              <p className="mt-2 text-sm leading-relaxed text-ink-400">
+                Portfolio, control, reporting, investigation and delivery.
+              </p>
             </Card>
           </Reveal>
         </li>
@@ -123,6 +124,16 @@ export function ForwardControls() {
         />
         <p className="mt-4 max-w-[72ch] text-lg font-medium leading-relaxed text-ink-100">
           Know what is breached today — and what the portfolio is moving toward.
+        </p>
+        {/* Carried here from the deleted delivery section. It is the one
+            behaviour on the page that is not user-initiated — every other
+            surface describes somewhere a person goes to ask, and this is the
+            case where Trakt arrives unasked — and it belongs beside the demo
+            that produces the finding rather than in a list of channels. The
+            claim is the Teams outbox (`trakt_notifications/`), not Copilot.
+            Asserted to appear exactly once on the page. */}
+        <p className="mt-3 max-w-[72ch] text-sm leading-relaxed text-ink-400">
+          Approved risk findings are pushed to Teams.
         </p>
       </Reveal>
 
@@ -238,91 +249,32 @@ export function ControlPreview() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Delivery model — four static tiles                                         */
+/* Delivery model — deleted in Pass 12                                        */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Four delivery modes, stated once each. A static row: no expand, no
- * collapse, no keyboard handling — the whole section is legible in one pass,
- * which is the point.
+ * `DeliveryModes` and `DELIVERY_MODES` are gone, and with them the whole
+ * `#delivery` section. Its four tiles said what the capability matrix's
+ * DELIVERY column now says in five items — Managed service · Trakt · Microsoft
+ * Copilot · Microsoft Teams · Enterprise agent A2A — at a section's cost, two
+ * sections above the matrix that repeated them.
  *
- * The per-tile availability labels are gone. They existed to separate three
- * shipped channels from one roadmap channel, and that distinction stopped
- * being true when agent-to-agent delegation was demonstrated: all four are
- * available, so a label repeating "Available today" four times said nothing
- * and the grey fourth tile said something false. The mint outline now carries
- * availability for the row — still system state, just no longer varying.
+ * Three things it carried, and where each went:
  *
- * The numerals are the section's argument in the margin: the headline is
- * "From a managed service to your own agents", and 01→04 is that ladder,
- * least autonomous to most. They are structure, not state, so they take peri
- * rather than mint.
+ *   • "Approved risk findings are pushed to Teams." — to Risk & Controls
+ *     above. It is a claim about what happens to a breach, not about a
+ *     delivery channel, and it now sits beside the demo that produces the
+ *     finding. Still asserted to appear exactly once on the page.
+ *   • The headline "From a managed service to your own agents." — NOT
+ *     rehomed. The ladder it named is carried by the DELIVERY items
+ *     themselves, managed service at one end and A2A at the other. A
+ *     positioning headline with no section under it is furniture.
+ *   • The 01–04 numerals — gone with the headline whose argument they
+ *     illustrated.
  *
- * Copy states capability rather than category. "Dashboards, charting and
- * drill-through" described a reporting tool from 2015; what is actually
- * there is natural-language questioning over figures the engine calculated
- * deterministically, which is the whole difference.
- *
- * The channel strip that used to precede this row, in its own Portfolio
- * Intelligence section, is gone: "Trakt workspace" and "Trakt Agent" were the
- * same surface named twice, and Copilot appeared in both. Its proactive-Teams
- * claim is now the section's body line.
+ * "Managed service" is deliberately FIRST in the matrix column. Without it the
+ * page would lose its primary commercial delivery mode entirely.
  */
-const DELIVERY_MODES = [
-  {
-    name: "Managed service",
-    // Longer than its neighbours on purpose: it is the only line that
-    // separates a managed service from automated software.
-    copy: "Your reporting produced, reconciled and delivered by Trakt — no platform for your team to run.",
-  },
-  {
-    name: "Trakt Agent",
-    copy: "Ask in your own words. Get charts, cohorts and drill-through built on deterministic figures, not estimates.",
-  },
-  {
-    name: "Copilot",
-    copy: "Trakt inside Teams and Microsoft 365, answering in the thread — and raising what changed before anyone asks.",
-  },
-  {
-    // One tile, not two: the agent-to-agent section below covers both
-    // patterns — client-owned agents and cross-institution exchange — so
-    // splitting them here made the distinction twice and less well.
-    name: "Agent access",
-    copy: "Your agents delegate an objective and get back an evidence-backed assessment, every figure traced to its calculation.",
-  },
-] as const;
-
-export function DeliveryModes() {
-  return (
-    <ul
-      // A system-state context: mint outlines what is available, and all four
-      // channels now are.
-      data-state-colour="delivery-availability"
-      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-    >
-      {DELIVERY_MODES.map((mode, index) => (
-        <li key={mode.name}>
-          <Reveal delay={index * 60} className="h-full">
-            <Card className="flex h-full flex-col border-mint-400/55">
-              {/* `aria-hidden`: the numeral is a visual position in the
-                  ladder, and read aloud before every heading it would be
-                  four stray numbers. */}
-              <p
-                aria-hidden="true"
-                className="text-2xl font-semibold tabular-nums leading-none text-peri-300"
-              >
-                {String(index + 1).padStart(2, "0")}
-              </p>
-              <h3 className="mt-3 text-[15px] font-semibold text-ink-100">{mode.name}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-400">{mode.copy}</p>
-            </Card>
-          </Reveal>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /* -------------------------------------------------------------------------- */
 /* Governance                                                                 */
 /* -------------------------------------------------------------------------- */
