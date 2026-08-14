@@ -426,12 +426,13 @@ governance answer immediately after.
 Delivery Model tiles and was carried across to these two by habit. The
 second-person capability voice below was asked for and is the standard for tile
 bodies from Pass 11 on; the rule should not be cited against copy that was
-requested. What remains is a *length* budget, not a grammar — a trim to 15–18
-words is proposed and unapplied. The grammar slip in the first tile
-("Points it" → "Point it") was fixed in Pass 12.
+requested. What remains is a *length* budget, not a grammar: both bodies were trimmed to
+18 words in Pass 12 — 28 and 29 words read long beside a delegation line and a
+supporting line in the same block. The grammar slip in the first tile
+("Points it" → "Point it") was fixed in the same pass.
 
-| Tile — **Securitisation Readiness Agent**: "Point it at a warehouse and it works the whole book — eligibility, coverage, concentration — and tells you what would fail a deal before the arranger does." | Evidenced | The agent the recorded run exercises, so its evidence is the run itself. **"before the arranger does"** is the line's whole point: the agent is not summarising a book, it is anticipating the counterparty who will reject it. |
-| Tile — **Portfolio Acquisition Intelligence Agent**: "Reads a portfolio you are buying, finds what the seller's summary leaves out, and hands back every risk with the evidence behind it — and the questions still open." | Evidenced | The source description does three things — investigates risks, traces to evidence, surfaces open questions — and the line keeps all three now that it has room. **"what the seller's summary leaves out"** is the diligence buyer's actual fear, stated plainly; **"the questions still open"** is the part almost no tool will admit to. **The full name is kept** although it is the longer of the two — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry between two labels. |
+| Tile — **Securitisation Readiness Agent**: "Point it at a warehouse: eligibility, coverage, concentration — and what fails a deal, before the arranger says so." | Evidenced | The agent the recorded run exercises, so its evidence is the run itself. **"before the arranger says so"** is the line's whole point: the agent is not summarising a book, it is anticipating the counterparty who will reject it. **Trimmed 28 → 18 words in Pass 12.** The clause that went — "it works the whole book" — was already implied by naming the three checks. |
+| Tile — **Portfolio Acquisition Intelligence Agent**: "Reads the portfolio you are buying, finds what the seller's summary leaves out — and what it cannot resolve." | Evidenced | **"What the seller's summary leaves out"** is the diligence buyer's actual fear, stated plainly; **"what it cannot resolve"** is the part almost no tool will admit to. **Trimmed 29 → 18 words in Pass 12, and evidence-tracing is what was dropped** — deliberately. It is the page's ambient claim, made by the hero, by §7 and by the A2A demo's own description, whereas the seller's-summary line is unique to this tile. **The full name is kept** although it is the longer of the two — "Portfolio" is what separates this from corporate M&A diligence, which is worth more than symmetry between two labels. |
 
 **Pass 11 — the agents lead the section; the film follows.** They were small
 named lines *beneath* a fifty-second video: the products of the section, ranked
@@ -619,7 +620,6 @@ as an isolated change.
 | **The A2A poster's vertical rhythm**, the same defect as the controls poster above: the delegation poster's content sits in the upper two-thirds of a 1200×960 frame, leaving visible dead space beneath it once the play plate is centred. `demo-video/src/landing/A2APoster.tsx`. | The next Remotion render. Both posters together, once. |
 | **The hero's third proof chip.** "Agent-addressable, with evidence behind every answer" was proposed and not signed off; the chip is unchanged. | The next hero pass. |
 | **"Forecasting" survives in three places outside the matrix** — the hero sub-copy ("live portfolio monitoring, forecasting, controls and reporting"), the metadata description in `layout.tsx`, and the OpenGraph image's chip row. §3b forbids the generic word as a *capability item* because Trakt forecasts the pipeline, not the funded book; these three predate that rule and were left alone rather than rewritten inside a pass that had not asked for hero or metadata changes. The e2e guard is scoped to the matrix and the platform diagram accordingly. | The next hero or metadata pass. Rewriting the OG image means re-rendering it. |
-| **The A2A tile bodies run 28 and 29 words**, against a proposed 15–18. Trims drafted, not applied. | Signed off separately. |
 
 ---
 

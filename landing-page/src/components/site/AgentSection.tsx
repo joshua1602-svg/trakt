@@ -44,7 +44,7 @@ import { Card, SectionHeading } from "@/components/ui";
 const AGENTS = [
   {
     name: "Securitisation Readiness Agent",
-    copy: "Point it at a warehouse and it works the whole book — eligibility, coverage, concentration — and tells you what would fail a deal before the arranger does.",
+    copy: "Point it at a warehouse: eligibility, coverage, concentration — and what fails a deal, before the arranger says so.",
     Glyph: TrancheGlyph,
   },
   {
@@ -52,7 +52,7 @@ const AGENTS = [
     // is what separates this from corporate M&A diligence, which is worth
     // more than symmetry between two labels.
     name: "Portfolio Acquisition Intelligence Agent",
-    copy: "Reads a portfolio you are buying, finds what the seller's summary leaves out, and hands back every risk with the evidence behind it — and the questions still open.",
+    copy: "Reads the portfolio you are buying, finds what the seller's summary leaves out — and what it cannot resolve.",
     Glyph: DiligenceGlyph,
   },
 ] as const;
