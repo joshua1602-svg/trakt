@@ -332,7 +332,7 @@ test.describe("Trakt landing page", () => {
   const CAPABILITY_GROUPS: [string, string[]][] = [
     ["Portfolio", ["Pipeline", "Total AUM", "Portfolio / asset / SPV views"]],
     ["Control", ["Concentration limits", "Proactive risk watchlist", "Governance & lineage"]],
-    ["Report", ["Management MI", "Warehouse reporting", "Securitisation reporting"]],
+    ["Report", ["MI Analytics", "Warehouse reporting", "Securitisation reporting"]],
     ["Investigate", ["MI Query", "Securitisation Readiness", "Portfolio Acquisition DD"]],
     [
       "Delivery",
@@ -382,25 +382,21 @@ test.describe("Trakt landing page", () => {
     await expect(page.locator("#platform").getByText(/forecasting/i)).toHaveCount(0);
   });
 
-  test("roadmap items are marked, and only the two that are not shipped", async ({ page }) => {
+  test("the matrix carries no status markers and no muted items", async ({ page }) => {
     const capability = page.locator("#capability");
     await capability.scrollIntoViewIfNeeded();
 
-    // Visible label, not shade alone: a reader who misses a grey step reads
-    // seventeen shipped items.
-    const marked = capability.locator("[data-grid='capability'] ul > li").filter({
-      hasText: /Roadmap/,
-    });
-    await expect(marked).toHaveCount(2);
-    await expect(marked.nth(0)).toContainText("Portfolio Acquisition DD");
-    await expect(marked.nth(1)).toContainText("Enterprise agent A2A");
+    // The ROADMAP labels carried by Portfolio Acquisition DD and Enterprise
+    // agent A2A were removed by decision. The matrix reads as one flat
+    // capability set, so nothing here may be marked or muted — a leftover grey
+    // item with no label would be the worst of both.
+    await expect(capability.getByText(/roadmap/i)).toHaveCount(0);
+    await expect(capability.locator(".sr-only")).toHaveCount(0);
 
-    // And machine-readable, so the status survives a reader who cannot see the
-    // label and an edit that drops it.
-    await expect(capability.locator("[data-grid='capability'] .sr-only")).toHaveCount(2);
-
-    // Everything else is unmarked.
-    await expect(capability.locator("[data-grid='capability'] ul > li")).toHaveCount(17);
+    const tones = await capability
+      .locator("[data-grid='capability'] ul > li")
+      .evaluateAll((nodes) => [...new Set(nodes.map((n) => getComputedStyle(n).color))]);
+    expect(tones, "capability items are not all one colour").toHaveLength(1);
   });
 
   /**
@@ -429,10 +425,15 @@ test.describe("Trakt landing page", () => {
    * from the rendered boxes at every breakpoint the grid changes at, rather
    * than trusted to the class list.
    */
-  test("no five-card grid leaves a card alone on its own row", async ({ page, viewport }) => {
-    // Both five-card grids on the page, measured together: governance, and the
-    // capability matrix, which walked into the same trap by construction.
-    for (const selector of ["#governance ul > li", "[data-grid='capability'] > li"]) {
+  test("no card grid leaves a card alone on its own row", async ({ page, viewport }) => {
+    // Every awkward-numbered grid on the page, measured together: governance
+    // and the capability matrix at five cards, and the agent tiles at three,
+    // which lands in the same trap in a two-column layout.
+    for (const selector of [
+      "#governance ul > li",
+      "[data-grid='capability'] > li",
+      "#agents ul > li",
+    ]) {
       for (const width of [1760, 1440, 1024, 834, 390]) {
         await page.setViewportSize({ width, height: 900 });
         const layout = await page.locator(selector).evaluateAll((nodes) => {
@@ -511,7 +512,7 @@ test.describe("Trakt landing page", () => {
     expect(nextSectionId).toBe("book-a-demo");
   });
 
-  test("the agent section states delegation and names its two agents", async ({
+  test("the agent section states delegation and names its three agents", async ({
     page,
   }) => {
     const agents = page.locator("#agents");
@@ -533,12 +534,13 @@ test.describe("Trakt landing page", () => {
     await expect(agents.getByText("Roadmap", { exact: true })).toHaveCount(0);
     await expect(agents.getByText(/is designed to/i)).toHaveCount(0);
 
-    // The two agents are the section's products, so they lead it. As small
+    // The agents are the section's products, so they lead it. As small
     // named lines under a fifty-second film they were furniture nobody
     // reached — ranked below a recording of one of them.
     const AGENT_NAMES = [
       "Securitisation Readiness Agent",
       "Portfolio Acquisition Intelligence Agent",
+      "MI Query Agent",
     ];
     for (const agent of AGENT_NAMES) {
       await expect(agents.getByRole("heading", { name: agent, level: 3 })).toBeVisible();
