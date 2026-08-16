@@ -215,6 +215,17 @@ def _resolve_pipeline(client_id: str, to_run_id: Optional[str], scope=None
             "stagesUsingConfigFallback": evidence.get("stagesUsingConfigFallback"),
             "stageRates": m.get("historicalCompletionRateByStage"),
             "stageTiming": m.get("historicalCompletionTimingByStage"),
+            # Maturity-correction evidence. Additive — the forward states read
+            # ``completion_probability``, never these fields, so this changes
+            # disclosure only. A stage that falls back for want of matured
+            # history already lands in ``stagesUsingConfigFallback`` above,
+            # which is what drives the existing forecast-weakness limitation.
+            "maturityCorrectionEnabled": evidence.get("maturityCorrectionEnabled"),
+            "stagesUsingMaturedRates": evidence.get("stagesUsingMaturedRates"),
+            "maturityWindowDaysByStage": evidence.get("maturityWindowDaysByStage"),
+            "maturityByStage": evidence.get("maturityByStage"),
+            "identityExcludedRowCount": evidence.get("identityExcludedRowCount"),
+            "identityExcludedReason": evidence.get("identityExcludedReason"),
             "excludedStageCounts": evidence.get("excludedStageCounts"),
             "currentSnapshot": (source.get("source_file")
                                 if isinstance(source, dict) else str(source)),

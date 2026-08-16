@@ -13,17 +13,38 @@ This is an INITIAL, deterministic empirical model (not an ML model):
   * WITHDRAWN / UNKNOWN cases are never counted as completions.
 
 No probabilities are invented: rates come purely from observed transitions.
+
+Maturity correction
+-------------------
+The pooled ratio above has a censoring defect: a case first seen at a stage in
+the final snapshot enters the denominator having had no realistic opportunity
+to complete, so it is counted as a failure to convert. That understates every
+stage rate, worst at the stages with the longest configured funding lag, and
+worse still on a book whose origination is growing — because growth pushes more
+of the denominator into the immature zone.
+
+The corrected estimator therefore admits a case to a stage's population only
+once it has been observed for at least the configured
+``stage_days_to_fund(stage)``. Both estimators are always computed and
+published side by side; ``TRAKT_MATURITY_CORRECTED_STAGE_RATES`` decides which
+one populates ``stage_rates`` (and therefore the forecast). It is OFF by
+default, and with it off this module's numerical output is unchanged.
+
+When corrected mode is on, the selection chain is matured empirical -> standard
+configured probability. It never falls back to the pooled estimator: doing so
+would reinstate the very defect the correction exists to remove.
 """
 
 from __future__ import annotations
 
+import os
 import statistics
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from .pipeline_prep import ACTIVE_STAGES, case_stage_frame
+from .pipeline_prep import ACTIVE_STAGES, _stage_days_to_fund, case_stage_frame
 from trakt_core import perf as _perf
 
 # Minimum observed cases at a stage before its empirical rate is trusted. Short
@@ -32,6 +53,74 @@ MIN_OBSERVATIONS = 12
 
 COMPLETED = "COMPLETED"
 WITHDRAWN = "WITHDRAWN"
+
+#: Feature flag for the maturity-corrected estimator. OFF unless explicitly
+#: enabled, and read per call so an operator (and a test) can toggle it without
+#: a reload — the same convention ``insight_engine.weekly_brief_enabled`` uses.
+MATURITY_FLAG_ENV = "TRAKT_MATURITY_CORRECTED_STAGE_RATES"
+_ON = ("1", "true", "on", "yes", "enabled")
+
+#: Closed vocabulary for ``rateSource``. Standard sources only — a
+#: client-segment-specific source is deliberately not reachable here.
+RATE_POOLED = "POOLED_EMPIRICAL"
+RATE_MATURED = "MATURED_EMPIRICAL"
+RATE_CONFIG = "CONFIG_FALLBACK"
+
+
+def maturity_correction_enabled() -> bool:
+    """Whether stage rates come from the maturity-corrected estimator."""
+    return (os.environ.get(MATURITY_FLAG_ENV) or "").strip().lower() in _ON
+
+
+def _matured_stats(entries: List[Tuple[str, bool]]) -> Dict[str, Any]:
+    """Matured counts, rate, sample span and earlier/later cohort split.
+
+    ``entries`` is ``(first_observation_date, ever_completed)`` for every case
+    that matured at one stage. The cohort split divides the ELIGIBLE matured
+    observations chronologically and as evenly as practicable — not by calendar
+    halves, which on a book that grew from zero would put almost everything in
+    one side and say nothing about stability.
+
+    A rate is only reported for a cohort that actually has observations; a stage
+    too thin to split says so through ``maturedCohortSplitAvailable`` rather
+    than reporting an invented rate.
+    """
+    total = len(entries)
+    completed_n = sum(1 for _d, done in entries if done)
+    out: Dict[str, Any] = {
+        "maturedObserved": total,
+        "maturedCompleted": completed_n,
+        "maturedRate": (round(completed_n / total, 4) if total else None),
+        "maturedSampleStart": None,
+        "maturedSampleEnd": None,
+        "maturedCohortSplitAvailable": False,
+        "maturedObservedEarlierCohort": 0,
+        "maturedRateEarlierCohort": None,
+        "maturedObservedLaterCohort": 0,
+        "maturedRateLaterCohort": None,
+    }
+    if not total:
+        return out
+
+    ordered = sorted(entries, key=lambda e: e[0])
+    out["maturedSampleStart"] = ordered[0][0]
+    out["maturedSampleEnd"] = ordered[-1][0]
+    if total < 2:
+        return out
+
+    half = total // 2
+    earlier, later = ordered[:half], ordered[half:]
+
+    def _rate(rows: List[Tuple[str, bool]]) -> Optional[float]:
+        return (round(sum(1 for _d, done in rows if done) / len(rows), 4)
+                if rows else None)
+
+    out["maturedCohortSplitAvailable"] = bool(earlier and later)
+    out["maturedObservedEarlierCohort"] = len(earlier)
+    out["maturedRateEarlierCohort"] = _rate(earlier)
+    out["maturedObservedLaterCohort"] = len(later)
+    out["maturedRateLaterCohort"] = _rate(later)
+    return out
 
 
 def _read(path: Path) -> Optional[pd.DataFrame]:
@@ -65,6 +154,11 @@ def build_historical_completion_model(
     file_names: List[str] = []
     historical_rows = 0
     stable_identifier: Optional[str] = None
+    # Rows whose stable case/application identifier could not be resolved. They
+    # are already skipped below (a case that cannot be matched across snapshots
+    # cannot inform a longitudinal rate); counting them makes the exclusion
+    # answerable instead of invisible.
+    unusable_identity_rows = 0
 
     for entry in entries:
         df = _read(Path(entry.get("source_file", "")))
@@ -94,6 +188,7 @@ def build_historical_completion_model(
         for cid_raw, stage_raw, cd in zip(case_ids, stages, completion_dates):
             cid = str(cid_raw).strip()
             if not cid or cid.lower() in ("nan", "none", ""):
+                unusable_identity_rows += 1
                 continue
             stage = str(stage_raw)
             t = timelines.setdefault(cid, {"stages": {}, "completed_on": None, "ever": set()})
@@ -122,6 +217,15 @@ def build_historical_completion_model(
     # each such call re-guessed the datetime format and built a one-element
     # Series — profiling showed 8,420 format guesses per model build, which was
     # the single largest cost in this function.
+    # MATURED population per stage: (first_observation_date, ever_completed) for
+    # every case that had a full configured stage-to-funding window in which to
+    # convert before the observation window closed. A case that has not had that
+    # long has not FAILED to convert — it has not been given the chance, and
+    # counting it as a non-conversion is the censoring defect this corrects.
+    days_to_fund = _stage_days_to_fund()
+    window_end_ts = pd.Timestamp(max(dates)) if dates else None
+    matured: Dict[str, List[Tuple[str, bool]]] = {s: [] for s in ACTIVE_STAGES}
+
     pending: Dict[str, List[tuple]] = {s: [] for s in ACTIVE_STAGES}
     for cid, t in timelines.items():
         ever_completed = COMPLETED in t["ever"]
@@ -129,9 +233,17 @@ def build_historical_completion_model(
             if stage not in t["stages"]:
                 continue
             observed[stage] += 1
+            first = t["stages"][stage]
+            if window_end_ts is not None and first:
+                try:
+                    age_days = (window_end_ts - pd.Timestamp(first)).days
+                except Exception:  # noqa: BLE001 - an unparseable date is not matured
+                    age_days = None
+                if age_days is not None and age_days >= int(
+                        days_to_fund.get(stage, 0)):
+                    matured[stage].append((str(first), ever_completed))
             if ever_completed:
                 completed[stage] += 1
-                first = t["stages"][stage]
                 done = t["completed_on"]
                 if first and done:
                     pending[stage].append((first, done))
@@ -147,6 +259,7 @@ def build_historical_completion_model(
         days = (dones - firsts).days
         elapsed[stage].extend(int(d) for d in days if pd.notna(d) and d >= 0)
 
+    corrected = maturity_correction_enabled()
     rate_by_stage: Dict[str, Any] = {}
     timing_by_stage: Dict[str, Any] = {}
     stage_rates: Dict[str, float] = {}
@@ -155,13 +268,43 @@ def build_historical_completion_model(
         comp = completed[stage]
         sufficient = obs >= min_observations
         rate = round(comp / obs, 4) if obs else None
-        rate_by_stage[stage] = {"rate": rate, "observed": obs, "completed": comp,
-                                "sufficient": bool(sufficient and rate is not None)}
-        if elapsed[stage]:
-            timing_by_stage[stage] = {"medianDays": int(statistics.median(elapsed[stage])),
+        median_days = (int(statistics.median(elapsed[stage]))
+                       if elapsed[stage] else None)
+        if median_days is not None:
+            timing_by_stage[stage] = {"medianDays": median_days,
                                       "observed": len(elapsed[stage])}
-        if sufficient and rate is not None:
-            stage_rates[stage] = rate
+
+        m_stats = _matured_stats(matured[stage])
+        m_obs, m_rate = m_stats["maturedObserved"], m_stats["maturedRate"]
+        m_sufficient = m_obs >= min_observations
+
+        # The selection chain. Corrected mode is matured -> config; it NEVER
+        # falls back to the pooled estimator, because falling back to the
+        # estimator with the known censoring defect would defeat the correction.
+        if corrected:
+            rate_used = m_rate if (m_sufficient and m_rate is not None) else None
+            rate_source = RATE_MATURED if rate_used is not None else RATE_CONFIG
+        else:
+            rate_used = rate if (sufficient and rate is not None) else None
+            rate_source = RATE_POOLED if rate_used is not None else RATE_CONFIG
+        if rate_used is not None:
+            stage_rates[stage] = rate_used
+
+        rate_by_stage[stage] = {
+            # -- existing keys, unchanged in meaning and value ---------------- #
+            "rate": rate, "observed": obs, "completed": comp,
+            "sufficient": bool(sufficient and rate is not None),
+            # -- pooled, named explicitly ------------------------------------ #
+            "pooledObserved": obs, "pooledCompleted": comp, "pooledRate": rate,
+            # -- maturity-corrected estimator -------------------------------- #
+            **m_stats,
+            "maturedSufficient": bool(m_sufficient and m_rate is not None),
+            "maturityWindowDays": int(days_to_fund.get(stage, 0)),
+            "configuredStageDaysToFund": int(days_to_fund.get(stage, 0)),
+            "empiricalMedianCompletionDays": median_days,
+            # -- what was actually used, and why ----------------------------- #
+            "rateUsed": rate_used, "rateSource": rate_source,
+        }
 
     # Cumulative cohort progression: of the ORIGINAL KFI cohort, the % that has
     # reached each milestone (KFI -> Application -> Offer -> Funded) by each week.
@@ -200,6 +343,19 @@ def build_historical_completion_model(
         "stagesUsingHistoricalRates": stages_historical,
         "stagesUsingConfigFallback": stages_config_fallback,
         "excludedStageCounts": excluded_stage_counts,
+        # -- maturity correction (additive; the flag decides stage_rates) ----- #
+        "maturityCorrectionEnabled": corrected,
+        "maturityWindowDaysByStage": {s: int(days_to_fund.get(s, 0))
+                                      for s in ACTIVE_STAGES},
+        "stagesUsingMaturedRates": sorted(
+            s for s in ACTIVE_STAGES
+            if rate_by_stage.get(s, {}).get("rateSource") == RATE_MATURED),
+        "identityExcludedRowCount": unusable_identity_rows,
+        "identityExcludedReason": (
+            "rows carrying no resolvable pipeline case / application identifier "
+            "cannot be matched across weekly extracts and are excluded from "
+            "both the pooled and the matured empirical populations"
+            if unusable_identity_rows else None),
         "historicalCompletionRateByStage": rate_by_stage,
         "historicalCompletionTimingByStage": timing_by_stage,
         "historicalCompletionRateWindow": {
@@ -275,6 +431,33 @@ def _identifier_used(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
+#: The per-stage maturity fields promoted into the evidence block. Kept to the
+#: enablement-relevant set — the full rate block stays on the model for anyone
+#: who needs it, so the evidence payload does not become a statistics dump.
+_MATURITY_EVIDENCE_FIELDS = (
+    "pooledObserved", "pooledCompleted", "pooledRate",
+    "maturedObserved", "maturedCompleted", "maturedRate",
+    "maturedSufficient", "maturityWindowDays", "configuredStageDaysToFund",
+    "empiricalMedianCompletionDays", "maturedSampleStart", "maturedSampleEnd",
+    "maturedCohortSplitAvailable",
+    "maturedObservedEarlierCohort", "maturedRateEarlierCohort",
+    "maturedObservedLaterCohort", "maturedRateLaterCohort",
+    "rateUsed", "rateSource",
+)
+
+
+def _maturity_by_stage(model: Dict[str, Any]) -> Dict[str, Any]:
+    """Per-stage maturity evidence, flattened for the disclosure surface."""
+    by_stage = model.get("historicalCompletionRateByStage") or {}
+    out: Dict[str, Any] = {}
+    for stage, block in by_stage.items():
+        if not isinstance(block, dict):
+            continue
+        out[stage] = {f: block.get(f) for f in _MATURITY_EVIDENCE_FIELDS
+                      if f in block}
+    return out
+
+
 def historical_model_evidence(model: Optional[Dict[str, Any]],
                               completion_probability_basis: Optional[str] = None
                               ) -> Dict[str, Any]:
@@ -295,6 +478,14 @@ def historical_model_evidence(model: Optional[Dict[str, Any]],
         "stagesUsingConfigFallback": m.get("stagesUsingConfigFallback", []),
         "excludedStageCounts": m.get("excludedStageCounts", {}),
         "completionProbabilityBasis": completion_probability_basis,
+        # Maturity-correction evidence. Additive: a consumer that does not know
+        # about it reads exactly what it read before.
+        "maturityCorrectionEnabled": bool(m.get("maturityCorrectionEnabled")),
+        "maturityWindowDaysByStage": m.get("maturityWindowDaysByStage", {}),
+        "stagesUsingMaturedRates": m.get("stagesUsingMaturedRates", []),
+        "identityExcludedRowCount": m.get("identityExcludedRowCount", 0),
+        "identityExcludedReason": m.get("identityExcludedReason"),
+        "maturityByStage": _maturity_by_stage(m),
         # Dedup provenance: distinguish files scanned from unique extracts used so a
         # weekly file counted in two run folders is never double-counted as evidence.
         "sourceFilesScanned": m.get("sourceFilesScanned", m.get("weeklyFilesUsed", 0)),
