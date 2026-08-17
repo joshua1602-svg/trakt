@@ -27,8 +27,15 @@ python scripts/run_mi_capability_review.py --out out/mi_capability_review
 
 Question bank: `config/mi/golden_questions/business_semantic_questions.yaml`.
 
-**Parser caveat — read this before acting on the findings.** No
-`ANTHROPIC_API_KEY` was available in the review environment, so this measures the
+> **Update — the bank has since been re-run with the LLM parser enabled.** See
+> **§6**. Short version: it does not rescue the result. `ok=true` falls from 32/40
+> to 20/40, six questions now hit a hard parse crash, and three of the five
+> questions the deterministic parser answered *correctly* break. The single
+> largest cause is one unstated contract — the shape of `MIQuerySpec.filters` —
+> and the model was, in fact, identifying the right filters. Sections 2–5 below
+> describe the deterministic baseline and remain accurate; §6 is the comparison.
+
+**Parser caveat.** The body of this review measures the
 **deterministic parser**. That is not a corner case: it is the configured default
 whenever no key is set, it is what CI and the demo run on, and
 `parse_with_repair` falls back to it whenever the LLM is unavailable or errors.
@@ -456,3 +463,159 @@ read if the narrative said "weighted-average current LTV across all 11,035 loans
     findings into "fixed by escalation" and "still broken". Note that
     `zero_cost_first` means a *confident* wrong deterministic parse never
     escalates, so items 1–3 remain necessary regardless.
+
+---
+
+## 6. The LLM-enabled re-run
+
+Re-run with `MI_AGENT_LLM_PARSER=on` against `claude-haiku-4-5-20251001`, the
+configured `DEFAULT_MODEL` for this path:
+
+```bash
+ANTHROPIC_API_KEY=… python scripts/run_mi_capability_review.py --llm \
+  --out out/mi_review_llm --compare out/mi_capability_review/transcript.json
+```
+
+27 of 40 questions changed. The result is **not** better.
+
+| Outcome | Deterministic | LLM-enabled |
+|---|---:|---:|
+| Answered correctly | 5 | **3** |
+| A facet dropped, undisclosed | 8 | 5 |
+| Silently wrong | 19 | **12** |
+| Honest refusal | 2 | 1 |
+| Failed without saying why | 6 | **13** |
+| **Hard parse crash** | 0 | **6** |
+| `ok=true` overall | **32 / 40** | **20 / 40** |
+
+Silent wrongness genuinely falls — 19 → 12 — because the LLM refuses where the
+deterministic parser substituted. That is the one real gain, and it matters. But
+it is bought by turning working answers into failures: **of the five questions the
+deterministic parser got right, the LLM parser broke three.** Only A6
+(concentration limits) and B11 (regional contribution to WA LTV) survived; B23
+(age vs LTV) newly joined them as a proper scatter.
+
+### 6.1 The root cause: `filters` has no stated schema and no ingest validation
+
+Six questions — A1, A2a, A2b, A2c, A7, B15 — now return *"The MI Agent could not
+interpret this question."* That string is `mi_service`'s catch-all for an
+**exception** in the parse path, not a considered refusal. The traceback is the
+same every time:
+
+```
+File "mi_agent/llm_query_parser.py", line 2647, in parse_with_repair
+    vr = validate_mi_query(spec, semantics, available_columns=cols)
+File "mi_agent/mi_query_validator.py", line 153, in validate_mi_query
+    referenced = spec.referenced_fields()
+File "mi_agent/mi_query_spec.py", line 303, in referenced_fields
+    if f not in seen:
+TypeError: unhashable type: 'dict'
+```
+
+`MIQuerySpec.filters` is declared `Dict[str, Any]` (`mi_query_spec.py:81`).
+`from_dict` coerces only `None → {}` (`:226-227`) and never checks the type, so a
+list passes straight through; `referenced_fields` then iterates it as a mapping
+(`:296`) and hashes each element (`:303`).
+
+The model emits a **list of predicate objects** — the more natural JSON shape, and
+one the prompt never rules out. Its actual output for A1:
+
+```json
+{ "intent": "chart", "metric": "current_loan_to_value",
+  "dimensions": ["borrower_type"],
+  "filters": [ { "field": "collateral_geography",
+                 "operator": "equals", "value": "London" } ] }
+```
+
+**The model got the London filter right.** It also correctly noted in its own
+`explanation` that `borrower_type` is absent from the available columns. The
+parser crashed on the shape rather than reading the content.
+
+The same contract gap fails *silently* on a different phrasing. For "What is my
+exposure to borrowers over 85?" the model returned:
+
+```json
+{ "intent": "summary", "metric": "current_outstanding_balance",
+  "aggregation": "sum",
+  "filter": { "field": "youngest_borrower_age",
+              "operator": "greater_than", "value": 85 } }
+```
+
+Singular `filter`, not `filters`. `from_dict` ignores the unknown key, no
+exception is raised, and the answer comes back as **£1.96bn** — the same 63×
+overstatement as the deterministic path, now with the correct predicate having
+been computed and discarded.
+
+Three fixes, all small, all at the same boundary:
+
+1. **State the schema in the prompt.** `_SYSTEM_INSTRUCTIONS` names which *keys*
+   are legal but never the shape of `filters`. Give it the literal form and one
+   example.
+2. **Normalise on ingest.** `from_dict` should accept the list-of-predicates and
+   the singular `filter` shape and fold them into the dict form — and raise a
+   *controlled* validation error, never a `TypeError`, on anything it cannot
+   fold.
+3. **Make `referenced_fields` defensive**, so a malformed spec can never take
+   down the parse path.
+
+A fourth, related: the model wrote `current_loan_to_value <= 0.75` for "75% LTV"
+while this tape stores LTV as whole-number percent (43.16). Even with the shape
+fixed, that predicate matches almost nothing. The percent-scale ambiguity the
+executor already documents needs to reach the prompt.
+
+### 6.2 A weaker parse silently disables a stronger governed route
+
+Routing consumes the `ParsedQuestion`, so the spec the parser produces decides
+which governed capability runs. A plausible-but-generic LLM chart spec therefore
+**outcompetes a purpose-built route**:
+
+| Question | Deterministic | LLM-enabled |
+|---|---|---|
+| B08 run rate of new lending | `forecast_extrapolation` — "~£16.3m/month (£195.5m/year) based on 2 month(s) of funded growth" | a 150-point line chart of balance by origination month, back to 2014 |
+| B01 concentration + headroom | `risk_limits` — 12 Schedule 8 tests with headroom and movement | a 12-row regional bar chart; the headroom half of the question disappears |
+| B21 largest single-loan exposure | top-10 loan table, largest £841,638.96 | whole-book KPI, £1.96bn |
+
+For B08 the model asked for a line chart on `origination_date`; for B21 it asked
+for `aggregation: loan_level` with no ranking or `top_n`. Neither is unreasonable
+as a chart request. Both destroy a better answer the system already had. Route
+selection needs to consider the *question*, not only the spec derived from it —
+or the governed routes need precedence over a generic chart spec.
+
+### 6.3 Observability is destroyed before it reaches the caller
+
+`adapters.py:673` attaches the parser's `llm` block — call count, token usage,
+estimated cost — to `metadata.llm`. `mi_service.py` then **overwrites the same
+key** with the LLM *configuration*:
+
+```python
+meta["llm"] = {"enabled": …, "available": …, "model": …, "status": …}
+```
+
+So no caller can tell whether a given answer cost an LLM call or came back from
+`zero_cost_first` for free. This review's harness reported "LLM consulted on 0/40
+questions · estimated $0.0000" for a run that plainly used the model. Use a
+distinct key for the configuration.
+
+### 6.4 What this means for the fix list
+
+Nothing in §5 is retired, and two items are promoted:
+
+* **New #1 — normalise and validate `filters` at the spec boundary, and state its
+  schema in the prompt** (§6.1). It is the single highest-yield change in the
+  review: it converts six hard crashes into answers, and it is the difference
+  between the model correctly identifying "London" / "over 85" / "LTV ≤ 75%" and
+  the system throwing that away.
+* **New #2 — give governed routes precedence over a generic chart spec** (§6.2),
+  so a weaker parse cannot disable `risk_limits` or `forecast_extrapolation`.
+* Former #1–#3 (the availability pass erasing the request record, filters gated
+  behind count/balance phrasings, the brittle categorical matcher) **stand
+  unchanged**. They are the deterministic path's behaviour, and the deterministic
+  path is what runs whenever the LLM is unavailable, rate-limited or errors — as
+  well as being what `zero_cost_first` returns for every high-confidence parse
+  (B09 and B11 were answered that way in the LLM run, with no model call).
+
+The headline conclusion is not "the LLM is worse". It is that **neither parser is
+the bottleneck**: the model demonstrably understood the questions the
+deterministic parser mangled, and the spec contract, the route precedence and the
+narrative layer discarded that understanding. Those three seams are where the
+work is.

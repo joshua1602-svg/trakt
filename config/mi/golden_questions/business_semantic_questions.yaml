@@ -17,6 +17,16 @@
 #     python -m demo_platform.run_demo --generate --orchestrate
 #     python scripts/run_mi_capability_review.py --out out/mi_capability_review
 #
+# The same bank re-run with the LLM parser on (claude-haiku-4-5, the configured
+# DEFAULT_MODEL) is NOT better: ok=true falls 32/40 -> 20/40, six questions hit a
+# hard parse crash, and three of the five questions the deterministic parser
+# answered correctly break. `observed` below therefore records the DETERMINISTIC
+# run, which is the floor behaviour the system falls back to. The LLM comparison
+# is section 6 of due_diligence/MI_QUERY_AGENT_CAPABILITY_REVIEW.md; reproduce it
+# with:
+#     ANTHROPIC_API_KEY=… python scripts/run_mi_capability_review.py --llm \
+#       --out out/mi_review_llm --compare out/mi_capability_review/transcript.json
+#
 # grade values:
 #   correct              — answered the question asked, with the right numbers
 #   partial              — right machinery, but a stated facet was dropped or
