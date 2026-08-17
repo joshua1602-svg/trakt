@@ -2764,7 +2764,55 @@ def carry_specialist_intent(llm_spec: MIQuerySpec, det_spec: MIQuerySpec) -> Lis
         except Exception:  # noqa: BLE001 - never let this break a parse
             continue
         carried.append(field_name)
+    carried.extend(reconcile_threshold_operators(llm_spec, det_spec))
     return carried
+
+
+def reconcile_threshold_operators(llm_spec: MIQuerySpec,
+                                  det_spec: MIQuerySpec) -> List[str]:
+    """Apply the house threshold convention to an LLM spec's own predicate.
+
+    The convention is a reading of the QUESTION's language, not a preference:
+
+        over 85 / older than 85          -> age >  85
+        85 or older / at least 85 / 85+  -> age >= 85
+
+    The deterministic parser resolves it from the wording. The LLM does not: on
+    "what is my exposure to borrowers over 85?" it returned ``>= 85``, which is
+    136 loans and £31.1m instead of 86 loans and £19.4m — a materially different
+    answer to the same question depending on which parser happened to run.
+
+    Only the OPERATOR moves, and only when both parsers picked the same field
+    and the same number — so this can never change which field is filtered, or
+    the value filtered on, or introduce a predicate the LLM did not state. The
+    receipt continues to print whichever predicate actually executed.
+    """
+    det_filters = getattr(det_spec, "filters", None) or {}
+    llm_filters = getattr(llm_spec, "filters", None) or {}
+    if not det_filters or not llm_filters:
+        return []
+
+    adjusted: List[str] = []
+    for field_name, det_condition in det_filters.items():
+        llm_condition = llm_filters.get(field_name)
+        if not isinstance(det_condition, dict) or not isinstance(llm_condition, dict):
+            continue
+        det_op, llm_op = det_condition.get("op"), llm_condition.get("op")
+        if det_op == llm_op or not det_op or not llm_op:
+            continue
+        # Same direction, different strictness — that is the convention's
+        # territory. ">" vs "<" is a genuine disagreement about the question and
+        # is left to the P0 guard rather than silently reconciled here.
+        if {det_op, llm_op} not in ({"gt", "ge"}, {"lt", "le"}):
+            continue
+        try:
+            if float(det_condition.get("value")) != float(llm_condition.get("value")):
+                continue
+        except (TypeError, ValueError):
+            continue
+        llm_condition["op"] = det_op
+        adjusted.append(f"threshold_operator:{field_name}")
+    return adjusted
 
 
 def parse_with_repair(

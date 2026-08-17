@@ -486,7 +486,10 @@ def _parser_provenance(workflow: Dict[str, Any]) -> Dict[str, Any]:
 
     failure = None
     if used == "deterministic_fallback_after_llm_failure" or detail == "validation_failed":
-        failure = "unknown"
+        # "validation_failed" already names the failure: the model returned a
+        # spec the governed validator rejected. Reporting that as "unknown" hid
+        # the single most common LLM failure mode behind a placeholder.
+        failure = ("parse_failure" if detail == "validation_failed" else "unknown")
         for category, needles in _LLM_FAILURE_CATEGORIES:
             if any(n in status for n in needles):
                 failure = category

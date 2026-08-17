@@ -324,6 +324,78 @@ def test_a_point_in_time_geography_question_is_still_geo_exposure():
     assert _is_geo_exposure("Which region grew the most last month?") is False
 
 
+# --------------------------------------------------------------------------- #
+# The age convention on the LLM path
+# --------------------------------------------------------------------------- #
+# Found by the P1C genuine-LLM run: on "what is my exposure to borrowers over
+# 85?" the deterministic parser applied ``> 85`` (86 loans, £19.4m) and the
+# model applied ``>= 85`` (136 loans, £31.1m). Two materially different answers
+# to one question, decided by which parser happened to run.
+CONVENTION_ON_LLM_PATH = [
+    ("What is my exposure to borrowers over 85?", "ge", "gt"),
+    ("What is my exposure to borrowers older than 85?", "ge", "gt"),
+    ("What is my exposure to borrowers aged 85 or older?", "gt", "ge"),
+    ("What is my exposure to borrowers aged at least 85?", "gt", "ge"),
+]
+
+
+@pytest.mark.parametrize("question,llm_op,expected", CONVENTION_ON_LLM_PATH,
+                         ids=[q[:46] for q, _, _ in CONVENTION_ON_LLM_PATH])
+def test_the_house_threshold_convention_survives_the_llm_path(
+        question, llm_op, expected, semantics):
+    def _llm_with(_prompt):
+        return json.dumps({
+            "intent": "summary", "chart_type": "none",
+            "metric": "current_outstanding_balance", "aggregation": "sum",
+            "filters": {"youngest_borrower_age": {"op": llm_op, "value": 85}},
+            "explanation": "exposure by borrower age"})
+
+    spec, meta = parse_with_repair(
+        question, semantics, available_columns=_COLUMNS,
+        llm_enabled=True, llm_callable=_llm_with, zero_cost_first=False)
+    assert meta["parser_mode"] == "llm"
+    assert spec.filters["youngest_borrower_age"]["op"] == expected
+    assert spec.filters["youngest_borrower_age"]["value"] == 85
+    assert "threshold_operator:youngest_borrower_age" in (
+        meta.get("specialist_intent_carried") or [])
+
+
+def test_only_the_operator_moves_never_the_field_or_the_value(semantics):
+    """The reconciliation must not be able to change WHAT is filtered."""
+    from mi_agent.llm_query_parser import reconcile_threshold_operators
+    from mi_agent.mi_query_spec import MIQuerySpec
+
+    det = MIQuerySpec(intent="summary",
+                      filters={"youngest_borrower_age": {"op": "gt", "value": 85.0}})
+    llm = MIQuerySpec(intent="summary",
+                      filters={"youngest_borrower_age": {"op": "ge", "value": 85},
+                               "current_loan_to_value": {"op": "lt", "value": 75}})
+    reconcile_threshold_operators(llm, det)
+    assert llm.filters == {"youngest_borrower_age": {"op": "gt", "value": 85},
+                           "current_loan_to_value": {"op": "lt", "value": 75}}
+
+
+@pytest.mark.parametrize("det_condition,llm_condition", [
+    # A different value is a different question — leave it to the P0 guard.
+    ({"op": "gt", "value": 85.0}, {"op": "ge", "value": 80}),
+    # Opposite directions are a genuine disagreement, not a strictness nuance.
+    ({"op": "gt", "value": 85.0}, {"op": "lt", "value": 85}),
+    # An equality predicate is not a threshold.
+    ({"op": "eq", "value": 85.0}, {"op": "ge", "value": 85}),
+])
+def test_the_reconciliation_stays_out_of_a_real_disagreement(det_condition,
+                                                             llm_condition):
+    from mi_agent.llm_query_parser import reconcile_threshold_operators
+    from mi_agent.mi_query_spec import MIQuerySpec
+
+    det = MIQuerySpec(intent="summary",
+                      filters={"youngest_borrower_age": dict(det_condition)})
+    llm = MIQuerySpec(intent="summary",
+                      filters={"youngest_borrower_age": dict(llm_condition)})
+    assert reconcile_threshold_operators(llm, det) == []
+    assert llm.filters["youngest_borrower_age"] == llm_condition
+
+
 def test_multi_clause_filters_still_split_after_the_and_fix(semantics):
     """The splitter change must not stop " and " joining two real predicates.
 

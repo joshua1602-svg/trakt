@@ -625,13 +625,17 @@ def adapt_workflow_result(
     chart_type = cr.get("chart_type") if cr else None
     chart_emitted = False
 
-    # P0: a semantic refusal must not ship the result it refused. The workflow
+    # P0: a declined answer must not ship the result it declined. The workflow
     # keeps ``query_result`` for the audit trail, but rendering it as a table
-    # titled "Result" alongside "I have not substituted a broader figure" hands
-    # the reader the very number the guard just declined to present.
+    # titled "Result" — or as a KPI reading "£1.96BN" — alongside "I have not
+    # substituted a broader figure" hands the reader the very number the guard
+    # just refused to present. This covers EVERY refusal, not only the semantic
+    # guard's: the dimension invariant refuses the same way and shipped the
+    # whole-book KPI next to its refusal.
     # ``qr`` itself is left intact so the metadata below still reports what ran.
-    refused = bool(workflow.get("semantic_refusal")
-                   or workflow.get("controlled_refusal"))
+    refused = (not workflow.get("ok")
+               or bool(workflow.get("semantic_refusal"))
+               or bool(workflow.get("controlled_refusal")))
 
     if qr and not refused:
         result_type = qr.get("result_type")
@@ -709,9 +713,13 @@ def adapt_workflow_result(
         # A controlled response (unmapped question / unsupported concept)
         # carries its own user-facing answer — never replace it with the
         # generic lead sentence.
+        # A declined answer states WHY. Falling through to the generic lead
+        # sentence gave "Here is the result for your query" on a refusal — a
+        # success-shaped answer to a question that was not answered.
         "answer": _with_receipt(
-            workflow.get("answer") or _answer(workflow.get("interpreted"),
-                                              qr, chart_type),
+            workflow.get("answer")
+            or (workflow.get("error") if refused else None)
+            or _answer(workflow.get("interpreted"), qr, chart_type),
             workflow),
         # P0: the machine-derived statement of what was ACTUALLY executed —
         # measure, aggregation, filters that really narrowed the frame,

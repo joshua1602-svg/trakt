@@ -42,7 +42,11 @@ from mi_agent.concentration_tests.metrics import (  # noqa: E402
 )
 
 #: Trees that never carry a governed concentration configuration.
-_SKIP_PREFIXES = ("demo-video", "frontend", "landing-page", ".git", "node_modules")
+# "out/" is gitignored run output, not configuration. Scanning it made this test
+# fail on whatever a developer had last generated there — an MI harness
+# transcript that merely MENTIONS a dimension is not a configuration using one.
+_SKIP_PREFIXES = ("demo-video", "frontend", "landing-page", ".git",
+                  "node_modules", "out/")
 
 
 def _newly_resolvable() -> list:
