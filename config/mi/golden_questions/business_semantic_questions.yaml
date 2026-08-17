@@ -1,0 +1,385 @@
+# Business-semantic MI question bank.
+#
+# These are deliberately NOT direct field lookups ("what is LTV in London").
+# Each one asks a question a credit / treasury / IC audience actually asks: it
+# names a business CONCEPT (concentration, headroom, credit quality, run-rate,
+# mix shift, diversification, stress, eligibility, vintage performance) and
+# leaves the agent to decide which governed measure, dimension, period and
+# route express it.
+#
+# `observed` records what the agent actually returned when this bank was run
+# against the synthetic demo_platform book (11,035 loans, £1.96bn, three
+# month-end snapshots 2026-04 / 2026-05 / 2026-06) through the SAME governed
+# entrypoint React and Copilot use — mi_service.execute_governed_mi_query —
+# with the deterministic parser (no ANTHROPIC_API_KEY configured).
+#
+# Reproduce with:
+#     python -m demo_platform.run_demo --generate --orchestrate
+#     python scripts/run_mi_capability_review.py --out out/mi_capability_review
+#
+# grade values:
+#   correct              — answered the question asked, with the right numbers
+#   partial              — right machinery, but a stated facet was dropped or
+#                          re-interpreted without saying so
+#   silently_wrong       — ok=true and a confident answer to a DIFFERENT question
+#   controlled_refusal   — ok=false with an honest, specific reason (the target
+#                          behaviour when a concept is not in the dataset)
+#   unhelpful_failure    — ok=false but the reason given does not identify what
+#                          could not be resolved
+
+version: 1
+dataset: demo_platform (synthetic — Alderbridge Lending Platform)
+parser: deterministic (MI_AGENT_LLM_PARSER unset, no ANTHROPIC_API_KEY)
+entrypoint: mi_agent_api.mi_service.execute_governed_mi_query
+
+# --------------------------------------------------------------------------- #
+# Group A — the questions submitted for review
+# --------------------------------------------------------------------------- #
+submitted:
+  - id: A1
+    question: What is the average LTV, the average borrower age, the average borrower type in London?
+    concept: multi-measure KPI within a named geographic scope
+    expected: >-
+      Three measures for the London segment only, or a controlled statement that
+      "average borrower type" is not a measure. Loan count must be London's, not
+      the whole book's.
+    observed:
+      ok: true
+      answer: single KPI, average youngest-borrower age 71, loan count 11,035
+      defects: [scope_filter_dropped, extra_measures_dropped, no_disclosure]
+    grade: silently_wrong
+
+  - id: A2a
+    question: Which region has grown the most in the last month?
+    concept: period-over-period growth ranked by dimension
+    expected: regions ranked by balance movement between the two latest snapshots
+    observed:
+      ok: true
+      route: geo_exposure
+      answer: point-in-time largest concentration (Westminster & City of London, £83.4m)
+      defects: [growth_intent_replaced_with_concentration]
+    grade: silently_wrong
+
+  - id: A2b
+    question: Which broker has grown the most in the last quarter?
+    concept: period-over-period growth ranked by dimension
+    expected: >-
+      controlled refusal — broker_channel is not carried in this book — or a
+      broker ranking where it is
+    observed:
+      ok: true
+      route: period_change_analysis
+      answer: generic metric-movement list; no broker dimension; "last quarter" compared as May->June
+      defects: [dimension_dropped, period_reinterpreted]
+    grade: silently_wrong
+
+  - id: A2c
+    question: Which product has grown the most in the last quarter?
+    concept: period-over-period growth ranked by dimension
+    observed:
+      ok: true
+      route: period_change_analysis
+      defects: [dimension_dropped, period_reinterpreted]
+    grade: silently_wrong
+
+  - id: A2d
+    question: Which borrower type has grown the most in the last month?
+    concept: period-over-period growth ranked by dimension
+    observed:
+      ok: true
+      route: period_change_analysis
+      answer: balance movement +£18.1m for the whole book; no borrower-type split
+      defects: [dimension_dropped]
+    grade: partial
+
+  - id: A3
+    question: Show me balance by LTV by borrower type
+    concept: two-dimensional stratification (cross-tab)
+    expected: heatmap / cross-tab of balance over ltv_bucket x borrower_type
+    observed:
+      ok: true
+      answer: single bar on amortisation_type — one row, "Interest roll-up", 100%
+      defects: [both_requested_dimensions_dropped, unrelated_dimension_substituted]
+    grade: silently_wrong
+
+  - id: A4
+    question: Show me balance by region by borrower type
+    concept: two-dimensional stratification (cross-tab)
+    observed:
+      ok: true
+      answer: single bar on collateral_geography; borrower type absent and not reported as rejected
+      defects: [dimension_silently_dropped]
+    grade: partial
+
+  - id: A5
+    question: Show me balance by borrower type by product
+    concept: two-dimensional stratification (cross-tab)
+    observed:
+      ok: false
+      answer: "The proposed query failed validation."
+      defects: [reason_not_surfaced]
+    grade: unhelpful_failure
+
+  - id: A6
+    question: Am I close to breaching any concentration limits?
+    concept: headroom against the governing document's covenants
+    observed:
+      ok: true
+      route: risk_limits
+      answer: >-
+        8 passed / 1 breach / 3 unavailable; nearest to limit named; 12-row table of
+        test / actual / limit / headroom / status / movement, sourced from the
+        Schedule 8 document
+    grade: correct
+
+  - id: A7
+    question: Based on current origination, when will funded loans be £100MM?
+    concept: run-rate extrapolation to a stated target
+    expected: >-
+      "£100m was passed at <date>" (the book is already £1.96bn) — the target value
+      itself parses correctly
+    observed:
+      ok: false
+      answer: "I couldn't map this question to a governed analytic"
+      defects: [forecast_route_not_triggered]
+    grade: unhelpful_failure
+
+  - id: A8
+    question: What is the average LTV of the direct book vs the acquired book?
+    concept: cohort comparison across origination provenance
+    observed:
+      ok: true
+      route: portfolio_risk_comparison
+      answer: "Direct has higher observed Current Loan To Value than Acquired."
+      artifact: Direct 43.35 vs Acquired 42.68
+      defects: [numbers_absent_from_narrative]
+    grade: partial
+
+  - id: A9
+    question: How has the average collateral value of the book changed since inception?
+    concept: metric evolution across the full retained history
+    expected: average current_valuation_amount at each of the three snapshots
+    observed:
+      ok: false
+      route: period_change_analysis
+      answer: "No governed field tagged for period-change analysis is available in both snapshots"
+      defects: [inception_reduced_to_latest_pair, average_treated_as_sum_on_the_variant_phrasing]
+    grade: unhelpful_failure
+
+# --------------------------------------------------------------------------- #
+# Group B — additional business-semantic questions
+# --------------------------------------------------------------------------- #
+questions:
+  - id: B01
+    question: Where is my portfolio most concentrated, and how much headroom is left?
+    concept: concentration + covenant headroom in one answer
+    grade: correct
+
+  - id: B02
+    question: Which segments are driving balance growth this quarter?
+    concept: growth attribution across unnamed dimensions
+    observed: {ok: true, answer: whole-book balance KPI £1.96bn}
+    grade: silently_wrong
+
+  - id: B03
+    question: Am I over-reliant on any single broker?
+    concept: single-name concentration risk
+    observed:
+      ok: false
+      answer: "'over-reliant single' is not a governed measure in this dataset; no substitute was used."
+      note: right outcome (broker_channel absent), but the reason names a parsed phrase rather than the missing dimension
+    grade: controlled_refusal
+
+  - id: B04
+    question: Is the credit quality of new origination better or worse than the back book?
+    concept: vintage-versus-back-book credit comparison
+    observed: {ok: true, answer: whole-book balance KPI}
+    grade: silently_wrong
+
+  - id: B05
+    question: How much of the book would breach a 75% LTV cap if house prices fell 10%?
+    concept: stressed eligibility / covenant test
+    observed: {ok: true, route: period_change_analysis, answer: May-to-June movement narrative}
+    grade: silently_wrong
+
+  - id: B06
+    question: What is my exposure to borrowers over 85?
+    concept: exposure within an age cohort
+    expected: balance and share for youngest_borrower_age >= 85
+    observed: {ok: true, answer: whole-book balance £1.96bn, filters: {}}
+    grade: silently_wrong
+
+  - id: B07
+    question: How much headroom do I have before the London concentration limit binds?
+    concept: named-limit headroom
+    observed:
+      ok: true
+      route: risk_limits
+      answer: whole limit schedule; the London row (21.1% vs 25.0%, 3.9pp headroom) is in the table but not in the narrative
+    grade: partial
+
+  - id: B08
+    question: What is the run rate of new lending and is it accelerating?
+    concept: origination run-rate and its second derivative
+    observed:
+      ok: true
+      route: forecast_extrapolation
+      answer: "~£16.3m/month (£195.5m/year) based on 2 month(s) of funded growth"
+      note: the "is it accelerating" half is not addressed
+    grade: correct
+
+  - id: B09
+    question: Which vintages have the highest LTV?
+    concept: vintage-level risk ranking
+    observed:
+      ok: true
+      answer: a 10-row LOAN-LEVEL table including loan_identifier — not a vintage ranking
+      defects: [wrong_grain, loan_identifier_exposed]
+    grade: silently_wrong
+
+  - id: B10
+    question: What share of the book is in arrears and where is it concentrated?
+    concept: arrears incidence and its geographic concentration
+    observed:
+      ok: true
+      route: concentration_analysis
+      answer: >-
+        generic exposure concentrations (amortisation type 100%, collateral type 100%);
+        the parsed spec (arrears_balance by collateral_geography) was discarded by the route
+      defects: [parsed_spec_ignored_by_route]
+    grade: silently_wrong
+
+  - id: B11
+    question: Which region contributes most to the weighted average LTV?
+    concept: contribution analysis
+    observed: {ok: true, answer: WA LTV by region, 12 groups, West Midlands highest at 43.9%}
+    grade: correct
+
+  - id: B12
+    question: How diversified is the book by region compared with last quarter?
+    concept: diversification measured across time
+    observed:
+      ok: true
+      route: portfolio_risk_comparison
+      answer: >-
+        compared DIRECT with ACQUIRED at the current date — not this quarter with last —
+        and reported "no governed directional differences" while its own tables show
+        clear regional differences
+      defects: [wrong_comparison_axis, narrative_contradicts_artifact]
+    grade: silently_wrong
+
+  - id: B13
+    question: Which product type has the highest average ticket size?
+    concept: product-level ticket economics
+    observed: {ok: false, answer: "The proposed query failed validation."}
+    grade: unhelpful_failure
+
+  - id: B14
+    question: Is the acquired book converging with the direct book on LTV?
+    concept: convergence of two cohorts over time
+    observed: {ok: true, answer: single whole-book WA LTV 43.2%}
+    grade: silently_wrong
+
+  - id: B15
+    question: What proportion of the book is eligible for a 75% LTV securitisation?
+    concept: eligibility share against a criterion
+    observed: {ok: true, answer: whole-book WA LTV 43.2% — not a share}
+    grade: silently_wrong
+
+  - id: B16
+    question: Which brokers are bringing me the highest LTV business?
+    concept: channel-level risk attribution
+    observed: {ok: false, answer: "The proposed query failed validation.", note: broker_channel genuinely absent}
+    grade: unhelpful_failure
+
+  - id: B17
+    question: What is driving the change in weighted average LTV since inception?
+    concept: driver attribution on a ratio metric
+    observed:
+      ok: true
+      route: funded_bridge
+      answer: >-
+        regional waterfall of BALANCE from 2026-04 to 2026-06 (+£32.6m, largest mover
+        South East +£11.1m) — a good artifact, but for balance, not WA LTV
+      defects: [metric_substituted_without_disclosure]
+    grade: partial
+
+  - id: B18
+    question: How has the regional mix of the book shifted over the last quarter?
+    concept: mix shift across time
+    observed: {ok: true, route: concentration_analysis, answer: point-in-time regional concentration only}
+    grade: partial
+
+  - id: B19
+    question: If origination continues at the current rate, what will the balance be at year end?
+    concept: run-rate projection to a fixed horizon
+    observed: {ok: true, answer: weighted-average interest rate 6.6%}
+    grade: silently_wrong
+
+  - id: B20
+    question: Which cohorts are closest to the no-negative-equity guarantee becoming a risk?
+    concept: NNEG proximity
+    observed:
+      ok: false
+      answer: >-
+        "'NNEG' is not available in this dataset. The MI book for this client does not
+        include nneg_flag. This field is not reported, so the question cannot be
+        answered from the current data (no value was fabricated)."
+      note: the reference refusal — names the concept, names the field, states nothing was fabricated
+    grade: controlled_refusal
+
+  - id: B21
+    question: What is the largest single-loan exposure and what share of the book is it?
+    concept: single-name concentration
+    observed: {ok: true, answer: top-10 loan table, largest £841,638.96}
+    grade: correct
+
+  - id: B22
+    question: How much of the book is concentrated in the top 10 postcodes?
+    concept: granular geographic concentration
+    observed:
+      ok: true
+      route: geo_exposure
+      answer: top ITL3 areas (15 rows), not postcodes — although a `postcode` column exists and the concentration route can rank it
+      defects: [granularity_substituted_without_disclosure]
+    grade: partial
+
+  - id: B23
+    question: Are older borrowers taking bigger loans relative to their property value?
+    concept: relationship between two measures across a cohort
+    observed: {ok: true, answer: total current valuation £4.86bn}
+    grade: silently_wrong
+
+  - id: B24
+    question: Which part of the book is growing fastest by loan count rather than balance?
+    concept: growth measured on an alternative basis
+    observed: {ok: true, answer: balance by account_status (Active / Redeemed)}
+    grade: silently_wrong
+
+  - id: B25
+    question: How does the direct book compare with the acquired book on borrower age?
+    concept: cohort comparison on a non-default measure
+    observed:
+      ok: true
+      route: portfolio_risk_comparison
+      answer: >-
+        reported "no governed directional differences were observed" — no age figures given
+    grade: silently_wrong
+
+  - id: B26
+    question: What would a 10% house price fall do to my weighted average LTV?
+    concept: single-factor stress
+    observed: {ok: true, answer: current WA LTV 43.2%, no stress applied, no disclosure}
+    grade: silently_wrong
+
+  - id: B27
+    question: Which regions are we most exposed to relative to last month?
+    concept: exposure ranking with a temporal reference
+    observed: {ok: true, route: geo_exposure, answer: point-in-time ranking only}
+    grade: partial
+
+  - id: B28
+    question: Show me the quality of the book by origination vintage.
+    concept: vintage quality curve
+    observed: {ok: false, answer: "The proposed query failed validation."}
+    grade: unhelpful_failure
