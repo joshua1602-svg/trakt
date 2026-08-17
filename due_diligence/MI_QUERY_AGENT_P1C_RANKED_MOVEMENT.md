@@ -364,3 +364,75 @@ second way to compute movement. The trusted answerable surface grew; the P0 safe
 did not move. Three pre-existing defects were found by running the real thing and fixed,
 one of which — the age convention diverging between parser paths — was producing a
 materially different number for the same question depending on which parser ran.
+
+---
+
+## 15. Full 40-question classification, both parser paths
+
+Every question in the regression bank, classified by outcome rather than by `ok` flag.
+Deterministic run: `out/p1c_det`. Genuine LLM run: `out/p1c_llm_final` (32 of 40 parsed by
+the live model, 8 short-circuited by `zero_cost_first`, **0 silent fallbacks**).
+
+| | Deterministic | LLM |
+| --- | --- | --- |
+| **Correct** | 5 | 5 |
+| **Partial, limitation disclosed** | 5 | 4 |
+| **Safe refusal** | 29 | 30 |
+| **Silent semantic error** | **1** | **1** |
+
+**Correct (both paths):** A2a (ranked movement — new in P1C), A6, B01 (concentration limits
+vs the governing document), B06 (86 loans over 85 — now identical on both paths), B08
+(run-rate extrapolation).
+
+**Partial with an explicit limitation:** A4 *(deterministic only — "Not applied: borrower
+type — field is unavailable in this dataset"; the LLM path refuses outright)*, A8 *(states
+the direction of the LTV difference but not the two averages)*, B21 *(deterministic only —
+ranked top-10 loan listing; the "share of the book" half is not answered; the LLM path
+refuses)*, B22 *("Not applied: postcode — this answer is reported at ITL3 area level")*,
+B25 *("no governed directional differences were observed" — honest, but gives no age
+figures)*, B04 *(LLM only — answers "credit quality" with average LTV by portfolio cohort;
+the receipt names the proxy, the answer text does not)*.
+
+**Safe refusal:** the remaining 29/30. Every one names what it could not do and states that
+nothing was substituted. The five P1C-shaped refusals (A2b, A2c, A2d, B02, B24) now name the
+dimension or the period grain that blocked them instead of giving a generic facet message.
+
+### The one silent semantic error — B11, and it is not a P1C regression
+
+> **B11 — "Which region contributes most to the weighted average LTV?"**
+
+The agent returns a chart **titled with the user's own question**, ordered by each region's
+weighted-average LTV descending. The first bar is **West Midlands** (43.90%). A reader takes
+that as the answer.
+
+It is not. "Contributes most to the weighted average" is a balance-weighted contribution,
+and the two rankings are almost inverted:
+
+| Region | Region WA LTV | Share of book | Contribution to the book's 43.15% |
+| --- | --- | --- | --- |
+| **South East** | 43.14% | 26.28% | **11.34 pp** |
+| London | 42.75% | 21.06% | 9.00 pp |
+| South West | 43.31% | 12.08% | 5.23 pp |
+| **West Midlands** *(shown first)* | 43.90% | 6.20% | **2.72 pp** |
+| North East *(shown second)* | 43.92% | 1.55% | 0.68 pp |
+
+The correct answer is **South East**; the agent presents **West Midlands**. The artifact does
+carry `concentration_pct`, so the evidence to judge it is on screen, and the receipt states
+truthfully that it calculated "Weighted-average Current LTV · grouped by Region" — but
+nothing tells the reader that "contributes most" was not the calculation performed, and the
+chart title asserts that it was.
+
+**Status:** pre-existing, on both parser paths, and **not introduced by P1C** — it was
+present before this work and is not caused by the ranking layer. It is reported here because
+the launch gate is *0 silent semantic errors* and this is one.
+
+**Shape of the fix (not attempted):** P0 already refuses a superlative answered over an
+unranked population (`detect_unranked_superlative`, built in P0 for B21). "Contributes most
+to / drives / accounts for most of ⟨an aggregate⟩" is the same failure in a different
+costume: a **contribution** question answered with a per-group value ranking. It needs its
+own detector, and then either the governed contribution calculation (share × value) or a
+refusal. It is a self-contained P1-sized item; it was not folded into P1C because the brief
+scoped this phase to ranked period-over-period movement, and quietly widening scope is how
+regressions get in.
+
+**Everything else in the bank is either correct, disclosed, or refused.**
