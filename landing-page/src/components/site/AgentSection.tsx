@@ -30,8 +30,9 @@ import { Card, SectionHeading, cx } from "@/components/ui";
  * The agents sit ABOVE the demo, as outlined tiles rather than the small
  * named lines they were. Underneath a fifty-second film they were furniture
  * nobody reached — the products of the section, ranked below a recording of
- * one of them. A third joined them in Pass 13: MI Query, the capability the
- * React dashboard and Copilot already carry, reachable by an agent. Above it they are the claim, and the film is the evidence for
+ * one of them. A third joined them in Pass 13 and leads the row: Portfolio
+ * Surveillance, the written position an agent asks for before it asks for
+ * anything else. Above it they are the claim, and the film is the evidence for
  * the claim, which is the right order for both.
  *
  * Their outline is `border-line`, not mint. Mint means available, and the
@@ -44,6 +45,16 @@ import { Card, SectionHeading, cx } from "@/components/ui";
 
 const AGENTS = [
   {
+    // First, because it is the one an agent asks for before it asks for
+    // anything else: what is the position, and what changed. The prose is
+    // deterministic — `mi_agent_pptx/insights.py` is templates over governed
+    // figures with no LLM in the wording — which is the same claim the section
+    // headline makes, applied to sentences rather than sums.
+    name: "Portfolio Surveillance Agent",
+    copy: "Reports the whole position in words: balance, movements, the trends behind them — and what is starting to turn.",
+    Glyph: SurveillanceGlyph,
+  },
+  {
     name: "Securitisation Readiness Agent",
     copy: "Point it at a warehouse: eligibility, coverage, concentration — and what fails a deal, before the arranger says so.",
     Glyph: TrancheGlyph,
@@ -55,17 +66,6 @@ const AGENTS = [
     name: "Portfolio Acquisition Intelligence Agent",
     copy: "Reads the portfolio you are buying, finds what the seller's summary leaves out — and what it cannot resolve.",
     Glyph: DiligenceGlyph,
-  },
-  {
-    // The same MI query capability the React dashboard and Copilot already
-    // carry, reachable by an agent instead of a person. Named "Agent" like its
-    // neighbours because what an agent delegates to is an agent, not an
-    // endpoint — and the matrix two sections above lists the underlying
-    // capability as "MI Query" without the suffix, which is the overview /
-    // depth split the rest of this section keeps to.
-    name: "MI Query Agent",
-    copy: "Your agents ask the portfolio questions your team already asks — over the same governed calculation.",
-    Glyph: QueryGlyph,
   },
 ] as const;
 
@@ -155,7 +155,7 @@ function TrancheGlyph() {
   );
 }
 
-function QueryGlyph() {
+function SurveillanceGlyph() {
   return (
     <svg
       width="26"
@@ -169,11 +169,12 @@ function QueryGlyph() {
       aria-hidden="true"
       className="text-peri-300"
     >
-      {/* A question put and an answer returned — deliberately not another
-          magnifier, which the diligence tile already uses. */}
-      <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v3A2.5 2.5 0 0 1 14.5 12H8l-3.5 3v-3H5.5A2.5 2.5 0 0 1 3 9.5z" />
-      <path d="M12.5 20h6.5a2 2 0 0 0 2-2v-2.5" />
-      <path d="M15 17.5 12.5 20l2.5 2.5" />
+      {/* A position over time with the latest point marked — deliberately not
+          another magnifier, which the diligence tile uses, and not an eye,
+          which reads as watching people rather than a book. */}
+      <path d="M3 20h18" />
+      <path d="M4 15.5l4.5-5 3.5 3 4-6.5" />
+      <circle cx="16" cy="7" r="2" />
     </svg>
   );
 }

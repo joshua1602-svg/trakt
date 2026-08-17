@@ -537,10 +537,12 @@ test.describe("Trakt landing page", () => {
     // The agents are the section's products, so they lead it. As small
     // named lines under a fifty-second film they were furniture nobody
     // reached — ranked below a recording of one of them.
+    // Order matters: Portfolio Surveillance leads, because it is what an agent
+    // asks for before it asks for anything else.
     const AGENT_NAMES = [
+      "Portfolio Surveillance Agent",
       "Securitisation Readiness Agent",
       "Portfolio Acquisition Intelligence Agent",
-      "MI Query Agent",
     ];
     for (const agent of AGENT_NAMES) {
       await expect(agents.getByRole("heading", { name: agent, level: 3 })).toBeVisible();
@@ -550,11 +552,18 @@ test.describe("Trakt landing page", () => {
     // grid change could reorder them visually while the markup still read
     // correctly.
     const frame = await agents.locator("video").boundingBox();
+    const boxes = [];
     for (const agent of AGENT_NAMES) {
       const tile = await agents.getByRole("heading", { name: agent, level: 3 }).boundingBox();
       expect(tile, `no box for ${agent}`).not.toBeNull();
       expect(tile!.y, `${agent} is not above the demo`).toBeLessThan(frame!.y);
+      boxes.push(tile!);
     }
+    // And in order — reading order, so top-to-bottom then left-to-right, which
+    // covers the single-column and two-column layouts as well as the row.
+    const reading = boxes.map((b) => [Math.round(b.y), Math.round(b.x)]);
+    const sorted = [...reading].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    expect(reading, "the agent tiles are out of order").toEqual(sorted);
 
     // The topology is deleted, not hidden. It was a diagram of the exchange
     // sitting beside both the sentence describing it and a demo performing it.
