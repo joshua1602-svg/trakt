@@ -393,6 +393,19 @@ _OP_ALIASES = {
     "between": "between",
     # Categorical membership (used by the "Other" bar-bucket drill-through).
     "in": "in", "not_in": "not_in", "nin": "not_in", "not in": "not_in",
+    # Verbose spellings a JSON producer (notably the LLM parser) writes out in
+    # full. Folding them here means an operator the model spelled correctly in
+    # English is not silently downgraded to equality by the `.get(..., "eq")`
+    # default below — which would compare a threshold as an exact match and
+    # return an empty, unexplained result.
+    "gte": "ge", "greater_than_or_equal": "ge", "greater_than_or_equal_to": "ge",
+    "greater_or_equal": "ge", "not_less_than": "ge",
+    "lte": "le", "less_than_or_equal": "le", "less_than_or_equal_to": "le",
+    "less_or_equal": "le", "not_greater_than": "le",
+    "equal": "eq", "equals": "eq", "equal_to": "eq", "is_equal_to": "eq",
+    "not_equal": "ne", "not_equals": "ne", "not_equal_to": "ne", "is_not": "ne",
+    "one_of": "in", "any_of": "in", "none_of": "not_in", "not_one_of": "not_in",
+    "in_range": "between", "range": "between",
 }
 
 

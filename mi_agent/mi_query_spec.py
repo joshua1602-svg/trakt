@@ -59,6 +59,138 @@ AMBIGUOUS_DIMENSION_TERMS = {"stage", "portfolio", "region", "rate", "balance"}
 _SCALAR_FIELD_SLOTS = ("metric", "dimension", "x", "y", "size", "color", "weight_field", "sort_by")
 _LIST_FIELD_SLOTS = ("dimensions", "hierarchy")
 
+# --------------------------------------------------------------------------- #
+# Filter normalisation
+# --------------------------------------------------------------------------- #
+# ``filters`` is canonically ``{field_key: condition}`` (see
+# mi_query_executor._apply_filters). Callers that build a spec from JSON — the
+# LLM parser above all — routinely express the same intent as a LIST of predicate
+# objects, or under a singular ``filter`` key, because that is the more natural
+# JSON shape and nothing in the contract ruled it out. Both shapes previously
+# reached the dataclass unconverted: a list made ``referenced_fields`` raise
+# ``TypeError: unhashable type: 'dict'``, and a singular ``filter`` key was
+# dropped as unknown — so a correctly-identified predicate was either a crash or
+# a silently unfiltered answer.
+#
+# These helpers fold every recognised shape into the canonical mapping. A
+# predicate that cannot be folded is NEVER discarded: it is recorded in
+# ``unavailable_filters``, which the workflow already surfaces in warnings and
+# the query-audit panel.
+
+#: Keys a predicate object may use to name its field, in precedence order.
+_PREDICATE_FIELD_KEYS = ("field", "field_key", "key", "column", "name")
+#: Keys a predicate object may use to name its comparison operator.
+_PREDICATE_OP_KEYS = ("operator", "op", "comparator", "comparison")
+#: Keys a predicate object may use to carry its value.
+_PREDICATE_VALUE_KEYS = ("value", "values", "val")
+#: Operator spellings that mean plain equality/membership, for which the
+#: canonical condition is the bare value rather than an ``{"op", "value"}`` dict.
+_EQUALITY_OPS = {"", "=", "==", "eq", "equal", "equals", "equal_to", "equalto",
+                 "is", "is_equal_to", "in", "one_of"}
+
+
+def _predicate_to_condition(pred: Dict[str, Any]) -> Optional[tuple]:
+    """``{field, operator, value}`` -> ``(field_key, condition)``, or None.
+
+    Returns None when the object carries no usable field name, so the caller can
+    record it as unavailable rather than guess which column it meant.
+    """
+    field_key = None
+    for key in _PREDICATE_FIELD_KEYS:
+        candidate = pred.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            field_key = candidate.strip()
+            break
+    if field_key is None:
+        return None
+
+    operator = ""
+    for key in _PREDICATE_OP_KEYS:
+        candidate = pred.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            operator = candidate.strip().lower()
+            break
+
+    has_value = any(k in pred for k in _PREDICATE_VALUE_KEYS)
+    value: Any = None
+    for key in _PREDICATE_VALUE_KEYS:
+        if key in pred:
+            value = pred[key]
+            break
+    # ``between`` is also written as separate bounds.
+    if not has_value and ("min" in pred or "max" in pred):
+        lo, hi = pred.get("min"), pred.get("max")
+        if lo is not None and hi is not None:
+            return field_key, {"op": "between", "value": [lo, hi]}
+        return field_key, {"op": "ge" if lo is not None else "le",
+                           "value": lo if lo is not None else hi}
+    if not has_value:
+        return None
+
+    # Plain equality/membership is expressed as the bare value: the executor
+    # matches a string case-insensitively and a list as membership, which is what
+    # a categorical predicate means.
+    if operator in _EQUALITY_OPS:
+        if isinstance(value, (list, tuple, set)):
+            return field_key, list(value)
+        return field_key, value
+    return field_key, {"op": operator, "value": value}
+
+
+def _describe_unfoldable(pred: Any) -> str:
+    """A short, user-facing note for a predicate that could not be folded."""
+    if isinstance(pred, dict):
+        parts = [f"{k}={v!r}" for k, v in list(pred.items())[:3]]
+        body = ", ".join(parts) if parts else "empty predicate"
+    else:
+        body = repr(pred)[:80]
+    return (f"a filter was requested ({body}) but could not be interpreted, "
+            "so it was NOT applied")
+
+
+def normalise_filters(raw: Any) -> tuple:
+    """``(filters_dict, unavailable_notes)`` for any recognised filter shape.
+
+    Accepts the canonical mapping, a list of predicate objects, and a single
+    predicate object. Never raises: anything unrecognised is reported through the
+    notes so the caller can surface it instead of dropping it.
+    """
+    notes: List[str] = []
+    if raw is None:
+        return {}, notes
+    if isinstance(raw, dict):
+        # A lone predicate object — ``{"field": …, "operator": …, "value": …}`` —
+        # is a predicate, not a one-entry mapping of field to condition.
+        if any(k in raw for k in _PREDICATE_FIELD_KEYS) and \
+                any(k in raw for k in _PREDICATE_OP_KEYS + _PREDICATE_VALUE_KEYS):
+            folded = _predicate_to_condition(raw)
+            if folded is None:
+                notes.append(_describe_unfoldable(raw))
+                return {}, notes
+            return {folded[0]: folded[1]}, notes
+        # Canonical mapping. Keys must be usable as field references.
+        out: Dict[str, Any] = {}
+        for key, value in raw.items():
+            if isinstance(key, str) and key.strip():
+                out[key] = value
+            else:
+                notes.append(_describe_unfoldable({key: value}))
+        return out, notes
+    if isinstance(raw, (list, tuple)):
+        out = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                notes.append(_describe_unfoldable(item))
+                continue
+            folded = _predicate_to_condition(item)
+            if folded is None:
+                notes.append(_describe_unfoldable(item))
+                continue
+            out[folded[0]] = folded[1]
+        return out, notes
+    notes.append(_describe_unfoldable(raw))
+    return {}, notes
+
 
 @dataclass
 class MIQuerySpec:
@@ -223,8 +355,22 @@ class MIQuerySpec:
         for slot in _LIST_FIELD_SLOTS:
             if slot in kwargs and kwargs[slot] is None:
                 kwargs[slot] = []
-        if "filters" in kwargs and kwargs["filters"] is None:
-            kwargs["filters"] = {}
+        # ``filters`` accepts the canonical mapping, a list of predicate objects
+        # or a single predicate object; a producer that wrote the singular
+        # ``filter`` key meant the same thing. Fold them all, and carry anything
+        # unfoldable into unavailable_filters rather than dropping it. Without
+        # this, a list reached referenced_fields() and raised TypeError, and a
+        # singular ``filter`` was discarded as an unknown key — both of which
+        # turned a correctly-identified predicate into a wrong answer.
+        raw_filters = kwargs.get("filters")
+        if not raw_filters and isinstance(data.get("filter"), (dict, list, tuple)):
+            raw_filters = data["filter"]
+        folded, notes = normalise_filters(raw_filters)
+        kwargs["filters"] = folded
+        if notes:
+            existing = list(kwargs.get("unavailable_filters") or [])
+            kwargs["unavailable_filters"] = existing + [
+                n for n in notes if n not in existing]
         return cls(**kwargs)
 
     @classmethod
@@ -292,14 +438,27 @@ class MIQuerySpec:
             for value in getattr(self, slot) or []:
                 if value:
                     out.append(value)
-        # filter keys are field references too
-        for key in self.filters or {}:
-            if key:
+        # filter keys are field references too. Defensive about the container and
+        # its keys: a spec built by a producer that bypassed from_dict (a direct
+        # constructor call, an older pickle) may still carry a non-mapping here,
+        # and introspection must never be the thing that raises.
+        filters = self.filters
+        if isinstance(filters, dict):
+            keys: List[Any] = list(filters.keys())
+        elif isinstance(filters, (list, tuple)):
+            keys = [f.get("field") if isinstance(f, dict) else f for f in filters]
+        else:
+            keys = []
+        for key in keys:
+            if isinstance(key, str) and key:
                 out.append(key)
-        # de-duplicate, preserve order
+        # de-duplicate, preserve order. Only hashable, string-valued references
+        # reach here, so membership testing is safe.
         seen = set()
         unique = []
         for f in out:
+            if not isinstance(f, str):
+                continue
             if f not in seen:
                 seen.add(f)
                 unique.append(f)

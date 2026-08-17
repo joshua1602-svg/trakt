@@ -2183,6 +2183,18 @@ _SYSTEM_INSTRUCTIONS = (
     "allowed for the chosen metric. Respect each field's allowed_chart_roles.\n"
     "7. Output STRICT JSON ONLY — no prose, no markdown fences. Always include "
     "a short 'explanation' string.\n"
+    "8. FILTERS. The key is 'filters' (plural) and it is a JSON OBJECT keyed by "
+    "field key — never a list, and never a singular 'filter'. Each value is "
+    "either a bare value for equality/membership, or an object "
+    '{\"op\": ..., \"value\": ...}. Allowed ops: gt, ge, lt, le, eq, ne, '
+    "between (value is a two-element list), in, not_in (value is a list). "
+    "Examples:\n"
+    '   {\"filters\": {\"geographic_region_obligor\": \"London\"}}\n'
+    '   {\"filters\": {\"youngest_borrower_age\": {\"op\": \"ge\", \"value\": 85}}}\n'
+    '   {\"filters\": {\"current_loan_to_value\": {\"op\": \"le\", \"value\": 75}}}\n'
+    "9. PERCENT SCALE. Percent-format fields (LTV, interest rate) are expressed "
+    "in PERCENTAGE POINTS, not fractions: 75% is 75, not 0.75. Write filter "
+    "thresholds on those fields in points.\n"
 )
 
 
