@@ -2709,6 +2709,56 @@ def _is_layered_question(question: str) -> bool:
     return False
 
 
+#: Specialist analytical intent the DETERMINISTIC parser detects and the LLM
+#: cannot: nothing in the field catalogue it is prompted with expresses "this is
+#: a covenant-headroom question" or "this is a run-rate question". The chat
+#: recognisers dispatch on exactly these fields
+#: (``mi_agent_api.chat_routing._register_default_recognisers``), so an LLM spec
+#: that omits them silently demotes a purpose-built governed capability to a
+#: generic chart — which is how "am I close to breaching any concentration
+#: limits?" became a field-unavailable refusal and "what is the run rate of new
+#: lending?" became a 150-point line chart.
+#:
+#: These are INTENT markers, never data. Carrying them forward cannot change
+#: which rows or measures the LLM asked for; it only preserves the routing
+#: decision the deterministic parser already made.
+_SPECIALIST_INTENT_FIELDS: Tuple[str, ...] = (
+    "risk_limit_query", "risk_monitor", "risk_monitor_mode", "risk_dimension",
+    "risk_limit_category",
+    "forecast_mode", "forecast_question", "forecast_target_value",
+    "bridge_query", "cohort_progression",
+    "temporal_mode", "compare_periods", "baseline_date", "current_date",
+    "execution_mode", "state",
+)
+
+
+def carry_specialist_intent(llm_spec: MIQuerySpec, det_spec: MIQuerySpec) -> List[str]:
+    """Copy specialist ROUTING intent from the deterministic spec onto the LLM's.
+
+    Only fields the LLM left unset are filled, so a spec that genuinely
+    expresses one of these keeps its own value. Returns the names carried, for
+    parser metadata and tests.
+
+    This is the precedence rule in one place: a specialist capability the
+    deterministic parser positively recognised may not be shadowed by a generic
+    LLM spec. It runs below every channel (React, Copilot, workflow, harness)
+    because they all parse here.
+    """
+    carried: List[str] = []
+    for field_name in _SPECIALIST_INTENT_FIELDS:
+        det_value = getattr(det_spec, field_name, None)
+        if not det_value:
+            continue
+        if getattr(llm_spec, field_name, None):
+            continue          # the LLM expressed it itself — leave it alone
+        try:
+            setattr(llm_spec, field_name, det_value)
+        except Exception:  # noqa: BLE001 - never let this break a parse
+            continue
+        carried.append(field_name)
+    return carried
+
+
 def parse_with_repair(
     user_question: str,
     semantics,
@@ -2852,9 +2902,11 @@ def parse_with_repair(
 
         if vr_ok and spec is not None:
             detail = "llm" if i == 0 else "llm_repaired"
+            carried = carry_specialist_intent(spec, det_spec)
             return spec, {
                 "parser_mode": "llm",
                 "parser_mode_detail": detail,
+                "specialist_intent_carried": carried,
                 "ok": True,
                 "validation_errors": [],
                 "repair_attempts": i,
@@ -2900,9 +2952,16 @@ def parse_with_repair(
               else f"LLM call failed ({llm_call_error}); no valid deterministic parse either"
               if llm_call_error
               else "LLM output failed validation after repair attempts")
+    # Even an LLM spec that failed validation must not swallow a specialist
+    # intent the deterministic parser recognised: routing runs on the parsed
+    # spec BEFORE workflow validation, so a covenant-headroom question whose
+    # deterministic spec also fails validation still reaches the governed risk
+    # route — unless the flag is dropped here.
+    carried_on_failure = carry_specialist_intent(last_spec, det_spec)
     return last_spec, {
         "parser_mode": "llm",
         "parser_mode_detail": "validation_failed",
+        "specialist_intent_carried": carried_on_failure,
         "ok": False,
         "validation_errors": last_errors,
         "repair_attempts": max(0, len(attempts) - 1),

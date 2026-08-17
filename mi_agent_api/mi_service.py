@@ -457,6 +457,45 @@ def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
         return None, "Could not load the governed data for this query."
 
 
+#: Parser provenance for the evaluation harness. The distinction that matters:
+#: a deterministic FALLBACK after an LLM failure is not an LLM result, and a
+#: harness that cannot tell them apart reports a fiction.
+_LLM_FAILURE_CATEGORIES = (
+    ("authentication", ("authenticationerror", "401", "api key")),
+    ("rate_limit", ("ratelimit", "429", "overloaded")),
+    ("timeout", ("timeout", "timed out", "deadline")),
+    ("parse_failure", ("failed validation", "did not return a usable")),
+)
+
+
+def _parser_provenance(workflow: Dict[str, Any]) -> Dict[str, Any]:
+    """``{parser_used, llm_failure}`` — non-secret, for evaluation only."""
+    meta = (workflow.get("metadata") or {}) if isinstance(workflow, dict) else {}
+    parse_meta = meta.get("parse_metadata") or {}
+    detail = str(parse_meta.get("parser_mode_detail")
+                 or meta.get("parser_mode_detail") or "")
+    mode = str(parse_meta.get("parser_mode") or workflow.get("parser_mode") or "")
+    status = str(parse_meta.get("status") or "").lower()
+
+    if detail == "deterministic_fallback":
+        used = "deterministic_fallback_after_llm_failure"
+    elif mode == "llm" or detail.startswith("llm"):
+        used = "llm"
+    else:
+        used = "deterministic"
+
+    failure = None
+    if used == "deterministic_fallback_after_llm_failure" or detail == "validation_failed":
+        failure = "unknown"
+        for category, needles in _LLM_FAILURE_CATEGORIES:
+            if any(n in status for n in needles):
+                failure = category
+                break
+    return {"parser_used": used, "llm_failure": failure,
+            "parser_mode_detail": detail or None,
+            "specialist_intent_carried": parse_meta.get("specialist_intent_carried") or []}
+
+
 def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                          route: Optional[str], semantics: Dict[str, Any],
                          frame) -> Dict[str, Any]:
@@ -621,6 +660,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         routed = None
     if routed is not None:
         route = (routed.get("metadata") or {}).get("route") if isinstance(routed, dict) else None
+        if isinstance(routed, dict):
+            rmeta = routed.setdefault("metadata", {})
+            if isinstance(rmeta, dict):
+                rmeta.setdefault("parserProvenance", _parser_provenance(
+                    {"metadata": {"parse_metadata": dict(getattr(parsed, "meta", {}) or {})}}))
         _stamp_routed_scope(routed, req)
         routed = _guard_routed_answer(routed, question=req.question, route=route,
                                       semantics=semantics, frame=df)
@@ -656,9 +700,16 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
 
     meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
     if isinstance(meta, dict):
-        meta["llm"] = {"enabled": llm_cfg.enabled, "available": llm_cfg.available,
-                       "model": llm_cfg.model if llm_cfg.available else None,
-                       "status": llm_cfg.status}
+        # NOTE the key: ``llmConfig``, not ``llm``. The adapter puts the
+        # parser's own LLM block (call count, tokens, cost) on ``metadata.llm``;
+        # overwriting it here previously destroyed the only evidence of whether
+        # a model was actually consulted, which let a deterministic fallback be
+        # reported as an LLM result.
+        meta["llmConfig"] = {"enabled": llm_cfg.enabled,
+                             "available": llm_cfg.available,
+                             "model": llm_cfg.model if llm_cfg.available else None,
+                             "status": llm_cfg.status}
+        meta.setdefault("parserProvenance", _parser_provenance(workflow))
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
     # Governed portfolio scope + coverage. The BACKEND states which portfolios

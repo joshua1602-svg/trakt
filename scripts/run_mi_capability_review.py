@@ -113,6 +113,12 @@ def run_one(qid: str, question: str, ctx) -> Dict[str, Any]:
         "llmStatus": llm.get("status"),
         "llmCalls": llm.get("calls"),
         "llmCostUsd": llm.get("estimated_total_cost"),
+        # Proves WHICH parser actually ran. A deterministic fallback after an
+        # LLM failure is not an LLM result and must never be counted as one.
+        "parserUsed": (meta.get("parserProvenance") or {}).get("parser_used"),
+        "llmFailure": (meta.get("parserProvenance") or {}).get("llm_failure"),
+        "specialistIntentCarried": (meta.get("parserProvenance") or {}).get(
+            "specialist_intent_carried"),
         "specMetric": (spec or {}).get("metric"),
         "specDimension": (spec or {}).get("dimension"),
         "specDimensions": (spec or {}).get("dimensions"),
@@ -220,10 +226,15 @@ def main() -> int:
         print(f"wrote {out_dir/'diff.md'} — {moved}/{len(transcript)} questions changed")
 
     if args.llm:
-        total = sum(r.get("llmCostUsd") or 0 for r in transcript)
-        called = sum(1 for r in transcript if (r.get("llmCalls") or 0) > 0)
-        print(f"LLM consulted on {called}/{len(transcript)} questions · "
-              f"estimated ${total:.4f}")
+        from collections import Counter
+        used = Counter(r.get("parserUsed") or "unknown" for r in transcript)
+        failures = Counter(r.get("llmFailure") for r in transcript if r.get("llmFailure"))
+        print("parser actually used:", dict(used))
+        if failures:
+            print("llm failures:", dict(failures))
+        if used.get("llm", 0) == 0:
+            print("WARNING: no question was answered from a live LLM parse — "
+                  "this run is NOT an LLM evaluation.")
 
     print(f"\nwrote {out_dir/'transcript.json'} and {out_dir/'summary.md'}")
     return 0
