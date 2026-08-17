@@ -94,6 +94,7 @@ def run_one(qid: str, question: str, ctx) -> Dict[str, Any]:
     env = res.result or {}
     meta = env.get("metadata") or {}
     spec = env.get("spec") if isinstance(env.get("spec"), dict) else {}
+    llm = meta.get("llm") or {}
     rec.update({
         "governedStatus": res.status,
         "httpStatus": res.http_status,
@@ -101,6 +102,17 @@ def run_one(qid: str, question: str, ctx) -> Dict[str, Any]:
         "error": env.get("error"),
         "answer": env.get("answer"),
         "route": meta.get("route"),
+        # Parser observability — proves whether the LLM was actually consulted
+        # for this question or whether zero_cost_first returned the
+        # deterministic spec without a call.
+        "parserMode": env.get("parserMode") or meta.get("parser_mode"),
+        "parserModeDetail": meta.get("parserModeDetail") or meta.get("parser_mode_detail"),
+        "repairAttempts": meta.get("repairAttempts") or meta.get("repair_attempts"),
+        "repairSkippedReason": (meta.get("repairSkippedReason")
+                                or meta.get("repair_skipped_reason")),
+        "llmStatus": llm.get("status"),
+        "llmCalls": llm.get("calls"),
+        "llmCostUsd": llm.get("estimated_total_cost"),
         "specMetric": (spec or {}).get("metric"),
         "specDimension": (spec or {}).get("dimension"),
         "specDimensions": (spec or {}).get("dimensions"),
@@ -122,6 +134,11 @@ def main() -> int:
                          "(default: deterministic only)")
     ap.add_argument("--period", default="current",
                     help="demo_platform reporting period role to answer from")
+    ap.add_argument("--model", default=None,
+                    help="override MI_AGENT_LLM_MODEL for this run")
+    ap.add_argument("--compare", default=None, metavar="TRANSCRIPT",
+                    help="path to an earlier transcript.json; emits diff.md "
+                         "showing which questions changed answer")
     args = ap.parse_args()
 
     from demo_platform import config as cfg
@@ -130,6 +147,12 @@ def main() -> int:
     os.environ["MI_AGENT_DATA_CACHE_TTL"] = "0"
     if args.llm:
         os.environ["MI_AGENT_LLM_PARSER"] = "on"
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            print("--llm requires ANTHROPIC_API_KEY in the environment.",
+                  file=sys.stderr)
+            return 2
+        if args.model:
+            os.environ["MI_AGENT_LLM_MODEL"] = args.model
     else:
         os.environ["MI_AGENT_LLM_PARSER"] = "off"
         os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -149,9 +172,10 @@ def main() -> int:
     for qid, question in load_questions():
         rec = run_one(qid, question, ctx)
         transcript.append(rec)
-        print("%-5s ok=%-5s route=%-24s %s" % (
-            qid, rec.get("ok"), rec.get("route") or "-",
-            (rec.get("answer") or rec.get("error") or "")[:110].replace("\n", " ")),
+        print("%-5s ok=%-5s llm=%-2s route=%-24s %s" % (
+            qid, rec.get("ok"), rec.get("llmCalls") if args.llm else "-",
+            rec.get("route") or "-",
+            (rec.get("answer") or rec.get("error") or "")[:100].replace("\n", " ")),
             flush=True)
 
     (out_dir / "transcript.json").write_text(
@@ -166,6 +190,40 @@ def main() -> int:
         lines.append("| %s | %s | %s | %s |" % (
             rec["id"], rec.get("ok"), rec.get("route") or "—", answer[:160]))
     (out_dir / "summary.md").write_text("\n".join(lines) + "\n")
+
+    if args.compare:
+        prior = {r["id"]: r for r in json.loads(Path(args.compare).read_text())}
+        diff = ["# Run diff", "",
+                f"baseline: `{args.compare}`  ·  this run: "
+                f"{'llm-enabled' if args.llm else 'deterministic'}", "",
+                "Rows are questions whose answer, route or resolved dimensions moved.", "",
+                "| id | field | baseline | this run |", "| --- | --- | --- | --- |"]
+        moved = 0
+        for rec in transcript:
+            was = prior.get(rec["id"])
+            if not was:
+                continue
+            changed = False
+            for field in ("ok", "route", "specMetric", "specDimension",
+                          "specDimensions", "specFilters", "answer"):
+                a, b = was.get(field), rec.get(field)
+                if a == b:
+                    continue
+                changed = True
+                fmt = lambda v: str(v).replace("\n", " ").replace("|", "\\|")[:150]
+                diff.append("| %s | %s | %s | %s |" % (
+                    rec["id"], field, fmt(a), fmt(b)))
+            if changed:
+                moved += 1
+        diff.insert(4, f"**{moved} of {len(transcript)} questions changed.**")
+        (out_dir / "diff.md").write_text("\n".join(diff) + "\n")
+        print(f"wrote {out_dir/'diff.md'} — {moved}/{len(transcript)} questions changed")
+
+    if args.llm:
+        total = sum(r.get("llmCostUsd") or 0 for r in transcript)
+        called = sum(1 for r in transcript if (r.get("llmCalls") or 0) > 0)
+        print(f"LLM consulted on {called}/{len(transcript)} questions · "
+              f"estimated ${total:.4f}")
 
     print(f"\nwrote {out_dir/'transcript.json'} and {out_dir/'summary.md'}")
     return 0
