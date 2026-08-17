@@ -184,6 +184,13 @@ TEMPORAL_ROUTES = frozenset({
     "period_change_analysis", "temporal_compare", "evolution", "evolution_funnel",
     "evolution_pipeline_stage", "funded_bridge", "cohort_progression",
     "cohort_conversion", "forecast_extrapolation", "scenario",
+    # ``period_movement`` reads the current AND prior governed reporting periods
+    # and reports the delta between them (mi_agent.movement.period_movement).
+    # Its absence here refused "what changed since last month?" as a
+    # point-in-time answer — a false refusal of a genuinely two-period
+    # capability, which disables working governed analytics rather than
+    # preventing a substitution.
+    "period_movement",
 })
 
 #: Routes that genuinely rank a dimension.
@@ -598,6 +605,11 @@ class ExecutionReceipt:
     period: Optional[str] = None
     comparison_period: Optional[str] = None
     scenario: Optional[str] = None
+    #: How a ranked answer was ordered — the basis, the direction and any Top N.
+    #: Stated because "which region grew the most" has more than one defensible
+    #: reading (money added, growth rate, share gained) and the reader is
+    #: entitled to know which one produced the order they are looking at.
+    ranking: Optional[str] = None
     parser_confidence: Optional[str] = None
     facets: List[RequestedFacet] = field(default_factory=list)
     #: True for a routed governed capability, whose scope is defined by the
@@ -631,7 +643,10 @@ class ExecutionReceipt:
             # be mistaken for a filtered one.
             parts.append("entire funded portfolio")
         if self.dimensions:
-            parts.append("grouped by " + _join(self.dimensions))
+            parts.append(("ranked by " if self.ranking else "grouped by ")
+                         + _join(self.dimensions))
+        if self.ranking:
+            parts.append(self.ranking)
         if self.scenario:
             parts.append(self.scenario)
         if self.comparison_period:
@@ -682,6 +697,7 @@ class ExecutionReceipt:
             "period": self.period,
             "comparisonPeriod": self.comparison_period,
             "scenario": self.scenario,
+            "ranking": self.ranking,
             "parserConfidence": self.parser_confidence,
             "facets": [f.to_dict() for f in self.facets],
             "notApplied": [f.disclosure() for f in self.not_applied()],
@@ -1031,6 +1047,7 @@ _ROUTE_LABELS = {
     "geo_exposure": "Geographic exposure",
     "concentration_analysis": "Exposure concentration",
     "period_change_analysis": "Governed period change",
+    "period_movement": "Month-on-month movement",
     "temporal_compare": "Governed period comparison",
     "evolution": "Metric evolution",
     "funded_bridge": "Funded balance bridge",
@@ -1042,12 +1059,37 @@ _ROUTE_LABELS = {
 }
 
 
+def ranking_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The ranking a route DECLARES it performed, as structured evidence.
+
+    Returns ``{}`` unless the route stated that a ranking was applied and named
+    the canonical field it ranked. A declaration without a field is not evidence
+    — it cannot be checked against what the question asked for.
+    """
+    if not isinstance(envelope, dict):
+        return {}
+    declared = (envelope.get("metadata") or {}).get("rankedMovement")
+    if not isinstance(declared, dict) or not declared.get("applied"):
+        return {}
+    if not declared.get("canonicalField"):
+        return {}
+    return declared
+
+
 def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional[str],
                             semantics: dict,
-                            available_columns: Optional[Iterable[str]] = None
+                            available_columns: Optional[Iterable[str]] = None,
+                            envelope: Optional[Dict[str, Any]] = None
                             ) -> List[RequestedFacet]:
-    """Stamp facet statuses for an answer produced by a routed capability."""
+    """Stamp facet statuses for an answer produced by a routed capability.
+
+    ``envelope`` is the routed answer itself. It is read for EVIDENCE only — a
+    route that claims to have ranked a dimension must name the canonical field
+    it ranked, and that field must be one the question's ranking facet resolves
+    to. A claim that does not match the question is not accepted.
+    """
     columns = set(available_columns or ())
+    ranked = ranking_evidence(envelope)
     fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
     listing = route in LISTING_ROUTES
 
@@ -1110,7 +1152,16 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
         elif facet.kind in (KIND_GROUPING, KIND_RANKING):
             canonicals = [_canonical(k) for k in facet.satisfied_by()]
             canonical = canonicals[0] if canonicals else None
-            if listing and facet.kind == KIND_RANKING:
+            if ranked and _canonical(ranked.get("canonicalField")) in canonicals:
+                # The route ranked the dimension this facet asked for, and said
+                # so with the field it used. Proven, not assumed.
+                facet.status, facet.reason = APPLIED, ""
+            elif ranked and facet.kind == KIND_RANKING:
+                facet.status = LOST
+                facet.reason = (f"the answer ranks "
+                                f"{ranked.get('displayName') or 'another dimension'}, "
+                                f"not {facet.label}")
+            elif listing and facet.kind == KIND_RANKING:
                 # The listing engine produces the ranking itself; which column
                 # the frame carries is not what decides whether it answered.
                 facet.status, facet.reason = APPLIED, ""
@@ -1188,19 +1239,55 @@ def build_routed_receipt(*, route: Optional[str], envelope: Dict[str, Any],
     """A receipt for a routed answer, built from what the route itself declares."""
     metadata = envelope.get("metadata") or {}
     spec = envelope.get("spec") if isinstance(envelope.get("spec"), dict) else {}
+    ranked = ranking_evidence(envelope)
     return ExecutionReceipt(
         measure=_ROUTE_LABELS.get(route or "", "Governed analysis"),
         aggregation=None,
         filters=[],
-        dimensions=[],
+        dimensions=([ranked["displayName"]] if ranked.get("displayName") else []),
         population=None,
         period=metadata.get("asOfDate") or envelope.get("asOf"),
-        comparison_period=None,
+        comparison_period=_ranked_period(ranked),
         scenario=None,
+        ranking=_ranking_phrase(ranked),
         parser_confidence=(spec or {}).get("parser_confidence"),
         facets=list(facets),
         routed=True,
     )
+
+
+#: How a ranking direction reads in the receipt.
+_RANK_DIRECTION_WORDS = {
+    "increase": "largest increases first",
+    "decrease": "largest decreases first",
+    "movement": "largest movements first, in either direction",
+}
+
+
+def _ranking_phrase(ranked: Dict[str, Any]) -> Optional[str]:
+    """"ranked on absolute balance movement, largest increases first, top 3"."""
+    if not ranked:
+        return None
+    parts = [str(ranked.get("basisLabel") or ranked.get("basis") or "").strip()]
+    direction = _RANK_DIRECTION_WORDS.get(str(ranked.get("direction") or ""))
+    if direction:
+        parts.append(direction)
+    top_n = ranked.get("topN")
+    if top_n:
+        parts.append(f"top {int(top_n)} of "
+                     f"{int(ranked.get('categoriesAnalysed') or 0):,}")
+    return ", ".join(p for p in parts if p) or None
+
+
+def _ranked_period(ranked: Dict[str, Any]) -> Optional[str]:
+    """The two dates the ranking actually spanned, stated as the receipt's
+    comparison period so a ranked answer can never imply a span it did not use."""
+    if not ranked:
+        return None
+    opening, closing = ranked.get("openingPeriod"), ranked.get("closingPeriod")
+    if not opening or not closing:
+        return None
+    return f"{opening} → {closing}"
 
 
 # --------------------------------------------------------------------------- #

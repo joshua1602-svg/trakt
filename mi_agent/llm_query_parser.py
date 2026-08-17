@@ -1561,7 +1561,15 @@ _POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
 #: containing the word "balance" — and the threshold bound to the balance column,
 #: silently filtering the answer by a predicate the user never asked for. A
 #: threshold must be resolved against its own clause, or not at all.
-_CLAUSE_SPLIT_RE = re.compile(r"\band\b|\bwith\b|\bwhere\b|\bwhose\b|\bhaving\b")
+# "and" joins two predicates ("age over 70 AND ltv above 50") — except when it
+# is part of ONE postfix bound ("85 and over", "40 and above"). Splitting there
+# tore the phrase in half and the bound was silently lost, which is why
+# "borrowers 85 and over" resolved to no filter at all. A negative lookahead is
+# the right layer for this: the splitter decides what a clause IS, so the
+# threshold matcher never has to know about the exception.
+_CLAUSE_SPLIT_RE = re.compile(
+    r"\band\b(?!\s+(?:over|above|older|under|below|younger|more|less)\b)"
+    r"|\bwith\b|\bwhere\b|\bwhose\b|\bhaving\b")
 
 
 def _parse_filters(q: str, semantics: dict, available_columns=None,

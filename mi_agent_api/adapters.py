@@ -625,7 +625,15 @@ def adapt_workflow_result(
     chart_type = cr.get("chart_type") if cr else None
     chart_emitted = False
 
-    if qr:
+    # P0: a semantic refusal must not ship the result it refused. The workflow
+    # keeps ``query_result`` for the audit trail, but rendering it as a table
+    # titled "Result" alongside "I have not substituted a broader figure" hands
+    # the reader the very number the guard just declined to present.
+    # ``qr`` itself is left intact so the metadata below still reports what ran.
+    refused = bool(workflow.get("semantic_refusal")
+                   or workflow.get("controlled_refusal"))
+
+    if qr and not refused:
         result_type = qr.get("result_type")
         if result_type == "summary":
             artifacts.append(_kpi_artifact(qr, spec, ctx, hints))
@@ -654,7 +662,7 @@ def adapt_workflow_result(
     # Only warn about degraded fidelity when we could not emit a chart at all
     # (no Plotly figure and no normalisable series). With a figure present,
     # heatmap/treemap render faithfully via the Plotly renderer.
-    if chart_type in {"heatmap", "treemap"} and not chart_emitted:
+    if chart_type in {"heatmap", "treemap"} and not chart_emitted and not refused:
         raw_warnings.append(f"{chart_type} could not be rendered; showing the result table.")
 
     # Hide technical diagnostics (e.g. the percent-scale heuristic note) from the
@@ -744,6 +752,7 @@ def adapt_workflow_result(
             "chartType": chart_type,
             "unmappedQuestion": bool(workflow.get("unmapped_question")),
             "controlledUnsupported": bool(workflow.get("controlled_unsupported")),
+            "controlledRefusal": refused,
             # Technical diagnostics retained for engineers / an expandable UI panel.
             "diagnostics": diagnostics,
         },

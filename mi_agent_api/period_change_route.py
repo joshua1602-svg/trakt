@@ -24,6 +24,8 @@ workflow; if a number is not in the result, it is not in the answer.
 from __future__ import annotations
 
 import logging
+import re
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from trakt_core.errors import ErrorCode
@@ -273,22 +275,406 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # book to answer "how did LTV change?" is work nobody asked for.
     from mi_agent.period_change.models import MODE_REQUESTED_METRIC
 
+    # P1C. The ranking intent is resolved BEFORE the analysis runs, because it
+    # decides what the analysis must cover: asking "which region grew the most?"
+    # and receiving an analysis that never looked at geography cannot produce a
+    # ranked answer, and re-running afterwards would compute the book twice.
+    columns = set(snapshots[-1].frame.columns) if snapshots else None
+    rank_intent = resolve_rank_intent(question, columns=columns)
+    if rank_intent.refusal is not None:
+        return _rank_refusal_envelope(question, spec_dict, rank_intent)
+
+    mode, requested_fields = intent.mode, intent.requested_fields
+    if rank_intent.requested:
+        # Requested-metric mode is the governed way to say "analyse THIS field".
+        # The ranked dimension is exactly that: a field the reader named.
+        mode = MODE_REQUESTED_METRIC
+        requested_fields = (rank_intent.field,)
+
     request = PeriodChangeRequest(
-        question=question, mode=intent.mode,
+        question=question, mode=mode,
         period_request=intent.period_request,
-        requested_fields=intent.requested_fields,
-        requested_concepts=intent.requested_concepts,
+        requested_fields=requested_fields,
+        requested_concepts=() if rank_intent.requested else intent.requested_concepts,
         scope=scope_ref,
-        include_bridge=(intent.include_bridge
-                        or intent.mode != MODE_REQUESTED_METRIC),
-        composition_focus=intent.composition_focus)
+        include_bridge=(intent.include_bridge or mode != MODE_REQUESTED_METRIC),
+        composition_focus=intent.composition_focus or rank_intent.requested)
 
     try:
         result = run_period_change_analysis(request, snapshots)
     except PeriodChangeFailure as failure:
+        if rank_intent.requested and failure.reason == FAIL_NO_ELIGIBLE_FIELDS:
+            # The reader named a dimension the governed registry does not carry
+            # for this book. Say that, rather than the generic period-change
+            # message, and rank nothing in its place.
+            return _rank_refusal_envelope(question, spec_dict, RankingOutcome(
+                requested=True, request=rank_intent.request,
+                refusal_reason="dimension_not_governed",
+                refusal=(f"I could not rank movement by {rank_intent.term}: it "
+                         f"is not a governed period-change dimension for this "
+                         f"book. I have not ranked a different dimension "
+                         f"instead.")))
         return _failure_envelope(question, spec_dict, failure)
 
-    return _render(result, question, spec_dict, portfolio_id, as_of)
+    # A ranked question is answered by RANKING the governed period-change
+    # output, never by recalculating it.
+    ranking = apply_ranking(rank_intent, result)
+    if ranking.refusal is not None:
+        return _rank_refusal_envelope(question, spec_dict, ranking)
+
+    return _render(result, question, spec_dict, portfolio_id, as_of,
+                   ranking=ranking)
+
+
+# --------------------------------------------------------------------------- #
+# P1C — ranked period-over-period movement
+# --------------------------------------------------------------------------- #
+# The sequence, and nothing else:
+#
+#     governed period-change engine  →  CategoryShift per category
+#                                    →  deterministic ranking (mi_agent.period_change.ranking)
+#                                    →  answer + table + receipt evidence
+#
+# No figure is recalculated here, no ordering is asked of a model, and a ranking
+# that cannot be produced is REFUSED rather than replaced by the narrative — a
+# reader who asked "which region grew the most" and received a portfolio summary
+# has been answered a different question.
+
+#: Nouns that are the narrative itself rather than a dimension to rank.
+#: "What were the largest movements since last month?" already has a governed
+#: answer (the top movements per unit, across metrics); a question that names no
+#: dimension must keep it rather than be refused for lacking one.
+_NARRATIVE_RANK_SUBJECTS = frozenset({
+    "movement", "movements", "change", "changes", "driver", "drivers",
+    "shift", "shifts", "metric", "metrics", "mover", "movers", "factor",
+    "factors", "contributor", "contributors", "component", "components",
+    "increase", "increases", "decrease", "decreases", "growth", "decline",
+    "declines", "rise", "rises", "fall", "falls", "gain", "gains", "loss",
+    "losses",
+})
+
+#: The interrogative that introduces the thing to rank.
+_RANK_SUBJECT_LEAD_RE = re.compile(r"\b(?:which|what|rank|order)\b", re.I)
+#: Words between the interrogative and the noun: auxiliaries, articles, and the
+#: Top-N wording itself.
+_RANK_SUBJECT_SKIP = frozenset({
+    "were", "was", "are", "is", "has", "have", "had", "did", "do", "does",
+    "the", "a", "an", "me", "us", "of", "my", "our", "by",
+    "top", "first", "best", "three", "four", "five", "ten",
+    "largest", "biggest", "greatest", "smallest", "lowest", "highest", "most",
+})
+
+
+@dataclass(frozen=True)
+class RankingOutcome:
+    """What the route resolved for a ranked question.
+
+    Exactly one of three states, so the caller never has to infer:
+
+    ``requested`` False               not a ranked question — narrative as before
+    ``refusal`` set                   ranked, but the ranking could not be produced
+    ``movement`` set and ``ok``       ranked, and these are the ranked results
+    """
+
+    requested: bool = False
+    request: Any = None
+    #: The canonical dimension field to rank, and the term the reader used.
+    field: Optional[str] = None
+    term: Optional[str] = None
+    #: Other fields the same term resolves to once dataset availability is
+    #: known; carried so an availability difference is never read as a
+    #: substitution.
+    alt_fields: Tuple[str, ...] = ()
+    movement: Any = None
+    distribution: Any = None
+    refusal: Optional[str] = None
+    #: Machine-readable reason for the refusal, for the audit line.
+    refusal_reason: Optional[str] = None
+
+    @property
+    def applied(self) -> bool:
+        return bool(self.movement is not None and getattr(self.movement, "ok", False))
+
+
+def _rank_subject(question: str) -> Optional[str]:
+    """The noun the question asks to rank — "which five SEGMENTS grew the most".
+
+    Used for two decisions only: whether the question is about the governed
+    narrative rather than a dimension, and what to quote back when no governed
+    dimension resolves. It never selects the dimension — that is
+    ``requested_dimension_terms``' job, and having one resolver is the point.
+    """
+    lead = _RANK_SUBJECT_LEAD_RE.search(question or "")
+    if not lead:
+        return None
+    for word in re.findall(r"[a-z][a-z-]*", question[lead.end():].lower()):
+        if word in _RANK_SUBJECT_SKIP:
+            continue
+        return word
+    return None
+
+
+def _distribution_for(result: PeriodChangeResult, keys: Sequence[str]) -> Any:
+    """The governed distribution whose field is one of ``keys``, or None."""
+    wanted = [str(k) for k in keys if k]
+    for key in wanted:
+        for dist in result.distribution_changes:
+            if dist.field == key:
+                return dist
+    return None
+
+
+def resolve_rank_intent(question: str, *, columns: Optional[Any] = None
+                        ) -> RankingOutcome:
+    """What the question asks to rank, resolved BEFORE the analysis runs.
+
+    Dimension resolution reuses ``execution_receipt.requested_dimension_terms``
+    — the SAME resolver the P0 guard uses to decide what the question asked for.
+    Sharing it is deliberate: if the route and the guard resolved "region"
+    differently, the guard would refuse every ranked answer, and a second
+    dimension vocabulary would be a second thing to keep in step.
+
+    Returns a ``RankingOutcome`` in one of three states: not requested, a
+    refusal, or a resolved ``field`` / ``term`` / ``request`` to rank on.
+    """
+    from mi_agent import execution_receipt as receipt_mod
+    from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent.period_change import rank_request as rank_mod
+    from .data_source import semantics_path
+
+    if not rank_mod.has_rank_language(question):
+        return RankingOutcome(requested=False)
+
+    subject = _rank_subject(question)
+    if subject and subject in _NARRATIVE_RANK_SUBJECTS:
+        # "the largest movements" is the governed narrative, not a ranking of a
+        # dimension. Keep the answer this route already gives.
+        return RankingOutcome(requested=False)
+
+    semantics = load_mi_semantics(semantics_path())
+    terms = receipt_mod.requested_dimension_terms(
+        question, semantics, available_columns=columns)
+    if not terms:
+        return RankingOutcome(
+            requested=True, refusal_reason="dimension_not_resolved",
+            refusal=("I can rank movement between two reporting dates, but I "
+                     "could not identify a governed dimension to rank"
+                     + (f" from “{subject}”" if subject else "")
+                     + ". I have not ranked something else instead."))
+
+    key, term, alts = terms[0]
+    request = rank_mod.detect_rank_request(question, term)
+    if request is None:
+        return RankingOutcome(requested=False)
+    return RankingOutcome(requested=True, request=request, field=key, term=term,
+                          alt_fields=tuple(alts or ()))
+
+
+def apply_ranking(intent: RankingOutcome, result: PeriodChangeResult
+                  ) -> RankingOutcome:
+    """Rank the governed period-change output for an already-resolved intent."""
+    from mi_agent.period_change import ranking as rk
+    from mi_agent.period_change.models import (
+        STATUS_AVAILABLE, STATUS_PARTIALLY_AVAILABLE)
+
+    if not intent.requested:
+        return intent
+    request, term = intent.request, intent.term
+    distribution = _distribution_for(result,
+                                     (intent.field,) + tuple(intent.alt_fields))
+    if distribution is None:
+        return RankingOutcome(
+            requested=True, request=request,
+            refusal_reason="dimension_not_analysed",
+            refusal=(f"I could not rank movement by {term}: that dimension was "
+                     f"not part of the governed period-change analysis for this "
+                     f"book. I have not ranked a different dimension instead."))
+    if distribution.status not in (STATUS_AVAILABLE, STATUS_PARTIALLY_AVAILABLE):
+        return RankingOutcome(
+            requested=True, request=request, distribution=distribution,
+            refusal_reason="dimension_not_comparable",
+            refusal=(f"I could not rank movement by {term}: it is not comparable "
+                     f"across both reporting dates ({distribution.status}). I "
+                     f"have not ranked a different dimension instead."))
+
+    movement = rk.rank_movement(distribution.categories, basis=request.basis,
+                                direction=request.direction,
+                                top_n=request.top_n)
+    if not movement.ok:
+        return RankingOutcome(
+            requested=True, request=request, distribution=distribution,
+            movement=movement,
+            refusal_reason=("no_category_moved_that_way"
+                            if movement.reason
+                            and movement.reason.startswith("no category")
+                            else "ranking_not_producible"),
+            refusal=_unrankable_message(result, term, movement))
+
+    return RankingOutcome(requested=True, request=request, movement=movement,
+                          distribution=distribution)
+
+
+def _unrankable_message(result: PeriodChangeResult, term: str, movement: Any
+                        ) -> str:
+    """Why no ranking was produced, as a finding rather than an apology.
+
+    "No region declined" IS the answer to "which region declined the most" — it
+    is stated as a fact about the two periods. What must never happen is
+    quietly answering with the increases instead, so the message says that too.
+    """
+    from . import chat_routing
+
+    period = result.summary.get("period") or {}
+    start = chat_routing._date_label(period.get("start"))
+    end = chat_routing._date_label(period.get("end"))
+    if (movement.reason or "").startswith("no category"):
+        moved = ("decreased" if movement.direction == "decrease" else "increased")
+        return (f"Between {start} and {end}, no {term} {moved} on "
+                f"{movement.basis_label}. I have not answered with the "
+                f"movements in the other direction instead.")
+    return (f"I could not rank {term} by {movement.basis_label} between {start} "
+            f"and {end}: {movement.reason}.")
+
+
+def _rank_refusal_envelope(question: str, spec_dict: Dict[str, Any],
+                           ranking: RankingOutcome) -> Dict[str, Any]:
+    """A controlled refusal for a ranking that could not be produced.
+
+    Fail-closed by construction: the alternative is returning the period-change
+    narrative, which answers a materially different question from the one asked.
+    """
+    from . import chat_routing
+
+    envelope = chat_routing._envelope(
+        ok=False, question=question, answer=ranking.refusal, spec=spec_dict,
+        artifacts=[], route=ROUTE_NAME, error=ranking.refusal,
+        lens_applied=True,
+        warnings=[f"ranking unavailable: {ranking.refusal_reason}"])
+    meta = envelope["metadata"]
+    meta["controlledUnsupported"] = True
+    meta["controlledRefusal"] = True
+    meta["workflowId"] = WORKFLOW_ID
+    meta["rankedMovement"] = {"applied": False,
+                              "reason": ranking.refusal_reason}
+    meta["errorCode"] = ErrorCode.UNSUPPORTED_QUESTION
+    envelope["controlledRefusal"] = True
+    return envelope
+
+
+#: How many runners-up the prose names when the reader did not ask for a Top N.
+#: The table always carries every ranked row.
+_PROSE_RUNNERS_UP = 3
+
+_RANK_COLUMNS = [
+    {"key": "rank", "label": "Rank"},
+    {"key": "category", "label": "Category"},
+    {"key": "start_value", "label": "Opening"},
+    {"key": "end_value", "label": "Closing"},
+    {"key": "movement", "label": "Movement"},
+    {"key": "percent_movement", "label": "Relative"},
+    {"key": "presence", "label": "Presence"},
+]
+
+#: The unit each ranking basis is expressed in, so the table formats the figure
+#: the ranking actually used rather than assuming currency.
+_BASIS_UNITS = {
+    "balance_absolute": UNIT_CURRENCY,
+    "balance_percent": UNIT_CURRENCY,
+    "count_absolute": UNIT_COUNT,
+    "balance_share": UNIT_RATIO,
+    "count_share": UNIT_RATIO,
+}
+
+
+def _share_pp(value: Optional[float]) -> str:
+    """A governed share is a ratio; a reader wants percentage points."""
+    return "—" if value is None else f"{float(value) * 100:.2f}%"
+
+
+def _rank_rows(ranking: RankingOutcome) -> List[Dict[str, Any]]:
+    basis = ranking.movement.basis
+    unit = _BASIS_UNITS.get(basis, UNIT_CURRENCY)
+    share = basis in ("balance_share", "count_share")
+    rows: List[Dict[str, Any]] = []
+    for index, row in enumerate(ranking.movement.rows, start=1):
+        rows.append({
+            "rank": index,
+            "category": row.category,
+            "start_value": (_share_pp(row.start_value) if share
+                            else _format_value(row.start_value, unit)),
+            "end_value": (_share_pp(row.end_value) if share
+                          else _format_value(row.end_value, unit)),
+            "movement": (f"{row.absolute_movement * 100:+.2f} pp" if share
+                         else _format_movement(row.absolute_movement, unit)),
+            "percent_movement": ("—" if row.percent_movement is None
+                                 else f"{row.percent_movement:+.1f}%"),
+            "presence": row.presence,
+        })
+    return rows
+
+
+def build_rank_answer(result: PeriodChangeResult,
+                      ranking: RankingOutcome) -> str:
+    """The ranked answer, stated from the ranked rows and nothing else."""
+    from . import chat_routing
+
+    movement, request = ranking.movement, ranking.request
+    period = (result.summary.get("period") or {})
+    start = chat_routing._date_label(period.get("start"))
+    end = chat_routing._date_label(period.get("end"))
+    dimension = ranking.distribution.display_name
+    basis = movement.basis_label
+    share = movement.basis in ("balance_share", "count_share")
+    unit = _BASIS_UNITS.get(movement.basis, UNIT_CURRENCY)
+
+    def _describe(row) -> str:
+        if share:
+            figure = (f"{_share_pp(row.start_value)} → {_share_pp(row.end_value)} "
+                      f"({row.absolute_movement * 100:+.2f} pp)")
+        else:
+            relative = ("" if row.percent_movement is None
+                        else f", {row.percent_movement:+.1f}%")
+            figure = (f"{_format_value(row.start_value, unit)} → "
+                      f"{_format_value(row.end_value, unit)} "
+                      f"({_format_movement(row.absolute_movement, unit)}"
+                      f"{relative})")
+        return f"{row.category} {figure}"
+
+    direction_word = {"increase": "increased", "decrease": "decreased"}.get(
+        movement.direction, "moved")
+    lead = movement.rows[0]
+    parts = [f"Between {start} and {end}, ranked by {basis} across "
+             f"{dimension}, {lead.category} {direction_word} the most: "
+             f"{_describe(lead)}."]
+
+    # Prose names the leader and a few runners-up; the full ranking is the table.
+    # A twelve-category ranking read out as a sentence is not an answer anybody
+    # can use, and truncating it silently would hide rows — so when the prose
+    # stops short it says how many rows the table carries.
+    named = movement.rows[1:] if request is not None and request.top_n else \
+        movement.rows[1:_PROSE_RUNNERS_UP + 1]
+    if named:
+        parts.append("Then " + "; ".join(_describe(r) for r in named) + ".")
+    if request is not None and request.top_n:
+        parts.append(f"Showing the top {request.top_n} of "
+                     f"{len(ranking.distribution.categories)} categories.")
+    elif len(movement.rows) > len(named) + 1:
+        parts.append(f"The full ranking of all {len(movement.rows)} ranked "
+                     f"{'category' if len(movement.rows) == 1 else 'categories'} "
+                     f"is in the table below.")
+    if movement.direction_excluded:
+        count = movement.direction_excluded
+        moved = {"increase": "increase", "decrease": "decrease"}.get(
+            movement.direction, "move")
+        parts.append(f"{count} further "
+                     f"{'category' if count == 1 else 'categories'} did not "
+                     f"{moved} on this basis and "
+                     f"{'is' if count == 1 else 'are'} not listed.")
+    if movement.excluded:
+        parts.append("Not ranked: " + "; ".join(
+            f"{category} ({reason})" for category, reason in movement.excluded)
+            + ".")
+    return " ".join(parts)
 
 
 def _failure_envelope(question: str, spec_dict: Dict[str, Any],
@@ -539,11 +925,13 @@ def build_answer(result: PeriodChangeResult) -> str:
 
 
 def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any],
-            portfolio_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any]:
+            portfolio_id: Optional[str], as_of: Optional[str],
+            ranking: Optional[RankingOutcome] = None) -> Dict[str, Any]:
     from . import chat_routing
 
     payload = result.to_dict()
     artifacts: List[Dict[str, Any]] = []
+    ranked = ranking is not None and ranking.applied
 
     summary = payload["summary"]
     kpis = [
@@ -561,6 +949,20 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
         portfolio_id=portfolio_id, as_of=as_of,
         description=(f"Resolved by {summary['period']['resolution_method']} "
                      f"from the governed Business Semantics Registry.")))
+
+    if ranked:
+        # The ranking the question asked for leads, before the governed
+        # narrative's own tables: the reader asked which category moved most,
+        # and that answer must not be the fourth table down.
+        artifacts.append(chat_routing._table_artifact(
+            f"Ranked movement by {ranking.distribution.display_name}",
+            columns=_RANK_COLUMNS, rows=_rank_rows(ranking), spec=spec_dict,
+            portfolio_id=portfolio_id, as_of=as_of,
+            description=(f"Ranked on {ranking.movement.basis_label} between "
+                         f"{chat_routing._date_label(summary['period']['start'])} "
+                         f"and "
+                         f"{chat_routing._date_label(summary['period']['end'])}"
+                         f", from the governed period-change result.")))
 
     metric_rows = _metric_rows(result)
     if metric_rows:
@@ -588,7 +990,10 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
                          "identifier.")))
 
     envelope = chat_routing._envelope(
-        ok=True, question=question, answer=build_answer(result), spec=spec_dict,
+        ok=True, question=question,
+        answer=(build_rank_answer(result, ranking) if ranked
+                else build_answer(result)),
+        spec=spec_dict,
         artifacts=artifacts, route=ROUTE_NAME, lens_applied=True,
         warnings=list(payload["warnings"]) + list(payload["limitations"]),
         source_notes=[{
@@ -609,4 +1014,25 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
     meta["workflowId"] = WORKFLOW_ID
     meta["periodResolution"] = payload["period_resolution"]["resolution_method"]
     meta["periodChangeMode"] = payload["request_interpretation"]["mode"]
+    if ranked:
+        # The EVIDENCE the P0 guard verifies against. It states what was ranked,
+        # on which basis, in which direction and over which two dates — so the
+        # guard can prove the ranking the question asked for is the ranking that
+        # ran, rather than taking the route's word for it.
+        meta["rankedMovement"] = {
+            "applied": True,
+            "canonicalField": ranking.distribution.field,
+            "displayName": ranking.distribution.display_name,
+            "basis": ranking.movement.basis,
+            "basisLabel": ranking.movement.basis_label,
+            "direction": ranking.movement.direction,
+            "topN": ranking.movement.top_n,
+            "rankedCategories": len(ranking.movement.rows),
+            "categoriesAnalysed": len(ranking.distribution.categories),
+            "excluded": [{"category": c, "reason": r}
+                         for c, r in ranking.movement.excluded],
+            "openingPeriod": summary["period"]["start"],
+            "closingPeriod": summary["period"]["end"],
+            "rows": [r.to_dict() for r in ranking.movement.rows],
+        }
     return envelope

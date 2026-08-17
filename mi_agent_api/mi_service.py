@@ -541,7 +541,8 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             return routed
         facets = receipt_mod.reconcile_routed_facets(
             facets, route=route, semantics=semantics,
-            available_columns=set(frame.columns) if frame is not None else None)
+            available_columns=set(frame.columns) if frame is not None else None,
+            envelope=routed)
         # A temporal route may have compared a shorter span than the question
         # named ("since inception" answered as one month). Verified against the
         # periods the route itself declares.

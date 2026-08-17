@@ -226,6 +226,8 @@ AGE_CONVENTION = [
     ("borrowers aged 85 or older", "ge", 85.0),
     ("borrowers aged at least 85", "ge", 85.0),
     ("borrowers 85+", "ge", 85.0),
+    ("borrowers 85 and over", "ge", 85.0),
+    ("borrowers 40 and above", "ge", 40.0),
     ("borrowers under 70", "lt", 70.0),
     ("borrowers younger than 70", "lt", 70.0),
 ]
@@ -243,16 +245,98 @@ def test_age_threshold_house_convention(question, op, value, semantics):
     assert condition == {"op": op, "value": value}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "KNOWN GAP: the clause splitter treats ' and ' as a predicate separator, so "
-    "'85 and over' is torn into 'borrowers 85' / 'over' and the bound is lost. "
-    "Every other inclusive form ('85 or older', 'at least 85', '85+') resolves "
-    "correctly, so the convention itself holds; this is a splitter fix, tracked "
-    "rather than patched around inside the threshold matcher."))
-def test_age_and_over_phrasing_is_a_known_gap(semantics):
+# --------------------------------------------------------------------------- #
+# Route coverage across phrasings (P1B Phase 8)
+# --------------------------------------------------------------------------- #
+# A capability recognised for one phrasing and lost for the next is a capability
+# nobody can rely on. Each governed route below is pinned across the phrasings a
+# reader actually uses, on BOTH parser paths.
+BRIDGE_PHRASINGS = [
+    "What drove the change in funded balance?",
+    "What drove the movement in funded balance?",
+    "Show me the balance bridge",
+    "Bridge the funded balance movement",
+    "Show me the funded balance bridge since last month",
+]
+
+
+@pytest.mark.parametrize("question", BRIDGE_PHRASINGS, ids=[q[:44] for q in BRIDGE_PHRASINGS])
+def test_the_funded_bridge_marker_survives_every_phrasing(question, semantics):
+    """``funded_bridge`` dispatches on ``bridge_query``, which only the
+    deterministic parser sets — so every phrasing must keep it when the LLM spec
+    is the one in play, or the bridge silently becomes a generic chart."""
+    det, _ = _deterministic_parse(question, semantics, available_columns=_COLUMNS)
+    assert det.bridge_query is True, "baseline: the deterministic parser sets it"
+
+    spec, meta = parse_with_repair(
+        question, semantics, available_columns=_COLUMNS,
+        llm_enabled=True, llm_callable=_llm, zero_cost_first=False)
+    assert meta["parser_mode"] == "llm"
+    assert spec.bridge_query is True
+    assert "bridge_query" in (meta.get("specialist_intent_carried") or [])
+
+
+#: Period-change phrasings, and whether the governed period-change capability
+#: owns them. The negatives matter as much as the positives: a route that claims
+#: point-in-time questions is as broken as one that loses temporal ones.
+PERIOD_CHANGE_PHRASINGS = [
+    ("What changed since last month?", True),
+    ("What moved month on month?", True),
+    ("Which region grew the most last month?", True),
+    ("Which region declined the most month-on-month?", True),
+    ("How has the portfolio composition shifted since the prior month?", True),
+    ("Rank regions by growth since last month.", True),
+    # Not period change: no comparison at all.
+    ("What is the weighted average LTV?", False),
+    ("Where is the book concentrated?", False),
+    ("Which region has the largest exposure?", False),
+    # Not period change: owned by other governed capabilities by design.
+    ("What is the run rate of new lending?", False),
+    ("Show me the trend in funded balance", False),
+]
+
+
+@pytest.mark.parametrize("question,owned", PERIOD_CHANGE_PHRASINGS,
+                         ids=[q[:44] for q, _ in PERIOD_CHANGE_PHRASINGS])
+def test_period_change_recognition_across_phrasings(question, owned):
+    from mi_agent.period_change import recognise
+
+    assert bool(recognise(question, spec=None, view="funded").matched) is owned
+
+
+@pytest.mark.parametrize("question,owned", PERIOD_CHANGE_PHRASINGS,
+                         ids=[q[:44] for q, _ in PERIOD_CHANGE_PHRASINGS])
+def test_geo_exposure_defers_to_period_change_and_only_to_it(question, owned):
+    """The precedence rule, from the other side: the point-in-time geographic
+    route stands down for exactly the questions the period-change capability
+    claims, and for no others."""
+    from mi_agent_api.chat_routing import _defers_to_period_change
+
+    assert _defers_to_period_change(question) is owned
+
+
+def test_a_point_in_time_geography_question_is_still_geo_exposure():
+    from mi_agent_api.chat_routing import _is_geo_exposure
+
+    assert _is_geo_exposure("Which region has the largest exposure?") is True
+    assert _is_geo_exposure("Where is the largest geographic concentration?") is True
+    # …and the same question with a period comparison is not.
+    assert _is_geo_exposure("Which region grew the most last month?") is False
+
+
+def test_multi_clause_filters_still_split_after_the_and_fix(semantics):
+    """The splitter change must not stop " and " joining two real predicates.
+
+    The fix is a negative lookahead, so "and" still separates clauses everywhere
+    except immediately before a bound word — which is the only place it was
+    tearing one predicate in half.
+    """
     from mi_agent.llm_query_parser import _parse_filters
 
-    condition = _parse_filters("borrowers 85 and over", semantics,
-                               {"youngest_borrower_age"}
-                               ).get("youngest_borrower_age")
-    assert condition == {"op": "ge", "value": 85.0}
+    columns = {"youngest_borrower_age", "current_loan_to_value",
+               "current_outstanding_balance"}
+    for question in ("age over 70 and ltv above 50",
+                     "balance over 100000 and ltv above 50",
+                     "loans with ltv above 50 and age over 70"):
+        applied = _parse_filters(question, semantics, columns)
+        assert len(applied) == 2, f"{question!r} -> {applied}"

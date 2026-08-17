@@ -1646,12 +1646,39 @@ _GROUPED_RANKING_RE = re.compile(
     r"\b(?:top|bottom|largest|biggest|smallest|lowest|highest)\b[^?]*?\bby\b")
 
 
-def _is_geo_exposure(question: str) -> bool:
+def _defers_to_period_change(question: str, *, spec: Any = None,
+                             view: str = "funded") -> bool:
+    """True when the governed period-change route positively claims ``question``.
+
+    A point-in-time route that answers a two-period question does not produce a
+    smaller answer — it produces a DIFFERENT one. Rather than duplicating
+    period-change vocabulary here, this asks the owning capability's own
+    recogniser, so the two can never drift apart.
+    """
+    try:
+        return bool(_period_change.recognise(question, spec=spec,
+                                             view=view or "funded").matched)
+    except Exception:  # noqa: BLE001 - a recognition fault must not lose a route
+        logger.exception("period-change deference check failed for %r", question)
+        return False
+
+
+def _is_geo_exposure(question: str, *, spec: Any = None,
+                     view: str = "funded") -> bool:
     q = f" {question.lower()} "
     if any(t in q for t in _RISK_LIMIT_TERMS):
         return False  # a limit/breach question is a risk-monitor question
     if "bridge" in q:
         return False  # a balance bridge by region is the bridge route
+    if _defers_to_period_change(question, spec=spec, view=view):
+        # "Which region grew the most last month?" is a PERIOD-CHANGE question
+        # that happens to name geography. This route answers at one date, so it
+        # would have reported today's largest region and silently dropped the
+        # comparison — exactly the substitution P0 refuses. Deference is narrow
+        # by construction: it applies only when the governed period-change
+        # recogniser positively claims the question, so anything that route
+        # declines still lands here.
+        return False
     if _GROUPED_RANKING_RE.search(q):
         # "show top 5 regions by balance" is a ranking question that happens to
         # mention geography — not a request for the ITL3 concentration view.
@@ -2395,7 +2422,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="geo_exposure", priority=60, lens_aware=True,
             description="Funded exposure by UK ITL3 area.",
-            recognise=lambda r: _is_geo_exposure(r.question),
+            recognise=lambda r: _is_geo_exposure(r.question, spec=r.spec,
+                                                 view=r.view),
             handle=lambda r: _route_geo(
                 r.question, r.spec_dict, client_id=r.client_id, run_id=r.run_id,
                 frame_resolver=r.frame_resolver, portfolio_id=r.portfolio_id,
