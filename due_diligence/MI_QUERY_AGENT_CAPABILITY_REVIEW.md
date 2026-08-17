@@ -1,5 +1,19 @@
 # MI Query Agent — capability review
 
+*17 August 2026 · branch `claude/mi-query-agent-review-n8d33r` · synthetic data
+throughout, not a real customer.*
+
+**Contents.** §1 headline · §2 the nine submitted questions · §3 twenty-eight
+business-semantic questions · §4 defects outside the parser · §5 the consolidated
+fix list · §6 the LLM-enabled re-run.
+
+**Companion files in the repository.** The question bank with per-question
+expected-vs-observed detail is
+`config/mi/golden_questions/business_semantic_questions.yaml`; the reproducible
+harness is `scripts/run_mi_capability_review.py`.
+
+---
+
 **Scope.** Can the MI Query Agent that serves the React MI Agent and Microsoft 365
 Copilot answer the questions a credit / treasury / IC audience actually asks —
 by narrative or by chart?
@@ -425,44 +439,68 @@ read if the narrative said "weighted-average current LTV across all 11,035 loans
 
 ## 5. Recommendations, in priority order
 
-1. **Never let the availability pass erase the request record.** In
+This list is consolidated across both parser runs — §6 findings are folded in, not
+appended. Items 1–2 come from the LLM run; 3–5 from the deterministic run; the
+rest apply to both paths.
+
+1. **Normalise and validate `filters` at the spec boundary, and state its schema
+   in the prompt** (§6.1). `MIQuerySpec.from_dict` should fold the
+   list-of-predicates and singular `filter` shapes into the dict form and raise a
+   *controlled* validation error — never a `TypeError` — on anything it cannot
+   fold; `referenced_fields` should be defensive so a malformed spec can never
+   take down the parse path; and `_SYSTEM_INSTRUCTIONS` should state the literal
+   shape with one example, plus the fact that LTV is stored as whole-number
+   percent. **Highest value in the review**: it converts six hard crashes into
+   answers, and it is the difference between the model correctly identifying
+   "London" / "over 85" / "LTV ≤ 75%" and the system discarding all three.
+2. **Give governed routes precedence over a generic chart spec** (§6.2), so a
+   weaker parse cannot disable `risk_limits`, `forecast_extrapolation` or a
+   loan-level ranking. Route selection should consider the question, not only the
+   spec derived from it.
+3. **Never let the availability pass erase the request record.** In
    `_deterministic_parse`, when a requested dimension's column is missing, keep
    `requested_dimension_terms`, set `dimension_substituted=True`, and retain any
    *co-requested dimension that does exist*. Fixes §2.3, §2.4 and restores the
-   fail-closed invariant the harness is meant to guarantee. **Highest value.**
-2. **Extend the filter branch to every aggregation.** Move `_parse_filters` above
+   fail-closed invariant the harness is meant to guarantee.
+4. **Extend the filter branch to every aggregation.** Move `_parse_filters` above
    the `is_count_q or is_balance_q` gate so averages, weighted averages and
    "exposure" questions carry their predicates. Fixes §2.1(a), B06, B15, B14.
-3. **Harden the categorical matcher**: strip trailing punctuation, accept
+5. **Harden the categorical matcher**: strip trailing punctuation, accept
    `for` / `across` / `within`, strip leading articles, and — critically —
    **validate the matched value against the dimension's actual values, refusing
    when it matches nothing** rather than filtering to zero rows or dropping it.
    Fixes §2.1(b) and turns "in Atlantis" into a refusal.
-4. **Make the default narrative restate what was computed** — measure, aggregation,
+6. **Make the default narrative restate what was computed** — measure, aggregation,
    filters applied, population size, and any requested facet that was dropped.
    Surface `parser_confidence` when it is not `high`. This single change converts
    most of §3's silent-wrong answers into visibly-partial ones.
-5. **Fix the two arithmetic/logic bugs**: the `milestones[-1]` fallback in
+7. **Fix the two arithmetic/logic bugs**: the `milestones[-1]` fallback in
    `chat_routing.py:919` (report "beyond the projection horizon"), and the
    `wa_interest_rate` unit at `chat_routing.py:367`.
-6. **Give period recognition "last quarter" / "since inception"**, and make the
+8. **Give period recognition "last quarter" / "since inception"**, and make the
    period-change narrative state when a requested period could not be honoured.
    Fixes §2.2, §2.9, B18, B27.
-7. **Rank by the named dimension in growth questions.** `period_change_analysis`
+9. **Rank by the named dimension in growth questions.** `period_change_analysis`
    already computes the composition shifts; route "which \<dimension\> grew most"
    to a ranked delta on that dimension instead of `geo_exposure` or a generic
    metric list.
-8. **Standardise every failure on the B20 refusal template** — name the concept,
-   name the missing field, state that nothing was substituted. Replaces
-   `"The proposed query failed validation."` everywhere.
-9. **Put the numbers in the narrative** for `portfolio_risk_comparison` (§2.8) —
-   Copilot has no table to fall back on.
-10. **Audit loan-level output for identifier exposure** (B09) against the stated
+10. **Standardise every failure on the B20 refusal template** — name the concept,
+    name the missing field, state that nothing was substituted. Replaces
+    `"The proposed query failed validation."` everywhere.
+11. **Put the numbers in the narrative** for `portfolio_risk_comparison` (§2.8) —
+    Copilot has no table to fall back on.
+12. **Audit loan-level output for identifier exposure** (B09) against the stated
     executor contract.
-11. **Re-run this bank with the LLM parser enabled** to split the `[det-only]`
-    findings into "fixed by escalation" and "still broken". Note that
-    `zero_cost_first` means a *confident* wrong deterministic parse never
-    escalates, so items 1–3 remain necessary regardless.
+13. **Stop overwriting parser observability** (§6.3) — `mi_service` replaces the
+    adapter's `metadata.llm` (call count, tokens, cost) with the LLM
+    configuration, so no caller can tell whether an answer cost a model call.
+    Use a distinct key.
+
+The deterministic items are not superseded by the LLM run. That path runs
+whenever no key is configured, is what `zero_cost_first` returns for every
+high-confidence parse without calling the model at all, and is the fallback
+whenever the LLM is unavailable, rate-limited or errors. It is the floor — and
+the floor currently answers wrong instead of refusing.
 
 ---
 
@@ -598,21 +636,10 @@ distinct key for the configuration.
 
 ### 6.4 What this means for the fix list
 
-Nothing in §5 is retired, and two items are promoted:
-
-* **New #1 — normalise and validate `filters` at the spec boundary, and state its
-  schema in the prompt** (§6.1). It is the single highest-yield change in the
-  review: it converts six hard crashes into answers, and it is the difference
-  between the model correctly identifying "London" / "over 85" / "LTV ≤ 75%" and
-  the system throwing that away.
-* **New #2 — give governed routes precedence over a generic chart spec** (§6.2),
-  so a weaker parse cannot disable `risk_limits` or `forecast_extrapolation`.
-* Former #1–#3 (the availability pass erasing the request record, filters gated
-  behind count/balance phrasings, the brittle categorical matcher) **stand
-  unchanged**. They are the deterministic path's behaviour, and the deterministic
-  path is what runs whenever the LLM is unavailable, rate-limited or errors — as
-  well as being what `zero_cost_first` returns for every high-confidence parse
-  (B09 and B11 were answered that way in the LLM run, with no model call).
+Nothing in §5 was retired; the `filters` contract and route precedence were
+promoted to #1 and #2, and the observability defect added as #13. The
+deterministic items stand unchanged — B09 and B11 were answered by
+`zero_cost_first` in the LLM run, with no model call at all.
 
 The headline conclusion is not "the LLM is worse". It is that **neither parser is
 the bottleneck**: the model demonstrably understood the questions the
