@@ -821,6 +821,9 @@ def run_mi_agent_query(
         if not _substitution:
             _substitution = _receipt_mod.detect_measure_substitution(
                 question, metric_key=getattr(spec, "metric", None))
+        if not _substitution:
+            _substitution = _receipt_mod.detect_unranked_superlative(
+                question, spec=spec, query_result=qres)
         receipt = _receipt_mod.build_receipt(
             spec=spec, query_result=qres, semantics=semantics, facets=_facets,
             parser_confidence=(parse_meta or {}).get("parser_confidence"),

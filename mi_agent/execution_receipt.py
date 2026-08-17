@@ -1281,3 +1281,42 @@ def check_period_grain(facets: Sequence[RequestedFacet],
                     f"'{label}'")
                 break
     return list(facets)
+
+
+# --------------------------------------------------------------------------- #
+# Superlative without a ranking
+# --------------------------------------------------------------------------- #
+#: "What is the LARGEST single-loan exposure" asks for one extreme row. A spec
+#: that carries no ranking, no top-N and no grouping answers it with the WHOLE
+#: population — a plausible number for a different question. The deterministic
+#: parser ranks and truncates; a model-produced ``loan_level`` spec need not, so
+#: this is checked from execution rather than trusted from the parse.
+_SUPERLATIVE_RE = re.compile(
+    r"\b(?:largest|biggest|highest|greatest|smallest|lowest|maximum|minimum|"
+    r"max|min)\b", re.I)
+
+
+def detect_unranked_superlative(question: str, *, spec, query_result) -> Optional[str]:
+    """A superlative question answered over the whole, unranked population."""
+    if not _SUPERLATIVE_RE.search(question or ""):
+        return None
+    if getattr(spec, "top_n", None) or getattr(spec, "ranking_mode", None):
+        return None
+    meta = getattr(query_result, "metadata", None) or {}
+    if meta.get("group_field_keys"):
+        return None                      # a grouped ranking IS a ranking
+    recon = meta.get("reconciliation") or {}
+    total = recon.get("total_records")
+    included = recon.get("records_after_filters")
+    if total is None or included is None or included < total:
+        return None                      # narrowed: not a whole-book answer
+    # A LOAN-LEVEL result whose rows are fewer than the population has been
+    # ranked and truncated to the extreme rows — that IS the answer. A summary
+    # row is not: "1 group" there means one aggregate OVER the whole book, which
+    # is the failure this guard exists to catch.
+    row_count = getattr(query_result, "row_count", None)
+    if (getattr(query_result, "result_type", None) == "loan_level"
+            and row_count is not None and total and row_count < total):
+        return None
+    return ("the question asks for a single extreme value, but the calculation "
+            "covered the whole book without ranking it")
