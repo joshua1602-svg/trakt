@@ -518,6 +518,27 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
     return "Here is the result for your query."
 
 
+def _with_receipt(answer: str, workflow: Dict[str, Any]) -> str:
+    """Append the execution receipt to a successful substantive answer.
+
+    A refusal already states its own reason and carries no receipt, so it is
+    returned untouched. The receipt is derived from execution (see
+    ``mi_agent.execution_receipt``), never from the question, which is what makes
+    it capable of exposing a scope error rather than repeating one.
+    """
+    receipt = workflow.get("execution_receipt") or {}
+    if not workflow.get("ok") or not receipt:
+        return answer
+    line = receipt.get("receipt")
+    if not line:
+        return answer
+    parts = [answer.rstrip(), line]
+    not_applied = receipt.get("notApplied") or []
+    if not_applied:
+        parts.append("Not applied: " + "; ".join(not_applied) + ".")
+    return "\n\n".join(p for p in parts if p)
+
+
 def _cap_bar_rows(rows: List[Dict[str, Any]], x_key: str, value_key: str,
                   n: int = 10) -> Tuple[List[Dict[str, Any]], bool]:
     """Cap a bar chart to the top ``n`` categories by ``value_key``.
@@ -680,8 +701,17 @@ def adapt_workflow_result(
         # A controlled response (unmapped question / unsupported concept)
         # carries its own user-facing answer — never replace it with the
         # generic lead sentence.
-        "answer": workflow.get("answer") or _answer(workflow.get("interpreted"),
-                                                    qr, chart_type),
+        "answer": _with_receipt(
+            workflow.get("answer") or _answer(workflow.get("interpreted"),
+                                              qr, chart_type),
+            workflow),
+        # P0: the machine-derived statement of what was ACTUALLY executed —
+        # measure, aggregation, filters that really narrowed the frame,
+        # groupings that really grouped, population, period. Structured for
+        # callers that want to render it themselves; also folded into `answer`
+        # above so a text-first channel (Copilot) cannot miss it.
+        "executionSummary": workflow.get("execution_receipt"),
+        "semanticGuard": workflow.get("semantic_guard"),
         "interpreted": _interpreted_string(workflow.get("interpreted")),
         "spec": spec,
         "validation": validation,

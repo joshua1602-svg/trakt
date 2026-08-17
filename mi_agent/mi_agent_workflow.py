@@ -38,6 +38,75 @@ from . import portfolio_scope as _portfolio_registry
 _RENDERABLE = {"bar", "line", "scatter", "bubble", "heatmap", "treemap"}
 
 
+#: Validation errors that mean "the dataset does not carry the field this
+#: question needs" — the case where we can name the missing field instead of
+#: reporting a bare validation failure.
+_MISSING_FIELD_RE = re.compile(
+    r"Canonical column '([^']+)' \(for semantic field '([^']+)'\) not present")
+_UNKNOWN_FIELD_RE = re.compile(r"Unknown semantic field: '([^']+)'")
+
+
+def _validation_refusal(errors: List[str], semantics: dict) -> str:
+    """A refusal that says what could not be fulfilled, in the house style.
+
+    The reference behaviour is the governed unavailable-concept response: name
+    the concept, name the field, and state plainly that nothing was substituted.
+    A bare "the proposed query failed validation" tells the reader nothing they
+    can act on, even though the failing field is known here.
+    """
+    named: List[str] = []
+    for err in errors or []:
+        match = _MISSING_FIELD_RE.search(err) or _UNKNOWN_FIELD_RE.search(err)
+        if not match:
+            continue
+        key = match.group(2) if match.re is _MISSING_FIELD_RE else match.group(1)
+        entry = (semantics.get("fields", {}) if isinstance(semantics, dict) else {}).get(key) or {}
+        label = entry.get("business_name") or entry.get("display_name") or key.replace("_", " ")
+        canonical = entry.get("canonical_field", key)
+        if label not in [n[0] for n in named]:
+            named.append((label, canonical))
+    if named:
+        if len(named) == 1:
+            label, canonical = named[0]
+            return (f"'{label}' is not available in this dataset. The MI book for "
+                    f"this client does not include {canonical}. This field is not "
+                    "reported, so the question cannot be answered from the current "
+                    "data (no value was fabricated).")
+        labels = ", ".join(f"'{l}'" for l, _ in named)
+        columns = ", ".join(c for _, c in named)
+        return (f"{labels} are not available in this dataset. The MI book for this "
+                f"client does not include {columns}. These fields are not reported, "
+                "so the question cannot be answered from the current data (no value "
+                "was fabricated).")
+    detail = "; ".join(errors or []) or "the requested combination is not supported"
+    return ("I could not build a governed query for this question: " + detail +
+            ". No substitute figure has been returned.")
+
+
+def _reporting_date_label(df) -> Optional[str]:
+    """The frame's own reporting cut-off, formatted for the execution receipt.
+
+    Read from the data (``data_cut_off_date``), never from the question, so the
+    receipt states the date the numbers actually came from. Returns None when the
+    frame carries no usable cut-off rather than guessing one.
+    """
+    try:
+        for column in ("data_cut_off_date", "reporting_date"):
+            if column not in getattr(df, "columns", []):
+                continue
+            values = df[column].dropna()
+            if values.empty:
+                continue
+            import pandas as _pd
+            stamp = _pd.to_datetime(values.iloc[0], errors="coerce")
+            if _pd.isna(stamp):
+                continue
+            return f"{stamp.day} {stamp.strftime('%B %Y')}"
+    except Exception:  # noqa: BLE001 - a label must never break a query
+        return None
+    return None
+
+
 def _dedupe(items: List[str]) -> List[str]:
     """De-duplicate a list of strings, preserving first-seen order."""
     seen: set = set()
@@ -523,7 +592,9 @@ def run_mi_agent_query(
     warnings.extend(vr.warnings)
     if not vr.ok:
         result["interpreted"]["Validation"] = "Failed"
-        result["error"] = "The proposed query failed validation."
+        result["error"] = _validation_refusal(vr.errors, semantics)
+        result["answer"] = result["error"]
+        result["controlled_refusal"] = True
         result["warnings"] = _dedupe(warnings)
         result["metadata"] = {
             "parse_metadata": parse_meta,
@@ -699,6 +770,66 @@ def run_mi_agent_query(
         result["error"] = f"The query produced no usable rows ({reason})."
         result["warnings"] = _dedupe(warnings)
         return result
+
+    # ---- P0: execution receipt + semantic-completeness guard ---------------
+    # The dimension and filter invariants above compare the SPEC with execution.
+    # They cannot see intent the parser dropped before a spec existed, which is
+    # how a scoped question came to be answered from the whole book. Re-derive
+    # the material facets from the QUESTION and reconcile them against what
+    # actually executed, then either refuse, disclose, or stand.
+    try:
+        from . import execution_receipt as _receipt_mod
+
+        _requested_dims = _receipt_mod.requested_dimension_terms(
+            question, semantics, available_columns=available_columns)
+        _facets = _receipt_mod.detect_requested_facets(
+            question, semantics, frame=df, requested_dimensions=_requested_dims)
+        _facets = _receipt_mod.reconcile_facets(
+            _facets, spec=spec, query_result=qres, semantics=semantics,
+            available_columns=available_columns, route=None,
+            # The point-in-time executor has no stress/scenario capability, so a
+            # scenario is never applied on this path. Stating that explicitly is
+            # what turns "what would a 10% fall do to LTV" into a refusal rather
+            # than today's current-LTV answer.
+            scenario_applied=False)
+        _substitution = _receipt_mod.detect_substitution(
+            _facets, spec=spec, query_result=qres, semantics=semantics)
+        if not _substitution:
+            _substitution = _receipt_mod.detect_measure_substitution(
+                question, metric_key=getattr(spec, "metric", None))
+        receipt = _receipt_mod.build_receipt(
+            spec=spec, query_result=qres, semantics=semantics, facets=_facets,
+            parser_confidence=(parse_meta or {}).get("parser_confidence"),
+            period=_reporting_date_label(df))
+        verdict, message = _receipt_mod.assess(receipt, substitution=_substitution)
+        result["execution_receipt"] = receipt.to_dict()
+        result["semantic_guard"] = {"verdict": verdict, "message": message,
+                                    "facets": [f.to_dict() for f in _facets],
+                                    "substitution": _substitution}
+        if verdict == _receipt_mod.VERDICT_REFUSE:
+            # Fail closed: the calculation that ran answers a materially
+            # different question from the one asked. Never present it.
+            result["ok"] = False
+            result["error"] = message
+            result["answer"] = message
+            result["controlled_refusal"] = True
+            result["semantic_refusal"] = True
+            result["warnings"] = _dedupe(warnings + [message])
+            result["metadata"] = {
+                "parse_metadata": parse_meta,
+                "parser_mode_detail": parse_meta.get("parser_mode_detail"),
+                "execution_receipt": result["execution_receipt"],
+                "semantic_guard": result["semantic_guard"],
+                "llm": parse_meta.get("llm"),
+            }
+            return result
+        if verdict == _receipt_mod.VERDICT_PARTIAL and message:
+            warnings.append(message)
+    except Exception as exc:  # noqa: BLE001 - the guard must never break a good answer
+        # A guard fault is itself a safety event: record it loudly rather than
+        # letting an unguarded answer through silently.
+        warnings.append(f"semantic completeness guard unavailable: {exc}")
+        result["semantic_guard"] = {"verdict": "unavailable", "error": str(exc)}
 
     # ---- chart (only where a chart type is renderable) --------------------
     chart_result: Optional[MIChartResult] = None

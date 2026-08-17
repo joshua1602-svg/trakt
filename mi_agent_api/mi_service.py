@@ -457,6 +457,84 @@ def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
         return None, "Could not load the governed data for this query."
 
 
+def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
+                         route: Optional[str], semantics: Dict[str, Any],
+                         frame) -> Dict[str, Any]:
+    """P0 semantic guard for an answer produced by a routed governed capability.
+
+    A routed answer never reaches the point-in-time executor, so the workflow's
+    guard cannot see it. The check here is deliberately narrower: a route
+    declares its identity and its own scope, which is enough to tell whether a
+    period comparison, a stress condition, a value threshold or a ranking the
+    user asked for was actually part of what ran.
+
+    The bar for refusing is a facet that would change the NUMBER or that IS the
+    subject of the question. A facet a listing route simply could not narrow to
+    (asking about London and receiving every region's limit) is disclosed, not
+    refused: the requested category is present and no single figure is being
+    passed off as the narrow one. Never refuses on an unprovable facet, so a
+    working governed route cannot be disabled by this check.
+    """
+    if not isinstance(routed, dict) or not routed.get("ok"):
+        return routed
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+
+        spec = routed.get("spec") if isinstance(routed.get("spec"), dict) else {}
+        substitution = receipt_mod.detect_measure_substitution(
+            question, route=route, metric_key=(spec or {}).get("metric"))
+        facets = receipt_mod.detect_requested_facets(
+            question, semantics, frame=frame,
+            requested_dimensions=receipt_mod.requested_dimension_terms(
+                question, semantics,
+                available_columns=set(frame.columns) if frame is not None else None))
+        granularity = receipt_mod.granularity_disclosure(question, route)
+        if not facets and not substitution and granularity is None:
+            # Nothing to adjudicate, but the answer still states what governed
+            # capability produced it and as at when — the receipt is required on
+            # every successful substantive answer, not only contested ones.
+            receipt = receipt_mod.build_routed_receipt(
+                route=route, envelope=routed, facets=[])
+            routed["executionSummary"] = receipt.to_dict()
+            line = receipt.render()
+            if line:
+                routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{line}"
+            return routed
+        facets = receipt_mod.reconcile_routed_facets(
+            facets, route=route, semantics=semantics,
+            available_columns=set(frame.columns) if frame is not None else None)
+        # A temporal route may have compared a shorter span than the question
+        # named ("since inception" answered as one month). Verified against the
+        # periods the route itself declares.
+        facets = receipt_mod.check_period_grain(facets, routed)
+        if granularity is not None:
+            facets = list(facets) + [granularity]
+        receipt = receipt_mod.build_routed_receipt(
+            route=route, envelope=routed, facets=facets)
+        verdict, message = receipt_mod.assess(receipt, substitution=substitution)
+        routed["executionSummary"] = receipt.to_dict()
+        routed["semanticGuard"] = {"verdict": verdict, "message": message,
+                                   "route": route,
+                                   "facets": [f.to_dict() for f in facets]}
+        if verdict == receipt_mod.VERDICT_REFUSE:
+            routed["ok"] = False
+            routed["error"] = message
+            routed["answer"] = message
+            routed["artifacts"] = []
+            routed["controlledRefusal"] = True
+            routed.setdefault("warnings", []).append(message)
+        elif verdict == receipt_mod.VERDICT_PARTIAL and message:
+            routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{message}"
+            routed.setdefault("warnings", []).append(message)
+        else:
+            line = receipt.render()
+            if line:
+                routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{line}"
+    except Exception:  # noqa: BLE001 - the guard must never break a governed route
+        logger.exception("routed semantic guard failed for question=%r", question)
+    return routed
+
+
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
                   deps: CapabilityDependencies) -> Dict[str, Any]:
     """The analytical pipeline.
@@ -544,6 +622,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     if routed is not None:
         route = (routed.get("metadata") or {}).get("route") if isinstance(routed, dict) else None
         _stamp_routed_scope(routed, req)
+        routed = _guard_routed_answer(routed, question=req.question, route=route,
+                                      semantics=semantics, frame=df)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
