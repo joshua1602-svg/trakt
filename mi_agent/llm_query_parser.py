@@ -1140,8 +1140,8 @@ _FILTER_COMPARATORS: List[Tuple[str, str]] = [
     (rf"between\s+{_VALUE}\s+and\s+{_VALUE}", "between"),
     (rf"(?:greater than or equal to|at least|no less than|>=)\s*{_VALUE}", "ge"),
     (rf"(?:less than or equal to|at most|no more than|<=)\s*{_VALUE}", "le"),
-    (rf"(?:more than|greater than|over|above|>)\s*{_VALUE}", "gt"),
-    (rf"(?:less than|under|below|fewer than|<)\s*{_VALUE}", "lt"),
+    (rf"(?:more than|greater than|older than|over|above|>)\s*{_VALUE}", "gt"),
+    (rf"(?:less than|younger than|under|below|fewer than|<)\s*{_VALUE}", "lt"),
     (rf"(?:equal to|equals|exactly|=)\s*{_VALUE}", "eq"),
 ]
 
@@ -1169,8 +1169,64 @@ def _age_equality_value(clause: str) -> Optional[float]:
     return float(raw) if raw else None
 
 
-def _filter_field_of(q: str, semantics: dict, available_columns=None) -> Optional[str]:
-    """Resolve the field a numeric threshold applies to from the question text."""
+#: Subject keyword -> resolver, for proximity-based threshold binding.
+_FILTER_SUBJECT_PATTERNS = (
+    (r"\bltv\b|\bloan to value\b", "ltv"),
+    (r"\b(?:age|aged|youngest|borrowers?|years?|yrs?|yo|year[- ]?old|older|younger)\b", "age"),
+    (r"\brate\b|\binterest\b|\bcoupon\b", "rate"),
+    (r"\bbalance\b|\boutstanding\b|\bexposure\b|\bloan size\b|\bticket\b", "balance"),
+    (r"\bvaluation\b|\bproperty value\b", "valuation"),
+)
+
+
+def _resolve_subject(kind: str, semantics: dict, available_columns=None):
+    if kind == "ltv":
+        return _ltv_metric(semantics, available_columns)
+    if kind == "age":
+        return _age_metric(semantics, available_columns)
+    if kind == "rate":
+        return _rate_metric(semantics, available_columns)
+    if kind == "balance":
+        return _balance_metric(semantics, available_columns)
+    return find_field(semantics, role="metric", fmt="currency",
+                      keywords=("valuation", "value"))
+
+
+def _filter_field_of(q: str, semantics: dict, available_columns=None,
+                     anchor: Optional[int] = None) -> Optional[str]:
+    """Resolve the field a numeric threshold applies to from the question text.
+
+    When ``anchor`` (the comparator's position) is supplied, the subject NEAREST
+    BEFORE the comparator wins. Fixed precedence alone bound "what is the average
+    LTV for borrowers over 75?" to LTV — the metric named earlier in the sentence
+    — and silently applied the age threshold to the wrong column. Proximity is
+    what a reader uses, and it is what the predicate actually means.
+    """
+    if anchor is not None:
+        head = q[:anchor]
+        # A currency amount is a balance threshold regardless of earlier nouns.
+        if re.search(r"£\s*$|£\s*\d", q[max(0, anchor - 2):anchor + 12]):
+            balance = _balance_metric(semantics, available_columns)
+            if balance:
+                return balance
+        # A subject stated immediately AFTER the number is a postfix predicate
+        # ("above 60% LTV") and binds tightest. Otherwise the subject nearest
+        # BEFORE the comparator wins ("for borrowers over 75").
+        tail = q[anchor:anchor + 28]
+        for pattern, kind in _FILTER_SUBJECT_PATTERNS:
+            if re.search(pattern, tail):
+                resolved = _resolve_subject(kind, semantics, available_columns)
+                if resolved:
+                    return resolved
+        best: Optional[Tuple[int, str]] = None
+        for pattern, kind in _FILTER_SUBJECT_PATTERNS:
+            for match in re.finditer(pattern, head):
+                if best is None or match.start() > best[0]:
+                    best = (match.start(), kind)
+        if best is not None:
+            resolved = _resolve_subject(best[1], semantics, available_columns)
+            if resolved:
+                return resolved
     if "ltv" in q or "loan to value" in q:
         return _ltv_metric(semantics, available_columns)
     # Age threshold: "age", "youngest", "aged", "borrower(s)", "years"/"yrs",
@@ -1352,11 +1408,66 @@ def _grouped_metric(metric_part: str, q: str, semantics: dict) -> Tuple[Optional
 # Region/geography categorical filter, e.g. "geographic region south west",
 # "region south west", "in south west". The value is normalised to Title Case;
 # the executor matches case-insensitively against the prepared dimension values.
+#: P1A — a categorical scope may be introduced by any of several prepositions,
+#: may carry a leading article, and may be followed by trailing punctuation or a
+#: descriptive noun. Previously anchored bare at ``$`` after ``in`` only, so
+#: "in London?" (a question mark), "for London" and "in the South East" all
+#: failed while "in london" succeeded — the shapes a person actually types were
+#: exactly the ones that missed.
 _CATEGORICAL_FILTER_RE = re.compile(
-    r"(?:geographic\s+region|geographic|geography|region|in)\s+"
-    r"([a-z][a-z]*(?:\s+[a-z]+){0,2})\s*$")
+    r"(?:geographic\s+region|geographic|geography|region|in|for|across|within|from)\s+"
+    r"(?:the\s+)?"
+    r"([a-z][a-z]*(?:\s+[a-z]+){0,3}?)"
+    r"(?:\s+(?:region|regions|area|areas|loans|loan|book|portfolio))?"
+    r"[\s?.!,]*$")
 _CATEGORICAL_STOPWORDS = {"the", "loans", "loan", "with", "and", "by", "more",
-                          "less", "than", "over", "under", "above", "below"}
+                          "less", "than", "over", "under", "above", "below",
+                          "book", "portfolio", "region", "regions", "area",
+                          "areas", "total", "all", "each", "this", "that",
+                          "it", "them", "me", "my", "our", "us", "there"}
+#: Terms another governed resolver already owns. Widening the preposition list
+#: to accept "for <place>" also made "for joint borrowers" look like a place, so
+#: a borrower-structure predicate was bound to the GEOGRAPHY field and selected
+#: nothing. A categorical geography value may not contain any of these.
+_NON_PLACE_TERMS = {
+    "joint", "sole", "single", "borrower", "borrowers", "applicant",
+    "applicants", "fixed", "variable", "floating", "rate", "product",
+    "products", "broker", "brokers", "channel", "active", "redeemed",
+    "arrears", "default", "performing", "vintage", "cohort", "type",
+    "status", "band", "bucket", "ltv", "age", "balance", "exposure",
+    "value", "valuation", "interest", "securitisation", "them", "these",
+}
+
+
+#: "What PROPORTION of the book ...". A share question needs two populations —
+#: the filtered numerator and the whole-book denominator — so it is a distinct
+#: governed aggregation, not a KPI of the filtered rows.
+_SHARE_RE = re.compile(
+    r"\bwhat\s+(?:proportion|percentage|share|fraction|%)\b|"
+    r"\b(?:proportion|percentage|share|fraction)\s+of\s+(?:the\s+)?"
+    r"(?:book|portfolio|loans|balance|exposure)\b|"
+    r"\bhow much of the (?:book|portfolio)\b|"
+    r"\bwhat\s+(?:%|percent)\s+of\b", re.I)
+#: A share is measured on a balance basis unless the question counts loans.
+_SHARE_COUNT_RE = re.compile(r"\b(?:loans|cases|accounts|borrowers)\b", re.I)
+
+
+def _share_request(q: str, semantics: dict, available_columns=None
+                   ) -> Optional[Tuple[str, Optional[str]]]:
+    """``(basis, metric)`` for a share question, or None.
+
+    ``basis`` is ``"balance"`` or ``"count"``; ``metric`` is the balance field
+    for a value share and ``None`` for a count share (the executor counts rows
+    when no metric is set).
+    """
+    if not _SHARE_RE.search(q):
+        return None
+    counts_loans = bool(re.search(
+        r"\b(?:proportion|percentage|share|fraction|%|percent)\s+of\s+(?:the\s+)?"
+        r"(?:loans|cases|accounts|borrowers)\b", q, re.I))
+    if counts_loans:
+        return ("count", None)
+    return ("balance", _balance_metric(semantics, available_columns))
 
 
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None
@@ -1366,7 +1477,20 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     if not m:
         return None
     value = m.group(1).strip()
+    # "for loans in Wales" captures "loans in wales" — peel leading filler and
+    # any nested preposition so the VALUE is the place, not the phrase.
+    while True:
+        head = value.split(" ", 1)[0]
+        if head in _CATEGORICAL_STOPWORDS or head in ("in", "for", "within",
+                                                      "across", "from"):
+            if " " not in value:
+                return None
+            value = value.split(" ", 1)[1].strip()
+            continue
+        break
     if not value or value in _CATEGORICAL_STOPWORDS:
+        return None
+    if any(word in _NON_PLACE_TERMS for word in value.split()):
         return None
     field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"
     if field not in _fields(semantics):
@@ -1482,6 +1606,10 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
             m = re.search(pattern, clause)
             if not m:
                 continue
+            # Re-resolve against THIS comparator's position: the subject nearest
+            # before the operator is the one the predicate is about.
+            field = _filter_field_of(clause, semantics, available_columns,
+                                     anchor=m.start()) or field
             if field:
                 filters[field] = {"op": op, "value": _amount_from_match(m, op)}
                 matched = True
@@ -2025,6 +2153,25 @@ def _deterministic_parse(question: str, semantics: dict,
         # answering a different question with a whole-book KPI.
         wants_summary = (bool(_SUMMARY_INTENT_RE.search(q)) or is_count_q
                          or is_balance_q or _wants_count(q))
+        # P1A — "what percentage of the book is <predicate>" names no measure,
+        # because "the book" IS the basis. It reached here and was answered as a
+        # WHOLE-BOOK summary, which is the opposite of the question: a share is
+        # the filtered population OVER the book, not the book itself. Resolve it
+        # to a governed share before the summary default claims it.
+        share = _share_request(q, semantics, available_columns)
+        if share and not (re.search(r"\bby\b", q) or dim_terms):
+            share_filters, share_unavail = _grouped_value_filters(
+                q, semantics, available_columns)
+            if share_filters:
+                return (MIQuerySpec(
+                    intent="summary", chart_type="none",
+                    metric=share[1] or _balance_metric(semantics, available_columns),
+                    aggregation="share", title=title,
+                    filters=share_filters, unavailable_filters=share_unavail,
+                    explanation="Share of the whole book meeting the stated "
+                                "condition (filtered population over total).",
+                    output_format="table"),
+                    _det_meta("medium", explicit, dim_terms))
         if wants_summary:
             return (MIQuerySpec(
                 intent="summary", chart_type="none", aggregation="count", title=title,
@@ -2049,13 +2196,32 @@ def _deterministic_parse(question: str, semantics: dict,
     grouping_requested = bool(re.search(r"\bby\b", q)) or bool(dim_terms)
     if dimension is None and metric is not None and not grouping_requested:
         weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
+        # P1A — a single-metric KPI carries its predicate. Until now this branch
+        # built the spec with NO filters, so "average LTV in London" and
+        # "exposure to borrowers over 85" were parsed as whole-book KPIs: the
+        # predicate was extracted upstream and then discarded here, before the
+        # spec existed. The filtered-KPI branch above only runs for counting and
+        # total-balance phrasings, which is why "how many loans over 85" worked
+        # while "exposure to borrowers over 85" did not. Same helper the bar
+        # branch uses, so an unavailable predicate is surfaced, never dropped.
+        kpi_filters, kpi_unavail = _grouped_value_filters(
+            q, semantics, available_columns)
+        share = _share_request(q, semantics, available_columns)
+        if share and kpi_filters:
+            # "What proportion of the book is below 75% LTV" is a ratio of two
+            # populations, not a KPI of one. The filter defines the numerator;
+            # the denominator is the same measure over the whole book.
+            _, metric = share
+            agg, weight = "share", None
         return (MIQuerySpec(
             intent="summary", chart_type="none", metric=metric, aggregation=agg,
             weight_field=weight, title=title,
+            filters=kpi_filters, unavailable_filters=kpi_unavail,
             explanation=f"{agg} of {metric} (single KPI; no grouping dimension "
                         "requested).",
             output_format="table"),
-            _det_meta("medium" if explicit else "low", explicit, dim_terms))
+            _det_meta("medium" if (explicit or kpi_filters) else "low",
+                      explicit, dim_terms))
 
     if metric is None:
         # NEVER substitute a different measure for one the user named. A grouped
@@ -2072,6 +2238,24 @@ def _deterministic_parse(question: str, semantics: dict,
                             "dataset; no substitute was used.",
                 output_format="text"),
                 _det_meta("low", explicit, dim_terms, note="unresolved_metric"))
+        # "What percentage of the book is ..." names no measure because "the
+        # book" IS the measure — the governed default basis for a share is the
+        # balance. Resolve it here rather than falling through to a bar chart,
+        # which would answer a two-population question with a breakdown.
+        share = _share_request(q, semantics, available_columns)
+        if share and not grouping_requested:
+            share_filters, share_unavail = _grouped_value_filters(
+                q, semantics, available_columns)
+            if share_filters:
+                return (MIQuerySpec(
+                    intent="summary", chart_type="none",
+                    metric=share[1] or _balance_metric(semantics, available_columns),
+                    aggregation="share", title=title,
+                    filters=share_filters, unavailable_filters=share_unavail,
+                    explanation="Share of the whole book meeting the stated "
+                                "condition (filtered population over total).",
+                    output_format="table"),
+                    _det_meta("medium", explicit, dim_terms))
         metric, agg = _balance_metric(semantics, available_columns), "sum"
     weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
     conf = "high" if explicit else ("medium" if not generic else "low")

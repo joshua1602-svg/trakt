@@ -205,9 +205,12 @@ def validate_mi_query(
     if spec.metric and spec.metric in fields:
         metric_entry = fields[spec.metric]
         allowed = set(metric_entry.get("allowed_aggregations") or [])
-        # count / count_distinct are universally permissible counters.
+        # count / count_distinct are universally permissible counters. ``share``
+        # is a ratio of two POPULATIONS on the metric's own basis, not a new way
+        # of aggregating the metric, so it is permissible wherever a sum is —
+        # which every balance-style measure allows.
         if spec.aggregation not in allowed and spec.aggregation not in (
-            "count", "count_distinct", "loan_level",
+            "count", "count_distinct", "loan_level", "share",
         ):
             result.error(
                 f"Aggregation {spec.aggregation!r} not allowed for metric "

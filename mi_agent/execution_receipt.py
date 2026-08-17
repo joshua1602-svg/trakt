@@ -121,9 +121,11 @@ _GEO_STOPWORDS = {
 #: threshold. Deliberately explicit — a bare number is never a threshold.
 _THRESHOLD_PATTERNS: Tuple[Tuple[str, str], ...] = (
     (r"\b(?:over|above|more than|greater than|exceeding|in excess of)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "over"),
-    (r"\b(?:under|below|less than|fewer than|beneath)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "under"),
+    (r"\b(?:under|below|less than|fewer than|beneath|younger than)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "under"),
+    (r"\bolder than\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "over"),
     (r"\b(?:at least|no less than|minimum of)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "at least"),
     (r"\b(?:at most|no more than|up to|maximum of|capped at)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "at most"),
+    (r"\bbetween\s+£?\s*(\d[\d,\.]*)\s*%?\s+and\s+£?\s*\d[\d,\.]*", "between"),
     (r"(\d[\d,\.]*)\s*(?:\+|\s+or (?:above|over|older|more|greater))\b", "or above"),
     (r"[<>]=?\s*£?\s*(\d[\d,\.]*)\s*(%|percent)?", "comparison"),
 )
@@ -573,6 +575,7 @@ _AGGREGATION_LABELS = {
     "count_distinct": "Distinct count of",
     "distribution": "Distribution of",
     "loan_level": "Loan-level",
+    "share": "Share of",
 }
 
 
@@ -585,6 +588,9 @@ class ExecutionReceipt:
     filters: List[str] = field(default_factory=list)
     dimensions: List[str] = field(default_factory=list)
     population: Optional[int] = None
+    #: The whole-book population, stated alongside a share so the DENOMINATOR is
+    #: auditable from the receipt alone rather than implied.
+    population_total: Optional[int] = None
     group_count: Optional[int] = None
     population_label: str = "loans"
     #: True when execution demonstrably narrowed the frame.
@@ -633,7 +639,12 @@ class ExecutionReceipt:
         if self.group_count is not None:
             parts.append(f"{self.group_count:,} groups")
         if self.population is not None:
-            parts.append(f"{self.population:,} {self.population_label}")
+            if self.aggregation == "share" and self.population_total:
+                parts.append(f"{self.population:,} qualifying "
+                             f"{self.population_label} of "
+                             f"{self.population_total:,}")
+            else:
+                parts.append(f"{self.population:,} {self.population_label}")
         if self.period:
             parts.append(f"as at {self.period}")
         if not parts:
@@ -664,6 +675,7 @@ class ExecutionReceipt:
             "filtersApplied": list(self.filters),
             "dimensionsApplied": list(self.dimensions),
             "population": self.population,
+            "populationTotal": self.population_total,
             "populationLabel": self.population_label,
             "groupCount": self.group_count,
             "narrowed": self.narrowed,
@@ -703,13 +715,20 @@ def describe_filter(field_key: str, condition: Any, semantics: dict) -> str:
                    "lt": "<", "less_than": "<", "le": "<=", "lte": "<=",
                    "eq": "=", "equals": "=", "ne": "≠", "not_equals": "≠"}
         if op in ("between",) and isinstance(value, (list, tuple)) and len(value) == 2:
-            return f"{name} between {value[0]} and {value[1]}"
+            return f"{name} between {_num(value[0])} and {_num(value[1])}"
         if op in ("in", "one_of") and isinstance(value, (list, tuple, set)):
             return f"{name} in {', '.join(str(v) for v in value)}"
-        return f"{name} {symbols.get(op, op)} {value}"
+        return f"{name} {symbols.get(op, op)} {_num(value)}"
     if isinstance(condition, (list, tuple, set)):
         return f"{name} in {', '.join(str(v) for v in condition)}"
     return f"{condition}" if _looks_like_a_place(field_key) else f"{name} = {condition}"
+
+
+def _num(value: Any) -> str:
+    """Render a threshold as a person would write it ("85", not "85.0")."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def _looks_like_a_place(field_key: str) -> bool:
@@ -945,6 +964,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         filters=_applied_filter_phrases(spec, semantics, narrowed),
         dimensions=dimensions,
         population=int(population) if population is not None else None,
+        population_total=int(total) if total is not None else None,
         group_count=group_count,
         narrowed=narrowed,
         period=period,

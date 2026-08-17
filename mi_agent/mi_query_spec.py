@@ -24,6 +24,9 @@ CHART_TYPES = {"bar", "line", "scatter", "bubble", "heatmap", "treemap", "none"}
 AGGREGATIONS = {
     "sum", "avg", "weighted_avg", "count", "count_distinct",
     "median", "distribution", "loan_level", "balance_sum",
+    # P1A — a filtered population expressed as a share of the whole book.
+    # Distinct from the aggregations above because it needs TWO populations.
+    "share",
 }
 OUTPUT_FORMATS = {"chart", "table", "text", "chart_and_table"}
 

@@ -712,6 +712,40 @@ def _metric_aggregation(spec: MIQuerySpec) -> str:
     return agg
 
 
+def _execute_share(spec, df, work, semantics, warnings, balance_col):
+    """A governed share: the filtered population over the WHOLE-BOOK population.
+
+    Two populations, both computed here from the same frame, so the denominator
+    can never drift from the numerator. Basis is the balance measure when one is
+    named and loan count otherwise. Returns None when the denominator is zero or
+    unavailable — a share with no denominator is refused, never reported as 0%.
+    """
+    if spec.metric:
+        entry = resolve_semantic_field(spec.metric, semantics)
+        canonical = entry.get("canonical_field")
+        _require_column(work, canonical, spec.metric)
+        numerator = float(coerce_numeric(work[canonical]).sum())
+        denominator = float(coerce_numeric(df[canonical]).sum())
+        basis, col = canonical, f"{canonical}_share_pct"
+    else:
+        numerator, denominator = float(len(work)), float(len(df))
+        basis, col = "loan_count", "loan_count_share_pct"
+    if not denominator:
+        return None, None
+    share_pct = numerator / denominator * 100.0
+    warnings.append(
+        f"share basis {basis}: {numerator:,.2f} of {denominator:,.2f} "
+        f"({share_pct:.2f}%)")
+    data = pd.DataFrame([{
+        "loan_count": int(len(work)),
+        "population_total": int(len(df)),
+        f"{basis}_numerator": numerator,
+        f"{basis}_denominator": denominator,
+        col: share_pct,
+    }])
+    return data, "summary"
+
+
 def _execute_summary(spec, work, semantics, warnings, balance_col):
     if spec.metric:
         entry = resolve_semantic_field(spec.metric, semantics)
@@ -1073,7 +1107,18 @@ def execute_mi_query(
     coverage: Dict[str, Any] = {}
 
     # ---- dispatch -------------------------------------------------------- #
-    if spec.intent == "summary" or (spec.intent == "chart" and spec.chart_type == "none"):
+    if spec.aggregation == "share":
+        # A share needs BOTH populations, so it receives the unfiltered frame as
+        # well as the filtered one. Everything else sees only ``work``.
+        data_out, result_type = _execute_share(
+            spec, df, work, semantics, warnings, balance_col)
+        if data_out is None:
+            raise MIQueryExecutionError(
+                "a share cannot be calculated: the whole-book denominator is "
+                "zero or unavailable")
+        metadata["share_basis"] = spec.metric or "loan_count"
+
+    elif spec.intent == "summary" or (spec.intent == "chart" and spec.chart_type == "none"):
         data_out, result_type = _execute_summary(spec, work, semantics, warnings, balance_col)
 
     elif spec.intent == "table" and spec.ranking_mode == "loan_level":

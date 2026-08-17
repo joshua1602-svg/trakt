@@ -751,6 +751,30 @@ def run_mi_agent_query(
                 f"This result covers £{inc:,.0f} of the £{tot:,.0f} funded book; "
                 f"£{excl:,.0f} was excluded{because}.")
 
+    # P1A — a filtered KPI whose predicate matched NOTHING is not an answer of
+    # zero. "Average LTV in Atlantis" must not report £0 / 0% as though the book
+    # genuinely held nothing there: an empty population means the predicate did
+    # not select anything, which the operator has to be told.
+    _recon = (qres.metadata or {}).get("reconciliation") or {}
+    if spec.filters and _recon.get("records_after_filters") == 0:
+        applied = ", ".join(str(k) for k in (spec.filters or {}))
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).append(
+            f"no_rows_match_filter: {applied}")
+        result["validation"] = val
+        if isinstance(result.get("interpreted"), dict):
+            result["interpreted"]["Validation"] = "Failed"
+        result["error"] = (
+            f"No loans in this book match that filter ({applied}), so there is "
+            "nothing to calculate. I have not returned a whole-book figure in "
+            "its place.")
+        result["answer"] = result["error"]
+        result["controlled_refusal"] = True
+        result["warnings"] = _dedupe(warnings)
+        return result
+
     # A grouped / loan-level result with no rows after preparation is not a
     # "passed" query — surface it as a controlled validation failure with an
     # exact reason rather than rendering an empty chart.

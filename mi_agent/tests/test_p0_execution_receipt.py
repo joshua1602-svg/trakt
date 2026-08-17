@@ -175,21 +175,28 @@ def test_receipt_states_the_reporting_date_from_the_data(frame, semantics):
 # =========================================================================== #
 # B. Fail closed — material intent that did not survive
 # =========================================================================== #
-def test_missing_geographic_scope_cannot_return_the_whole_book(frame, semantics):
-    """The headline failure: "average LTV in London" answered from 11,035 loans.
-    The average branch does not carry the filter, so this must refuse."""
+def test_geographic_scope_is_applied_not_dropped(frame, semantics):
+    """P1A MOVEMENT. At P0 this refused, because the average branch carried no
+    filter. It is now ANSWERED — and the thing that mattered is unchanged: the
+    population is London's, never the book's. The refusal path is still proven
+    by test_the_guard_is_not_weakened_a_dropped_filter_still_refuses."""
     result = _ask("what is the average ltv in london?", frame, semantics)
-    assert result["ok"] is False
-    assert result.get("semantic_refusal") is True
-    assert "London" in result["error"]
-    assert "not substituted" in result["error"]
+    assert result["ok"] is True, result.get("error")
+    expected = int((frame["collateral_geography"] == "London").sum())
+    assert _summary(result)["population"] == expected
+    assert _summary(result)["population"] < len(frame)
+    assert "London" in _summary(result)["receipt"]
 
 
-def test_missing_age_threshold_cannot_return_whole_book_exposure(frame, semantics):
+def test_age_threshold_is_applied_not_dropped(frame, semantics):
+    """P1A MOVEMENT — see above. £1.96bn whole-book was the P0-era failure; the
+    answer is now the over-85 population only."""
     result = _ask("what is my exposure to borrowers over 85?", frame, semantics)
-    assert result["ok"] is False
-    assert "85" in result["error"]
-    assert "not substituted" in result["error"]
+    assert result["ok"] is True, result.get("error")
+    expected = int((frame["youngest_borrower_age"] > 85).sum())
+    assert _summary(result)["population"] == expected
+    assert _summary(result)["population"] < len(frame)
+    assert "85" in _summary(result)["receipt"]
 
 
 def test_missing_ltv_threshold_cannot_be_answered_with_the_wa_ltv(frame, semantics):
