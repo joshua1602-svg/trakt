@@ -206,3 +206,53 @@ def test_a_deterministic_run_is_reported_as_deterministic(semantics):
                                 available_columns=_COLUMNS)
     assert _parser_provenance(
         {"metadata": {"parse_metadata": meta}})["parser_used"] == "deterministic"
+
+
+# --------------------------------------------------------------------------- #
+# Age threshold — the house convention (P1B Phase 7)
+# --------------------------------------------------------------------------- #
+# Strict where the language is strict, inclusive where it is inclusive:
+#
+#     over 85 / older than 85        -> age >  85
+#     85 or older / at least 85 / 85+ -> age >= 85
+#
+# Pinned in the PARSER, so deterministic and LLM paths cannot disagree: the LLM
+# spec states its own operator and is left alone, while a deterministic parse
+# resolves the phrasing here. The receipt continues to show whichever predicate
+# actually executed.
+AGE_CONVENTION = [
+    ("exposure to borrowers over 85", "gt", 85.0),
+    ("borrowers older than 85", "gt", 85.0),
+    ("borrowers aged 85 or older", "ge", 85.0),
+    ("borrowers aged at least 85", "ge", 85.0),
+    ("borrowers 85+", "ge", 85.0),
+    ("borrowers under 70", "lt", 70.0),
+    ("borrowers younger than 70", "lt", 70.0),
+]
+
+
+@pytest.mark.parametrize("question,op,value", AGE_CONVENTION,
+                         ids=[q[:40] for q, _, _ in AGE_CONVENTION])
+def test_age_threshold_house_convention(question, op, value, semantics):
+    from mi_agent.llm_query_parser import _parse_filters
+
+    condition = _parse_filters(question, semantics,
+                               {"youngest_borrower_age",
+                                "current_outstanding_balance"}
+                               ).get("youngest_borrower_age")
+    assert condition == {"op": op, "value": value}
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "KNOWN GAP: the clause splitter treats ' and ' as a predicate separator, so "
+    "'85 and over' is torn into 'borrowers 85' / 'over' and the bound is lost. "
+    "Every other inclusive form ('85 or older', 'at least 85', '85+') resolves "
+    "correctly, so the convention itself holds; this is a splitter fix, tracked "
+    "rather than patched around inside the threshold matcher."))
+def test_age_and_over_phrasing_is_a_known_gap(semantics):
+    from mi_agent.llm_query_parser import _parse_filters
+
+    condition = _parse_filters("borrowers 85 and over", semantics,
+                               {"youngest_borrower_age"}
+                               ).get("youngest_borrower_age")
+    assert condition == {"op": "ge", "value": 85.0}
