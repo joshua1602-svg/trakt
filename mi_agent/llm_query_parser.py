@@ -26,7 +26,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .mi_query_spec import MIQuerySpec
+from .mi_query_spec import MAX_MEASURES, MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
 
 logger = logging.getLogger(__name__)
@@ -735,6 +735,291 @@ def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List
     return None, "sum", matched
 
 
+# --------------------------------------------------------------------------- #
+# P1E — the measure SET a question names
+# --------------------------------------------------------------------------- #
+# "Give me the balance, loan count, weighted-average LTV and rate for London" is
+# ONE analytical request carrying four governed measures over one population —
+# not four questions, and not an excuse to answer one of them.
+#
+# This reuses ``_detect_metric``'s vocabularies rather than adding a parallel
+# one: the same curated grammar, the same registry synonyms, the same
+# aggregation qualifiers. The only difference is that it collects EVERY match in
+# order of appearance instead of returning the first.
+
+
+def _local_aggregation_intent(text: str, start: int) -> Optional[str]:
+    """The aggregation qualifier attached to THIS measure, not to the sentence.
+
+    "weighted-average LTV and average borrower age" carries two different
+    qualifiers; reading the whole sentence would give both measures whichever
+    one matched first.
+    """
+    window = text[max(0, start - _AGG_QUALIFIER_WINDOW):start]
+    # Stop at a conjunction or comma: the qualifier before "and" belongs to the
+    # PREVIOUS measure ("total balance and LTV" does not make LTV a sum).
+    for separator in (",", " and ", " plus ", ";"):
+        cut = window.rfind(separator)
+        if cut != -1:
+            window = window[cut + len(separator):]
+    return _aggregation_intent(window)
+
+
+#: How far back to look for a measure's own aggregation qualifier.
+_AGG_QUALIFIER_WINDOW = 40
+
+#: How a reader names the loan-count measure inside a multi-measure request.
+_COUNT_MEASURE_RE = re.compile(
+    r"\b(?:loan\s+count|number\s+of\s+(?:loans|cases|accounts|mortgages)|"
+    r"no\.?\s+of\s+(?:loans|cases|accounts)|count\s+of\s+(?:loans|cases|accounts)|"
+    r"how\s+many\s+(?:loans|cases|accounts)|loan\s+numbers)\b", re.I)
+
+
+#: Introduces a GROUPING clause. Everything from here to the end of the clause
+#: names axes, not measures — "balance by region and age bucket" measures one
+#: thing across two, and reading "age" there as a second measure would turn a
+#: governed two-dimensional breakdown into a spurious multi-measure request.
+_GROUPING_CLAUSE_RE = re.compile(
+    r"\b(?:split\s+by|grouped\s+by|broken\s+down\s+by|by|per|across)\b", re.I)
+
+#: Where a grouping clause ends and ordinary sentence resumes.
+_GROUPING_CLAUSE_END_RE = re.compile(
+    r"[,?.;:]|\b(?:where|for|with|in|over|under|above|below|between|show|give)\b",
+    re.I)
+
+
+#: A measure word carrying one of these suffixes names a BUCKETED DIMENSION —
+#: "age bucket", "LTV band" — so "which age bucket has the largest balance" is a
+#: ranking over one measure, not a request for two.
+_DIMENSION_SUFFIX_RE = re.compile(
+    r"^\s*(?:bucket|band|range|group|grouping|segment|category|categories|"
+    r"cohort|tier|type)s?\b", re.I)
+
+
+def _grouping_regions(text: str) -> List[Tuple[int, int]]:
+    """Spans of ``text`` that name grouping AXES rather than measures."""
+    regions: List[Tuple[int, int]] = []
+    for match in _GROUPING_CLAUSE_RE.finditer(text):
+        end = _GROUPING_CLAUSE_END_RE.search(text, match.end())
+        regions.append((match.end(), end.start() if end else len(text)))
+    return regions
+
+
+def _measure_hits(text: str, semantics: dict, available_columns=None
+                  ) -> List[Tuple[int, int, str, str]]:
+    """Non-overlapping ``(start, end, semantic_key, default_aggregation)`` hits.
+
+    The single place the measure vocabulary is applied to a question. Both the
+    measure SET and the unresolved-slot guard read it, so the guard can never
+    disagree with the parser about which words were understood as measures.
+    """
+    reg_terms = _registry_metric_terms(semantics)
+    fields = _fields(semantics)
+    columns = set(available_columns) if available_columns is not None else None
+
+    # P0 already decides which measure words in a question are MEASURES and
+    # which are grammar. Reusing its two exclusions — rather than re-deriving
+    # them — is what keeps the parser and the P0 ledger from disagreeing about
+    # the same sentence.
+    from .execution_receipt import _is_filter_subject  # local: avoids a cycle
+
+    grouping = _grouping_regions(text)
+
+    #: (start, end, semantic_key, default_aggregation)
+    hits: List[Tuple[int, int, str, str]] = []
+
+    def _record(match, key: Optional[str], default_agg: str) -> None:
+        if not key:
+            return
+        entry = fields.get(key, {}) or {}
+        canonical = entry.get("canonical_field", key)
+        if columns is not None and key != "loan_count" and canonical not in columns:
+            return
+        # "balance below 75% LTV" measures balance and FILTERS on LTV; "balance
+        # BY region" measures balance and GROUPS by region. Neither second word
+        # is a measure, and reading it as one turns a good filtered answer into
+        # a spurious multi-measure request.
+        if _is_filter_subject(text, match.start(), match.end()):
+            return
+        if any(start <= match.start() < end for start, end in grouping):
+            return
+        if _DIMENSION_SUFFIX_RE.match(text[match.end():match.end() + 16]):
+            return
+        hits.append((match.start(), match.end(), key, default_agg))
+
+    # 1) Registry multi-word phrases (longest first) — a phrase measure must beat
+    #    a curated token it contains.
+    for term in sorted((t for t in reg_terms if " " in t), key=len, reverse=True):
+        for match in re.finditer(r"\b" + re.escape(term) + r"\b", text):
+            key = reg_terms[term]
+            entry = fields.get(key, {})
+            _record(match, key, entry.get("default_aggregation")
+                    or ("weighted_avg" if entry.get("format") == "percent" else "sum"))
+    # 2) The curated grammar — the core measures.
+    for term, token in _METRIC_TERMS:
+        for match in re.finditer(r"\b" + re.escape(term) + r"\b", text):
+            key, default_agg = _resolve_metric(token, semantics)
+            _record(match, key or ("loan_count" if token == "count" else None),
+                    "count" if token == "count" else default_agg)
+    # 2b) Count synonyms. "number of loans" and "loan count" are the same governed
+    #     measure; the curated grammar carries only the bare token "count",
+    #     which a CFO rarely writes. Scoped to the measure set so
+    #     ``_detect_metric``'s single-measure behaviour is untouched.
+    for match in _COUNT_MEASURE_RE.finditer(text):
+        _record(match, "loan_count", "count")
+    # 3) Registry single-word synonyms for anything still unnamed.
+    for term in sorted((t for t in reg_terms if " " not in t), key=len, reverse=True):
+        for match in re.finditer(r"\b" + re.escape(term) + r"\b", text):
+            key = reg_terms[term]
+            entry = fields.get(key, {})
+            _record(match, key, entry.get("default_aggregation")
+                    or ("weighted_avg" if entry.get("format") == "percent" else "sum"))
+
+    # Overlapping spans: keep the longest match at each position, so "loan to
+    # value" is one measure rather than also matching "value".
+    hits.sort(key=lambda h: (h[0], -(h[1] - h[0])))
+    chosen: List[Tuple[int, int, str, str]] = []
+    for hit in hits:
+        if any(hit[0] < c[1] and c[0] < hit[1] for c in chosen):
+            continue
+        chosen.append(hit)
+    return chosen
+
+
+def detect_measure_set(text: str, semantics: dict, available_columns=None, *,
+                       with_spans: bool = False):
+    """Every governed measure the question names, in order, with its aggregation.
+
+    Returns ``[]`` when fewer than two distinct measures are named, so a
+    single-measure question keeps exactly the parse it has today and this
+    function can never change it.
+
+    ``with_spans`` additionally returns the text spans the measures consumed.
+    A caller masks them before resolving dimensions and filters, so "average
+    borrower AGE" as a measure cannot also be read as a grouping by age band —
+    the same consume-the-span discipline the single-measure parser follows.
+    """
+    chosen = _measure_hits(text, semantics, available_columns)
+
+    measures: List[Dict[str, str]] = []
+    spans: List[Tuple[int, int]] = []
+    seen: set = set()
+    for start, end, key, default_agg in sorted(chosen):
+        if key in seen:
+            continue
+        seen.add(key)
+        spans.append((start, end))
+        if key == "loan_count":
+            measures.append({"field": "loan_count", "aggregation": "count"})
+            continue
+        aggregation = _apply_agg_intent(
+            key, default_agg, _local_aggregation_intent(text, start), semantics)
+        measures.append({"field": key, "aggregation": aggregation})
+
+    if len(measures) < 2:
+        measures, spans = [], []
+    return (measures, tuple(spans)) if with_spans else measures
+
+
+#: Where a coordinated measure list stops. Punctuation ends the clause; a
+#: preposition introduces the SCOPE or the GROUPING rather than another measure
+#: ("... and weighted-average LTV **by** region", "... **for** the London book").
+_MEASURE_LIST_STOP_RE = re.compile(
+    r"[?.;:!]|\b(?:by|for|in|across|between|over|under|where|with|per|split|"
+    r"grouped|broken|during|since|versus|vs)\b", re.I)
+
+#: Words that can occupy a slot without naming a measure. A trailing courtesy
+#: ("..., please") is not a measure the agent failed to understand.
+_MEASURE_SLOT_FILLER = frozenset({
+    "please", "thanks", "thank you", "ta", "cheers", "as well", "too", "also",
+    "and", "or", "etc", "etc.", "the", "a", "an", "me", "us", "it", "that",
+})
+
+_SLOT_SPLIT_RE = re.compile(r",|\band\b|&", re.I)
+
+#: A measure slot is a NOUN PHRASE — "weighted average rate", "loan count". A
+#: slot carrying a question word or a finite verb is a second CLAUSE, not a
+#: measure the parser failed to understand: "the largest exposure and what share
+#: of the book is it" asks two things, and the second is a governed share
+#: question rather than an unrecognised measure name.
+_SLOT_IS_A_CLAUSE_RE = re.compile(
+    r"\b(?:what|which|who|whose|how|why|when|where|is|are|was|were|be|been|"
+    r"do|does|did|has|have|had|can|could|will|would|should|make|makes|made|"
+    r"give|gives|show|shows|tell|tells)\b", re.I)
+
+
+def unresolved_measure_slots(text: str, semantics: dict,
+                             available_columns=None) -> Tuple[str, ...]:
+    """Slots in the question's measure list that named no governed measure.
+
+    A CFO writes measures as a coordinated list — "balance, loan count,
+    weighted-average LTV and weighted-average rate". If the vocabulary
+    understands three of those four, answering the three and saying nothing
+    about the fourth is a silent omission, and a silent omission is the one
+    outcome this product must never produce.
+
+    The guard is deliberately STRUCTURAL rather than lexical: it does not need
+    to know what the unrecognised words mean, only that a slot of the same list
+    resolved to nothing. That is why it also covers vocabulary this parser has
+    not learnt yet, instead of needing a new pattern per missing synonym.
+
+    Bounded to the list itself. The region runs from the first recognised
+    measure to the end of that clause, so words before the list (a leading scope
+    clause) and after it (a grouping or a filter) are never mistaken for
+    measures.
+    """
+    hits = _measure_hits(text, semantics, available_columns)
+    if not hits:
+        return ()          # no measure list was recognised at all — not ours
+    spans = [(h[0], h[1]) for h in hits]
+    start = min(s for s, _ in spans)
+    last = max(e for _, e in spans)
+
+    stop = len(text)
+    tail = _MEASURE_LIST_STOP_RE.search(text, last)
+    if tail is not None:
+        stop = tail.start()
+
+    # Slot boundaries come from the separators' own offsets, so a slot's text and
+    # its position can never disagree — the check below is "did a measure span
+    # fall inside THIS slot", and an off-by-one there would invent a finding.
+    bounds: List[Tuple[int, int]] = []
+    cursor = start
+    for sep in _SLOT_SPLIT_RE.finditer(text, start, stop):
+        bounds.append((cursor, sep.start()))
+        cursor = sep.end()
+    bounds.append((cursor, stop))
+
+    unresolved: List[str] = []
+    for slot_start, slot_end in bounds:
+        if any(slot_start < e and b < slot_end for b, e in spans):
+            continue        # this slot named a measure
+        piece = text[slot_start:slot_end]
+        if _SLOT_IS_A_CLAUSE_RE.search(piece):
+            continue        # a second question, not a measure name
+        residue = [w for w in re.findall(r"[a-z][a-z'-]*", piece.lower())
+                   if w not in _MEASURE_SLOT_FILLER]
+        if not residue or len(residue) > 6:
+            continue        # filler, or too long a clause to be a measure slot
+        unresolved.append(" ".join(piece.split()).strip(" ,"))
+    return tuple(dict.fromkeys(u for u in unresolved if u))
+
+
+def _mask_spans(text: str, spans) -> str:
+    """``text`` with the measure spans blanked, preserving offsets.
+
+    Blanking rather than deleting keeps every other offset valid, so a filter or
+    dimension detector reading the remainder sees the sentence it expects.
+    """
+    if not spans:
+        return text
+    chars = list(text)
+    for start, end in spans:
+        for i in range(start, min(end, len(chars))):
+            chars[i] = " "
+    return "".join(chars)
+
+
 #: "top 5", "bottom 5", "largest 10". The DIRECTION is resolved separately by
 #: ``_detect_ranking``; this only extracts the N. "bottom"/"smallest"/"lowest"
 #: were missing, so a Bottom-N question kept its ascending sort but silently lost
@@ -1436,6 +1721,11 @@ _NON_PLACE_TERMS = {
     "arrears", "default", "performing", "vintage", "cohort", "type",
     "status", "band", "bucket", "ltv", "age", "balance", "exposure",
     "value", "valuation", "interest", "securitisation", "them", "these",
+    # Sourcing cohorts. "the acquired book" names HOW the loans were sourced,
+    # which the portfolio lens already resolves; reading it as a place invented
+    # a geography value the column does not contain and emptied the population.
+    "acquired", "direct", "originated", "origination", "purchased",
+    "sponsored", "warehouse", "book", "books", "portfolio", "portfolios",
 }
 
 
@@ -1913,6 +2203,70 @@ def _contribution_recognizer(q: str, title: str, semantics: dict,
                            note="aggregate_contribution")
 
 
+def _measure_set_recognizer(q: str, title: str, semantics: dict,
+                            available_columns=None):
+    """A governed MULTI-MEASURE plan, or None.
+
+    One population, one optional filter set, one optional governed grouping,
+    one reporting period — and every governed measure the question named. Filters
+    and dimensions are resolved by the SAME helpers the single-measure paths use,
+    so the population a multi-measure answer describes is the population a
+    single-measure answer would have described.
+    """
+    # A RELATIONSHIP is not a measure set. "ltv vs interest rate" names two
+    # governed measures but asks how they RELATE, which only a loan-level plot
+    # can express — so it is left to the scatter path that already owns it, and
+    # P0 keeps its relationship facet. Deferring here rather than competing.
+    if any(token in q for token in (" vs ", " versus ", "scatter", "bubble",
+                                    "plot", "against", "sized by",
+                                    "relative to")):
+        return None
+
+    measures, spans = detect_measure_set(q, semantics, available_columns,
+                                         with_spans=True)
+    if len(measures) < 2:
+        return None
+    if len(measures) > MAX_MEASURES:
+        # Reported, never truncated: answering four of five without saying so is
+        # the silent omission P0 exists to prevent.
+        return None
+
+    # Dimensions and filters are read from the text the measures did NOT claim.
+    remainder = _mask_spans(q, spans)
+    dims, _terms, _rest = _explicit_dimensions(
+        remainder, semantics, grouping=True, available_columns=available_columns)
+    filters = _parse_filters(remainder, semantics, available_columns)
+    region = _parse_categorical_filter(remainder, semantics, available_columns)
+    if region is None:
+        # A CFO usually states the scope FIRST — "For the London book, give me
+        # …". The existing categorical resolver reads a trailing scope clause,
+        # so the leading clause is handed to that same resolver rather than a
+        # second pattern being invented for it.
+        lead = remainder.split(",", 1)[0].strip()
+        if lead and lead != remainder.strip():
+            region = _parse_categorical_filter(lead, semantics, available_columns)
+    if region and region[0] not in filters:
+        filters[region[0]] = region[1]
+
+    grouped = bool(dims)
+    spec = MIQuerySpec(
+        intent="chart" if grouped else "summary",
+        chart_type="bar" if grouped else "none",
+        measures=measures,
+        metric=measures[0]["field"] if measures[0]["field"] != "loan_count" else None,
+        aggregation=measures[0].get("aggregation") or "sum",
+        dimension=dims[0] if grouped else None,
+        x=dims[0] if grouped else None,
+        filters=filters,
+        output_format="chart_and_table" if grouped else "table",
+        title=title,
+        explanation=("Governed multi-measure request: "
+                     + ", ".join(m["field"] for m in measures)
+                     + " over one population."))
+    return spec, _det_meta("high", bool(dims), [m["field"] for m in measures],
+                           note="multi_measure")
+
+
 def _deterministic_parse(question: str, semantics: dict,
                          available_columns=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
@@ -1955,6 +2309,13 @@ def _deterministic_parse(question: str, semantics: dict,
     rl = _risk_limit_recognizer(q, title)
     if rl is not None:
         return rl
+    # A question naming several governed measures is ONE request over one
+    # population. Recognised before the generic single-metric paths, which would
+    # otherwise keep whichever measure they matched first and drop the rest.
+    ms = _measure_set_recognizer(q, title, semantics,
+                                 available_columns=available_columns)
+    if ms is not None:
+        return ms
 
     # ---- filtered count / balance ("how many loans with <field> <op> N") ---
     # A counting/aggregating question with a numeric threshold routes to a
@@ -2517,6 +2878,21 @@ _SYSTEM_INSTRUCTIONS = (
     "9. PERCENT SCALE. Percent-format fields (LTV, interest rate) are expressed "
     "in PERCENTAGE POINTS, not fractions: 75% is 75, not 0.75. Write filter "
     "thresholds on those fields in points.\n"
+    "10. SEVERAL MEASURES IN ONE QUESTION. When the question names more than one "
+    "measure (\"balance, loan count, weighted-average LTV and rate\"), that is ONE "
+    "request over ONE population — not several questions. Return them in "
+    "'measures': a JSON ARRAY of objects, each {\"field\": <catalogue key>, "
+    "\"aggregation\": <allowed aggregation>}. Use the key 'loan_count' for a "
+    "count of loans. Keep the shared filters in 'filters' and the shared "
+    "grouping in 'dimension' — they apply to every measure. Do NOT pick one "
+    "measure and drop the rest, and do NOT invent a measure the question did "
+    "not ask for. Example:\n"
+    '   {\"intent\": \"summary\", \"chart_type\": \"none\", \"measures\": ['
+    '{\"field\": \"current_outstanding_balance\", \"aggregation\": \"sum\"}, '
+    '{\"field\": \"loan_count\", \"aggregation\": \"count\"}, '
+    '{\"field\": \"current_loan_to_value\", \"aggregation\": \"weighted_avg\"}], '
+    '\"filters\": {\"collateral_geography\": \"London\"}}\n'
+    "    For a SINGLE measure keep using 'metric' + 'aggregation' as before.\n"
 )
 
 
@@ -2895,7 +3271,90 @@ def carry_specialist_intent(llm_spec: MIQuerySpec, det_spec: MIQuerySpec) -> Lis
             continue
         carried.append(field_name)
     carried.extend(reconcile_threshold_operators(llm_spec, det_spec))
+    carried.extend(carry_measure_set(llm_spec, det_spec))
+    carried.extend(reconcile_measure_aggregations(llm_spec, det_spec))
     return carried
+
+
+def carry_measure_set(llm_spec: MIQuerySpec, det_spec: MIQuerySpec) -> List[str]:
+    """Carry a governed measure SET the model returned as a single metric.
+
+    The same precedence rule as ``carry_specialist_intent``: something the
+    deterministic parser positively recognised may not be shadowed by a more
+    generic LLM spec. This is the original P1E defect on the LLM path — the
+    model understood the question, said so in its explanation, and returned one
+    metric because the contract had one slot. It now has the array, but if it
+    still answers with a single metric the two parsers would disagree about the
+    same sentence, and the LLM path would refuse a question the deterministic
+    path answers.
+
+    Deliberately narrow. The set is carried ONLY when the model expressed no
+    measure of its own, or expressed one the deterministic set already contains
+    — so this can never re-point the question at a measure the model did not
+    name.
+    """
+    det_measures = [m for m in (getattr(det_spec, "measures", None) or [])
+                    if isinstance(m, dict) and m.get("field")]
+    if len(det_measures) < 2:
+        return []
+    llm_measures = [m for m in (getattr(llm_spec, "measures", None) or [])
+                    if isinstance(m, dict) and m.get("field")]
+    if len(llm_measures) > 1:
+        return []                     # the model expressed a set — leave it
+    det_fields = {str(m["field"]) for m in det_measures}
+    if llm_measures and str(llm_measures[0]["field"]) not in det_fields:
+        return []                     # the model saw a different measure
+    single = getattr(llm_spec, "metric", None)
+    if single and str(single) not in det_fields:
+        return []
+
+    llm_spec.measures = [dict(m) for m in det_measures]
+    first = llm_spec.measures[0]
+    llm_spec.metric = None if first["field"] == "loan_count" else first["field"]
+    if first.get("aggregation"):
+        llm_spec.aggregation = first["aggregation"]
+    return ["measures"]
+
+
+def reconcile_measure_aggregations(llm_spec: MIQuerySpec,
+                                   det_spec: MIQuerySpec) -> List[str]:
+    """Apply the house aggregation convention to the LLM's own measure set.
+
+    The convention is a reading of the QUESTION's language, not a preference: a
+    bare "average" on a PERCENT measure means the balance-weighted average in MI,
+    which is why ``_apply_agg_intent`` resolves it that way. The model does not
+    know that convention — on "average interest rate" it returned a simple mean,
+    a different number from the governed one.
+
+    Only the AGGREGATION moves, and only where both parsers named the SAME
+    measure field, so this can never add, drop or re-point a measure. Where the
+    model expressed something the deterministic parser did not recognise at all,
+    the model's choice stands.
+    """
+    det_measures = {str((m or {}).get("field")): (m or {}).get("aggregation")
+                    for m in (getattr(det_spec, "measures", None) or [])
+                    if isinstance(m, dict) and m.get("field")}
+    llm_measures = getattr(llm_spec, "measures", None) or []
+    if not det_measures or not llm_measures:
+        return []
+
+    adjusted: List[str] = []
+    for measure in llm_measures:
+        if not isinstance(measure, dict):
+            continue
+        field_name = str(measure.get("field") or "")
+        governed = det_measures.get(field_name)
+        if not governed or measure.get("aggregation") == governed:
+            continue
+        measure["aggregation"] = governed
+        adjusted.append(f"measure_aggregation:{field_name}")
+    if adjusted and llm_measures:
+        # Keep the singular slots pointing at measures[0], as normalise_measures
+        # guarantees everywhere else.
+        first = llm_measures[0]
+        if isinstance(first, dict) and first.get("aggregation"):
+            llm_spec.aggregation = first["aggregation"]
+    return adjusted
 
 
 def reconcile_threshold_operators(llm_spec: MIQuerySpec,

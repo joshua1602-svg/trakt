@@ -2072,18 +2072,30 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     metric_comparisons = result.get("metric_comparisons") or []
     distribution_comparisons = result.get("distribution_comparisons") or []
     requested = result.get("requested_metric") or {}
+    requested_set = result.get("requested_metrics") or (
+        [requested] if requested else [])
+    compared_ok = [r for r in requested_set if r.get("compared")]
+    not_compared = [r for r in requested_set if not r.get("compared")]
+    # Requested measures the workflow does not express at all (a loan count has
+    # no BSR directionality, so it is not one of the measures it undertook to
+    # compare). Named in the answer alongside `not_compared`, but kept out of
+    # the requested-MEASURE ledger those two lists feed.
+    uncomparable = result.get("uncomparable_measures") or []
 
-    # ---- the requested-metric invariant --------------------------------- #
-    # If the caller named a metric, that metric must be in the executed
-    # comparison before this route may answer. Anything else is a refusal that
-    # names the metric and says why. The failure this prevents: "how do the two
-    # books compare on borrower age?" returning "no governed directional
-    # differences were observed" when borrower age was never compared at all.
-    if requested and not requested.get("compared"):
+    # ---- the requested-measure invariant -------------------------------- #
+    # Every measure the caller named must be accounted for before this route may
+    # answer. When NONE was compared it is a refusal naming them; when some were
+    # and some were not, the answer stands and names what is missing (P1E's
+    # explicit-partial rule). The failure this prevents: "how do the two books
+    # compare on borrower age?" returning "no governed directional differences
+    # were observed" when borrower age was never compared at all.
+    if requested_set and not compared_ok:
+        names = _sentence_join([r.get("display_name") or r.get("field")
+                                for r in not_compared]) or "the requested measure"
+        reasons = "; ".join(sorted({str(r.get("reason")) for r in not_compared}))
         message = (
             f"I could not compare {sides[0]['label']} with {sides[1]['label']} "
-            f"on {requested.get('display_name') or requested.get('field')}: "
-            f"{requested.get('reason')}. I have not compared a different "
+            f"on {names}: {reasons}. I have not compared a different "
             f"measure instead, and I have not reported this as 'no difference'.")
         envelope = _envelope(
             ok=False, question=request.question, spec=request.spec_dict,
@@ -2096,6 +2108,7 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
         meta["controlledUnsupported"] = True
         meta["portfolioComparison"] = {
             "requestedMetric": requested.get("field"),
+            "requestedMetrics": [r.get("field") for r in requested_set],
             "requestedMetricCompared": False,
             "reason": requested.get("reason"),
             "measuresCompared": [],
@@ -2108,6 +2121,12 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     summary_lines = result.get("summary") or []
     if summary_lines:
         answer = " ".join(summary_lines)
+        if not_compared or uncomparable:
+            # Explicit partial: what ran, and what did not, by name. Never a
+            # silent three-of-four.
+            answer += (" Not compared: " + "; ".join(
+                f"{r.get('display_name') or r.get('field')} ({r.get('reason')})"
+                for r in list(not_compared) + list(uncomparable)) + ".")
     elif metric_comparisons or distribution_comparisons:
         # Something WAS compared and no direction emerged — a real observation.
         answer = (f"Compared {sides[0]['label']} with {sides[1]['label']} at "
@@ -2167,7 +2186,10 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     # comparison metadata, never from the question's wording.
     envelope["metadata"]["portfolioComparison"] = {
         "requestedMetric": requested.get("field"),
-        "requestedMetricCompared": bool(requested.get("compared")) if requested else None,
+        "requestedMetrics": [r.get("field") for r in requested_set],
+        "requestedMetricsCompared": [r.get("field") for r in compared_ok],
+        "requestedMetricsNotCompared": [r.get("field") for r in not_compared],
+        "requestedMetricCompared": bool(compared_ok) if requested_set else None,
         "measuresCompared": [c.get("field") for c in metric_comparisons],
         "measureLabels": [c.get("display_name") for c in metric_comparisons],
         "aggregations": [c.get("aggregation") for c in metric_comparisons],

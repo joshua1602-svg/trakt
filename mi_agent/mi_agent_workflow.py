@@ -308,6 +308,71 @@ def _capability_explanation(question: str, frame, history_periods: int = 1
     return " ".join(parts)
 
 
+#: How each governed format reads in a management answer.
+def _format_measure_value(value, fmt: str) -> str:
+    """One measure, formatted the way a reader expects to see it."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if fmt == "currency":
+        for cut, suffix in ((1e9, "bn"), (1e6, "m"), (1e3, "k")):
+            if abs(number) >= cut:
+                return f"£{number / cut:,.2f}{suffix}"
+        return f"£{number:,.2f}"
+    if fmt == "percent":
+        return f"{number:.2f}%"
+    if fmt == "integer":
+        return f"{number:,.1f}" if number % 1 else f"{int(number):,}"
+    return f"{number:,.2f}"
+
+
+def _multi_measure_answer(spec, qres, semantics: dict) -> Optional[str]:
+    """A CFO-readable answer for a governed multi-measure request.
+
+    One request, several measures, ONE population — so the answer reads as a
+    single management summary rather than as several unrelated figures. Every
+    number comes from the executed row; nothing here calculates.
+    """
+    try:
+        executed = (getattr(qres, "metadata", None) or {}).get("measures_executed")
+        data = getattr(qres, "data", None)
+        if not executed or data is None or not len(data):
+            return None
+        if getattr(qres, "result_type", None) != "summary":
+            return None      # a grouped result is read from its table
+        row = data.iloc[0]
+        fields = semantics.get("fields", {}) or {}
+        lines = []
+        for measure in executed:
+            column = measure.get("column")
+            if column not in data.columns:
+                continue
+            if measure.get("aggregation") == "count":
+                lines.append(f"Loans: {int(row[column]):,}")
+                continue
+            entry = fields.get(measure.get("field"), {}) or {}
+            label = measure.get("label") or measure.get("field")
+            if measure.get("aggregation") == "weighted_avg":
+                label = f"Weighted-average {label}"
+            elif measure.get("aggregation") == "avg":
+                label = f"Average {label}"
+            lines.append(f"{label}: "
+                         f"{_format_measure_value(row[column], entry.get('format'))}")
+        if not lines:
+            return None
+        unavailable = (getattr(qres, "metadata", None) or {}).get(
+            "measures_unavailable") or []
+        answer = " · ".join(lines)
+        if unavailable:
+            # Every requested measure is accounted for: what ran, and what did
+            # not, by name. A silent 3-of-4 is the failure this prevents.
+            answer += ("  Not available: " + "; ".join(unavailable) + ".")
+        return answer
+    except Exception:  # noqa: BLE001 - prose must never break a good answer
+        return None
+
+
 def _contribution_answer(spec, qres, semantics: dict) -> Optional[str]:
     """The leading contributor, in a sentence, from the executed rows only."""
     try:
@@ -841,6 +906,13 @@ def run_mi_agent_query(
     # sentence saying which one, from the executed rows. Stated with BOTH
     # figures because the point of the calculation is that they differ: the
     # leading contributor is rarely the group with the highest value.
+    # P1E: a multi-measure request gets a management answer naming every figure.
+    if qres is not None and (getattr(qres, "metadata", None) or {}).get(
+            "measures_executed"):
+        line = _multi_measure_answer(spec, qres, semantics)
+        if line:
+            result["answer"] = line
+
     if spec.aggregation == "contribution" and qres is not None:
         line = _contribution_answer(spec, qres, semantics)
         if line:

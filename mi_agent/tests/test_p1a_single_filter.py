@@ -270,11 +270,25 @@ def test_a_ranking_query_is_still_refused_after_p1a(frame, semantics):
     assert result["ok"] is False
 
 
-def test_a_multi_measure_query_is_still_refused_after_p1a(frame, semantics):
+def test_a_multi_measure_query_shares_one_filtered_population_after_p1e(
+        frame, semantics):
+    """P1A's filter and P1E's measure set compose over ONE population.
+
+    This question used to refuse because a spec carried one measure. It now
+    answers both — and the point P1A cares about is that the London filter
+    applies to BOTH figures, not to whichever measure happened to be parsed
+    first.
+    """
     result = _ask("what is the average ltv and the average borrower age in london?",
                   frame, semantics)
-    assert result["ok"] is False
-    assert "more than one measure" in result["error"]
+    assert result["ok"] is True, result.get("error")
+    metadata = getattr(result.get("query_result"), "metadata", None) or {}
+    columns = [m["column"] for m in (metadata.get("measures_executed") or [])]
+    assert any("loan_to_value" in c for c in columns)
+    assert any("age" in c for c in columns)
+    # One population, stated once: the receipt cannot claim two.
+    receipt = _summary(result).get("receipt") or ""
+    assert receipt.count("London") == 1
 
 
 def test_the_guard_is_not_weakened_a_dropped_filter_still_refuses(frame, semantics):

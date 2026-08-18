@@ -53,7 +53,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -712,6 +712,154 @@ def _metric_aggregation(spec: MIQuerySpec) -> str:
     return agg
 
 
+# --------------------------------------------------------------------------- #
+# P1E — multi-measure composition
+# --------------------------------------------------------------------------- #
+# One analytical request carrying several governed measures over ONE population.
+# The population is filtered ONCE and every measure is computed from that same
+# frame, which is the property that makes the answer coherent: a balance for
+# London beside an LTV for the whole book is four numbers that do not describe
+# the same thing.
+
+
+class ResolvedMeasure(NamedTuple):
+    """One governed measure, resolved against the semantic registry."""
+
+    key: str                      # semantic field key as requested
+    field: Optional[str]          # canonical column, None for a bare count
+    aggregation: str
+    weight_field: Optional[str]
+    column: str                   # output column name
+    label: str                    # business name, for the answer and receipt
+
+
+def resolve_measures(spec: MIQuerySpec, semantics: dict, columns
+                     ) -> Tuple[List[ResolvedMeasure], List[str]]:
+    """``(resolved, unavailable_notes)`` for the spec's measure set.
+
+    The AGGREGATION IS GOVERNED, not chosen by whoever wrote the question: it
+    comes from the registry's ``default_aggregation`` for the field unless the
+    request names one the registry also allows. An aggregation the registry does
+    not allow for a measure is refused for that measure rather than silently
+    downgraded — reporting a simple mean where a weighted average is governed is
+    a different number, not a rounding difference.
+    """
+    available = set(columns) if columns is not None else set()
+    resolved: List[ResolvedMeasure] = []
+    notes: List[str] = []
+    seen: set = set()
+
+    for measure in spec.measures or []:
+        key = str(measure.get("field") or "").strip()
+        if not key:
+            continue
+        requested_agg = str(measure.get("aggregation") or "").strip().lower()
+
+        if key in ("loan_count", "count", "loans"):
+            if "count" not in seen:
+                seen.add("count")
+                resolved.append(ResolvedMeasure(
+                    key="loan_count", field=None, aggregation="count",
+                    weight_field=None, column="loan_count", label="Loans"))
+            continue
+
+        try:
+            entry = resolve_semantic_field(key, semantics)
+        except Exception:  # noqa: BLE001 - an unknown measure is disclosed
+            notes.append(f"{key} is not a governed measure in this dataset")
+            continue
+        canonical = entry.get("canonical_field") or key
+        if canonical not in available:
+            notes.append(f"{entry.get('business_name') or key} is not available "
+                         f"in this dataset")
+            continue
+
+        allowed = set(entry.get("allowed_aggregations") or ())
+        governed = str(entry.get("default_aggregation") or "sum").lower()
+        if requested_agg and allowed and requested_agg not in allowed:
+            notes.append(
+                f"{entry.get('business_name') or key} cannot be aggregated as "
+                f"{requested_agg!r} — the registry allows "
+                f"{', '.join(sorted(allowed))}")
+            continue
+        aggregation = requested_agg or governed
+        if aggregation in ("distribution", "loan_level"):
+            notes.append(f"{entry.get('business_name') or key} is not a scalar "
+                         f"measure ({aggregation})")
+            continue
+
+        weight = None
+        if aggregation == "weighted_avg":
+            weight = resolve_weight_field(spec, entry, semantics, available)
+            if not weight:
+                notes.append(f"{entry.get('business_name') or key} needs a "
+                             f"governed weight and none is available")
+                continue
+
+        signature = (canonical, aggregation)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        resolved.append(ResolvedMeasure(
+            key=key, field=canonical, aggregation=aggregation,
+            weight_field=weight,
+            column=_metric_col_name(canonical, aggregation),
+            label=entry.get("business_name") or canonical))
+    return resolved, notes
+
+
+def _measure_values(frame: pd.DataFrame,
+                    measures: Sequence[ResolvedMeasure]) -> Dict[str, Any]:
+    """Every measure, computed from ONE frame."""
+    out: Dict[str, Any] = {}
+    for measure in measures:
+        out[measure.column] = aggregate_series(
+            frame, measure.field, measure.aggregation, measure.weight_field)
+    return out
+
+
+def _execute_measure_set(spec, work, semantics, warnings, measures
+                         ) -> Tuple[pd.DataFrame, str]:
+    """Portfolio-level multi-measure summary: one row, every measure."""
+    row: Dict[str, Any] = {"loan_count": int(len(work))}
+    row.update(_measure_values(work, measures))
+    return pd.DataFrame([row]), "summary"
+
+
+def _execute_grouped_measure_set(spec, work, semantics, warnings,
+                                 group_field_keys, measures
+                                 ) -> Tuple[pd.DataFrame, str, List[str]]:
+    """One table carrying every measure per group — not one table per measure."""
+    group_cols: List[str] = []
+    for key in group_field_keys:
+        group_cols.append(_resolve_group_column(key, semantics, work, warnings,
+                                                use_bucket=False))
+    work, bucketed = _bucket_missing(work, group_cols)
+    if bucketed:
+        warnings.append(
+            f"{bucketed:,} row(s) with a missing/blank grouping value were "
+            f"grouped under '{MISSING_BUCKET_LABEL}' (not dropped) so totals "
+            f"reconcile")
+
+    rows: List[Dict[str, Any]] = []
+    for keys, group in work.groupby(group_cols, sort=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        row: Dict[str, Any] = dict(zip(group_cols, keys))
+        row["loan_count"] = int(len(group))
+        row.update(_measure_values(group, measures))
+        rows.append(row)
+
+    columns = (list(group_cols) + ["loan_count"]
+               + [m.column for m in measures if m.column != "loan_count"])
+    out = pd.DataFrame(rows, columns=columns)
+    lead = next((m for m in measures if m.aggregation in ("sum", "balance_sum")),
+                measures[0] if measures else None)
+    if lead is not None and lead.column in out.columns:
+        out = out.sort_values(lead.column, ascending=False, kind="stable")
+    return out.reset_index(drop=True), "grouped", group_cols
+
+
 def _execute_share(spec, df, work, semantics, warnings, balance_col):
     """A governed share: the filtered population over the WHOLE-BOOK population.
 
@@ -1203,7 +1351,36 @@ def execute_mi_query(
     coverage: Dict[str, Any] = {}
 
     # ---- dispatch -------------------------------------------------------- #
-    if spec.aggregation == "contribution":
+    # ---- P1E: a request carrying more than one governed measure ---------- #
+    # Dispatched FIRST so the measure set is honoured whole. A single-measure
+    # spec normalises to a one-element list and falls through to the existing
+    # paths unchanged, so nothing about today's behaviour moves.
+    multi = [m for m in (spec.measures or []) if m.get("field")]
+    if len(multi) > 1 and spec.aggregation not in ("share", "contribution"):
+        resolved, unavailable = resolve_measures(spec, semantics, work.columns)
+        for note in unavailable:
+            warnings.append(f"measure unavailable: {note}")
+        if not resolved:
+            raise MIQueryExecutionError(
+                "none of the requested measures could be calculated: "
+                + "; ".join(unavailable))
+        metadata["measures_requested"] = [m.get("field") for m in multi]
+        metadata["measures_executed"] = [
+            {"field": m.key, "canonical_field": m.field,
+             "aggregation": m.aggregation, "weight_field": m.weight_field,
+             "column": m.column, "label": m.label} for m in resolved]
+        metadata["measures_unavailable"] = list(unavailable)
+        keys = _all_group_dims(spec)
+        if keys:
+            data_out, result_type, group_cols = _execute_grouped_measure_set(
+                spec, work, semantics, warnings, keys, resolved)
+            metadata["group_field_keys"] = list(keys)
+            metadata["group_columns"] = group_cols
+        else:
+            data_out, result_type = _execute_measure_set(
+                spec, work, semantics, warnings, resolved)
+
+    elif spec.aggregation == "contribution":
         data_out, result_type = _execute_contribution(
             spec, work, semantics, warnings, balance_col)
         if data_out is None:

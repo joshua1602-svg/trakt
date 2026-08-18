@@ -79,6 +79,12 @@ def _summary(result) -> dict:
     return result.get("execution_receipt") or {}
 
 
+def _executed_measures(result) -> list:
+    """The measure set the EXECUTOR declares it calculated."""
+    qr = result.get("query_result")
+    return list((getattr(qr, "metadata", None) or {}).get("measures_executed") or [])
+
+
 # =========================================================================== #
 # A. Execution receipt — describes EXECUTION, not the question
 # =========================================================================== #
@@ -246,12 +252,37 @@ def test_a_measure_the_question_did_not_name_is_refused(frame, semantics):
     assert substitution and "ltv" in substitution
 
 
-def test_multiple_measures_are_refused_rather_than_silently_reduced_to_one(
-        frame, semantics):
+def test_multiple_measures_are_never_silently_reduced_to_one(frame, semantics):
+    """The guarantee, unchanged; the way it is honoured, widened.
+
+    Before P1E the only way to avoid answering a two-measure question with ONE
+    figure was to refuse it. P1E calculates both, so the guarantee is now met by
+    DELIVERING the set. What must never happen — then or now — is a single
+    figure presented as if it answered the whole question.
+    """
     result = _ask("what is the average ltv and the average borrower age?",
                   frame, semantics)
+    assert result["ok"] is True, result.get("error")
+    executed = [m["column"] for m in _executed_measures(result)]
+    assert any("loan_to_value" in c for c in executed)
+    assert any("age" in c for c in executed)
+    receipt = _receipt(result)
+    assert "Weighted-average Current LTV" in receipt
+    assert "Borrower Age" in receipt
+
+
+def test_a_measure_set_that_cannot_be_delivered_whole_still_refuses(
+        frame, semantics):
+    """The refusal this replaced still fires when the set CANNOT be honoured.
+
+    "credit score" is not in this book. Answering the two measures that are and
+    saying nothing about the third is the silent 3-of-4 the guard exists to
+    prevent, so the whole question refuses.
+    """
+    result = _ask("what is the average ltv, the average borrower age and the "
+                  "average credit score?", frame, semantics)
     assert result["ok"] is False
-    assert "more than one measure" in result["error"]
+    assert "credit score" in result["error"].lower()
 
 
 def test_a_malformed_facet_produces_a_controlled_failure_not_a_crash(frame, semantics):

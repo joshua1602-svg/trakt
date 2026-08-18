@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 # Allowed enumerations (kept as module constants so the validator and parser
 # can share them).
@@ -156,6 +156,77 @@ def _describe_unfoldable(pred: Any) -> str:
             "so it was NOT applied")
 
 
+#: The most measures one question may carry. A management answer with more than
+#: four figures stops being readable, and an unbounded set would let a vague
+#: question quietly become an expensive one. A request beyond this is reported,
+#: never silently truncated.
+MAX_MEASURES = 4
+
+
+def normalise_measures(raw: Any, *, metric: Optional[str] = None,
+                       aggregation: Optional[str] = None,
+                       weight_field: Optional[str] = None) -> tuple:
+    """``(measures, notes)`` for any recognised measure shape.
+
+    Accepts the canonical list of ``{"field", "aggregation"}`` mappings, a list
+    of bare field-name strings, and the singular ``metric``/``aggregation``
+    pair. Never raises: anything unrecognised is reported through the notes so a
+    caller surfaces it instead of dropping it — the same discipline
+    ``normalise_filters`` follows.
+
+    Duplicates are folded: "balance and total balance" resolve to one governed
+    measure and must be reported once, not twice.
+    """
+    notes: List[str] = []
+    out: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def _add(field_name: Any, agg: Any = None, weight: Any = None) -> None:
+        name = str(field_name or "").strip()
+        if not name:
+            return
+        key = (name, str(agg or "").strip().lower() or None)
+        if key in seen or any(m["field"] == name and not agg for m in out):
+            return
+        seen.add(key)
+        entry: Dict[str, Any] = {"field": name}
+        if agg:
+            entry["aggregation"] = str(agg).strip().lower()
+        if weight:
+            entry["weight_field"] = str(weight).strip()
+        out.append(entry)
+
+    items: Any = raw
+    if isinstance(items, (str, Mapping)):
+        items = [items]
+    if items is None:
+        items = []
+    if not isinstance(items, (list, tuple)):
+        notes.append(f"measure specification {type(raw).__name__} was not "
+                     f"recognised and has not been applied")
+        items = []
+
+    for item in items:
+        if isinstance(item, str):
+            _add(item)
+        elif isinstance(item, Mapping):
+            name = (item.get("field") or item.get("metric")
+                    or item.get("name") or item.get("measure"))
+            if not name:
+                notes.append("a requested measure carried no field name and has "
+                             "not been applied")
+                continue
+            _add(name, item.get("aggregation") or item.get("agg"),
+                 item.get("weight_field") or item.get("weight"))
+        else:
+            notes.append(f"a requested measure of type {type(item).__name__} "
+                         f"was not recognised and has not been applied")
+
+    if not out and metric:
+        _add(metric, aggregation, weight_field)
+    return out, notes
+
+
 def normalise_filters(raw: Any) -> tuple:
     """``(filters_dict, unavailable_notes)`` for any recognised filter shape.
 
@@ -217,6 +288,22 @@ class MIQuerySpec:
 
     aggregation: str = "count"                  # see AGGREGATIONS
     weight_field: Optional[str] = None
+
+    # P1E — MULTI-MEASURE COMPOSITION.
+    #
+    # A CFO asks one analytical question containing several governed measures
+    # ("balance, loan count, WA LTV and WA rate for the London book"), not four
+    # unrelated questions. ``measures`` is that set: an ordered list of
+    # ``{"field", "aggregation", "weight_field"}`` entries sharing ONE
+    # population, ONE filter set, ONE optional grouping and ONE reporting period.
+    #
+    # Backward compatibility is by NORMALISATION, not by a second code path:
+    # ``normalise_measures`` folds the singular ``metric``/``aggregation`` into a
+    # one-element list, and keeps ``metric``/``aggregation`` pointing at
+    # ``measures[0]``. Every existing single-metric query therefore produces
+    # exactly the spec it produced before, and the executor has one contract to
+    # consume rather than two.
+    measures: List[Dict[str, Any]] = field(default_factory=list)
 
     filters: Dict[str, Any] = field(default_factory=dict)
     top_n: Optional[int] = None
@@ -375,6 +462,15 @@ class MIQuerySpec:
             raw_filters = data["filter"]
         folded, notes = normalise_filters(raw_filters)
         kwargs["filters"] = folded
+        # P1E: fold the measure set, accepting the singular metric/aggregation
+        # as a one-element list so the two shapes are one contract downstream.
+        measures, measure_notes = normalise_measures(
+            kwargs.get("measures") if kwargs.get("measures") is not None
+            else data.get("measure"),
+            metric=kwargs.get("metric"), aggregation=kwargs.get("aggregation"),
+            weight_field=kwargs.get("weight_field"))
+        kwargs["measures"] = measures
+        notes = list(notes) + measure_notes
         if notes:
             existing = list(kwargs.get("unavailable_filters") or [])
             kwargs["unavailable_filters"] = existing + [
@@ -446,6 +542,15 @@ class MIQuerySpec:
             for value in getattr(self, slot) or []:
                 if value:
                     out.append(value)
+        # P1E: every measure in the set is a field reference, so validation sees
+        # the whole request rather than only its first measure. ``loan_count``
+        # is a governed count, not a semantic field, and is excluded.
+        for measure in self.measures or []:
+            if not isinstance(measure, dict):
+                continue
+            name = measure.get("field")
+            if name and name not in ("loan_count", "count"):
+                out.append(name)
         # filter keys are field references too. Defensive about the container and
         # its keys: a spec built by a producer that bypassed from_dict (a direct
         # constructor call, an older pickle) may still carry a non-mapping here,

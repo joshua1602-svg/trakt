@@ -55,6 +55,13 @@ KIND_PROJECTION = "projection"
 KIND_COHORT_COMPARISON = "cohort_comparison"
 #: More measures named than a single-metric spec can carry.
 KIND_MULTI_MEASURE = "multi_measure"
+#: A slot in the question's measure list that named NO governed measure. The
+#: parser understood the other slots, so answering them and saying nothing about
+#: this one would be a silent 3-of-4 — the one outcome the product must never
+#: produce. Structural, not lexical: the guard does not need to know what the
+#: unrecognised words mean, only that a coordinated slot resolved to nothing,
+#: which is why it also covers vocabulary the parser has not learnt yet.
+KIND_UNRESOLVED_MEASURE = "unresolved_measure"
 #: One measure asked for RELATIVE TO another ("bigger loans relative to their
 #: property value") — a relationship, which a single aggregate cannot express.
 KIND_RELATIONSHIP = "relationship"
@@ -94,6 +101,9 @@ class RequestedFacet:
     #: ("region" -> the readable geography, or the NUTS3 code field), and every
     #: such resolution is the SAME request being honoured — not a substitution.
     alt_keys: Tuple[str, ...] = ()
+    #: For a multi-measure facet: the measure CONCEPTS the question named, so
+    #: reconciliation can check the whole set rather than a single label.
+    concepts: Tuple[str, ...] = ()
     status: str = LOST
     reason: str = ""
 
@@ -511,6 +521,28 @@ def executed_measure_concept(metric_key: Optional[str]) -> Optional[str]:
     return None
 
 
+def executed_measure_concepts(query_result: Any) -> Set[str]:
+    """The measure CONCEPTS execution actually returned.
+
+    Read from the executor's declared measure set (P1E) and, failing that, from
+    the executed metric — evidence, never the question. Returns an empty set
+    when execution declared no measure set, which keeps the pre-P1E branches
+    below in charge for a single-measure result.
+    """
+    metadata = getattr(query_result, "metadata", None) or {}
+    executed = metadata.get("measures_executed") or []
+    concepts: Set[str] = set()
+    for measure in executed:
+        key = (measure or {}).get("canonical_field") or (measure or {}).get("field")
+        if key in ("loan_count", "count"):
+            concepts.add("count")
+            continue
+        concept = executed_measure_concept(key)
+        if concept:
+            concepts.add(concept)
+    return concepts
+
+
 def requested_dimension_terms(question: str, semantics: dict,
                               available_columns: Optional[Iterable[str]] = None
                               ) -> List[Tuple[str, str, Tuple[str, ...]]]:
@@ -560,6 +592,17 @@ def requested_dimension_terms(question: str, semantics: dict,
     return out
 
 
+def _unresolved_measure_slots(q: str, semantics: dict, frame) -> Tuple[str, ...]:
+    """Measure slots the parser did not understand. Never raises."""
+    try:
+        from .llm_query_parser import unresolved_measure_slots  # local: cycle
+        columns = (list(frame.columns)
+                   if frame is not None and hasattr(frame, "columns") else None)
+        return unresolved_measure_slots(q, semantics, columns)
+    except Exception:  # noqa: BLE001 - the guard must never break an answer
+        return ()
+
+
 def detect_requested_facets(question: str, semantics: dict, *, frame=None,
                             requested_dimensions: Optional[Sequence[Tuple[str, str]]] = None
                             ) -> List[RequestedFacet]:
@@ -594,7 +637,16 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     if len(concepts) > 1:
         facets.append(RequestedFacet(
             kind=KIND_MULTI_MEASURE,
-            label="more than one measure (" + _join(concepts) + ")"))
+            label="more than one measure (" + _join(concepts) + ")",
+            concepts=tuple(concepts)))
+    for slot in _unresolved_measure_slots(q, semantics, frame):
+        # LOST at construction: the parser never resolved these words, so no
+        # execution could have honoured them and there is no evidence to weigh.
+        facets.append(RequestedFacet(
+            kind=KIND_UNRESOLVED_MEASURE, label=slot, status=LOST,
+            reason=("this was asked for alongside measures that were "
+                    "calculated, but it is not a governed measure in this "
+                    "dataset, so it was not calculated")))
     for key, term, alts in (requested_dimensions or []):
         facets.append(RequestedFacet(kind=KIND_GROUPING, label=term,
                                      field_key=key, alt_keys=alts))
@@ -796,7 +848,7 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     KIND_GEOGRAPHIC_SCOPE, KIND_THRESHOLD, KIND_STRESS,
     KIND_COMPARISON_PERIOD, KIND_RANKING, KIND_PROJECTION,
     KIND_COHORT_COMPARISON, KIND_MULTI_MEASURE, KIND_RELATIONSHIP,
-    KIND_CONTRIBUTION,
+    KIND_CONTRIBUTION, KIND_UNRESOLVED_MEASURE,
 })
 #: Facets that change the SHAPE of a still-valid answer. A partial answer is
 #: acceptable provided the unhonoured facet is named.
@@ -918,9 +970,29 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                                 "covers them together")
 
         elif facet.kind == KIND_MULTI_MEASURE:
+            # P1E: the requested measure SET is reconciled against the measures
+            # execution actually returned. Every concept the question named must
+            # be accounted for — applied, or explicitly named as unavailable.
+            executed = executed_measure_concepts(query_result)
+            requested = set(facet.concepts or ())
+            if requested and executed:
+                missing = sorted(requested - executed)
+                if not missing:
+                    facet.status, facet.reason = APPLIED, ""
+                elif set(missing) < requested:
+                    # Some ran and some did not. Disclosable ONLY because the
+                    # executor names what it could not calculate; a silent 3-of-4
+                    # is what this branch exists to prevent.
+                    facet.status = UNAVAILABLE
+                    facet.reason = ("not available in this dataset: "
+                                    + _join(missing))
+                else:
+                    facet.status = UNSUPPORTED
+                    facet.reason = ("none of the requested measures could be "
+                                    "calculated")
             # A scatter/bubble expresses several measures at once (x, y, size),
             # so a multi-measure request IS honoured there.
-            if getattr(query_result, "result_type", None) == "loan_level":
+            elif getattr(query_result, "result_type", None) == "loan_level":
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = UNSUPPORTED
@@ -1001,6 +1073,32 @@ def detect_substitution(facets: Sequence[RequestedFacet], *, spec, query_result,
             f"in place of {asked}")
 
 
+#: How one executed measure reads in the receipt.
+_MEASURE_AGG_WORDS = {
+    "sum": "", "balance_sum": "", "count": "", "count_distinct": "Distinct ",
+    "avg": "Average ", "median": "Median ", "weighted_avg": "Weighted-average ",
+}
+
+
+def _measure_set_phrase(executed: Sequence[Dict[str, Any]]) -> Optional[str]:
+    """"Balance · Loans · Weighted-average Current LTV" — the measures that ran.
+
+    Derived from the executor's declared measure metadata, never from the
+    question, which is what lets the receipt expose a measure that went missing.
+    Returns None for a single-measure result so today's receipts are unchanged.
+    """
+    if not executed or len(executed) < 2:
+        return None
+    parts: List[str] = []
+    for measure in executed:
+        label = (measure or {}).get("label") or (measure or {}).get("field") or ""
+        lead = _MEASURE_AGG_WORDS.get(str((measure or {}).get("aggregation") or ""), "")
+        phrase = f"{lead}{label}".strip()
+        if phrase and phrase not in parts:
+            parts.append(phrase)
+    return " · ".join(parts) or None
+
+
 def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[RequestedFacet],
                   parser_confidence: Optional[str] = None,
                   period: Optional[str] = None,
@@ -1022,9 +1120,14 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
     if getattr(query_result, "result_type", None) == "table":
         group_count = getattr(query_result, "row_count", None)
 
+    executed = meta.get("measures_executed") or []
     return ExecutionReceipt(
-        measure=_business_name(getattr(spec, "metric", None), semantics),
-        aggregation=getattr(spec, "aggregation", None),
+        measure=(_measure_set_phrase(executed)
+                 or _business_name(getattr(spec, "metric", None), semantics)),
+        # A measure set carries its own per-measure aggregation, so a single
+        # sentence-leading aggregation label would misdescribe it.
+        aggregation=(None if executed
+                     else getattr(spec, "aggregation", None)),
         filters=_applied_filter_phrases(spec, semantics, narrowed),
         dimensions=dimensions,
         population=int(population) if population is not None else None,
@@ -1231,6 +1334,17 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             facet.reason = ("this governed capability does not decompose a "
                             "weighted average across groups")
 
+        elif facet.kind == KIND_MULTI_MEASURE and compared.get("measuresCompared"):
+            # P1E: a governed comparison may carry several measures. Reconciled
+            # against what the route declares it compared, measure by measure.
+            not_compared = compared.get("requestedMetricsNotCompared") or []
+            if not not_compared:
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = UNAVAILABLE
+                facet.reason = ("not compared for these books: "
+                                + _join([str(f) for f in not_compared]))
+
         elif facet.kind in (KIND_MULTI_MEASURE, KIND_RELATIONSHIP):
             facet.status = UNSUPPORTED
             facet.reason = ("this governed capability returns a single measure, "
@@ -1342,11 +1456,16 @@ def _comparison_measure(compared: Dict[str, Any]) -> Optional[str]:
     if not labels:
         return None
     aggs = [a for a in (compared.get("aggregations") or []) if a]
-    lead = _COMPARISON_AGG_WORDS.get(str(aggs[0]).lower(), "") if aggs else ""
-    head = f"{lead} {labels[0]}".strip() if lead else labels[0]
-    if len(labels) > 1:
-        head += f" and {len(labels) - 1} further governed indicator(s)"
-    return head
+    # Every compared measure is named. "and 2 further indicators" hid exactly
+    # the thing a multi-measure receipt exists to show.
+    parts: List[str] = []
+    for index, label in enumerate(labels):
+        agg = aggs[index] if index < len(aggs) else ""
+        lead = _COMPARISON_AGG_WORDS.get(str(agg).lower(), "")
+        phrase = f"{lead} {label}".strip() if lead else label
+        if phrase not in parts:
+            parts.append(phrase)
+    return " · ".join(parts)
 
 
 def _comparison_populations(compared: Dict[str, Any]) -> List[str]:
