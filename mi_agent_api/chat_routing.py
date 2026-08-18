@@ -2114,6 +2114,11 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
         meta["controlledRefusal"] = True
         meta["controlledUnsupported"] = True
         meta["portfolioComparison"] = {
+            # This route compares PORTFOLIO SCOPES, so the cohort concept it
+            # expresses is how the loans were SOURCED. Declared as evidence so a
+            # question asking about a different cohort — seasoning, vintage —
+            # cannot be marked answered merely because two books were compared.
+            "cohortConcept": "sourcing",
             "requestedMetric": requested.get("field"),
             "requestedMetrics": [r.get("field") for r in requested_set],
             "requestedMetricCompared": False,
@@ -2156,6 +2161,11 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
         envelope["metadata"]["controlledRefusal"] = True
         envelope["metadata"]["controlledUnsupported"] = True
         envelope["metadata"]["portfolioComparison"] = {
+            # This route compares PORTFOLIO SCOPES, so the cohort concept it
+            # expresses is how the loans were SOURCED. Declared as evidence so a
+            # question asking about a different cohort — seasoning, vintage —
+            # cannot be marked answered merely because two books were compared.
+            "cohortConcept": "sourcing",
             "requestedMetric": requested.get("field"),
             "requestedMetricCompared": False,
             "reason": "no governed indicator was eligible for comparison",
@@ -2192,6 +2202,11 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     # were actually compared, and between which two books. Derived from executed
     # comparison metadata, never from the question's wording.
     envelope["metadata"]["portfolioComparison"] = {
+        # This route compares PORTFOLIO SCOPES, so the cohort concept it
+        # expresses is how the loans were SOURCED. Declared as evidence so a
+        # question asking about a different cohort — seasoning, vintage —
+        # cannot be marked answered merely because two books were compared.
+        "cohortConcept": "sourcing",
         "requestedMetric": requested.get("field"),
         "requestedMetrics": [r.get("field") for r in requested_set],
         "requestedMetricsCompared": [r.get("field") for r in compared_ok],

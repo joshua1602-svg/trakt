@@ -451,6 +451,92 @@ _COHORT_COMPARISON_RE = re.compile(
 _COHORT_DIMENSION_KEYS = ("source_portfolio_type", "source_portfolio_id",
                           "source_portfolio_label", "portfolio_cohort")
 
+# --------------------------------------------------------------------------- #
+# Cohort SEMANTIC IDENTITY
+# --------------------------------------------------------------------------- #
+# A cohort question names a CONCEPT, not merely "two books". "Direct versus
+# acquired" asks how the loans were SOURCED; "new origination versus the back
+# book" asks how long they have been on the book. Both split the portfolio in
+# two, and until this table existed the guard could not tell them apart: any
+# grouping by a sourcing key marked any cohort facet applied, so a vintage
+# question answered by sourcing channel read as correct.
+#
+# The concept must survive the same chain every other facet does — requested
+# concept, resolved governed field, executed grouping, receipt — and a concept
+# whose fields this dataset does not carry must refuse by name rather than be
+# satisfied by a different split.
+#
+# Concept language is curated here rather than read from field synonyms because
+# the registry describes FIELDS, and "back book" is not a synonym of any field:
+# it is a way of asking about seasoning, which vintage_year expresses.
+_COHORT_CONCEPTS: Tuple[Tuple[str, str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "sourcing",
+        "how the loans were sourced",
+        (r"\bdirect\b", r"\bacquired\b", r"\bpurchased\b", r"\borganic\b",
+         r"\bsourcing\b", r"\bsource portfolio\b", r"\boriginated in[- ]house\b"),
+        ("source_portfolio_type", "source_portfolio_id",
+         "source_portfolio_label", "portfolio_cohort"),
+    ),
+    (
+        "vintage",
+        "how long the loans have been on the book",
+        (r"\bnew origination(?:s)?\b", r"\bback book\b", r"\bnew lending\b",
+         r"\bnewly originated\b", r"\brecent origination(?:s)?\b",
+         r"\bseasoned\b", r"\bseasoning\b", r"\bvintage(?:s)?\b",
+         r"\bfront book\b", r"\bnew business\b"),
+        # GROUPABLE vintage dimensions only. A raw origination_date is on this
+        # tape, but a date is not a cohort: splitting a book by it needs a
+        # derived year or seasoning band, and none is governed here. Listing
+        # the date would make the guard report the concept as merely not
+        # applied — "we could have and didn't" — when the truth is that the
+        # dataset carries no vintage dimension to apply.
+        ("vintage_year", "origination_year", "vintage", "vintage_bucket",
+         "seasoning_bucket", "origination_vintage"),
+    ),
+)
+
+
+#: Comparison framing. A cohort CONCEPT alone is not a comparison — "the
+#: acquired book's LTV" asks about one cohort — so the facet is raised only
+#: when the question also sets two things against each other.
+_COHORT_COMPARISON_FRAMING_RE = re.compile(
+    r"\bvs\.?\b|\bversus\b|\bcompared? (?:with|to|against)\b|\bcompare\b|"
+    r"\bbetter or worse than\b|\bagainst\b|\bconverging with\b|"
+    r"\b(?:higher|lower|better|worse|bigger|smaller) than\b|"
+    r"\bdifference between\b|\bhow does\b[^?]{0,60}\bcompare\b", re.I)
+
+
+def cohort_concepts_named(question: str) -> List[Tuple[str, str, Tuple[str, ...]]]:
+    """``[(concept, description, governed_field_keys)]`` the question names.
+
+    Order follows the table, not the sentence: a question naming both is
+    genuinely ambiguous and is reported as both, so neither can be quietly
+    dropped in favour of whichever executed.
+    """
+    q = f" {str(question or '').strip().lower()} "
+    out: List[Tuple[str, str, Tuple[str, ...]]] = []
+    for concept, description, patterns, fields in _COHORT_CONCEPTS:
+        if any(re.search(p, q) for p in patterns):
+            out.append((concept, description, fields))
+    return out
+
+
+def _cohort_fields_available(fields: Sequence[str],
+                             columns: Optional[Iterable[str]],
+                             semantics: dict) -> List[str]:
+    """The concept's governed fields this dataset actually carries."""
+    available = {str(c) for c in (columns or ())}
+    if not available:
+        return list(fields)
+    registry = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
+    present = []
+    for key in fields:
+        canonical = (registry.get(key, {}) or {}).get("canonical_field", key)
+        if key in available or canonical in available:
+            present.append(key)
+    return present
+
 #: Routes that genuinely compare two cohorts.
 COHORT_ROUTES = frozenset({"portfolio_risk_comparison", "cohort_progression",
                            "cohort_conversion"})
@@ -649,9 +735,27 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     if _PROJECTION_RE.search(q):
         facets.append(RequestedFacet(
             kind=KIND_PROJECTION, label="a forward projection"))
-    if _COHORT_COMPARISON_RE.search(q):
-        facets.append(RequestedFacet(
-            kind=KIND_COHORT_COMPARISON, label="a comparison between two books"))
+    named = cohort_concepts_named(q)
+    # The facet is raised either by the original two-books phrasing, or by a
+    # cohort CONCEPT set against something else. The second arm matters: "how
+    # does new lending compare with the seasoned book" names a cohort and a
+    # comparison but matches none of the original patterns, so no facet was
+    # raised and the identity check below never ran.
+    if _COHORT_COMPARISON_RE.search(q) or (
+            named and _COHORT_COMPARISON_FRAMING_RE.search(q)):
+        # WHICH cohort, not merely that one was asked for. Without the concept
+        # the guard could only check that the book had been split in two, and a
+        # vintage question answered by sourcing channel satisfied it.
+        if named:
+            for concept, description, fields in named:
+                facets.append(RequestedFacet(
+                    kind=KIND_COHORT_COMPARISON,
+                    label=f"a comparison by {description}",
+                    concepts=(concept,), alt_keys=tuple(fields)))
+        else:
+            facets.append(RequestedFacet(
+                kind=KIND_COHORT_COMPARISON,
+                label="a comparison between two books"))
     # A share is the requested ANSWER only when the question is not also a
     # ranking. "Which region increased its share the most" asks WHICH ONE — the
     # share is the metric being ranked, and the ranking facet already guards it.
@@ -989,7 +1093,35 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                             "projection was run")
 
         elif facet.kind == KIND_COHORT_COMPARISON:
-            if any(k in group_keys for k in _COHORT_DIMENSION_KEYS):
+            expected = tuple(facet.alt_keys or ())
+            if expected:
+                # SEMANTIC IDENTITY: the executed grouping must express the
+                # concept the question named. Splitting the book by some other
+                # cohort answers a different question with the right arithmetic.
+                if any(k in group_keys for k in expected):
+                    facet.status, facet.reason = APPLIED, ""
+                elif not _cohort_fields_available(expected, columns, semantics):
+                    # Name the CONCEPT, not the six field spellings that could
+                    # have expressed it — a reader needs to know what the book
+                    # cannot answer, not the vocabulary it was searched for.
+                    facet.status = UNAVAILABLE
+                    facet.reason = (
+                        "this dataset carries no governed dimension for "
+                        f"{facet.label[len('a comparison by '):]}, so the two "
+                        "cohorts cannot be identified")
+                elif any(k in group_keys for k in _COHORT_DIMENSION_KEYS):
+                    facet.status = LOST
+                    facet.reason = (
+                        "the book was split by "
+                        + _join([_business_name(k, semantics) or k
+                                 for k in group_keys
+                                 if k in _COHORT_DIMENSION_KEYS])
+                        + f", which is not {facet.label[len('a comparison by '):]}")
+                else:
+                    facet.status = LOST
+                    facet.reason = ("the two cohorts were not compared; this "
+                                    "figure covers them together")
+            elif any(k in group_keys for k in _COHORT_DIMENSION_KEYS):
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = LOST
@@ -1422,7 +1554,25 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                                 "projection was run")
 
         elif facet.kind == KIND_COHORT_COMPARISON:
-            if compared:
+            wanted = tuple(facet.concepts or ())
+            executed_concept = (compared.get("cohortConcept")
+                                if compared else None)
+            if wanted and executed_concept and executed_concept not in wanted:
+                # SEMANTIC IDENTITY on the routed path. The comparison route
+                # splits the book by how loans were SOURCED; a question about
+                # how long they have been on the book is a different cohort,
+                # and two correctly-compared portfolios do not answer it.
+                facet.status = LOST
+                facet.reason = (
+                    f"the books were compared by {executed_concept}, which is "
+                    f"not {facet.label[len('a comparison by '):]}")
+            elif wanted and not executed_concept and route in COHORT_ROUTES:
+                # A cohort route that does not say which cohort it compared is
+                # not evidence that it compared the requested one.
+                facet.status = LOST
+                facet.reason = ("the capability did not state which cohorts it "
+                                "compared, so the requested one is unproven")
+            elif compared:
                 # The route declared what it compared. A comparison that
                 # measured NOTHING, or that dropped the measure the question
                 # named, has not compared the two books on that question — even
