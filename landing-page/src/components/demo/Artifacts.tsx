@@ -34,10 +34,10 @@ function KpiBlock({ artifact }: { artifact: KpiArtifact }) {
       <dl className="grid gap-3 sm:grid-cols-2">
         {artifact.kpis.map((kpi) => (
           <div key={kpi.label} className="rounded-lg border border-line bg-navy-950/50 p-4">
-            <dt className="text-[11px] uppercase tracking-wider text-ink-400">
+            <dt className="text-small uppercase tracking-wider text-ink-400">
               {kpi.label}
             </dt>
-            <dd className="mt-1.5 text-2xl font-semibold tabular-nums text-ink-100">
+            <dd className="mt-1.5 text-headline font-semibold tabular-nums text-ink-100">
               {kpi.value}
             </dd>
           </div>
@@ -50,7 +50,7 @@ function KpiBlock({ artifact }: { artifact: KpiArtifact }) {
 
 function Coverage({ value }: { value: number }) {
   return (
-    <p className="mt-2.5 text-[11px] text-ink-500">
+    <p className="mt-2.5 text-small text-ink-500">
       Balance coverage {formatValue(value, "pct")} of the funded book.
     </p>
   );
@@ -72,7 +72,7 @@ function ChartBlock({ artifact }: { artifact: ChartArtifact }) {
   return (
     <div>
       {artifact.title ? (
-        <h4 className="mb-3 text-sm font-medium text-ink-200">{artifact.title}</h4>
+        <h4 className="mb-3 text-body font-medium text-ink-200">{artifact.title}</h4>
       ) : null}
 
       <dl className="space-y-2.5">
@@ -82,10 +82,10 @@ function ChartBlock({ artifact }: { artifact: ChartArtifact }) {
           return (
             <div key={index}>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="min-w-0 truncate text-xs text-ink-300">
+                <dt className="min-w-0 truncate text-small text-ink-300">
                   {String(row[artifact.xKey] ?? "—")}
                 </dt>
-                <dd className="shrink-0 text-xs font-medium tabular-nums text-ink-100">
+                <dd className="shrink-0 text-small font-medium tabular-nums text-ink-100">
                   {formatValue(value, format, { compact: true })}
                 </dd>
               </div>
@@ -159,7 +159,7 @@ function RowNote({ value, note }: { value: string; note: string }) {
         {value}
       </button>
       {open ? (
-        <span className="mt-1.5 block max-w-xs text-[11px] leading-relaxed text-ink-400">
+        <span className="mt-1.5 block max-w-xs text-small leading-relaxed text-ink-400">
           {note}
         </span>
       ) : null}
@@ -178,7 +178,7 @@ function TableBlock({
 }) {
   const table = (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[420px] border-collapse text-sm">
+      <table className="w-full min-w-[420px] border-collapse text-body">
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         <thead>
           <tr className="border-b border-line">
@@ -187,7 +187,7 @@ function TableBlock({
                 key={column.key}
                 scope="col"
                 className={cx(
-                  "px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-ink-400",
+                  "px-3 py-2 text-small font-medium uppercase tracking-wider text-ink-400",
                   column.align === "right" ? "text-right" : "text-left",
                 )}
               >
@@ -232,7 +232,7 @@ function TableBlock({
     return (
       <div>
         {artifact.title ? (
-          <h4 className="mb-2 text-sm font-medium text-ink-200">{artifact.title}</h4>
+          <h4 className="mb-2 text-body font-medium text-ink-200">{artifact.title}</h4>
         ) : null}
         {table}
         {artifact.coverage != null ? <Coverage value={artifact.coverage} /> : null}
@@ -244,12 +244,12 @@ function TableBlock({
     <details className="mt-3.5 rounded-lg border border-line-soft bg-navy-950/40">
       {/* A product capability — drill-through from a figure to its source —
           not a UI affordance. Closed by default so the panel stays compact. */}
-      <summary className="cursor-pointer px-3 py-2 text-xs text-ink-400 hover:text-ink-200">
+      <summary className="cursor-pointer px-3 py-2 text-small text-ink-400 hover:text-ink-200">
         Underlying values
       </summary>
       <div className="px-1 pb-2">{table}</div>
       {artifact.coverage != null ? (
-        <p className="px-3 pb-2.5 text-[11px] text-ink-500">
+        <p className="px-3 pb-2.5 text-small text-ink-500">
           Balance coverage {formatValue(artifact.coverage, "pct")}.
         </p>
       ) : null}

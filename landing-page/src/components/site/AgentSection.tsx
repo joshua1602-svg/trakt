@@ -8,7 +8,7 @@ import { Card, SectionHeading, cx } from "@/components/ui";
  *
  * The section's claim is delegation: an agent that has never heard of Trakt
  * can find a Trakt agent and hand it an objective. Stated once, under the
- * headline, in the page's claim grammar (`text-lg font-medium text-ink-100`)
+ * headline, in the page's claim grammar (`text-subhead font-medium text-ink-100`)
  * — the same treatment the hero, risk & controls and governance lines use.
  * No roadmap label and no "is designed to": the mechanism is proven, so the
  * claim is present tense.
@@ -78,11 +78,11 @@ export function AgentSection() {
           eyebrow="Agent-to-agent"
           title="Agents don't calculate the portfolio. Trakt does."
         />
-        <p className="mt-4 max-w-[72ch] text-lg font-medium leading-relaxed text-ink-100">
+        <p className="mt-4 max-w-[72ch] text-subhead font-medium leading-relaxed text-ink-100">
           An agent that knows nothing about Trakt can discover it and delegate an
           objective.
         </p>
-        <p className="mt-3 max-w-[72ch] text-sm leading-relaxed text-ink-400">
+        <p className="mt-3 max-w-[72ch] text-body leading-relaxed text-ink-400">
           Your agents already have somewhere to work. Give them somewhere trustworthy
           to get credit intelligence.
         </p>
@@ -101,8 +101,8 @@ export function AgentSection() {
             <Reveal delay={index * 60} className="h-full">
               <Card className="flex h-full flex-col">
                 <agent.Glyph />
-                <h3 className="mt-3 text-base font-semibold text-ink-100">{agent.name}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-300">{agent.copy}</p>
+                <h3 className="mt-3 text-subhead font-semibold text-ink-100">{agent.name}</h3>
+                <p className="mt-2 text-body leading-relaxed text-ink-300">{agent.copy}</p>
               </Card>
             </Reveal>
           </li>

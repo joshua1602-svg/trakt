@@ -33,14 +33,14 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
             wrap; the second sentence is a block below `sm` so the break lands
             on the full stop by construction rather than by luck, and stays
             there if the type or the column ever changes. */}
-        <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-peri-400">
+        <p className="mb-4 text-small font-semibold uppercase tracking-[0.18em] text-peri-400">
           <span>Agentic portfolio intelligence.</span>{" "}
           <span className="block sm:inline">Deterministic by design.</span>
         </p>
-        <h1 className="text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-100 sm:text-5xl">
+        <h1 className="text-balance text-display font-semibold text-ink-100">
           One governed view of your lending portfolios.
         </h1>
-        <p className="mt-5 max-w-[72ch] text-lg leading-relaxed text-ink-200">
+        <p className="mt-5 max-w-[72ch] text-subhead leading-relaxed text-ink-200">
           {/* "for specialist lenders" carries the audience naming the eyebrow
               used to do. Without it the page names no audience above the fold:
               the headline says "lending portfolios", not specialist lending,
@@ -57,7 +57,7 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
             meets the claim and its first instance together.
             Same treatment as the risk & controls and governance claim lines:
             the page has one grammar for "this is a claim". */}
-        <p className="mt-4 text-lg font-medium leading-relaxed text-ink-100">
+        <p className="mt-4 text-subhead font-medium leading-relaxed text-ink-100">
           Same question. Same calculation. Same answer.
         </p>
 
@@ -73,7 +73,7 @@ export function Hero({ scope }: { scope: DemoScopeInfo }) {
           {PROOF_POINTS.map((point) => (
             <li
               key={point}
-              className="flex items-start gap-2 text-[13px] leading-snug text-ink-200 sm:max-w-[15rem] sm:flex-1 sm:rounded-lg sm:border sm:border-line sm:px-3 sm:py-2"
+              className="flex items-start gap-2 text-body leading-snug text-ink-200 sm:max-w-[15rem] sm:flex-1 sm:rounded-lg sm:border sm:border-line sm:px-3 sm:py-2"
             >
               <CheckMark />
               {point}
@@ -142,19 +142,19 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
       aria-label="Preview of a governed Trakt answer"
       role="img"
     >
-      <p className="border-b border-line pb-3 text-xs font-medium text-ink-300">
+      <p className="border-b border-line pb-3 text-small font-medium text-ink-300">
         Microsoft 365 Copilot
       </p>
 
       <div className="space-y-3 pt-4">
         <div className="flex justify-end">
-          <p className="rounded-xl rounded-br-sm bg-navy-700 px-3.5 py-2 text-[13px] text-ink-100">
+          <p className="rounded-xl rounded-br-sm bg-navy-700 px-3.5 py-2 text-body text-ink-100">
             Show the funded balance by book.
           </p>
         </div>
 
         <div className="rounded-xl border border-line bg-navy-950/70 p-3.5">
-          <p className="text-[13px] leading-relaxed text-ink-100">Three governed books.</p>
+          <p className="text-body leading-relaxed text-ink-100">Three governed books.</p>
 
           {/* The differentiator, first thing a visitor sees. A flat total here
               would quietly contradict the multi-book claim above it — and the
@@ -166,26 +166,26 @@ function InterfacePreview({ scope }: { scope: DemoScopeInfo }) {
                 key={book.id}
                 className="flex items-baseline justify-between gap-3 rounded-lg border border-line-soft bg-navy-900/60 px-3 py-1.5"
               >
-                <dt className="min-w-0 text-[11px] text-ink-300">
+                <dt className="min-w-0 text-small text-ink-300">
                   {book.shortLabel}
                   {book.balanceSheetStatus === "sold" ? (
-                    <span className="ml-1.5 text-[10px] text-amber-400">sold</span>
+                    <span className="ml-1.5 text-small text-amber-400">sold</span>
                   ) : null}
                 </dt>
-                <dd className="shrink-0 text-[13px] font-semibold tabular-nums text-ink-100">
+                <dd className="shrink-0 text-body font-semibold tabular-nums text-ink-100">
                   {book.balanceDisplay}
                 </dd>
               </div>
             ))}
             <div className="flex items-baseline justify-between gap-3 border-t border-line-soft px-3 pt-2">
-              <dt className="text-[11px] text-ink-400">Platform total</dt>
-              <dd className="text-[13px] font-semibold tabular-nums text-ink-200">
+              <dt className="text-small text-ink-400">Platform total</dt>
+              <dd className="text-body font-semibold tabular-nums text-ink-200">
                 {scope.platformBalanceDisplay}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-3 px-3">
-              <dt className="text-[11px] text-ink-300">Sponsor total</dt>
-              <dd className="text-base font-semibold tabular-nums text-ink-100">
+              <dt className="text-small text-ink-300">Sponsor total</dt>
+              <dd className="text-subhead font-semibold tabular-nums text-ink-100">
                 {scope.totalBalanceDisplay}
               </dd>
             </div>

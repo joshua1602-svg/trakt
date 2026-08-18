@@ -152,7 +152,7 @@ export function DemoPlayer({
                 <PlayGlyph /> {overlayLabel}
               </button>
               {durationLabel ? (
-                <span className="text-[12px] font-medium text-ink-300">{durationLabel}</span>
+                <span className="text-small font-medium text-ink-300">{durationLabel}</span>
               ) : null}
             </div>
           </div>
@@ -219,7 +219,7 @@ export function DemoPlayer({
       )}
 
       {caption ? (
-        <figcaption className="mt-3 text-[11px] leading-relaxed text-ink-500">
+        <figcaption className="mt-3 text-small leading-relaxed text-ink-500">
           {caption}
         </figcaption>
       ) : null}

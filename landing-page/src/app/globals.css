@@ -98,6 +98,53 @@
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ---------------------------------------------------------------- */
+  /* The type scale — four roles and one display size                  */
+  /* ---------------------------------------------------------------- */
+  /*
+   * Measured before it existed: twelve distinct sizes on the static page
+   * (48, 30, 24, 18, 17, 16, 15, 14, 13, 12, 11, 10) in twenty-one
+   * size-and-weight combinations, with 14px doing several unrelated jobs
+   * across 41 elements and 12px across 30. Nothing chose those sizes; they
+   * accumulated one component at a time, and the page read as noise.
+   *
+   * Five tokens replace them, and every one has a job:
+   *
+   *   display   the hero headline, and nothing else
+   *   headline  every section heading, and the demo's KPI figures
+   *   subhead   claim lines, card titles, the wordmark, money totals
+   *   body      all running copy, navigation, tile bodies, list items
+   *   small     eyebrows, captions, table labels, disclosures
+   *
+   * Display and headline CLAMP rather than taking a `sm:` step. The old pairs
+   * (`text-4xl sm:text-5xl`, `text-2xl sm:text-3xl`) were two tokens wearing
+   * one name and they are the reason the audit counted 48 AND 36 as separate
+   * sizes. A clamp is one token that happens to be smaller on a phone.
+   *
+   * Weight is not part of the scale. A token fixes the size; `font-medium`
+   * and `font-semibold` stay where a component needs emphasis, because a
+   * scale that also owned weight would need twenty tokens to say what five
+   * plus two utilities already say.
+   *
+   * `npm run lint:type` fails on a raw size class anywhere in `src/`.
+   */
+  --text-display: clamp(2.25rem, 1.6rem + 2.6vw, 2.75rem);
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.02em;
+
+  --text-headline: clamp(1.5rem, 1.25rem + 1vw, 1.75rem);
+  --text-headline--line-height: 1.18;
+  --text-headline--letter-spacing: -0.015em;
+
+  --text-subhead: 1.125rem;
+  --text-subhead--line-height: 1.45;
+
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.6;
+
+  --text-small: 0.75rem;
+  --text-small--line-height: 1.45;
 }
 
 html {
@@ -112,6 +159,12 @@ body {
   background-color: var(--color-navy-950);
   color: var(--color-ink-100);
   font-family: var(--font-sans);
+  /* The base size is a scale token, so anything that carries no `text-*`
+     class still lands on the scale. Without it the browser default (16px)
+     leaked through five elements — the platform diagram's arrow glyphs and
+     the lead form's honeypot label — and the type audit counted a sixth size
+     that no component had asked for. */
+  font-size: var(--text-body);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "tnum";
   /* A single restrained wash, not a startup gradient. */

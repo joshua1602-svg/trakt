@@ -7,7 +7,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port ${PORT:-3000}",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/lint-type.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -15,7 +15,8 @@
     "demo-pack": "python3 scripts/build_demo_pack.py",
     "demo-pack:check": "python3 scripts/build_demo_pack.py --check",
     "scan": "node scripts/scan-build.mjs",
-    "validate-config": "vitest run tests/config.test.ts"
+    "validate-config": "vitest run tests/config.test.ts",
+    "lint:type": "node scripts/lint-type.mjs"
   },
   "dependencies": {
     "next": "16.2.12",

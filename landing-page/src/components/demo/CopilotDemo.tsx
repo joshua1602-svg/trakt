@@ -207,8 +207,8 @@ export function CopilotDemo({
       {/* Scope header — always visible, so no answer is ever seen without it. */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line bg-navy-850/60 px-5 py-4">
         <div>
-          <p className="text-sm font-semibold text-ink-100">{meta.scope.client}</p>
-          <p className="mt-0.5 text-xs text-ink-400">
+          <p className="text-body font-semibold text-ink-100">{meta.scope.client}</p>
+          <p className="mt-0.5 text-small text-ink-400">
             {meta.scope.portfolioName} · {meta.scope.assetClass} ·{" "}
             {meta.scope.loanCount.toLocaleString("en-GB")} exposures ·{" "}
             {meta.scope.totalBalanceDisplay} as at {meta.scope.asOfDisplay}
@@ -217,7 +217,7 @@ export function CopilotDemo({
         <div className="flex items-center gap-2">
           <Badge tone="synthetic">Synthetic data</Badge>
           {started ? (
-            <button type="button" onClick={reset} className={cx(buttonStyles.ghost, "px-3 py-1.5 text-xs")}>
+            <button type="button" onClick={reset} className={cx(buttonStyles.ghost, "px-3 py-1.5 text-small")}>
               Reset
             </button>
           ) : null}
@@ -232,7 +232,7 @@ export function CopilotDemo({
         </p>
 
         {!started && meta.scope.clientDescription ? (
-          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-ink-300">
+          <p className="mb-4 max-w-2xl text-body leading-relaxed text-ink-300">
             {meta.scope.clientDescription}
           </p>
         ) : null}
@@ -252,7 +252,7 @@ export function CopilotDemo({
         ) : null}
 
         {error ? (
-          <p role="alert" className="mb-4 rounded-lg border border-rose-400/35 bg-rose-400/10 px-3 py-2 text-sm text-rose-400">
+          <p role="alert" className="mb-4 rounded-lg border border-rose-400/35 bg-rose-400/10 px-3 py-2 text-body text-rose-400">
             {error}
           </p>
         ) : null}
@@ -273,7 +273,7 @@ export function CopilotDemo({
                 ? "Session question limit reached"
                 : "Ask about balance, concentration, LTV, reporting…"
             }
-            className="min-w-0 flex-1 rounded-lg border border-line bg-navy-950 px-4 py-3 text-sm text-ink-100 placeholder:text-ink-500 disabled:opacity-55"
+            className="min-w-0 flex-1 rounded-lg border border-line bg-navy-950 px-4 py-3 text-body text-ink-100 placeholder:text-ink-500 disabled:opacity-55"
           />
           <button
             type="submit"
@@ -289,14 +289,14 @@ export function CopilotDemo({
             visitor is nearly at the limit, which is the only point at which the
             number is of any use to them. */}
         {remaining <= COUNTER_VISIBLE_FROM ? (
-          <p className="mt-2 text-[11px] text-ink-500">
+          <p className="mt-2 text-small text-ink-500">
             {remaining} of {meta.limits.questionsPerSession} questions remaining in this
             demonstration session.
           </p>
         ) : null}
 
         <div className="mt-5">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+          <p className="mb-2 text-small font-semibold uppercase tracking-wider text-ink-400">
             Try one of these
           </p>
           <ul className="flex flex-wrap gap-2">
@@ -306,7 +306,7 @@ export function CopilotDemo({
                   type="button"
                   disabled={busy || outOfQuestions}
                   onClick={() => onSuggested(question.id, question.label)}
-                  className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
+                  className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-small text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
                 >
                   {question.label}
                 </button>
@@ -318,7 +318,7 @@ export function CopilotDemo({
                   type="button"
                   disabled={busy}
                   onClick={() => requestReport(action.id, action.label)}
-                  className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-left text-xs font-medium text-peri-200 transition-colors hover:bg-peri-400/20 disabled:opacity-50"
+                  className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-left text-small font-medium text-peri-200 transition-colors hover:bg-peri-400/20 disabled:opacity-50"
                 >
                   {action.label}
                 </button>
@@ -338,7 +338,7 @@ export function CopilotDemo({
                     type="button"
                     disabled={busy || outOfQuestions}
                     onClick={() => onSuggested(example.id, example.label)}
-                    className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-xs text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
+                    className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-left text-small text-ink-200 transition-colors hover:border-peri-500 hover:text-ink-100 disabled:opacity-50"
                   >
                     {example.label}
                   </button>
@@ -368,7 +368,7 @@ function TurnView({
   if (turn.kind === "question") {
     return (
       <div className="flex justify-end">
-        <p className="max-w-[85%] rounded-xl rounded-br-sm bg-navy-700 px-4 py-2.5 text-sm text-ink-100">
+        <p className="max-w-[85%] rounded-xl rounded-br-sm bg-navy-700 px-4 py-2.5 text-body text-ink-100">
           {turn.text}
         </p>
       </div>
@@ -419,15 +419,15 @@ function AnswerView({
       )}
     >
       {unsupported ? (
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-400">
+        <p className="mb-2 text-small font-semibold uppercase tracking-wider text-amber-400">
           Not supported in this demonstration
         </p>
       ) : null}
 
-      <p className="text-sm leading-relaxed text-ink-100">{payload.answer}</p>
+      <p className="text-body leading-relaxed text-ink-100">{payload.answer}</p>
 
       {payload.productionNote ? (
-        <p className="mt-3 border-l-2 border-line pl-3 text-xs leading-relaxed text-ink-400">
+        <p className="mt-3 border-l-2 border-line pl-3 text-small leading-relaxed text-ink-400">
           {payload.productionNote}
         </p>
       ) : null}
@@ -438,7 +438,7 @@ function AnswerView({
         <footer className="mt-4 border-t border-line-soft pt-3">
           {/* Provenance stays lean: the as-at date and the synthetic pill live
               once, in the portfolio header above every answer. */}
-          <p className="flex flex-wrap gap-x-3 gap-y-1 break-words text-[11px] text-ink-500">
+          <p className="flex flex-wrap gap-x-3 gap-y-1 break-words text-small text-ink-500">
             {payload.interpreted ? <span>{payload.interpreted}</span> : null}
             <span>{payload.portfolioScope}</span>
           </p>
@@ -454,7 +454,7 @@ function AnswerView({
                         ? onReport(followUp.id, followUp.label)
                         : onFollowUp(followUp.id, followUp.label)
                     }
-                    className="rounded-full border border-line px-3 py-1 text-xs text-ink-300 transition-colors hover:border-peri-500 hover:text-ink-100"
+                    className="rounded-full border border-line px-3 py-1 text-small text-ink-300 transition-colors hover:border-peri-500 hover:text-ink-100"
                   >
                     {followUp.label}
                   </button>
