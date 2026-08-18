@@ -427,12 +427,22 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
                          ) -> Tuple[List[str], List[str], str]:
     """Find explicitly-requested dimensions in order of appearance.
 
+    Governed SCOPE phrases are masked first: "for the acquired portfolio" names
+    the population being reported on, and was being grouped BY
+    ``acquired_portfolio_id`` — a real registry field whose synonym the phrase
+    happens to match. The reference field keeps its meaning everywhere else;
+    it simply cannot be reached through a scope clause.
+
     Returns (dimension_keys, matched_terms, remaining_text). Only terms whose
     target key exists in the registry are honoured; matched spans are removed
     from ``remaining_text`` so metric detection does not re-trip on them.
 
     Generic region terms ("region", "geography", ...) resolve data-aware via
     _preferred_region (readable display field first, then NUTS code fields).
+
+    NOTE: ``remaining_text`` is derived from the ORIGINAL question, not the
+    masked copy, so metric detection downstream still sees every word the user
+    wrote.
 
     ``grouping=True`` enables a small set of context-only bucketing terms (a
     bare "age" axis -> age_bucket) used by heatmap/treemap.
@@ -450,7 +460,13 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
         for bare, bucket in (("age", "age_bucket"),):
             if bucket in fields and bare not in terms_map:
                 terms_map[bare] = bucket
+    from .portfolio_lens import mask_scope_phrases  # local: avoids a cycle
+
     remaining = q
+    # Dimension terms are searched in a copy with governed scope phrases blanked.
+    # ``mask_scope_phrases`` preserves offsets, so every index below is equally
+    # valid against ``remaining``, which stays faithful to what the user wrote.
+    search = mask_scope_phrases(q)
     found: List[Tuple[int, str, str]] = []  # (position, key, term)
     for term in sorted(terms_map, key=len, reverse=True):
         if term in _REGION_GENERIC_TERMS:
@@ -462,10 +478,12 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
         if not key or key not in fields:
             continue
         pat = r"\b" + re.escape(term) + r"\b"
-        m = re.search(pat, remaining)
+        m = re.search(pat, search)
         if m:
             found.append((m.start(), key, term))
-            remaining = remaining[:m.start()] + " " * (m.end() - m.start()) + remaining[m.end():]
+            blank = " " * (m.end() - m.start())
+            remaining = remaining[:m.start()] + blank + remaining[m.end():]
+            search = search[:m.start()] + blank + search[m.end():]
     found.sort(key=lambda t: t[0])
     keys: List[str] = []
     terms: List[str] = []
@@ -1836,8 +1854,17 @@ def _contribution_request(q: str, semantics: dict, available_columns=None
 
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None
                               ) -> Optional[Tuple[str, str]]:
-    """Detect a categorical region filter in a clause -> (field_key, value)."""
-    m = _CATEGORICAL_FILTER_RE.search(clause.strip())
+    """Detect a categorical region filter in a clause -> (field_key, value).
+
+    Governed SCOPE phrases are claimed before the search runs, so "the entire
+    portfolio" and "the current portfolio" cannot be read as places called
+    "Entire" and "Current". Claiming the span is what prevents the invalid
+    filter existing at all; removing one afterwards would silently widen the
+    population it had narrowed.
+    """
+    from .portfolio_lens import mask_scope_phrases  # local: avoids a cycle
+
+    m = _CATEGORICAL_FILTER_RE.search(mask_scope_phrases(clause).strip())
     if not m:
         return None
     value = m.group(1).strip()
@@ -3281,6 +3308,60 @@ _SPECIALIST_INTENT_FIELDS: Tuple[str, ...] = (
 )
 
 
+def reject_scope_role_filters(spec: MIQuerySpec, question: str,
+                              columns=None) -> List[str]:
+    """Refuse a filter that is really a SCOPE reference. Returns what it refused.
+
+    The model reads "the funded portfolio" as a predicate and emits
+    ``funded_status = "Funded"``. There is no such column: the whole governed
+    tape IS the funded book, so the phrase names the population being reported
+    on, not a subset of it. Left alone the query fails validation and the
+    question refuses for a field that was never asked about.
+
+    This is a ROLE rejection at normalisation, not a filter deletion. Both
+    conditions must hold, and each matters:
+
+      * the field is ABSENT from the dataset — so a genuine governed status
+        field is never touched, and "funded versus unfunded applications"
+        keeps its real predicate;
+      * the question contains a governed scope phrase naming that concept — so
+        an absent field the user genuinely asked to filter on still refuses by
+        name rather than being quietly dropped.
+
+    A filter that narrows the population can therefore never be removed here:
+    an absent column narrows nothing, because the query would not have run.
+    """
+    from .portfolio_lens import scope_phrase_spans  # local: avoids a cycle
+
+    filters = getattr(spec, "filters", None)
+    if not isinstance(filters, dict) or not filters:
+        return []
+    available = {str(c) for c in (columns or ())}
+    if not available:
+        return []
+    fields = _fields(_SEMANTICS_FOR_SCOPE or {})
+    text = (question or "").lower()
+    scoped = " ".join(text[a:b] for a, b in scope_phrase_spans(text))
+    if not scoped.strip():
+        return []
+    rejected: List[str] = []
+    for key in list(filters):
+        canonical = (fields.get(key, {}) or {}).get("canonical_field", key)
+        if key in available or canonical in available:
+            continue          # a real column: whatever it means, it is not ours
+        stem = str(key).split("_")[0].lower()
+        value = str(filters[key]).strip().lower()
+        if stem and (stem in scoped or (value and value in scoped)):
+            filters.pop(key, None)
+            rejected.append(f"{key} (scope phrase, not a predicate)")
+    return rejected
+
+
+#: Set by ``parse_with_repair`` so the scope-role check can resolve canonical
+#: field names without changing its signature.
+_SEMANTICS_FOR_SCOPE: Optional[dict] = None
+
+
 def carry_specialist_intent(llm_spec: MIQuerySpec, det_spec: MIQuerySpec) -> List[str]:
     """Copy specialist ROUTING intent from the deterministic spec onto the LLM's.
 
@@ -3538,6 +3619,8 @@ def parse_with_repair(
             return spec, meta
 
     # ---- LLM path (with repair loop) --------------------------------------
+    global _SEMANTICS_FOR_SCOPE
+    _SEMANTICS_FOR_SCOPE = semantics
     base_prompt = build_prompt(user_question, semantics,
                                available_columns=cols, catalog_mode=catalog_mode)
     prompt = base_prompt
@@ -3570,6 +3653,10 @@ def parse_with_repair(
             vr_ok = False
         else:
             last_spec = spec
+            # A scope phrase the model turned into a predicate is refused the
+            # ROLE before validation sees it, so the query is never built with
+            # a filter on a column the book does not have.
+            scope_rejected = reject_scope_role_filters(spec, user_question, cols)
             vr = validate_mi_query(spec, semantics, available_columns=cols)
             errors = list(vr.errors)
             vr_ok = vr.ok
@@ -3587,6 +3674,7 @@ def parse_with_repair(
                 "parser_mode": "llm",
                 "parser_mode_detail": detail,
                 "specialist_intent_carried": carried,
+                "scope_role_rejected": list(scope_rejected),
                 "ok": True,
                 "validation_errors": [],
                 "repair_attempts": i,

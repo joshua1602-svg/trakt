@@ -40,7 +40,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from trakt_core import perf as _perf
 from trakt_core.audit import emit_audit_event
@@ -94,7 +94,10 @@ class MiQueryRequest:
     filters: Optional[Dict[str, Any]] = None
     dataset_context: Optional[str] = None
     context: Optional[Any] = None
-    source_portfolio_lens: Optional[str] = None
+    #: The portfolio scope the caller has selected. A LIST selects several books
+    #: explicitly and resolves to exactly those — never to their provenance
+    #: type, which would widen the answer to books the caller did not choose.
+    source_portfolio_lens: Optional[Union[str, List[str]]] = None
     #: DEPRECATED as an identity input. Retained because adapters used it as the
     #: fallback portfolio selector when the caller named none, and dropping it
     #: would change which frame those callers resolve. Never authoritative for

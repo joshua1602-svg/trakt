@@ -50,6 +50,12 @@ PORTFOLIO_TYPES: Tuple[str, ...] = (PORTFOLIO_TYPE_DIRECT, PORTFOLIO_TYPE_ACQUIR
 CONTEXT_KIND_TOTAL = "total"
 CONTEXT_KIND_TYPE = "type"
 CONTEXT_KIND_PORTFOLIO = "portfolio"
+#: Several portfolios selected explicitly. Distinct from a TYPE group: the
+#: member list is exactly what was selected, and does not grow when another book
+#: of the same provenance is onboarded. "The current portfolio" with two books
+#: selected means those two — resolving it to their type would silently widen
+#: the answer to books the user did not choose.
+CONTEXT_KIND_SELECTION = "selection"
 
 #: The reserved group context ids. Everything else is a ``source_portfolio_id``.
 CONTEXT_TOTAL = "total"
@@ -513,6 +519,18 @@ class PortfolioScope:
         return out
 
 
+def _total_scope(registry: PortfolioRegistry, fell_back: bool = False,
+                 requested: Optional[str] = None) -> "PortfolioScope":
+    """The whole platform. Shared by every fallback so they cannot drift."""
+    ids = tuple(registry.ids())
+    return PortfolioScope(
+        context_id=CONTEXT_TOTAL, context_kind=CONTEXT_KIND_TOTAL, label="Total",
+        portfolio_ids=ids, portfolio_types=tuple(registry.types()),
+        asset_classes=registry.asset_classes(ids),
+        fell_back_to_total=fell_back,
+        requested_context_id=requested if fell_back else None)
+
+
 def resolve_scope(registry: PortfolioRegistry,
                   context_id: Optional[Any] = None) -> PortfolioScope:
     """Resolve any workspace context onto the portfolios it means.
@@ -527,6 +545,31 @@ def resolve_scope(registry: PortfolioRegistry,
     if isinstance(context_id, Mapping):
         context_id = (context_id.get("context_id") or context_id.get("id")
                       or context_id.get("lens") or context_id.get("value"))
+    # An explicit MULTI-SELECTION resolves to exactly those books. Previously a
+    # list fell through ``_clean`` to None and widened to Total — the selection
+    # the user had deliberately narrowed was silently discarded, which is the
+    # scope mutation this module exists to prevent.
+    if isinstance(context_id, (list, tuple, set, frozenset)):
+        wanted = [c for c in (_clean(v) for v in context_id) if c]
+        if not wanted:
+            return _total_scope(registry)
+        if len(wanted) == 1:
+            context_id = wanted[0]
+        else:
+            members = [registry.get(w) for w in wanted]
+            found = [m for m in members if m is not None]
+            if not found:
+                return _total_scope(registry, fell_back=True,
+                                    requested=",".join(wanted))
+            ids_sel = tuple(m.portfolio_id for m in found)
+            return PortfolioScope(
+                context_id=",".join(ids_sel),
+                context_kind=CONTEXT_KIND_SELECTION,
+                label=" + ".join(m.display_label for m in found),
+                portfolio_ids=ids_sel,
+                portfolio_types=tuple(dict.fromkeys(
+                    m.portfolio_type for m in found if m.portfolio_type)),
+                asset_classes=registry.asset_classes(ids_sel))
     requested = _clean(context_id)
     ids = tuple(registry.ids())
     types = tuple(registry.types())

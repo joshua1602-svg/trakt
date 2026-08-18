@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 SOURCE_TYPE_FIELD = "source_portfolio_type"
 SOURCE_ID_FIELD = "source_portfolio_id"
@@ -88,6 +88,91 @@ _COMPARISON_TERMS = (" vs ", " vs. ", " versus ", "compare", "comparison",
                      "side by side", "side-by-side", "against")
 
 
+# --------------------------------------------------------------------------- #
+# GOVERNED SCOPE PHRASES (P1I-A)
+# --------------------------------------------------------------------------- #
+# A phrase that names the POPULATION BEING REPORTED ON is a scope reference. It
+# is not a row predicate, not a grouping axis, and not a place.
+#
+# The distinction was being lost three different ways, each producing a
+# confident wrong answer or a spurious refusal:
+#
+#   "the entire portfolio"  -> collateral_geography = "Entire"
+#   "the current portfolio" -> collateral_geography = "Current"
+#   "the acquired portfolio"-> grouped by acquired_portfolio_id
+#   "the funded portfolio"  -> filter funded_status = "Funded"   (LLM path)
+#
+# All four are the same defect: a scope phrase consumed by a resolver that is
+# looking for something else. The cure is to CLAIM THE SPAN FIRST, so the
+# invalid filter or dimension is never created — never to create one and delete
+# it afterwards, which would silently broaden the population.
+#
+# Only QUALIFIED phrases count. A bare "current" or "entire" is ordinary
+# English; it becomes a scope reference when it qualifies a book noun, which is
+# what keeps "current LTV" and "current reporting date" out of this vocabulary.
+_SCOPE_NOUNS = ("book", "books", "portfolio", "portfolios", "platform",
+                "loan book", "aum")
+
+#: Qualifiers that, in front of a book noun, name a governed scope.
+#: ``direct``/``acquired`` are deliberately absent here — they are resolved by
+#: the lens families above, which already carry their full synonym sets.
+_SCOPE_QUALIFIERS = (
+    "funded", "unfunded", "whole", "entire", "total", "current", "overall",
+    "consolidated", "combined", "selected", "active", "direct", "acquired",
+    "purchased", "originated", "sponsored",
+)
+
+#: "the funded book", "of the entire portfolio", "in the current portfolio".
+#: The optional article and preposition are matched so the whole clause is
+#: claimed, not just the two content words.
+_SCOPE_PHRASE_RE = re.compile(
+    r"\b(?:(?:for|in|of|across|within|on)\s+)?(?:the\s+|our\s+|my\s+|this\s+)?"
+    r"(?:" + "|".join(re.escape(q) for q in _SCOPE_QUALIFIERS) + r")\s+"
+    r"(?:" + "|".join(re.escape(n) for n in _SCOPE_NOUNS) + r")\b",
+    re.IGNORECASE)
+
+#: Phrases naming the CURRENTLY SELECTED portfolio context rather than a fixed
+#: book. These defer to the caller's selection; with nothing selected they mean
+#: the whole platform, which is what the workspace is showing.
+_SELECTED_SCOPE_RE = re.compile(
+    r"\b(?:the\s+|this\s+|my\s+|our\s+)?(?:current|selected|active)\s+"
+    r"(?:" + "|".join(re.escape(n) for n in _SCOPE_NOUNS) + r")\b",
+    re.IGNORECASE)
+
+
+def scope_phrase_spans(text: Optional[str]):
+    """``((start, end), ...)`` for every governed scope phrase in ``text``.
+
+    THE single source of truth for what counts as portfolio-scope language.
+    Resolvers that are looking for places, predicates or grouping axes mask
+    these spans first, so a scope phrase cannot be consumed as something else.
+    """
+    if not text:
+        return ()
+    return tuple((m.start(), m.end()) for m in _SCOPE_PHRASE_RE.finditer(str(text)))
+
+
+def names_selected_scope(text: Optional[str]) -> bool:
+    """True when the question says "the current/selected portfolio"."""
+    return bool(text) and bool(_SELECTED_SCOPE_RE.search(str(text)))
+
+
+def mask_scope_phrases(text: Optional[str]) -> str:
+    """``text`` with governed scope phrases blanked, preserving offsets.
+
+    Blanking rather than deleting keeps every other offset valid, so a filter or
+    dimension detector reading the remainder sees the sentence it expects — the
+    same discipline the measure-set parser already uses.
+    """
+    if not text:
+        return text or ""
+    out = list(str(text))
+    for start, end in scope_phrase_spans(text):
+        for i in range(start, end):
+            out[i] = " "
+    return "".join(out)
+
+
 @dataclass
 class PortfolioLens:
     """A resolved portfolio lens: a label + the filters that realise it."""
@@ -96,14 +181,21 @@ class PortfolioLens:
     label: str
     filters: Dict[str, Any] = field(default_factory=dict)
     cohort_id: Optional[str] = None
+    #: Several books selected explicitly. ``cohort_id`` stays populated with the
+    #: first for backward compatibility; consumers that understand a selection
+    #: read this. Empty for every single-scope lens.
+    cohort_ids: Tuple[str, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        out = {
             "name": self.name,
             "label": self.label,
             "filters": dict(self.filters),
             "cohort_id": self.cohort_id,
         }
+        if self.cohort_ids:
+            out["cohort_ids"] = list(self.cohort_ids)
+        return out
 
 
 def total_lens() -> PortfolioLens:
@@ -113,6 +205,14 @@ def total_lens() -> PortfolioLens:
 def _cohort_lens(cohort_id: str) -> PortfolioLens:
     cid = cohort_id.strip().lower()
     return PortfolioLens(LENS_COHORT, cid, {SOURCE_ID_FIELD: cid}, cohort_id=cid)
+
+
+def _selection_lens(ids: Sequence[str]) -> PortfolioLens:
+    """Several books chosen explicitly — exactly those, never their type."""
+    ids = tuple(str(i).strip().lower() for i in ids if str(i).strip())
+    return PortfolioLens(LENS_COHORT, " + ".join(ids),
+                         {}, cohort_id=ids[0] if ids else None,
+                         cohort_ids=ids)
 
 
 def _type_lens(ptype: str) -> PortfolioLens:
@@ -229,6 +329,11 @@ def context_id(lens: PortfolioLens) -> str:
     """
     if lens is None:
         return LENS_TOTAL
+    # A multi-selection hands the registry the whole id list, so the governed
+    # scope is exactly the books chosen. Handing over one of them, or their
+    # type, would answer for a population the caller did not select.
+    if lens.cohort_ids and len(lens.cohort_ids) > 1:
+        return list(lens.cohort_ids)
     if lens.name == LENS_COHORT and lens.cohort_id:
         return lens.cohort_id
     return lens.name
@@ -290,6 +395,13 @@ def lens_from_selection(value: Any) -> PortfolioLens:
     """
     if isinstance(value, Mapping):
         value = value.get("id") or value.get("lens") or value.get("value")
+    if isinstance(value, (list, tuple, set, frozenset)):
+        picked = [str(v).strip() for v in value if str(v).strip()]
+        if not picked:
+            return total_lens()
+        if len(picked) > 1:
+            return _selection_lens(picked)
+        value = picked[0]
     if value is None:
         return total_lens()
     sel = str(value).strip().lower()
