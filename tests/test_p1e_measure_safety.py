@@ -495,3 +495,37 @@ def test_a_set_the_model_expressed_itself_is_left_alone(semantics, columns):
         {"field": LTV, "aggregation": "weighted_avg"}]})
     assert "measures" not in carry_specialist_intent(model, deterministic)
     assert len(model.measures) == 2
+
+
+# =========================================================================== #
+# 11. A scope word is not a place
+# =========================================================================== #
+@pytest.mark.parametrize("question,expected_population", [
+    # Sourcing cohort — the portfolio lens already resolves this one.
+    ("For the acquired book, what are balance, loan count and "
+     "weighted-average LTV?", 3909),
+    # Funding state. This one was refused for an EMPTY population, because
+    # "the funded book" resolved to a geography called "Funded" which matches
+    # no row. It pre-dates P1E and broke the landing-page demo pack build.
+    ("How many loans are in the funded book?", 11035),
+])
+def test_a_scope_word_is_never_resolved_as_a_geography(ask, question,
+                                                       expected_population):
+    """A place filter is only ever a place. Inventing a geography value the
+    column does not contain empties the population and refuses a good
+    question — the failure mode is a refusal rather than a wrong number, but
+    it is still an outage."""
+    envelope = ask(question)
+    assert envelope["ok"] is True, envelope.get("error")
+    assert f"{expected_population:,} loans" in receipt(envelope)
+
+
+def test_the_non_place_guard_lists_scope_words_not_real_regions(governed_env):
+    """Scope control: the guard must not shadow an actual region in the book."""
+    from mi_agent.llm_query_parser import _NON_PLACE_TERMS
+    from mi_agent_api.data_source import get_dataframe
+
+    regions = {str(r).lower() for r in
+               get_dataframe()["collateral_geography"].dropna().unique()}
+    shadowed = {w for r in regions for w in r.split() if w in _NON_PLACE_TERMS}
+    assert not shadowed, f"the guard shadows real region words: {shadowed}"

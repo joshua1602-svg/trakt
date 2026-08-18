@@ -1726,6 +1726,10 @@ _NON_PLACE_TERMS = {
     # a geography value the column does not contain and emptied the population.
     "acquired", "direct", "originated", "origination", "purchased",
     "sponsored", "warehouse", "book", "books", "portfolio", "portfolios",
+    # Funding state, not a place. "how many loans are in the FUNDED book"
+    # resolved to a geography called "Funded", which matches nothing, and the
+    # question was refused for an empty population.
+    "funded", "unfunded", "pipeline", "drawn", "undrawn",
 }
 
 

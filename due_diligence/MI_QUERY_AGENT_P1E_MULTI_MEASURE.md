@@ -236,9 +236,29 @@ or leave counts outside the comparison surface and keep the disclosure above.
 The first is a registry-ownership decision of the kind reserved to you in the
 asset-class phase, so it is flagged rather than taken.
 
+### 6.5 "The funded book" read as a place called *Funded*
+
+Found by the full suite, not by the MI bank: the landing-page demo-pack build
+refused *"How many loans are in the funded book?"* with
+
+> No loans in this book match that filter (collateral_geography), so there is
+> nothing to calculate.
+
+Same shape as §6.3 — a scope word resolved as a geography value the column does
+not contain, emptying the population — but §6.3's fix did not catch it, because
+the extracted value is the bare word `Funded` rather than "funded book". Funding
+state words joined the same `_NON_PLACE_TERMS` guard, and the question now
+answers over all 11,035 loans.
+
+**This failure pre-dates P1E.** It was verified in a clean worktree at the base
+commit `cf619bb`, where it reproduces identically. It is fixed here rather than
+merely reported because it is the same defect class already being fixed and the
+change is one line of an existing list. A scope-control test asserts the guard
+never shadows a word that appears in a real region name in the book.
+
 ---
 
-## 7. Negative and safety tests — 34 assertions
+## 7. Negative and safety tests — 37 assertions
 
 `tests/test_p1e_measure_safety.py`. Each is a way P1E could produce a confident
 wrong answer.
@@ -263,6 +283,7 @@ wrong answer.
 | Model role | prompt carries the array and both prohibitions; reconciliation cannot move a measure; an invented field cannot reach a number |
 | Routed capability gap | a comparison names the loan count it cannot compare; the ledger keeps BSR measures separate from measures the route does not express |
 | Parser consistency | a set the model returned as one metric is carried; a measure it read differently is never overwritten; a set it expressed itself is left alone |
+| Scope words | "the acquired book" and "the funded book" are never resolved as places; the guard never shadows a real region word |
 
 ---
 
@@ -312,11 +333,17 @@ slot carrying a question word or a finite verb is a second clause, not a measure
 name. Fixed, B21 restored to its baseline answer, and the true positives in §6.1
 still fire.
 
-Targeted suites — all of `mi_agent/tests/` plus the P1C, P1D/B11, B25,
-asset-class-lifecycle and three P1E suites — **1,409 passed, 1 skipped,
-21 xfailed**.
+Targeted suites — all of `mi_agent/tests/` and `landing-page/tests/` plus the
+P1C, P1D/B11, B25, asset-class-lifecycle and three P1E suites — **1,433 passed,
+1 skipped, 21 xfailed**.
 
-FULL_SUITE_RESULT
+**Full suite: 8,476 passed, 30 skipped, 21 xfailed, 6 subtests passed.**
+
+The first full-suite run surfaced one failure —
+`landing-page/tests/demo_pack_reproducible_test.py::test_committed_pack_matches_a_fresh_build`.
+It was verified in a clean worktree at the base commit `cf619bb` and reproduces
+there identically, so it **pre-dates P1E**. It was fixed anyway (§6.5) because
+it is the same defect class as §6.3 and the one-word fix was already in hand.
 
 ---
 
@@ -393,6 +420,6 @@ committed or printed at any point in this phase.
 | `mi_agent/tests/test_p1a_single_filter.py` | one test reworked (§10) |
 | `tests/test_p1e_multi_measure.py` | **new** — contract + the five CFO questions (18) |
 | `tests/test_p1e_golden_bank.py` | **new** — 26-question bank (74) |
-| `tests/test_p1e_measure_safety.py` | **new** — negative and safety tests (34 + 1 xfail) |
+| `tests/test_p1e_measure_safety.py` | **new** — negative and safety tests (37 + 1 xfail) |
 
 **Not merged. Not pushed.**
