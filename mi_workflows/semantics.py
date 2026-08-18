@@ -72,6 +72,10 @@ class SemanticEntry:
     asset_applicability: Tuple[str, ...]
     confidence: str
     rationale: str
+    #: True for a measure that is a property of the POPULATION rather than of a
+    #: canonical field — a loan count has no column behind it. Consumers that
+    #: check "is this field on the tape" must not reject one.
+    derived: bool = False
 
     def tagged(self, workflow_tag: str) -> bool:
         return workflow_tag in self.workflow_tags
@@ -82,6 +86,7 @@ class SemanticEntry:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "source_field": self.source_field,
+            "derived": self.derived,
             "display_name": self.display_name,
             "analytical_concept": self.analytical_concept,
             "analytical_role": self.analytical_role,
@@ -150,6 +155,7 @@ def _entry_from_dict(name: str, raw: Mapping[str, Any]) -> SemanticEntry:
         asset_applicability=tuple(raw.get("asset_applicability") or ()),
         confidence=str(raw.get("confidence") or "low"),
         rationale=str(raw.get("rationale") or ""),
+        derived=bool(raw.get("derived")),
     )
 
 

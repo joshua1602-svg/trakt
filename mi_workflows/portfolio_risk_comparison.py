@@ -64,7 +64,7 @@ REPORTING_DATE_FIELD = "reporting_date"
 #: the Business Semantics Registry on the canonical identifier with a ``count``
 #: aggregation, so an MI spec asking for ``loan_count`` resolves here and is
 #: compared under the same rules as every other measure.
-COUNT_MEASURE_FIELD = "loan_identifier"
+COUNT_MEASURE_FIELD = "loan_count"
 
 #: Asset-class column, when the tape declares one. Absent means "not declared"
 #: — asset-specific fields are then excluded rather than guessed at.
@@ -415,7 +415,7 @@ def _comparability_decision(entry: SemanticEntry, shared_asset: Optional[str],
         if shared_asset not in entry.asset_applicability:
             return FieldDecision(entry, False,
                                  f"not applicable to asset class '{shared_asset}'")
-    if entry.source_field not in columns:
+    if entry.source_field not in columns and not getattr(entry, "derived", False):
         return FieldDecision(entry, False, "field not present on the tape")
     return FieldDecision(entry, True, "governed for portfolio comparison")
 
@@ -567,10 +567,11 @@ def run_portfolio_risk_comparison(
                 continue
             if name in ("loan_count", "count"):
                 # The MI spec's count measure IS a governed BSR measure: loan
-                # cardinality, declared on the canonical identifier with a
-                # neutral directionality. Resolved to that key so it goes
-                # through the same comparability rules as every other measure
-                # rather than being special-cased out of the comparison.
+                # cardinality, declared as a DERIVED measure — a property of the
+                # population, with no column behind it — carrying a neutral
+                # directionality. Resolved to that key so it goes through the
+                # same comparability rules as every other measure rather than
+                # being special-cased out of the comparison.
                 name = COUNT_MEASURE_FIELD
             if name not in requested_fields:
                 requested_fields.append(name)

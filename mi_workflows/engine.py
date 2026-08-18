@@ -140,16 +140,18 @@ def aggregate(df: pd.DataFrame, metric_field: str, aggregation: str, *,
         return MetricAggregate(None, aggregation, unit, basis, population,
                                0, population, None)
 
+    if aggregation == AGG_COUNT:
+        # A cardinality is a property of the POPULATION, so there is usually no
+        # column behind it — the registry declares it derived. When a column IS
+        # named, presence is counted; the values are never coerced or summed.
+        n = (int(df[metric_field].notna().sum())
+             if metric_field in df.columns else population)
+        return MetricAggregate(float(n), aggregation, UNIT_INTEGER, None,
+                               population, n, population - n, None)
+
     if metric_field not in df.columns:
         return _empty(weight_field if aggregation == AGG_WEIGHTED_AVERAGE
                       else (share_basis if aggregation == AGG_SHARE else None))
-
-    if aggregation == AGG_COUNT:
-        # Deliberately NOT coerced to numeric: a loan identifier is a string.
-        valid = df[metric_field].notna()
-        n = int(valid.sum())
-        return MetricAggregate(float(n), aggregation, UNIT_INTEGER, None,
-                               population, n, population - n, None)
 
     if aggregation == AGG_SUM:
         values = _numeric(df[metric_field])

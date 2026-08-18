@@ -95,9 +95,35 @@ def test_metadata_counts_consistent(registry, source_fields):
 # --------------------------------------------------------------------------- #
 
 
+#: Measures that are properties of a POPULATION rather than of a canonical
+#: field, and therefore have no source-registry entry. Enumerated here so a new
+#: one cannot appear silently: a derived measure is a governance decision, and
+#: this list is the record of which ones were taken.
+DERIVED_MEASURES = {"loan_count"}
+
+
 def test_every_field_exists_in_source_registry(registry, source_fields):
-    missing = sorted(set(registry["fields"]) - set(source_fields))
+    missing = sorted(set(registry["fields"]) - set(source_fields)
+                     - DERIVED_MEASURES)
     assert not missing, f"registry fields not in source registry: {missing}"
+
+
+def test_every_derived_measure_is_declared_and_has_no_source_field(
+        registry, source_fields):
+    """The other half of the exemption above.
+
+    A derived measure must be MARKED derived — consumers that ask "is this
+    field on the tape" key off that flag — and must genuinely have no canonical
+    field behind it. A derived entry that shadowed a real field would silently
+    bypass the source-registry integrity checks for that field.
+    """
+    declared = {name for name, entry in registry["fields"].items()
+                if entry.get("derived")}
+    assert declared == DERIVED_MEASURES, (
+        f"undeclared derived measures: {sorted(declared ^ DERIVED_MEASURES)}")
+    for name in declared:
+        assert name not in source_fields, (
+            f"{name} is marked derived but IS a canonical field")
 
 
 def test_source_field_matches_key(registry):

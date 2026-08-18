@@ -261,6 +261,22 @@ def E(concept: str,
     }
 
 
+# --------------------------------------------------------------------------- #
+# DERIVED MEASURES
+# --------------------------------------------------------------------------- #
+# Measures that are properties of a POPULATION rather than of a canonical field.
+# They are governed exactly like curated fields — same taxonomy, same
+# validation — but they are deliberately NOT looked up in the canonical field
+# registry, because there is no column behind them.
+#
+# Loan cardinality is the motivating case. It could have been keyed on the loan
+# identifier and counted there, but an identifier must never enter this registry
+# (``test_excluded_fields_do_not_appear`` enforces that, and rightly: an
+# identifier is not an analytical field, and admitting one invites it to be
+# ranked, summed or published as evidence). "How many loans" is a property of
+# the population; declaring it as one is what keeps the identifier out.
+DERIVED_SOURCE = "derived: population cardinality"
+
 # Workflow tag shorthands.
 _ALL4 = ["period_change", "portfolio_comparison", "ranking", "monitoring"]
 _PC_PCMP = ["period_change", "portfolio_comparison"]
@@ -276,23 +292,22 @@ _PCMP_MON = ["portfolio_comparison", "monitoring"]
 # (category/format/layer/portfolio_type/regime mapping), the curated MI
 # semantics layer or the risk-monitor configuration.
 
-CURATION: Dict[str, Dict[str, Any]] = {
-
-    # ================= POPULATION =================
-    "loan_identifier": E(
-        # portfolio_comparison ONLY. Period-change over an identifier is
-        # meaningless — the movement a reader wants there is net loan growth,
-        # which is a different measure — and a period-change audit that names
-        # the identifier field trips the no-loan-level-data guard for no
-        # analytical gain. Ranking and monitoring on an identifier are likewise
-        # not concepts. Scope kept to the workflow that actually compares it.
+DERIVED_CURATION: Dict[str, Dict[str, Any]] = {
+    "loan_count": E(
+        # portfolio_comparison ONLY. Period-change over a count is net loan
+        # growth — a different measure with its own movement semantics — and
+        # ranking or monitoring a bare cardinality is not a concept.
         "exposure", ["exposure"], _PCMP, "neutral", "count", "high",
-        "Loan cardinality: how many loans a population contains, counted on "
-        "the canonical identifier so nothing about the identifier's VALUE is "
-        "interpreted. Neutral by declaration — more loans is neither better "
-        "nor worse, it is scale — which is why a comparison may state the "
-        "difference but never reads a direction into it.",
+        "Loan cardinality: how many loans a population contains. Neutral by "
+        "declaration — more loans is neither better nor worse, it is scale — "
+        "so a comparison may state the difference but never reads a direction "
+        "into it. Derived from the population, not from any field, which is "
+        "why no identifier is admitted to this registry to express it.",
         display="Loan Count"),
+}
+
+
+CURATION: Dict[str, Dict[str, Any]] = {
 
     # ================= EXPOSURE / BALANCES =================
     "current_outstanding_balance": E(
@@ -1961,6 +1976,38 @@ def build_registry(source: Path = DEFAULT_SOURCE) -> Dict[str, Any]:
             "asset_applicability": assets,
             "confidence": cur["confidence"],
             "rationale": cur["rationale"],
+        }
+
+    # Derived measures: governed identically, but with no canonical field
+    # behind them, so the field lookups above are deliberately skipped.
+    for name in sorted(DERIVED_CURATION):
+        if name in out_fields:
+            raise ValueError(f"{name}: derived measure collides with a field")
+        cur = DERIVED_CURATION[name]
+        _validate_curated(name, cur)
+        role = "dimension" if cur["aggregation"] == "distribution" else "measure"
+        materiality = cur["materiality"]
+        if materiality is None:
+            materiality = cur["aggregation"] in _MATERIALITY_AGGREGATIONS
+        out_fields[name] = {
+            "source_field": name,
+            "display_name": cur["display"] or _display_name(name),
+            "analytical_concept": cur["concept"],
+            "analytical_role": role,
+            "temporality": "point_in_time",
+            "categories": list(cur["categories"]),
+            "workflow_tags": list(cur["tags"]),
+            "directionality": cur["directionality"],
+            "default_aggregation": cur["aggregation"],
+            "weight_field": None,
+            "share_basis": None,
+            "portfolio_comparability": "comparable",
+            "supports_materiality_assessment": bool(materiality),
+            "asset_applicability": ["cross_asset"],
+            "confidence": cur["confidence"],
+            "rationale": cur["rationale"],
+            # The marker a consumer keys off to know there is no column here.
+            "derived": True,
         }
 
     metadata = {
