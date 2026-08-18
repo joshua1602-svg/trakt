@@ -62,14 +62,27 @@ _SELECTABLE_COHORT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 # was narrowing the answer to the direct books while presenting itself as the
 # whole. Asserted by
 # mi_agent/tests/test_mi_query_capability_matrix.py::test_measure_vocabulary_is_not_read_as_a_portfolio_scope.
+# PROVENANCE ONLY. Every term here must name WHERE A LOAN CAME FROM.
+#
+# "new origination" and "newly originated" were removed from _DIRECT_TERMS, and
+# "back book", "backbook" and "legacy book" from _ACQUIRED_TERMS (P1J-1). Those
+# are VINTAGE / SEASONING concepts — they name WHEN a loan was written — and the
+# two axes are independent: a directly-originated loan written five years ago is
+# DIRECT by provenance and BACK BOOK by seasoning, and an acquired loan may be
+# newly originated. Resolving "the back book" to *acquired* silently excluded
+# every seasoned direct loan and included every recent acquired one — the same
+# class of silent scope mutation as P1I, on a different axis.
+#
+# Seasoning now has its own governed model (mi_agent/seasoning.py) and its own
+# vocabulary, which must not overlap with this one. Asserted by
+# tests/test_p1j1_vintage_seasoning.py.
 _DIRECT_TERMS = (
-    "direct", "directly originated", "organic", "own book",
-    "in-house", "new origination", "newly originated",
+    "direct", "directly originated", "organic", "own book", "in-house",
 )
 
 _ACQUIRED_TERMS = (
-    "acquired", "acquisition", "back book", "backbook", "purchased book",
-    "purchased", "bought book", "inorganic", "legacy book", "m&a",
+    "acquired", "acquisition", "purchased book",
+    "purchased", "bought book", "inorganic", "m&a",
 )
 # Phrases that name the CONSOLIDATED SCOPE. Every entry must be
 # portfolio-qualified. A bare "total" / "overall" / "combined" is deliberately

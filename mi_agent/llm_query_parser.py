@@ -2600,8 +2600,14 @@ def _deterministic_parse(question: str, semantics: dict,
                or "by month" in q or "evolution" in q or "by reporting date" in q
                or "over the months" in q or "by reporting month" in q
                or "reporting month" in q or "by week" in q or "per week" in q
-               or "weekly" in q or "by reporting period" in q
-               or "vintage_year" in dim_keys)
+               or "weekly" in q or "by reporting period" in q)
+    # NOTE: a vintage request used to force a line here. It must not: a VINTAGE
+    # is a cohort label (2014, 2015, …), not a point on a time axis, and the
+    # line path coerces its x to a date — turning every integer year into epoch
+    # month "1970-01" and collapsing all thirteen vintages into ONE row that
+    # still reported itself as "by origination vintage". A grouped bar over
+    # vintage_year is the honest shape, and is what the ranking path already
+    # produced for "which vintages have the highest LTV".
     # Resolve the metric from the phrase BEFORE the first "by" (the metric side),
     # so "<metric> by <dimension>" never picks the grouping term as the metric
     # (e.g. "balance by ltv" -> metric=balance, not LTV). Fall back to the dim-
@@ -2612,8 +2618,6 @@ def _deterministic_parse(question: str, semantics: dict,
     if is_line:
         x = ("origination_date" if "origination_date" in _fields(semantics)
              else None)
-        if "vintage_year" in dim_keys:
-            x = "vintage_year"
         # A value filter alongside a trend ("balance by month where LTV above
         # 50%") is applied to the mask BEFORE the time-series grouping (the
         # executor filters `work` before _execute_line), so attach it — a
@@ -3405,6 +3409,53 @@ def reject_scope_role_filters(spec: MIQuerySpec, question: str,
     return rejected
 
 
+def resolve_seasoning_role(spec: MIQuerySpec, question: str,
+                           columns=None) -> Optional[str]:
+    """Make a named seasoning POPULATION a filter, not a grouping. Returns it.
+
+    "What is the average LTV of the back book?" names the population being
+    reported on. Resolved as a grouping it answered for the front book AND the
+    back book — both segments, 11,035 loans — while presenting itself as an
+    answer about the back book. That is a silent semantic error of exactly the
+    kind P0/P1G exist to stop, so the ROLE is decided here, at normalisation,
+    before the spec is validated or executed.
+
+    A question naming BOTH sides is a comparison and is left alone: the grouping
+    is what makes it answerable. Nothing is deleted that could narrow a
+    population — the segment moves from the grouping to the filter that
+    expresses it, and the receipt then states which population ran.
+    """
+    from . import seasoning as _seasoning
+
+    if spec is None:
+        return None
+    available = {str(c) for c in (columns or ())}
+    if available and _seasoning.SEASONING_SEGMENT_FIELD not in available:
+        return None                      # book carries no seasoning: leave it
+    segment = _seasoning.resolve_segment_population(question)
+    if not segment:
+        return None
+
+    filters = getattr(spec, "filters", None)
+    if not isinstance(filters, dict):
+        filters = {}
+    if _seasoning.SEASONING_SEGMENT_FIELD in filters:
+        return None                      # already expressed as a population
+    filters[_seasoning.SEASONING_SEGMENT_FIELD] = segment
+    spec.filters = filters
+
+    # The segment named the population, so it is not also the axis. Any OTHER
+    # requested grouping (region, vintage) is untouched.
+    for attr in ("dimensions", "hierarchy"):
+        values = getattr(spec, attr, None)
+        if isinstance(values, list) and _seasoning.SEASONING_SEGMENT_FIELD in values:
+            setattr(spec, attr, [d for d in values
+                                 if d != _seasoning.SEASONING_SEGMENT_FIELD])
+    if getattr(spec, "dimension", None) == _seasoning.SEASONING_SEGMENT_FIELD:
+        spec.dimension = None
+    return segment
+
+
 #: Set by ``parse_with_repair`` so the scope-role check can resolve canonical
 #: field names without changing its signature.
 _SEMANTICS_FOR_SCOPE: Optional[dict] = None
@@ -3617,6 +3668,7 @@ def parse_with_repair(
     # ---- deterministic parse (always computed; free) ----------------------
     det_spec, det_meta = _deterministic_parse(user_question, semantics,
                                               available_columns=cols)
+    det_seasoning = resolve_seasoning_role(det_spec, user_question, cols)
     det_vr = validate_mi_query(det_spec, semantics, available_columns=cols)
 
     def _det_result(parser_detail: str, repair_skipped_reason=None) -> Tuple[MIQuerySpec, dict]:
@@ -3633,6 +3685,7 @@ def parse_with_repair(
             "llm": _empty_llm_meta(provider, None),
             "status": ("parsed deterministically" if det_vr.ok
                        else "deterministic parse failed validation"),
+            "seasoning_population": det_seasoning,
         }
         meta.update({k: det_meta[k] for k in (
             "explicit_dimension_requested", "requested_dimension_terms",
@@ -3705,6 +3758,7 @@ def parse_with_repair(
             # ROLE before validation sees it, so the query is never built with
             # a filter on a column the book does not have.
             scope_rejected = reject_scope_role_filters(spec, user_question, cols)
+            llm_seasoning = resolve_seasoning_role(spec, user_question, cols)
             vr = validate_mi_query(spec, semantics, available_columns=cols)
             errors = list(vr.errors)
             vr_ok = vr.ok
@@ -3723,6 +3777,7 @@ def parse_with_repair(
                 "parser_mode_detail": detail,
                 "specialist_intent_carried": carried,
                 "scope_role_rejected": list(scope_rejected),
+                "seasoning_population": llm_seasoning,
                 "ok": True,
                 "validation_errors": [],
                 "repair_attempts": i,

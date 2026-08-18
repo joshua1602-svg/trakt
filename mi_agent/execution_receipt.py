@@ -487,12 +487,14 @@ _COHORT_CONCEPTS: Tuple[Tuple[str, str, Tuple[str, ...], Tuple[str, ...]], ...] 
          r"\bfront book\b", r"\bnew business\b"),
         # GROUPABLE vintage dimensions only. A raw origination_date is on this
         # tape, but a date is not a cohort: splitting a book by it needs a
-        # derived year or seasoning band, and none is governed here. Listing
-        # the date would make the guard report the concept as merely not
-        # applied — "we could have and didn't" — when the truth is that the
-        # dataset carries no vintage dimension to apply.
+        # derived year or seasoning band. P1J-1 governs exactly those —
+        # vintage_year, seasoning_bucket (analytical bands) and
+        # seasoning_segment (the binary front/back split) — so on a book that
+        # carries an origination date the concept now RESOLVES rather than
+        # refusing. Where a book carries no origination date the guard still
+        # refuses by name, which is why the list stays explicit.
         ("vintage_year", "origination_year", "vintage", "vintage_bucket",
-         "seasoning_bucket", "origination_vintage"),
+         "seasoning_bucket", "seasoning_segment", "origination_vintage"),
     ),
 )
 

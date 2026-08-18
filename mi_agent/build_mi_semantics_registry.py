@@ -225,7 +225,19 @@ CURATION: Dict[str, dict] = {
     "current_loan_to_value": {
         "tier": "core", "business_name": "Current LTV",
         "business_description": "Current loan-to-value ratio.",
-        "synonyms": ["ltv", "current ltv", "loan to value", "cltv"],
+        # "credit quality" / "quality of the book" resolve here by GOVERNED
+        # RULING (P1J-1 R1): on a fully-performing book — no arrears, no
+        # defaults, no impairment, no risk grade — leverage is the governed
+        # quality proxy, and a lower weighted-average current LTV is better
+        # quality. The phrases are curated rather than inferred, and the receipt
+        # always names the executed measure ("Weighted-average Current LTV"), so
+        # the interpretation is visible rather than assumed. A book that carries
+        # genuine credit-risk fields should revisit this mapping.
+        # Bare "quality" is deliberately NOT a synonym: it also reads as data
+        # quality or valuation quality, and an ambiguous word must not silently
+        # select a measure.
+        "synonyms": ["ltv", "current ltv", "loan to value", "cltv",
+                     "credit quality", "quality of the book", "book quality"],
     },
     "indexed_loan_to_value": {
         "tier": "core", "business_name": "Indexed LTV",
@@ -715,7 +727,13 @@ CURATION: Dict[str, dict] = {
         "business_name": "Vintage",
         "business_description": "Origination year cohort (derived from origination_date).",
         "synonyms": ["vintage", "vintage year", "origination year",
-                     "cohort year", "year of origination"],
+                     "cohort year", "year of origination", "origination vintage",
+                     "vintage cohort",
+                     # Plurals: "which vintages have the highest LTV" asks for a
+                     # breakdown BY vintage, and the resolver matches synonyms
+                     # literally rather than lemmatising.
+                     "vintages", "origination vintages", "vintage years",
+                     "origination years"],
         "overrides": dict(
             _BUCKET_OVERRIDES,
             allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
@@ -726,6 +744,46 @@ CURATION: Dict[str, dict] = {
         "business_name": "Maturity Year",
         "business_description": "Maturity year cohort (derived from maturity_date).",
         "synonyms": ["maturity year", "maturity cohort", "year of maturity"],
+        "overrides": dict(
+            _BUCKET_OVERRIDES,
+            allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
+        ),
+    },
+    # ---- GOVERNED SEASONING (P1J-1) ----
+    # The vintage axis, independent of provenance. Both dimensions come from ONE
+    # governed model (config/mi/buckets.yaml::seasoning, mi_agent/seasoning.py):
+    # the analytical bands and the binary front/back split can never disagree.
+    #
+    # Synonyms are deliberately NOT exhaustive. "older vintages" is absent because
+    # it more naturally asks for analysis ACROSS vintage cohorts than for
+    # back_book=true — a genuinely ambiguous phrase must fail safe rather than be
+    # given a convenient meaning. Provenance words (direct/acquired/purchased)
+    # never appear here, and these words never appear in the provenance lens.
+    "seasoning_segment": {
+        "tier": "core", "derived": True, "derived_from": "months_on_book",
+        "business_name": "Seasoning Segment",
+        "business_description": "Front book vs back book — the binary seasoning "
+                                "split, derived from months_on_book against the "
+                                "governed reporting date. Independent of "
+                                "provenance (direct / acquired).",
+        "synonyms": ["front book", "back book", "seasoning segment",
+                     "front or back book", "new lending", "new originations",
+                     "recent originations", "newly originated", "new origination",
+                     "seasoned book", "seasoned loans", "legacy book"],
+        "overrides": dict(
+            _BUCKET_OVERRIDES,
+            allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
+        ),
+    },
+    "seasoning_bucket": {
+        "tier": "core", "derived": True, "derived_from": "months_on_book",
+        "business_name": "Seasoning Bucket",
+        "business_description": "Governed seasoning band (months on book at the "
+                                "reporting date), e.g. 0-12m / 13-24m / 25-60m / "
+                                "60m+.",
+        "synonyms": ["seasoning bucket", "seasoning band", "seasoning",
+                     "months on book band", "time on book band",
+                     "seasoning cohort"],
         "overrides": dict(
             _BUCKET_OVERRIDES,
             allowed_chart_roles=["x", "group", "filter", "color", "cohort"],

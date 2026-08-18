@@ -442,12 +442,19 @@ def test_direct_versus_acquired_still_compares(ask):
 
 
 def test_scope_does_not_become_a_cohort_synonym(ask):
-    """P1G identity, preserved: sourcing and seasoning stay different concepts.
-    "direct book" must not become a synonym for "new origination"."""
+    """P1G identity, preserved through P1J-1: sourcing and seasoning stay
+    different concepts. "direct book" must never be a synonym for "new
+    origination", in either direction. The question now ANSWERS (P1J-1 governs
+    seasoning), so the assertion is that it answered on the SEASONING axis and
+    never touched provenance."""
     envelope = ask("Is the credit quality of new origination better or worse "
                    "than the back book?")
-    assert envelope["ok"] is False
-    assert "how long the loans have been on the book" in answer(envelope).lower()
+    assert envelope["ok"] is True, envelope.get("error")
+    spec = envelope.get("spec") or {}
+    grouping = [spec.get("dimension")] + list(spec.get("dimensions") or [])
+    assert "seasoning_segment" in grouping
+    assert "source_portfolio_type" not in grouping
+    assert "source_portfolio_type" not in (spec.get("filters") or {})
 
 
 # =========================================================================== #

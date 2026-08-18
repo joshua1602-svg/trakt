@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 import pandas as pd
 
 from mi_agent import portfolio_lens as _lens_mod
+from mi_agent import seasoning as _seasoning
 from mi_agent.portfolio_scope import apply_scope, registry_for_frame
 from trakt_core.portfolio import PortfolioRegistry, PortfolioScope, resolve_scope
 
@@ -161,6 +162,24 @@ def rejection_reason(question: str, spec: Any = None) -> Optional[str]:
                     "temporal comparison / evolution routes")
         if getattr(spec, "forecast_mode", None):
             return "the parse resolved a forecast intent, owned by the forecast routes"
+    # SEASONING IS NOT PROVENANCE. "Compare the front book with the back book"
+    # is a comparison across the VINTAGE axis; this workflow compares where
+    # loans came from. Routed here it answered by sourcing — direct vs acquired
+    # — for a question about how long loans have been on the book, which is the
+    # axis conflation P1J-1 exists to remove. (It refused rather than answered,
+    # because the P1G cohort-identity guard caught the substitution, but a
+    # refusal is not the right answer to an answerable question.)
+    #
+    # Deferred ONLY when the question does not also name two governed provenance
+    # scopes. A question naming both axes ("the seasoned direct book vs recent
+    # acquired loans") still reaches this workflow and is still refused by the
+    # cohort guard, which is the safe outcome: better to refuse a two-axis
+    # question than to silently drop one of its axes.
+    if _seasoning.segments_named(question) and len(
+            _lens_mod.resolve_comparison_lenses(question)) < 2:
+        return ("the comparison is across the seasoning / vintage axis, which "
+                "is not a source-portfolio comparison")
+
     for reason, markers in _REJECTIONS:
         if any(m in q for m in markers):
             return reason

@@ -39,6 +39,7 @@ from analytics_lib.numeric import coerce_numeric
 from trakt_core import perf as _perf
 
 from engine import region_taxonomy as _region
+from mi_agent import seasoning as _seasoning
 
 logger = logging.getLogger("mi_agent_api.funded_prep")
 
@@ -178,6 +179,41 @@ def _reporting_date(out: pd.DataFrame) -> Optional[pd.Series]:
         return None
     rd = pd.to_datetime(out[rep_col], errors="coerce")
     return rd if rd.notna().any() else None
+
+
+def _derive_vintage_and_seasoning(out: pd.DataFrame, derived: List[str]) -> None:
+    """origination_date → vintage_year, months_on_book, seasoning band + segment.
+
+    THE single derivation for the vintage/seasoning axis, shared by the funded
+    tape prep and the platform-canonical read path. It previously lived inline in
+    ``_derive_source_fields`` only, so the MI Agent — which reads the platform
+    canonical — saw no vintage dimension at all and refused every vintage
+    question on a book that carried an origination date for every loan.
+
+    Seasoning is measured against the frame's own governed REPORTING / CUT-OFF
+    date, not wall-clock "today", so a historical snapshot yields the seasoning
+    the book had at that reporting date.
+    """
+    if "origination_date" not in out.columns:
+        return
+    od = coerce_dates(out["origination_date"])
+    if not od.notna().any():
+        return
+
+    if "vintage_year" not in out.columns:
+        out["vintage_year"] = od.dt.year.astype("Int64")
+        derived.append("vintage_year")
+
+    rd = _reporting_date(out)
+    if rd is None:
+        return
+    mob = _seasoning.months_between(od, rd)
+    if not mob.notna().any():
+        return
+    if "months_on_book" not in out.columns:
+        out["months_on_book"] = mob.astype("Int64")
+        derived.append("months_on_book")
+    derived.extend(_seasoning.derive_seasoning(out, months=mob))
 
 
 def _derive_youngest_age(out: pd.DataFrame, derived: List[str]) -> None:
@@ -377,6 +413,10 @@ def augment_platform_canonical_dimensions(df: pd.DataFrame) -> Tuple[pd.DataFram
     onboarding time."""
     out = df.copy()
     derived: List[str] = []
+    # origination_date → vintage_year / months_on_book / seasoning. The platform
+    # assembler does not emit these, so without this the MI Agent refused every
+    # vintage question on a book that carries an origination date for every loan.
+    _derive_vintage_and_seasoning(out, derived)
     _derive_youngest_age(out, derived)   # DOBs → youngest_borrower_age (age_bucket)
     _derive_borrower_type(out, derived)  # second-applicant presence → single/joint
     # Region / channel arrive under different canonical names per book; coalesce
@@ -409,19 +449,7 @@ def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], Li
         if b.get("method") in ("source_field", "derived_ratio") and target not in df.columns:
             derived.append(target)
 
-    if "origination_date" in out.columns:
-        od = coerce_dates(out["origination_date"])
-        if od.notna().any():
-            if "vintage_year" not in out.columns:
-                out["vintage_year"] = od.dt.year.astype("Int64")
-                derived.append("vintage_year")
-            rd = _reporting_date(out)
-            if rd is not None and "months_on_book" not in out.columns:
-                mob = (rd.dt.year - od.dt.year) * 12 + (rd.dt.month - od.dt.month)
-                if mob.notna().any():
-                    out["months_on_book"] = mob.astype("Int64")
-                    derived.append("months_on_book")
-
+    _derive_vintage_and_seasoning(out, derived)
     _derive_youngest_age(out, derived)
     _derive_borrower_type(out, derived)
 

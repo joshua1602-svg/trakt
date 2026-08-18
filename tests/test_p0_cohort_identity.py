@@ -160,18 +160,35 @@ VINTAGE_QUESTIONS = [
 
 @pytest.mark.parametrize("question", VINTAGE_QUESTIONS)
 def test_a_vintage_cohort_is_never_answered_by_sourcing(ask, question):
-    """The defect this file exists for.
+    """The defect this file exists for, restated after P1J-1.
 
-    This book carries no vintage, so there is no right answer — and the wrong
-    one was available and plausible. The refusal names the concept that could
-    not be honoured rather than the field the parser happened to reach for.
+    Vintage and provenance are INDEPENDENT axes. Before P1J-1 this book carried
+    no governed vintage dimension, so the only safe outcome was a refusal naming
+    the concept. P1J-1 governs seasoning, so these questions now ANSWER — but the
+    invariant is unchanged and is what this asserts: a vintage question is never
+    answered by sourcing. Whether it refuses or answers, the one thing it may
+    never do is split the book by direct/acquired and call that a vintage
+    comparison.
     """
     envelope = ask(question)
-    assert envelope["ok"] is False, (
-        f"answered a vintage question: {answer(envelope)!r}")
     text = answer(envelope).lower()
-    assert "how long the loans have been on the book" in text
-    assert "direct" not in text and "acquired" not in text
+    spec = envelope.get("spec") or {}
+    grouping = [spec.get("dimension")] + list(spec.get("dimensions") or [])
+    filters = spec.get("filters") or {}
+
+    # Never answered by provenance — the enduring invariant.
+    assert "direct vs acquired" not in text
+    assert "source_portfolio_type" not in grouping
+    assert "source_portfolio_type" not in filters
+
+    if envelope["ok"]:
+        # Answered: it must have been answered on the VINTAGE axis.
+        assert any(g in ("seasoning_segment", "seasoning_bucket", "vintage_year")
+                   for g in grouping if g), (
+            f"vintage question answered without a vintage grouping: {grouping!r}")
+    else:
+        # Refused: it must name the concept, not a field it reached for.
+        assert "how long the loans have been on the book" in text
 
 
 @pytest.mark.parametrize("question", [
@@ -239,15 +256,27 @@ def test_the_right_grouping_does_satisfy_it(semantics, columns):
 
 def test_an_unavailable_cohort_concept_is_named_not_substituted(semantics,
                                                                 columns):
-    """Vintage is not on this tape. The facet reports the concept and the
+    """A concept whose fields the book does not carry is named, not substituted.
+
+    Since P1J-1 this tape DOES carry vintage, so the unavailable case is proven
+    with a concept it genuinely lacks: the facet must report the concept and the
     fields it would need, rather than being marked applied by a split that
-    happens to exist."""
+    happens to exist.
+    """
     reconciled = er.reconcile_facets(
-        [_facet("vintage", ("vintage_year", "vintage_bucket"))],
+        [_facet("borrower structure", ("borrower_type", "number_of_borrowers"))],
         spec=object(), query_result=_Result([]),
         semantics=semantics, available_columns=columns)
     assert reconciled[0].status == er.UNAVAILABLE
     assert "no governed dimension" in reconciled[0].reason
+
+
+def test_a_governed_vintage_dimension_is_now_available(semantics, columns):
+    """The other side of the same guard: P1J-1 materialises vintage on this
+    tape, so the vintage concept must NOT report itself unavailable."""
+    assert "vintage_year" in columns and "seasoning_segment" in columns
+    assert er._cohort_fields_available(
+        ("vintage_year", "seasoning_segment"), columns, semantics)
 
 
 def test_a_raw_origination_date_is_not_a_vintage_dimension(columns):

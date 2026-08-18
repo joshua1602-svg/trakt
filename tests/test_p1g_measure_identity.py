@@ -226,12 +226,20 @@ def test_an_unavailable_requested_measure_refuses_without_substituting(ask):
 # The two halves of P1G compose
 # =========================================================================== #
 def test_measure_identity_does_not_weaken_cohort_identity(ask):
-    """A vintage question stays refused; measure identity must not hand it an
-    escape route by accepting a balance comparison."""
+    """Measure identity must not hand a vintage question an escape route.
+
+    Before P1J-1 the only safe outcome was a refusal. P1J-1 governs seasoning, so
+    the question answers — and measure identity still applies: the executed
+    measure must be the one the question named (credit quality -> current LTV,
+    per the P1J-1 R1 ruling), never a balance substituted for it.
+    """
     envelope = ask("Is the credit quality of new origination better or worse "
                    "than the back book?")
-    assert envelope["ok"] is False
-    assert "how long the loans have been on the book" in answer(envelope).lower()
+    assert envelope["ok"] is True, envelope.get("error")
+    spec = envelope.get("spec") or {}
+    assert spec.get("metric") == "current_loan_to_value"
+    assert "seasoning_segment" in (
+        [spec.get("dimension")] + list(spec.get("dimensions") or []))
 
 
 def test_both_identities_are_subject_facets_that_refuse():
