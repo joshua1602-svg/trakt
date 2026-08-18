@@ -3330,8 +3330,18 @@ def reject_scope_role_filters(spec: MIQuerySpec, question: str,
 
     A filter that narrows the population can therefore never be removed here:
     an absent column narrows nothing, because the query would not have run.
+
+    One further role rejection is handled separately below: a predicate on the
+    GOVERNED SCOPE FIELD itself. ``source_portfolio_type`` IS a real column, so
+    the absent-field test can never reach it, yet it is not a row predicate
+    either — the portfolio scope is resolved by the governed lens, which filters
+    on the explicit ids the registry holds and never on the type string. Two
+    scopes for one question is one too many, and the redundant one is the model's.
     """
-    from .portfolio_lens import scope_phrase_spans  # local: avoids a cycle
+    from .portfolio_lens import (  # local: avoids a cycle
+        LENS_ACQUIRED, LENS_DIRECT, SOURCE_TYPE_FIELD, resolve_lens,
+        scope_phrase_spans,
+    )
 
     filters = getattr(spec, "filters", None)
     if not isinstance(filters, dict) or not filters:
@@ -3345,6 +3355,27 @@ def reject_scope_role_filters(spec: MIQuerySpec, question: str,
     if not scoped.strip():
         return []
     rejected: List[str] = []
+
+    # -- the governed scope field itself ---------------------------------- #
+    # "the direct book" names the scope. The governed lens resolves it to the
+    # registry's explicit portfolio ids; a model-emitted
+    # ``source_portfolio_type = "direct"`` alongside that is a second, coarser
+    # scope expressed as a row predicate, and it defeats the mechanism whose
+    # whole point is that a group answers as the sum of its members. It is
+    # refused only when it is EXACTLY REDUNDANT — the same question resolves to
+    # that same type lens — so the governed id filter that replaces it comes
+    # from the identical phrase and the rejection cannot change the intended
+    # population. The id field is never rejected here: it is the finer grain,
+    # so dropping it could widen, and nothing above may widen.
+    scope_lens = resolve_lens(question)
+    if (SOURCE_TYPE_FIELD in filters
+            and getattr(scope_lens, "name", None) in (LENS_DIRECT, LENS_ACQUIRED)
+            and str(filters[SOURCE_TYPE_FIELD]).strip().lower() == scope_lens.name):
+        filters.pop(SOURCE_TYPE_FIELD, None)
+        rejected.append(
+            f"{SOURCE_TYPE_FIELD} (scope resolved by governed lens "
+            f"'{scope_lens.name}', not a predicate)")
+
     for key in list(filters):
         canonical = (fields.get(key, {}) or {}).get("canonical_field", key)
         if key in available or canonical in available:

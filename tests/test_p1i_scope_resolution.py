@@ -447,6 +447,97 @@ def test_the_scope_role_filter_is_rejected_when_both_conditions_hold(governed_en
     assert spec.filters == {}
 
 
+def test_the_governed_scope_field_is_not_a_row_predicate(governed_env):
+    """"The direct book" names the scope. The governed lens resolves it to the
+    registry's explicit portfolio ids; a ``source_portfolio_type`` predicate
+    alongside that is a second, coarser scope expressed as a filter."""
+    from mi_agent_api.data_source import get_dataframe, semantics_path
+    from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent.mi_query_spec import MIQuerySpec
+    import mi_agent.llm_query_parser as parser
+
+    parser._SEMANTICS_FOR_SCOPE = load_mi_semantics(semantics_path())
+    columns = list(get_dataframe().columns)
+    for question, ptype in (("What is the total balance of the direct book?",
+                             "direct"),
+                            ("What is the total balance of the acquired book?",
+                             "acquired")):
+        spec = MIQuerySpec.from_dict({
+            "metric": BALANCE,
+            "filters": {"source_portfolio_type": ptype}})
+        rejected = parser.reject_scope_role_filters(spec, question, columns)
+        assert rejected and "source_portfolio_type" in rejected[0]
+        assert spec.filters == {}
+
+
+def test_the_governed_scope_id_is_never_rejected(governed_env):
+    """The id is the FINER grain, so dropping it could widen. It stays."""
+    from mi_agent_api.data_source import get_dataframe, semantics_path
+    from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent.mi_query_spec import MIQuerySpec
+    import mi_agent.llm_query_parser as parser
+
+    parser._SEMANTICS_FOR_SCOPE = load_mi_semantics(semantics_path())
+    spec = MIQuerySpec.from_dict({
+        "metric": BALANCE, "filters": {"source_portfolio_id": [DIRECT_ID]}})
+    rejected = parser.reject_scope_role_filters(
+        spec, "What is the total balance of the direct book?",
+        list(get_dataframe().columns))
+    assert rejected == []
+    assert spec.filters == {"source_portfolio_id": [DIRECT_ID]}
+
+
+def test_a_disagreeing_scope_predicate_is_not_silently_dropped(governed_env):
+    """Rejection is for EXACT redundancy only. A predicate that contradicts the
+    lens the same question resolves to is a conflict, not a duplicate, and must
+    not be resolved by quietly deleting one side of it."""
+    from mi_agent_api.data_source import get_dataframe, semantics_path
+    from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent.mi_query_spec import MIQuerySpec
+    import mi_agent.llm_query_parser as parser
+
+    parser._SEMANTICS_FOR_SCOPE = load_mi_semantics(semantics_path())
+    spec = MIQuerySpec.from_dict({
+        "metric": BALANCE, "filters": {"source_portfolio_type": "acquired"}})
+    rejected = parser.reject_scope_role_filters(
+        spec, "What is the total balance of the direct book?",
+        list(get_dataframe().columns))
+    assert rejected == []
+    assert spec.filters == {"source_portfolio_type": "acquired"}
+
+
+def test_a_scope_predicate_survives_without_a_governed_scope_phrase(governed_env):
+    """No scope phrase in the question means no governed scope to defer to, so
+    there is nothing that could replace the predicate. It stays."""
+    from mi_agent_api.data_source import get_dataframe, semantics_path
+    from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent.mi_query_spec import MIQuerySpec
+    import mi_agent.llm_query_parser as parser
+
+    parser._SEMANTICS_FOR_SCOPE = load_mi_semantics(semantics_path())
+    spec = MIQuerySpec.from_dict({
+        "metric": BALANCE, "filters": {"source_portfolio_type": "direct"}})
+    rejected = parser.reject_scope_role_filters(
+        spec, "What is the total balance for directly originated lending?",
+        list(get_dataframe().columns))
+    assert rejected == []
+    assert spec.filters == {"source_portfolio_type": "direct"}
+
+
+def test_rejecting_the_type_predicate_does_not_change_the_population(ask):
+    """The governed id filter that replaces it comes from the identical phrase,
+    so the answer must be byte-identical to the pre-rejection one."""
+    from mi_agent.portfolio_lens import SOURCE_TYPE_FIELD
+
+    for question, ids in (("What is the total balance of the direct book?",
+                           [DIRECT_ID]),
+                          ("What is the total balance of the acquired book?",
+                           [ACQUIRED_ID])):
+        envelope = ask(question)
+        assert SOURCE_TYPE_FIELD not in spec_filters(envelope)
+        assert coverage(envelope).get("portfolios_used") == ids
+
+
 # =========================================================================== #
 # Execution-scope evidence
 # =========================================================================== #
