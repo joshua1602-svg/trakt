@@ -366,7 +366,66 @@ _(pending — see §16)_
 
 ## 14. Genuine-LLM acceptance
 
-_(pending — see §16)_
+Five runs per case through the real model, `zero_cost_first` forced off in the
+harness so every question reaches the LLM. **Parser provenance is recorded per
+run**, and a deterministic fallback is never labelled an LLM result.
+
+| case | axis | correct | safe refusal | substitution | hard failure |
+|---|---|---|---|---|---|
+| back book | seasoning | 5 | 0 | 0 | 0 |
+| seasoned book | seasoning | 5 | 0 | 0 | 0 |
+| legacy book | seasoning | 5 | 0 | 0 | 0 |
+| front book | seasoning | 5 | 0 | 0 | 0 |
+| newly originated | seasoning | 5 | 0 | 0 | 0 |
+| B04 (vintage comparison) | seasoning | 5 | 0 | 0 | 0 |
+| B09 (vintages) | seasoning | 5 | 0 | 0 | 0 |
+| B28 (by vintage) | seasoning | 5 | 0 | 0 | 0 |
+| acquired book | provenance | 5 | 0 | 0 | 0 |
+| direct book | provenance | 5 | 0 | 0 | 0 |
+| A8 (provenance comparison) | provenance | 5 | 0 | 0 | 0 |
+| combined (seasoning + provenance) | both | 5 | 0 | 0 | 0 |
+
+```
+parser provenance: {'llm': 55, None: 5}      llm calls: 55
+SEMANTIC GATE: GREEN
+```
+
+**PROVENANCE_SUBSTITUTION = 0 · SEASONING_SUBSTITUTION = 0 · AXIS_DROPPED = 0 ·
+HARD_FAILURE = 0.** The five `None`-provenance runs are the routed provenance
+comparison (A8), which answers through `portfolio_risk_comparison` and bypasses
+the parser by design — not a fallback.
+
+### What the LLM run found that the deterministic bank did not
+
+Three real defects, all fixed, all now covered by regressions:
+
+1. **A dropped seasoning population degraded to a "partial".** "The average LTV
+   of the back book in the direct book" returned a **count of the whole direct
+   book** — 7,126 loans — marked `ok`, with the lost population mentioned only as
+   a not-applied breakdown. Seasoning is now a **subject** facet: it refuses.
+2. **A population honoured as a filter read as LOST**, because the reconciler only
+   looked at group keys. The correct answer was being disclosed as a partial.
+3. **An unhandled crash.** The model expressed "newly originated" as
+   `origination_date >= "2024-01-01"`; the executor forced it through `float()`
+   and raised `ValueError`, surfacing as *"The MI Agent could not complete this
+   query."* Dates are now compared as dates, and a value that is neither numeric
+   nor a date fails in a controlled way.
+
+Two honest notes on the measurement itself:
+
+* An intermediate re-run reported **GREEN with `llm calls: 0`** — the key had run
+  out of credit and every question silently fell back to the deterministic
+  parser. That green was meaningless and was **discarded, not reported**. It is
+  why parser provenance is recorded per run rather than assumed.
+* My first scorer counted the crash above as a *safe refusal* because `ok` was
+  `False`. A crash and a refusal are not the same outcome; the scorer now
+  separates them, which is what turned that case red and got it fixed.
+* One scorer correction was made after seeing results: a **routed** provenance
+  comparison carries no spec filter or dimension, so the original check could not
+  see the axis and marked A8 `NO_AXIS`. That was a measurement bug — A8's answer
+  ("Direct has higher observed Current Loan To Value than Acquired") is
+  independently correct — and fixing the scorer is not the same as relaxing the
+  standard. It is recorded here so the change is visible rather than silent.
 
 ---
 

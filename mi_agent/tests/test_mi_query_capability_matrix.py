@@ -80,13 +80,29 @@ def test_measure_vocabulary_is_not_read_as_a_portfolio_scope(question):
     ("originated loans, organic book", pl.LENS_DIRECT),
     ("show our own book", pl.LENS_DIRECT),
     ("balance for the acquired book", pl.LENS_ACQUIRED),
-    ("show the back book", pl.LENS_ACQUIRED),
     ("balance across all portfolios", pl.LENS_TOTAL),
 ])
 def test_portfolio_qualified_phrases_still_resolve(question, expected):
     """Narrowing the keyword list must not cost genuine scope recognition."""
     assert pl.resolve_lens(question).name == expected
     assert pl.mentions_portfolio(question)
+
+
+@pytest.mark.parametrize("question", [
+    "show the back book",
+    "show the legacy book",
+    "balance for the seasoned book",
+    "show newly originated loans",
+])
+def test_a_seasoning_phrase_is_not_a_portfolio_scope(question):
+    """P1J-1 (ruling R2a): front/back is the VINTAGE axis and direct/acquired is
+    PROVENANCE. They are independent — a directly-originated loan written five
+    years ago is DIRECT and BACK BOOK — so "the back book" must not resolve to
+    the acquired lens. This case previously asserted the opposite, which is the
+    conflation itself: it silently excluded every seasoned direct loan and
+    included every recent acquired one. Seasoning resolves through
+    mi_agent.seasoning; see tests/test_p1j1_vintage_seasoning.py."""
+    assert pl.resolve_lens(question).name == pl.LENS_TOTAL
 
 
 def test_an_exact_cohort_id_always_wins(semantics):

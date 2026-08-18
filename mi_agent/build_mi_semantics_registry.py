@@ -781,7 +781,10 @@ CURATION: Dict[str, dict] = {
         "business_description": "Governed seasoning band (months on book at the "
                                 "reporting date), e.g. 0-12m / 13-24m / 25-60m / "
                                 "60m+.",
-        "synonyms": ["seasoning bucket", "seasoning band", "seasoning",
+        # NOTE: bare "seasoning" is deliberately absent — months_on_book already
+        # owns it, and a synonym owned by two fields makes resolution
+        # order-dependent (asserted by test_no_synonym_maps_to_two_fields).
+        "synonyms": ["seasoning bucket", "seasoning band",
                      "months on book band", "time on book band",
                      "seasoning cohort"],
         "overrides": dict(
