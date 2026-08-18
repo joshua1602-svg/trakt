@@ -549,6 +549,12 @@ fix is confined to aggregate-contribution semantics.
 | --- | --- |
 | `mi_agent/tests/test_p1d_aggregate_contribution.py` | 31 passed — the calculation against its definition, intent distinctness (8 positive / 6 negative phrasings), the P0 refusal, the chart title, the LLM-spec case |
 | `tests/test_p1d_aggregate_contribution_e2e.py` | 16 passed — B11 and 5 paraphrases end to end, every figure reconciled to pandas from the loan book |
+| **Full repository suite** | **8,252 passed, 30 skipped, 20 xfailed, 0 failed** |
+
+One existing test failed and was updated rather than worked around:
+`test_catalogue_exposes_real_semantic_layer` enumerates every aggregation the published
+catalogue exposes, precisely so a new one is a deliberate addition. `contribution` was added
+to that list with a note on what it is.
 
 The e2e truth fixture restates the executor's own rules — drop rows with no value or no
 weight; bucket a missing grouping value rather than drop it — so a change to either shows up
