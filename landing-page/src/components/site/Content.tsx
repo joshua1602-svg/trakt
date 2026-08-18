@@ -145,7 +145,7 @@ export function ForwardControls() {
             poster="/controls-demo-poster.png"
             webmSrc="/controls-demo.webm"
             mp4Src="/controls-demo.mp4"
-            description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
+            description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the base forecast and the downside forecast, ending on a projected breach horizon."
             caption="From documented requirement to live monitoring."
             fallback={<ControlPreview />}
             plateId="controls"
@@ -166,8 +166,8 @@ export function ForwardControls() {
  */
 const CONTROL_STATES = [
   { label: "Funded book", value: 24.1, status: "Pass", tone: "mint" },
-  { label: "Expected forecast", value: 28.7, status: "Warning", tone: "amber" },
-  { label: "Including full pipeline", value: 31.4, status: "Projected breach", tone: "rose" },
+  { label: "Base forecast", value: 28.7, status: "Warning", tone: "amber" },
+  { label: "Downside forecast", value: 31.4, status: "Projected breach", tone: "rose" },
 ] as const;
 
 const CONTROL_SCALE = 36;
@@ -195,7 +195,7 @@ export function ControlPreview() {
       data-state-colour="control-preview"
       className="rounded-2xl border border-line bg-navy-900/80 p-4 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)] sm:p-5"
       role="img"
-      aria-label="Preview of a concentration control evaluated against the funded book, the expected forecast and the full pipeline"
+      aria-label="Preview of a concentration control evaluated against the funded book, the base forecast and the downside forecast"
     >
       <p className="border-b border-line pb-3 text-small font-medium text-ink-300">
         Concentration controls

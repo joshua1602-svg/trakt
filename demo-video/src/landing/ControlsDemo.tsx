@@ -12,7 +12,7 @@
  *   8.0 – 11.0 s   Governed review: identified → reviewed → activated. A
  *                  human step, visible — nothing activates itself.
  *  11.0 – 17.0 s   The activated control monitored three ways: funded book,
- *                  expected forecast, full pipeline — then the projected
+ *                  base forecast, downside forecast — then the projected
  *                  breach horizon.
  *  16.5 – 18.0 s   The key line holds: know where the portfolio stands today —
  *                  and what it's moving toward. Loops.
@@ -424,9 +424,9 @@ const LIMIT = 30;
 
 const STATES = [
   { label: "Funded book", value: 24.1, status: "Pass", color: T.color.mint, at: 14 },
-  { label: "Expected forecast", value: 28.7, status: "Warning", color: T.color.amber, at: 52 },
+  { label: "Base forecast", value: 28.7, status: "Warning", color: T.color.amber, at: 52 },
   {
-    label: "Including full pipeline",
+    label: "Downside forecast",
     value: 31.4,
     status: "Projected breach",
     color: T.color.rose,
