@@ -2828,27 +2828,35 @@ def compact_catalogue(semantics: dict, mode: str = "core",
                       extra_keys: Iterable[str] = ()) -> str:
     """Compact, line-per-field catalogue. Materially smaller than the full
     JSON catalogue. Columns: key | business_name | role | format |
-    allowed_aggs | chart_roles | synonyms.
+    allowed_aggs | chart_roles | synonyms(<=3).
 
-    EVERY governed synonym is listed. The list used to be truncated to the
-    first three, which is how "total exposure" came to be parsed as exposure at
-    default: the registry declares ``exposure`` a synonym of
-    ``current_outstanding_balance``, but it sits fifth in that field's list and
-    so never reached the model, while ``exposure at default`` sat third on the
-    EAD line and did. The model was not misreading the question — it was never
-    shown the word that settles it.
+    The three-synonym cut is arbitrary and it does hide governed vocabulary:
+    ``exposure`` is the fifth synonym of ``current_outstanding_balance`` and
+    never reaches the model, which is why "total exposure" was parsed as
+    exposure at default — ``exposure at default`` sits third on the EAD line
+    and did reach it. The instruction in rule 11 settles that pair directly
+    instead.
 
-    A synonym list is curated governed vocabulary, and which three of it
-    survived was an accident of list order. Restoring the rest costs ~15% on a
-    prefix that is cached across requests, and removes a whole class of
-    disagreement between the two parsers, which read the same registry.
+    Lifting the cut entirely was tried and REVERTED. It restores 99 synonyms
+    across 51 fields, and one of them — ``origination type`` on
+    ``source_portfolio_type`` — let "the credit quality of new ORIGINATION
+    versus the BACK BOOK" be answered grouped by sourcing channel. Direct
+    versus acquired is not new lending versus seasoned lending; the correct
+    concept is vintage, which this book does not carry, so the correct outcome
+    was the refusal it used to give. The numbers were right for a question
+    nobody asked.
+
+    That is a real defect in this truncation AND a real gap in the guard that
+    let the substitute pass, and both want a phase of their own. Widening what
+    the model can see is only safe once a wrong cohort cannot be presented as
+    the right one.
     """
     extra = set(extra_keys)
     lines = ["field|business_name|role|format|aggs|chart_roles|synonyms"]
     for key, entry in _fields(semantics).items():
         if mode != "full" and entry.get("mi_tier") != "core" and key not in extra:
             continue
-        syn = ",".join(entry.get("synonyms", []) or [])
+        syn = ",".join((entry.get("synonyms", []) or [])[:3])
         lines.append("|".join([
             key,
             str(entry.get("business_name", "")),
@@ -2912,12 +2920,14 @@ _SYSTEM_INSTRUCTIONS = (
     '\"filters\": {\"collateral_geography\": \"London\"}}\n'
     "    For a SINGLE measure keep using 'metric' + 'aggregation' as before.\n"
     "11. EXPOSURE. Bare 'exposure' language — exposure, total exposure, current "
-    "exposure, portfolio/book exposure, outstanding exposure — means the "
-    "catalogue's governed CURRENT exposure measure (the balance field that "
-    "lists 'exposure' among its synonyms). Use 'exposure_at_default' ONLY when "
-    "the question explicitly names EAD or exposure at default. Never substitute "
-    "one for the other: they are different measures, and one of them may be "
-    "absent from the dataset.\n"
+    "exposure, portfolio exposure, book exposure, outstanding exposure — means "
+    "the catalogue's CURRENT OUTSTANDING BALANCE measure. It is the same "
+    "concept as balance in an MI book, and it is the field to use whenever the "
+    "question says exposure without naming another exposure measure. Use "
+    "'exposure_at_default' ONLY when the question explicitly says EAD or "
+    "exposure at default. The two are different measures and one may be absent "
+    "from the dataset, so never substitute either for the other: if the one "
+    "asked for is missing, return it and let validation refuse.\n"
 )
 
 

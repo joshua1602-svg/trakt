@@ -134,42 +134,39 @@ def test_the_registry_is_what_makes_exposure_mean_balance(semantics):
     assert "exposure at default" in ead_synonyms and "ead" in ead_synonyms
 
 
-def test_the_catalogue_shows_the_model_every_governed_synonym(semantics):
-    """The root cause of the parser disagreement.
+def test_the_catalogue_still_hides_the_synonym_that_would_settle_it(semantics):
+    """The root cause, pinned as the thing the instruction has to compensate for.
 
-    The catalogue used to list only the first three synonyms per field.
-    ``exposure`` is fifth on the balance field, so it never reached the model,
-    while ``exposure at default`` is third on the EAD field and did — and the
-    model resolved "total exposure" to the only exposure word it could see.
+    The catalogue lists three synonyms per field. ``exposure`` is FIFTH on the
+    balance field so it never reaches the model, while ``exposure at default``
+    is third on the EAD line and does — which is why "total exposure" was
+    parsed as EAD. The model was not misreading the question; it was never
+    shown the word that settles it.
+
+    Lifting the cut was tried and reverted (see ``compact_catalogue``): it
+    restores 99 synonyms across 51 fields, one of which let a vintage question
+    be answered by sourcing channel. Until that is guarded, rule 11 carries the
+    exposure convention instead — so this test asserts the gap is still there
+    and is deliberately being covered elsewhere, rather than silently closed.
     """
     from mi_agent.llm_query_parser import compact_catalogue
 
     lines = {l.split("|")[0]: l for l in
              compact_catalogue(semantics, mode="core").splitlines()}
-    assert "exposure" in lines[BALANCE].split("|")[-1].split(",")
+    assert "exposure" not in lines[BALANCE].split("|")[-1].split(",")
     assert "exposure at default" in lines[EAD].split("|")[-1].split(",")
 
 
-def test_no_governed_synonym_is_hidden_from_the_model(semantics):
-    """The general form: whatever the registry curates, the model sees."""
-    from mi_agent.llm_query_parser import compact_catalogue, _fields
-
-    shown = {l.split("|")[0]: l.split("|")[-1].split(",")
-             for l in compact_catalogue(semantics, mode="core").splitlines()[1:]}
-    for key, entry in _fields(semantics).items():
-        if key not in shown:
-            continue
-        missing = [s for s in (entry.get("synonyms") or []) if s not in shown[key]]
-        assert not missing, f"{key}: synonyms hidden from the model: {missing}"
-
-
-def test_the_prompt_states_the_exposure_convention():
-    """The catalogue makes ``exposure`` visible; the instruction settles which
-    of the two exposure measures a bare mention means."""
+def test_the_prompt_carries_the_exposure_convention_on_its_own(semantics):
+    """Because the catalogue cannot, the instruction must be self-sufficient:
+    it has to name the concept rather than point at a synonym the model cannot
+    see."""
     from mi_agent.llm_query_parser import _SYSTEM_INSTRUCTIONS
 
     assert "EXPOSURE" in _SYSTEM_INSTRUCTIONS
+    assert "CURRENT OUTSTANDING BALANCE" in _SYSTEM_INSTRUCTIONS
     assert "exposure_at_default" in _SYSTEM_INSTRUCTIONS
+    assert "never substitute either for the other" in _SYSTEM_INSTRUCTIONS
 
 
 @pytest.mark.parametrize("question", [
