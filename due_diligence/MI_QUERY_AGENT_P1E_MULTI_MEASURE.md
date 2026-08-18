@@ -294,6 +294,48 @@ the count read "7,126.0". Counts now render as whole numbers, keyed off the
 **aggregation** rather than the unit — the average of an integer-unit field (a
 term in months) is legitimately fractional and keeps its decimals.
 
+### 6.7 A proportion answered as an amount
+
+Found by the genuine-LLM acceptance pass (§9a) — invisible to every
+deterministic run and to the whole test suite.
+
+> **What proportion of the book is eligible for a 75% LTV securitisation?**
+> → `Balance: £1.96bn · Loans: 11,007`
+
+Two absolute figures, no proportion anywhere, and P0's verdict was `ok`. The
+reader is left to divide one number by a denominator the answer never states.
+This is an **incorrect successful answer** — the class the launch gate forbids.
+
+P0 carried facets for geographic scope, thresholds, ranking, grouping,
+contribution, relationships and measure sets. It had **none for a share**.
+Before the measure set existed the substitution detector caught this question by
+accident — it noticed the answer reported balance where the question said LTV. A
+measure set of balance and loan count satisfies that check, so the accident
+stopped happening and nothing was left watching.
+
+`KIND_SHARE` is detected with the parser's own `_SHARE_RE`, applied only when
+the governed share aggregation actually ran, and is a NUMBER facet — so a lost
+one refuses.
+
+Two narrowings, both from questions it wrongly caught:
+
+* **A ranked share is not a share request.** "Which region increased its share
+  of the portfolio the most" asks *which one*; the share is the metric being
+  ranked and the ranking facet already guards it. The facet is raised only when
+  no ranking was detected. (This was breaking P1C.)
+* **A routed capability may satisfy a share by stating one.** The concentration
+  answer reads "£83.4m (**4.2% of the book**)" — a proportion, from a capability
+  that never builds a spec. Accepted on *evidence*: its answer must actually
+  contain a percentage. Accepting by route name alone would let any listing
+  silently discharge a share request.
+
+**One baseline verdict changes, and it is a deliberate breadth loss.** B21 —
+"What is the largest single-loan exposure **and what share of the book is it**?"
+— gave the exposure and never mentioned the share. It has no dimension to rank,
+so no ranking facet covers it. That was a silent omission and now refuses,
+taking the deterministic bank from 11/40 to 10/40. Flagged for ratification
+rather than absorbed quietly.
+
 ---
 
 ## 7. Negative and safety tests — 39 assertions
@@ -385,6 +427,54 @@ it is the same defect class as §6.3 and the one-word fix was already in hand.
 
 ---
 
+## 9a. The genuine-LLM acceptance pass
+
+Run against the real Anthropic API with an operator-supplied key. Two
+configurations, 71 questions each — the five CFO questions, the 26-question
+P1E bank (imported from the test module so the two cannot drift), and the
+untouched 40-question bank.
+
+| Configuration | What it proves | Result | LLM calls | Cost |
+|---|---|---|---|---|
+| **production** — `MI_AGENT_LLM_PARSER=on`, free path intact | what real users get | 40/71 answered | 43 | $0.23 |
+| **forced** — every question sent to the model | the P1E contract on the LLM path, unmasked by the free path | 40/71 answered | 53 | $0.28 |
+
+Provenance is read per question from `metadata.llm.calls` and
+`parserProvenance`, not asserted.
+
+**Correction to an earlier claim in this phase.** The first "forced" run forced
+nothing: `MI_AGENT_ZERO_COST_FIRST` never reaches the governed entrypoint,
+because `mi_service` calls `run_mi_agent_query` without the kwarg and it keeps
+its default. Identical call counts in both runs is what gave it away. Forcing is
+now done in the harness by wrapping `parse_with_repair` — no production default
+was bent to suit a test.
+
+Forced results by suite:
+
+* **CFO 5/5.** Four went to the model; CFO-02 makes no call because portfolio
+  comparison is a specialist route resolved before parsing.
+* **P1E bank 25/26**, all 26 genuinely through the model. The one failure is
+  P1E-02 (§11.3) — a safe refusal, no wrong number.
+* **40-question bank 10/40**, identical to the deterministic path. Twenty-one
+  questions never reach the model at all: they are answered by specialist
+  routes (period movement, concentration, risk limits, comparison, forecast).
+
+**What the pass found.** One incorrect successful answer — B15, §6.7 — which
+was invisible to every deterministic run and to the entire test suite. That is
+the whole return on running it.
+
+Against the immutable **LLM** baseline the bank went 9 → 11 answered before the
+share fix and 9 → 10 after it, so P1E introduced no LLM-path regression.
+
+### API key handling
+
+Environment-only, in-process. Never written to disk, a config file or a commit.
+The harness asserts the key and any `sk-ant-` material is absent from its own
+JSON output before writing it, and a repository-wide scan for `sk-ant-` across
+tracked and untracked files returns nothing.
+
+---
+
 ## 10. Two tests reworked, none deleted
 
 Two tests pinned the pre-P1E behaviour that a multi-measure question is
@@ -422,16 +512,23 @@ the guarantee rather than the old mechanism:
    figure, so the safety outcome is identical — but the second message is less
    useful to a reader. Caused by validation ordering, not by measure counting.
 
-3. **The genuine-LLM path was not exercised.** No `ANTHROPIC_API_KEY` was
-   supplied to this session, so every result above is the deterministic parser
-   (`parserMode: "deterministic"`, asserted in the bank). The LLM-side contract
-   *is* tested where it can be without a key — the prompt carries the `measures`
-   array and both prohibitions; `carry_measure_set` and
-   `reconcile_measure_aggregations` are asserted on constructed specs standing
-   in for model output, including the cases where they must decline to act.
-   That is the contract, not the model's behaviour against it. **A genuine-LLM
-   re-run of the five CFO questions, the P1E bank and the 40-question bank
-   remains outstanding and should be completed before launch.**
+3. **"Total exposure" reads as EAD on the LLM path.** P1E-02 — "Show me
+   total exposure, loan count, weighted-average loan to value and
+   weighted-average interest rate" — the model resolves *total exposure* to
+   `exposure_at_default`, which this book does not carry, so the question
+   refuses naming the field. The deterministic parser resolves the same phrase
+   to `current_outstanding_balance`, which the registry itself declares the
+   "primary current-exposure metric".
+
+   Not a catalogue defect: the model is given the available column list, and
+   prompt rule 4 already tells it to prefer fields whose column is present. It
+   over-read the generic word "exposure" as an explicit request for EAD. The
+   catalogue is deliberately unfiltered — it is the stable, cacheable system
+   prefix, and filtering it per dataset would defeat prompt caching — so the
+   fix belongs in the instruction wording, which changes **every** LLM parse
+   and needs its own re-baseline of both banks. Out of scope here, recommended
+   next, and safe meanwhile: the outcome is a refusal that names the field, not
+   a number.
 
 4. ~~A loan count is not comparable across books~~ — **resolved**, §6.6.
 
