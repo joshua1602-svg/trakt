@@ -139,13 +139,39 @@ def _portfolio_ids(df: Any, scope_mod: Any) -> Tuple[str, ...]:
                          if r.get(FIELD_PORTFOLIO_ID)}))
 
 
+def _registry_for(snapshots: Sequence[SnapshotFrame],
+                  client_id: Optional[str]) -> Any:
+    """The governed portfolio registry for the closing snapshot, or None.
+
+    Read from the CLOSING frame because that is the book the analysis reports
+    on; a portfolio onboarded since the opening date is registered there.
+    """
+    if not snapshots:
+        return None
+    try:
+        from mi_agent.portfolio_scope import registry_for_frame
+
+        return registry_for_frame(snapshots[-1].frame, client_id=client_id)
+    except Exception:  # noqa: BLE001 - metadata must never break an answer
+        logger.exception("portfolio registry unavailable for client %r", client_id)
+        return None
+
+
 def scope_ref_from_lens(lens: Any, *, tenant_id: Optional[str] = None,
-                        asset_classes: Sequence[str] = ()) -> PortfolioScopeRef:
+                        asset_classes: Sequence[str] = (),
+                        registry: Any = None) -> PortfolioScopeRef:
     """The workflow's scope reference for a RESOLVED portfolio lens.
 
     A resolved lens carries the registry's explicit portfolio-id list in its
     filters (``chat_routing._resolve_lens``), never a type string, so the scope
     the workflow records is exactly the scope the frames were narrowed to.
+
+    The asset classes come from the GOVERNED PORTFOLIO REGISTRY for those ids —
+    the single source of truth onboarding writes. An explicit ``asset_classes``
+    argument still wins, so a caller that knows its book can state it, but the
+    registry means no caller HAS to: previously this argument had no production
+    caller at all, so every analysis ran with an unknown asset class and only
+    cross-asset semantics were ever admitted.
     """
     from mi_agent import portfolio_lens as lens_mod
 
@@ -158,11 +184,19 @@ def scope_ref_from_lens(lens: Any, *, tenant_id: Optional[str] = None,
         context = lens_mod.context_id(lens) if lens is not None else None
     except Exception:  # noqa: BLE001 - a lens fault must not fail the analysis
         context = None
+    resolved = resolve_asset_classes(asset_classes)
+    if not resolved and registry is not None:
+        try:
+            resolved = resolve_asset_classes(
+                registry.asset_classes(tuple(str(i) for i in ids) or None))
+        except Exception:  # noqa: BLE001 - metadata must never break an answer
+            logger.exception("asset-class resolution failed for scope %r", context)
+            resolved = ()
     return PortfolioScopeRef(
         tenant_id=tenant_id, context_id=context,
         label=getattr(lens, "label", None),
         portfolio_ids=tuple(str(i) for i in ids),
-        asset_classes=resolve_asset_classes(asset_classes))
+        asset_classes=resolved)
 
 
 #: BSR asset-applicability values, so a caller-supplied class is validated
@@ -219,7 +253,8 @@ def analyse_period_change(*, client_id: str, output_root: Optional[str],
     snapshots = build_snapshots(output_root, client_id, to_run_id=to_run_id,
                                 lens=scope)
     scope_ref = scope_ref_from_lens(scope, tenant_id=tenant_id,
-                                    asset_classes=asset_classes)
+                                    asset_classes=asset_classes,
+                                    registry=_registry_for(snapshots, client_id))
     request = PeriodChangeRequest(
         question=question, mode=mode or MODE_PORTFOLIO_OVERVIEW,
         period_request=period_request or PeriodRequest(),
@@ -268,7 +303,8 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
         question, source_lens)
     snapshots = build_snapshots(output_root, client_id, to_run_id=run_id,
                                 lens=resolved_lens)
-    scope_ref = scope_ref_from_lens(resolved_lens)
+    scope_ref = scope_ref_from_lens(
+        resolved_lens, registry=_registry_for(snapshots, client_id))
 
     # The bridge is computed for every broad question, and for a narrow one only
     # when the question actually asked what drove the movement. Reconciling the

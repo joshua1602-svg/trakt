@@ -304,7 +304,19 @@ def resolve_common_reporting_date(frame_a: pd.DataFrame, frame_b: pd.DataFrame,
     return common, None, warnings
 
 
-def _asset_classes(frame: pd.DataFrame) -> Tuple[str, ...]:
+def _asset_classes(frame: pd.DataFrame,
+                   scope: Optional[PortfolioScope] = None) -> Tuple[str, ...]:
+    """The governed asset classes of a side of the comparison.
+
+    GOVERNED PORTFOLIO METADATA FIRST. The asset class is a fact about the book,
+    established once at onboarding and carried on the portfolio registry; the
+    tape may or may not stamp a column of the same name. Reading only the column
+    is what left this workflow with an unknown asset class on every deployment
+    whose extract does not carry one — which silently excluded every
+    asset-specific metric from every comparison.
+    """
+    if scope is not None and getattr(scope, "asset_classes", ()):
+        return tuple(str(a).lower() for a in scope.asset_classes)
     if ASSET_CLASS_FIELD not in frame.columns:
         return ()
     return tuple(v.lower() for v in _distinct(frame[ASSET_CLASS_FIELD]))
@@ -514,8 +526,8 @@ def run_portfolio_risk_comparison(
                         "single-currency book assumption applies")
 
     # ---- asset class ------------------------------------------------------ #
-    classes_a = _asset_classes(frame_a)
-    classes_b = _asset_classes(frame_b)
+    classes_a = _asset_classes(frame_a, scope_a)
+    classes_b = _asset_classes(frame_b, scope_b)
     shared_asset = _shared_asset_class(classes_a, classes_b)
     if classes_a and classes_b and set(classes_a) != set(classes_b):
         limitations.append(
@@ -525,8 +537,9 @@ def run_portfolio_risk_comparison(
             "compared")
     elif not classes_a and not classes_b:
         limitations.append(
-            "the tape declares no asset_class column; asset-specific metrics "
-            "are excluded and only cross-asset metrics are compared")
+            "neither book declares a governed asset class (no portfolio "
+            "metadata and no asset_class column); asset-specific metrics are "
+            "excluded and only cross-asset metrics are compared")
 
     # ---- field selection: registry-governed ------------------------------- #
     columns = tuple(df.columns)

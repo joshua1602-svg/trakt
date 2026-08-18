@@ -111,9 +111,13 @@ def _run(frame, question, metric, bsr):
 # Root cause, pinned so it cannot be misdiagnosed again
 # =========================================================================== #
 def test_borrower_age_is_governed_for_comparison_but_asset_specific(bsr):
-    """The metric is NOT missing from the registry and NOT untagged. It is
-    declined by exactly one governed rule: it is an equity-release-specific
-    field and no shared asset class is provable on this book."""
+    """The rule that used to block B25, still intact.
+
+    Borrower age is equity-release-specific. It is compared only when the books
+    declare that asset class — which they now do, because onboarding publishes
+    it to the governed portfolio registry (see
+    ``tests/test_asset_class_lifecycle.py``). The rule was never the defect and
+    is unchanged; what changed is that the asset class now reaches it."""
     entry = bsr.get(AGE)
     assert entry is not None
     assert entry.tagged(TAG_PORTFOLIO_COMPARISON)
@@ -145,18 +149,26 @@ def test_the_rule_that_blocks_age_protects_many_other_fields(bsr):
 # =========================================================================== #
 # 1. The requested-metric invariant
 # =========================================================================== #
+#: An SME-only governed measure. On an equity-release book it is correctly not
+#: comparable, which makes it the honest way to exercise the invariant now that
+#: borrower age IS comparable here.
+OTHER_ASSET_METRIC = "enterprise_value"
+
+
 def test_a_requested_metric_that_is_not_compared_is_reported_as_such(bsr, book):
     """The outcome of a requested metric is always stated, never dropped
-    silently into an empty comparison list."""
-    result = _run(book, "How does the direct book compare with the acquired "
-                        "book on borrower age?", AGE, bsr)
+    silently into an empty comparison list.
+
+    Exercised with an SME measure on an equity-release book: the governed rule
+    declines it, and that decline must reach the caller."""
+    result = _run(book, "How do the two books compare on enterprise value?",
+                  OTHER_ASSET_METRIC, bsr)
     assert result["available"] is True
     requested = result["requested_metric"]
-    assert requested["field"] == AGE
+    assert requested["field"] == OTHER_ASSET_METRIC
     assert requested["compared"] is False
-    assert "asset-specific" in requested["reason"]
     assert result["metric_comparisons"] == []
-    assert any(AGE in note and "not compared" in note
+    assert any(OTHER_ASSET_METRIC in note and "not compared" in note
                for note in result["limitations"])
 
 
@@ -260,24 +272,69 @@ def test_an_uncompared_metric_never_produces_a_negative_conclusion(ask, question
         assert phrase not in answer, f"negative conclusion leaked: {answer}"
 
 
-def test_b25_refuses_and_names_the_measure_it_could_not_compare(ask):
+def test_b25_now_compares_borrower_age(ask, book):
+    """B25, answered. The truth reconciliation lives in
+    ``tests/test_asset_class_lifecycle.py``; this pins the declared evidence."""
     envelope = ask(AGE_PHRASINGS[0])
+    assert envelope.get("ok") is True, envelope.get("error")
+    declared = (envelope.get("metadata") or {}).get("portfolioComparison") or {}
+    assert declared.get("requestedMetric") == AGE
+    assert declared.get("requestedMetricCompared") is True
+    assert declared.get("measuresCompared") == [AGE]
+    assert "Youngest Borrower Age" in (
+        (envelope.get("executionSummary") or {}).get("receipt") or "")
+
+
+def test_a_metric_outside_the_books_asset_class_is_refused_and_named(book):
+    """The refusal path, still live.
+
+    Built by declaring a DIFFERENT governed asset class for the books, which is
+    the realistic shape: an equity-release measure asked of an SME book. The
+    route must name the measure, substitute nothing, and draw no negative
+    conclusion.
+    """
+    import logging
+    import os
+
+    import yaml
+    from trakt_core.context import ExecutionContext
+    from demo_platform import config as cfg
+
+    registry_file = Path(os.environ["MI_AGENT_SCRATCH"]) / "sme_registry.yaml"
+    registry_file.parent.mkdir(parents=True, exist_ok=True)
+    registry_file.write_text(yaml.safe_dump({"portfolios": [
+        {"source_portfolio_id": "alp_origination", "asset_class": "sme"},
+        {"source_portfolio_id": "alp_acquired", "asset_class": "sme"}]}))
+
+    before = dict(os.environ)
+    os.environ["TRAKT_PORTFOLIO_REGISTRY"] = str(registry_file)
+    logging.disable(logging.WARNING)
+    try:
+        from mi_agent_api import data_source
+        from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+
+        data_source.reset_cache()
+        envelope = execute_governed_mi_query(
+            MiQueryRequest(question=AGE_PHRASINGS[0]),
+            ExecutionContext.for_internal(cfg.CLIENT_ID)).result
+    finally:
+        logging.disable(logging.NOTSET)
+        os.environ.clear()
+        os.environ.update(before)
+        from mi_agent_api import data_source as _ds
+        _ds.reset_cache()
+
     assert envelope.get("ok") is False
-    answer = envelope["answer"]
-    assert "borrower age" in answer.lower()
-    assert "asset" in answer.lower()          # the reason is given
+    answer = envelope["answer"].lower()
+    assert "borrower age" in answer
     assert not (envelope.get("artifacts") or [])
+    for phrase in NEGATIVE_CONCLUSIONS:
+        assert phrase not in answer
+    # …and no other measure was offered in its place.
+    assert "loan to value" not in answer and "ltv" not in answer
     declared = (envelope.get("metadata") or {}).get("portfolioComparison") or {}
     assert declared.get("requestedMetricCompared") is False
     assert declared.get("measuresCompared") == []
-
-
-def test_the_refusal_does_not_substitute_a_different_measure(ask):
-    """The route compares LTV happily. It must not answer the age question with
-    it."""
-    envelope = ask(AGE_PHRASINGS[0])
-    assert "loan to value" not in (envelope.get("answer") or "").lower()
-    assert "ltv" not in (envelope.get("answer") or "").lower()
 
 
 def test_a_supported_comparison_still_answers_and_names_its_measure(ask, book):

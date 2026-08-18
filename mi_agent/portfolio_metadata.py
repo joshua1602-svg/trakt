@@ -45,7 +45,44 @@ _ALLOWED_KEYS = frozenset({
     "source_portfolio_label", "label", "originates", "pipeline_data_available",
     "forecast_treatment", "runoff_profile_id", "runoff_profile", "runoff_curve",
     "monthly_retention", "reporting_dates",
+    # The governed ASSET CLASS, established once by onboarding. It is what lets
+    # MI compose the common semantic core plus this asset's own metrics and
+    # dimensions (mi_agent.business_semantics.applies_to_asset). Carried here
+    # rather than on the tape because it is a fact about the BOOK, not about any
+    # individual loan, and because onboarding — not the extract — decides it.
+    "asset_class",
 })
+
+#: Asset-class synonyms, mapped onto the Business Semantics Registry vocabulary.
+#:
+#: Onboarding's own inference (``engine.onboarding_agent.onboarding_context``)
+#: speaks a longer dialect — "equity_release_mortgage" — while the BSR, the
+#: stratification catalogue and ``config/asset`` speak the short form. Rather
+#: than teach every consumer both, the boundary normalises ONCE, here, on the
+#: way in. An unrecognised value passes through lowercased: this table resolves
+#: known synonyms, it does not restrict what a client may declare.
+_ASSET_CLASS_SYNONYMS = {
+    "equity_release_mortgage": "equity_release",
+    "lifetime_mortgage": "equity_release",
+    "erm": "equity_release",
+    "residential_mortgage_loan": "residential_mortgage",
+    "rmbs": "residential_mortgage",
+    "sme_loan": "sme",
+    "bridging": "bridge",
+    "bridging_finance": "bridge",
+    "bridge_loan": "bridge",
+    "equipment_finance": "equipment_leasing",
+    "asset_finance": "equipment_leasing",
+    "cre": "commercial_real_estate",
+}
+
+
+def normalise_asset_class(value: Any) -> Optional[str]:
+    """One governed asset-class vocabulary, resolved at the boundary."""
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not text:
+        return None
+    return _ASSET_CLASS_SYNONYMS.get(text, text)
 
 
 def registry_path() -> Optional[str]:
@@ -139,7 +176,14 @@ def load_portfolio_metadata(client_id: Optional[str] = None,
         pid = str(pid).strip() if pid is not None else ""
         if not pid:
             continue
-        out[pid.lower()] = {k: v for k, v in entry.items() if k in _ALLOWED_KEYS}
+        allowed = {k: v for k, v in entry.items() if k in _ALLOWED_KEYS}
+        if "asset_class" in allowed:
+            normalised = normalise_asset_class(allowed["asset_class"])
+            if normalised:
+                allowed["asset_class"] = normalised
+            else:
+                allowed.pop("asset_class")
+        out[pid.lower()] = allowed
     return out
 
 
