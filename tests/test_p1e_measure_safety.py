@@ -454,11 +454,24 @@ def test_the_loan_count_measure_is_declared_neutral(governed_env):
     difference in book size."""
     from mi_workflows import semantics as bsr_module
 
-    entry = bsr_module.load_business_semantics().get("loan_identifier")
+    entry = bsr_module.load_business_semantics().get("loan_count")
     assert entry is not None, "loan cardinality is not governed by the BSR"
     assert entry.default_aggregation == "count"
     assert entry.directionality == "neutral"
     assert entry.analytical_role == "measure"
+
+
+def test_the_loan_count_is_derived_so_no_identifier_enters_the_registry():
+    """The first attempt keyed the count on ``loan_identifier`` and counted
+    there. An identifier must never enter the Business Semantics Registry — it
+    is not an analytical field, and admitting one invites it to be ranked,
+    summed or published as evidence. Cardinality is a property of the
+    POPULATION, and declaring it as one is what keeps the identifier out."""
+    from mi_workflows import semantics as bsr_module
+
+    registry = bsr_module.load_business_semantics()
+    assert registry.get("loan_identifier") is None
+    assert registry.get("loan_count").derived is True
 
 
 def test_the_count_is_scoped_to_comparison_not_to_period_change(governed_env):
@@ -468,7 +481,7 @@ def test_the_count_is_scoped_to_comparison_not_to_period_change(governed_env):
     actually compares it."""
     from mi_workflows import semantics as bsr_module
 
-    entry = bsr_module.load_business_semantics().get("loan_identifier")
+    entry = bsr_module.load_business_semantics().get("loan_count")
     assert "portfolio_comparison" in entry.workflow_tags
     assert "period_change" not in entry.workflow_tags
 
@@ -564,3 +577,76 @@ def test_the_non_place_guard_lists_scope_words_not_real_regions(governed_env):
                get_dataframe()["collateral_geography"].dropna().unique()}
     shadowed = {w for r in regions for w in r.split() if w in _NON_PLACE_TERMS}
     assert not shadowed, f"the guard shadows real region words: {shadowed}"
+
+
+# =========================================================================== #
+# 12. A proportion is not an amount
+# =========================================================================== #
+def test_a_share_question_answered_with_absolute_figures_refuses(ask):
+    """Found by the genuine-LLM acceptance pass, not by reading the code.
+
+    "What proportion of the book is eligible for a 75% LTV securitisation?"
+    came back as ``Balance: £1.96bn · Loans: 11,007`` — two absolute figures
+    and no proportion anywhere in it. P0 carried facets for scope, thresholds,
+    ranking, grouping, contribution and measure sets, but none for a SHARE, so
+    the lost intent was invisible and the guard returned ``ok``.
+
+    A share needs two populations: the filtered numerator and the whole-book
+    denominator. The numerator alone answers a different question, and leaves
+    the reader to do arithmetic against a denominator the answer never states.
+    """
+    envelope = ask("What proportion of the book is eligible for a 75% LTV "
+                   "securitisation?")
+    assert envelope["ok"] is False
+    assert "proportion" in answer(envelope).lower()
+
+
+def test_a_governed_share_still_answers_and_states_its_denominator(ask):
+    """Scope control. The guard must catch the LOST share, not share questions.
+
+    The receipt names the basis and both populations, so the proportion is
+    auditable from the answer alone rather than implied.
+    """
+    envelope = ask("What proportion of the book is above 60% LTV?")
+    assert envelope["ok"] is True, envelope.get("error")
+    text = receipt(envelope)
+    assert "Share of" in text
+    assert "of 11,035" in text, "the whole-book denominator is not stated"
+
+
+def test_a_routed_capability_may_satisfy_a_share_by_stating_one(ask):
+    """The concentration route answers "how much of the book is concentrated in
+    the top 10 postcodes" with "£83.4m (4.2% of the book)" — a proportion,
+    stated in its own terms, from a capability that never builds a spec.
+
+    Accepted on EVIDENCE: the route's own answer must actually contain a
+    percentage. Accepting the route by name alone would let any listing answer
+    silently discharge a share request.
+    """
+    envelope = ask("How much of the book is concentrated in the top 10 "
+                   "postcodes?")
+    assert envelope["ok"] is True, envelope.get("error")
+    assert "%" in answer(envelope)
+
+
+def test_the_share_facet_refuses_rather_than_disclosing():
+    """A missing proportion is a missing NUMBER, so it fails closed."""
+    assert er.KIND_SHARE in er.NUMBER_OR_SUBJECT_FACETS
+    assert er.KIND_SHARE not in er.SHAPE_FACETS
+
+
+def test_the_share_detector_is_the_parsers_own(governed_env):
+    """One detector, so the guard and the parser can never disagree about which
+    questions are share questions."""
+    from mi_agent.llm_query_parser import _SHARE_RE
+
+    for question in ("what proportion of the book is above 60% ltv?",
+                     "what share of the book is in arrears?",
+                     "how much of the book is concentrated?",
+                     "what percentage of loans are over 85?"):
+        assert er._asks_for_a_share(question)
+        assert _SHARE_RE.search(question)
+    for question in ("what is the total balance?",
+                     "show me balance by region",
+                     "give me balance, loan count and weighted-average ltv."):
+        assert not er._asks_for_a_share(question)

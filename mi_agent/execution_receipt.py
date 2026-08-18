@@ -55,6 +55,12 @@ KIND_PROJECTION = "projection"
 KIND_COHORT_COMPARISON = "cohort_comparison"
 #: More measures named than a single-metric spec can carry.
 KIND_MULTI_MEASURE = "multi_measure"
+#: "What PROPORTION of the book …". A share is a governed aggregation needing
+#: TWO populations — the filtered numerator and the whole-book denominator — so
+#: the absolute figures for the numerator alone answer a different question.
+#: Without this facet a share request that lost its aggregation came back as a
+#: confident pair of absolute numbers with no proportion anywhere in it.
+KIND_SHARE = "share"
 #: A slot in the question's measure list that named NO governed measure. The
 #: parser understood the other slots, so answering them and saying nothing about
 #: this one would be a silent 3-of-4 — the one outcome the product must never
@@ -592,6 +598,19 @@ def requested_dimension_terms(question: str, semantics: dict,
     return out
 
 
+def _asks_for_a_share(q: str) -> bool:
+    """True when the question asks for a PROPORTION rather than an amount.
+
+    Uses the parser's own share detector so the guard and the parser can never
+    disagree about which questions are share questions.
+    """
+    try:
+        from .llm_query_parser import _SHARE_RE  # local: avoids a cycle
+        return bool(_SHARE_RE.search(q or ""))
+    except Exception:  # noqa: BLE001 - the guard must never break an answer
+        return False
+
+
 def _unresolved_measure_slots(q: str, semantics: dict, frame) -> Tuple[str, ...]:
     """Measure slots the parser did not understand. Never raises."""
     try:
@@ -633,6 +652,14 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     if _COHORT_COMPARISON_RE.search(q):
         facets.append(RequestedFacet(
             kind=KIND_COHORT_COMPARISON, label="a comparison between two books"))
+    # A share is the requested ANSWER only when the question is not also a
+    # ranking. "Which region increased its share the most" asks WHICH ONE — the
+    # share is the metric being ranked, and the ranking facet already guards it.
+    # "What proportion of the book is above 60% LTV" asks for the proportion
+    # itself, and nothing else was watching for it.
+    if _asks_for_a_share(q) and not any(f.kind == KIND_RANKING for f in facets):
+        facets.append(RequestedFacet(
+            kind=KIND_SHARE, label="a proportion of the book"))
     concepts = named_measure_concepts(question)
     if len(concepts) > 1:
         facets.append(RequestedFacet(
@@ -848,7 +875,7 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     KIND_GEOGRAPHIC_SCOPE, KIND_THRESHOLD, KIND_STRESS,
     KIND_COMPARISON_PERIOD, KIND_RANKING, KIND_PROJECTION,
     KIND_COHORT_COMPARISON, KIND_MULTI_MEASURE, KIND_RELATIONSHIP,
-    KIND_CONTRIBUTION, KIND_UNRESOLVED_MEASURE,
+    KIND_CONTRIBUTION, KIND_UNRESOLVED_MEASURE, KIND_SHARE,
 })
 #: Facets that change the SHAPE of a still-valid answer. A partial answer is
 #: acceptable provided the unhonoured facet is named.
@@ -998,6 +1025,20 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                 facet.status = UNSUPPORTED
                 facet.reason = ("only one measure can be calculated per question, "
                                 "so the others were not returned")
+
+        elif facet.kind == KIND_SHARE:
+            # APPLIED only when the governed share aggregation actually ran.
+            # Absolute figures for the filtered population are a DIFFERENT
+            # answer: "£1.96bn, 11,007 loans" is not a proportion, and reading
+            # one out of it is arithmetic the user would have to do themselves
+            # against a denominator the answer never states.
+            if getattr(spec, "aggregation", None) == "share" or meta.get("share_basis"):
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = LOST
+                facet.reason = ("an absolute figure was calculated for the "
+                                "filtered population, not its proportion of "
+                                "the book")
 
         elif facet.kind == KIND_CONTRIBUTION:
             # APPLIED only when the governed contribution aggregation actually
@@ -1192,6 +1233,14 @@ LISTING_ROUTES = frozenset({
     "risk_limits", "geo_exposure", "concentration_analysis",
 })
 
+#: Routes whose answer STATES a proportion of the book in its own terms — the
+#: concentration answer reads "£83.4m (4.2% of the book)". A share facet those
+#: satisfy must not be reported as lost merely because no ``share`` aggregation
+#: appears in a spec the route never used.
+SHARE_BEARING_ROUTES = frozenset({
+    "concentration_analysis", "geo_exposure", "risk_limits",
+})
+
 #: Human labels for the governed capability that answered.
 _ROUTE_LABELS = {
     "risk_limits": "Concentration limits vs the governing document",
@@ -1240,6 +1289,19 @@ def comparison_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return declared if isinstance(declared, dict) else {}
 
 
+_PROPORTION_IN_ANSWER_RE = re.compile(
+    r"\d[\d,.]*\s*%|\bper cent\b|\bpercent\b", re.I)
+
+
+def _states_a_proportion(envelope: Optional[Dict[str, Any]]) -> bool:
+    """True when the routed answer itself reports a percentage."""
+    if not isinstance(envelope, dict):
+        return False
+    text = " ".join(str(envelope.get(k) or "")
+                    for k in ("answer", "summary", "headline"))
+    return bool(_PROPORTION_IN_ANSWER_RE.search(text))
+
+
 def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional[str],
                             semantics: dict,
                             available_columns: Optional[Iterable[str]] = None,
@@ -1264,7 +1326,17 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
         return (fields.get(key, {}) or {}).get("canonical_field", key)
 
     for facet in facets:
-        if facet.kind == KIND_GEOGRAPHIC_SCOPE:
+        if facet.kind == KIND_SHARE:
+            # Evidence, not assumption: the route is accepted as answering a
+            # share only if its own answer actually states a percentage.
+            if route in SHARE_BEARING_ROUTES and _states_a_proportion(envelope):
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = LOST
+                facet.reason = ("this answer does not state what proportion of "
+                                "the book the figure represents")
+
+        elif facet.kind == KIND_GEOGRAPHIC_SCOPE:
             if listing:
                 facet.status = UNSUPPORTED
                 facet.reason = ("this answer covers every region rather than "
