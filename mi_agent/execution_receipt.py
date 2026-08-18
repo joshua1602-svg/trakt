@@ -58,6 +58,12 @@ KIND_MULTI_MEASURE = "multi_measure"
 #: One measure asked for RELATIVE TO another ("bigger loans relative to their
 #: property value") — a relationship, which a single aggregate cannot express.
 KIND_RELATIONSHIP = "relationship"
+#: A group's CONTRIBUTION to a portfolio weighted aggregate ("which region
+#: contributes most to the weighted average LTV"). Ranking groups by their own
+#: value answers a different question — on the demonstration book the two
+#: rankings are near-inverted — so a contribution question that reaches a plain
+#: per-group ranking must refuse rather than present it.
+KIND_CONTRIBUTION = "aggregate_contribution"
 
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
@@ -317,6 +323,31 @@ def _detect_comparison_period(q: str) -> List[RequestedFacet]:
     return []
 
 
+#: P1D — a question about a group's CONTRIBUTION to a portfolio weighted
+#: aggregate. Both halves are required: contribution language AND a weighted
+#: aggregate as its object. "Which region has the highest LTV?" has neither and
+#: is untouched; "which region contributes most to the balance?" has the first
+#: but not the second, and a contribution to a plain sum is just its share.
+_CONTRIBUTION_RE = re.compile(
+    r"\b(?:contributes?|contributing|contributed)\s+(?:the\s+)?most\b|"
+    r"\b(?:biggest|largest|greatest|main|primary|top)\s+contributors?\b|"
+    r"\bcontributions?\s+to\b|"
+    r"\bdriv(?:es|ing|en)\s+(?:the\s+)?most\s+of\b|"
+    r"\b(?:accounts?|accounting)\s+for\s+(?:the\s+)?most\s+of\b", re.I)
+_WEIGHTED_OBJECT_RE = re.compile(
+    r"\bweighted[\s-]?(?:average|avg|mean)\b|\bwa\s+(?:ltv|rate|yield)\b|"
+    r"\bportfolio\s+(?:ltv|loan[\s-]?to[\s-]?value|interest\s+rate)\b|"
+    r"\baverage\s+(?:ltv|loan[\s-]?to[\s-]?value|interest\s+rate)\b", re.I)
+
+
+def _detect_contribution(q: str) -> List[RequestedFacet]:
+    if not (_CONTRIBUTION_RE.search(q) and _WEIGHTED_OBJECT_RE.search(q)):
+        return []
+    return [RequestedFacet(
+        kind=KIND_CONTRIBUTION,
+        label="contribution to the portfolio weighted average")]
+
+
 def _detect_ranking(q: str, requested_dimensions: Sequence[Tuple[str, str, Tuple[str, ...]]]
                     ) -> List[RequestedFacet]:
     """A ranking facet needs BOTH a superlative interrogative and a dimension to
@@ -548,6 +579,7 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     facets.extend(_detect_geographic_scope(q, geographic_values(frame, semantics)))
     facets.extend(_detect_comparison_period(q))
     facets.extend(_detect_ranking(q, list(requested_dimensions or [])))
+    facets.extend(_detect_contribution(q))
     if _RELATIONSHIP_RE.search(q):
         facets.append(RequestedFacet(
             kind=KIND_RELATIONSHIP,
@@ -583,6 +615,7 @@ _AGGREGATION_LABELS = {
     "distribution": "Distribution of",
     "loan_level": "Loan-level",
     "share": "Share of",
+    "contribution": "Contribution to portfolio weighted-average",
 }
 
 
@@ -763,6 +796,7 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     KIND_GEOGRAPHIC_SCOPE, KIND_THRESHOLD, KIND_STRESS,
     KIND_COMPARISON_PERIOD, KIND_RANKING, KIND_PROJECTION,
     KIND_COHORT_COMPARISON, KIND_MULTI_MEASURE, KIND_RELATIONSHIP,
+    KIND_CONTRIBUTION,
 })
 #: Facets that change the SHAPE of a still-valid answer. A partial answer is
 #: acceptable provided the unhonoured facet is named.
@@ -892,6 +926,20 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                 facet.status = UNSUPPORTED
                 facet.reason = ("only one measure can be calculated per question, "
                                 "so the others were not returned")
+
+        elif facet.kind == KIND_CONTRIBUTION:
+            # APPLIED only when the governed contribution aggregation actually
+            # ran. Anything else — most importantly a plain per-group weighted
+            # average, which is what this question used to be answered with —
+            # is LOST, and a lost contribution facet refuses.
+            if getattr(spec, "aggregation", None) == "contribution":
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = LOST
+                facet.reason = ("each group's own value was calculated, not its "
+                                "contribution to the portfolio figure; a small "
+                                "group with a high value contributes little, so "
+                                "these rank differently")
 
         elif facet.kind == KIND_RELATIONSHIP:
             # Only a loan-level result (scatter/bubble) actually relates two
@@ -1143,6 +1191,14 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             else:
                 facet.status = LOST
                 facet.reason = "the two books were not compared separately"
+
+        elif facet.kind == KIND_CONTRIBUTION:
+            # No routed capability decomposes a weighted aggregate across
+            # groups. Saying so is what stops a concentration or geography
+            # answer standing in for a contribution.
+            facet.status = LOST
+            facet.reason = ("this governed capability does not decompose a "
+                            "weighted average across groups")
 
         elif facet.kind in (KIND_MULTI_MEASURE, KIND_RELATIONSHIP):
             facet.status = UNSUPPORTED

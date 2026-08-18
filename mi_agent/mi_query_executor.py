@@ -746,6 +746,102 @@ def _execute_share(spec, df, work, semantics, warnings, balance_col):
     return data, "summary"
 
 
+def _execute_contribution(spec, work, semantics, warnings, balance_col):
+    """Each group's CONTRIBUTION to the portfolio weighted aggregate.
+
+    A portfolio weighted average is ``sum(w*v) / sum(w)``. That sum decomposes
+    exactly across any partition of the book::
+
+        contribution_g = sum over g of (w * v) / sum over the BOOK of w
+                       = weight_share_g * value_g
+
+    and the contributions sum back to the portfolio figure — which is checked
+    here and disclosed if it does not hold.
+
+    This is deliberately NOT the same as ranking groups by their own weighted
+    average. A small group with a high value has a high value and a negligible
+    contribution; presenting one as the other answers a different question.
+    Both figures are returned in every row so the reader can see the difference.
+
+    Returns ``(None, None)`` when the portfolio weight is zero or the columns
+    are unavailable — a contribution with no denominator is refused, never
+    reported as zero.
+    """
+    if not spec.metric:
+        return None, None
+    entry = resolve_semantic_field(spec.metric, semantics)
+    canonical = entry.get("canonical_field")
+    _require_column(work, canonical, spec.metric)
+
+    weight_col = resolve_weight_field(spec, entry, semantics, work.columns)
+    if not weight_col or weight_col not in work.columns:
+        return None, None
+
+    group_keys = _all_group_dims(spec)
+    if not group_keys:
+        return None, None
+    group_col = _resolve_group_column(group_keys[0], semantics, work, warnings,
+                                      use_bucket=False)
+
+    # Missing grouping values are BUCKETED, not dropped, exactly as every other
+    # grouped path does — otherwise the contributions would not sum back to the
+    # portfolio figure the answer quotes.
+    work, bucketed = _bucket_missing(work, [group_col])
+    if bucketed:
+        warnings.append(
+            f"{bucketed:,} row(s) with a missing grouping value were grouped "
+            f"under '{MISSING_BUCKET_LABEL}' (not dropped) so the "
+            f"contributions reconcile")
+
+    values = coerce_numeric(work[canonical])
+    weights = coerce_numeric(work[weight_col])
+    frame = pd.DataFrame({
+        "_group": work[group_col],
+        "_value": values,
+        "_weight": weights,
+        "_wv": values * weights,
+    }).dropna(subset=["_value", "_weight"])
+
+    total_weight = float(frame["_weight"].sum())
+    if not total_weight:
+        return None, None
+
+    grouped = frame.groupby("_group", dropna=False).agg(
+        loan_count=("_value", "size"),
+        weight=("_weight", "sum"),
+        weighted_value=("_wv", "sum"))
+    grouped["contribution"] = grouped["weighted_value"] / total_weight
+    grouped["weight_share_pct"] = grouped["weight"] / total_weight * 100.0
+    grouped["group_value"] = (grouped["weighted_value"]
+                              / grouped["weight"].replace(0.0, pd.NA))
+
+    portfolio = float(frame["_wv"].sum()) / total_weight
+    reconciled = float(grouped["contribution"].sum())
+    if abs(reconciled - portfolio) > max(1e-6, abs(portfolio) * 1e-9):
+        warnings.append(
+            f"contribution reconciliation off by {reconciled - portfolio:.6g} "
+            f"against the portfolio figure {portfolio:.6g}")
+    else:
+        warnings.append(
+            f"contributions sum to the portfolio "
+            f"{entry.get('business_name') or canonical} of {portfolio:,.4f} "
+            f"(weight basis {weight_col})")
+
+    contribution_col = f"{canonical}_contribution"
+    data = (grouped.reset_index()
+            .rename(columns={"_group": group_col,
+                             "contribution": contribution_col,
+                             "group_value": f"{canonical}_weighted_avg"})
+            .loc[:, [group_col, contribution_col,
+                     f"{canonical}_weighted_avg", "weight_share_pct",
+                     "loan_count"]]
+            .sort_values(contribution_col, ascending=False, kind="stable")
+            .reset_index(drop=True))
+    if spec.top_n:
+        data = data.head(int(spec.top_n))
+    return data, "grouped"
+
+
 def _execute_summary(spec, work, semantics, warnings, balance_col):
     if spec.metric:
         entry = resolve_semantic_field(spec.metric, semantics)
@@ -1107,7 +1203,17 @@ def execute_mi_query(
     coverage: Dict[str, Any] = {}
 
     # ---- dispatch -------------------------------------------------------- #
-    if spec.aggregation == "share":
+    if spec.aggregation == "contribution":
+        data_out, result_type = _execute_contribution(
+            spec, work, semantics, warnings, balance_col)
+        if data_out is None:
+            raise MIQueryExecutionError(
+                "a contribution cannot be calculated: the portfolio weight is "
+                "zero, or the metric, weight or grouping field is unavailable")
+        metadata["contribution_weight_field"] = spec.weight_field
+        metadata["group_field_keys"] = list(_all_group_dims(spec))
+
+    elif spec.aggregation == "share":
         # A share needs BOTH populations, so it receives the unfiltered frame as
         # well as the filtered one. Everything else sees only ``work``.
         data_out, result_type = _execute_share(

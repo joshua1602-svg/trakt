@@ -208,8 +208,16 @@ def validate_mi_query(
         # count / count_distinct are universally permissible counters. ``share``
         # is a ratio of two POPULATIONS on the metric's own basis, not a new way
         # of aggregating the metric, so it is permissible wherever a sum is —
-        # which every balance-style measure allows.
-        if spec.aggregation not in allowed and spec.aggregation not in (
+        # which every balance-style measure allows. ``contribution`` is the
+        # decomposition of the metric's OWN weighted average across groups, so
+        # it is permissible exactly where a weighted average is.
+        if spec.aggregation == "contribution":
+            if "weighted_avg" not in allowed:
+                result.error(
+                    f"A contribution to a weighted average is not defined for "
+                    f"metric {spec.metric!r}: the registry does not allow a "
+                    f"weighted average for it.")
+        elif spec.aggregation not in allowed and spec.aggregation not in (
             "count", "count_distinct", "loan_level", "share",
         ):
             result.error(

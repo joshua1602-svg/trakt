@@ -308,6 +308,47 @@ def _capability_explanation(question: str, frame, history_periods: int = 1
     return " ".join(parts)
 
 
+def _contribution_answer(spec, qres, semantics: dict) -> Optional[str]:
+    """The leading contributor, in a sentence, from the executed rows only."""
+    try:
+        data = getattr(qres, "data", None)
+        if data is None or not len(data):
+            return None
+        entry = (semantics.get("fields", {}) or {}).get(spec.metric or "", {}) or {}
+        canonical = entry.get("canonical_field") or spec.metric
+        name = entry.get("business_name") or canonical
+        contribution_col = f"{canonical}_contribution"
+        value_col = f"{canonical}_weighted_avg"
+        if contribution_col not in data.columns:
+            return None
+        group_col = data.columns[0]
+        top = data.iloc[0]
+        total = float(data[contribution_col].sum())
+        parts = [
+            f"{top[group_col]} contributes the most to the portfolio "
+            f"{name}: {float(top[contribution_col]):.2f} of the "
+            f"{total:.2f} total"]
+        if value_col in data.columns and "weight_share_pct" in data.columns:
+            parts.append(
+                f"— {float(top['weight_share_pct']):.1f}% of the book at "
+                f"{float(top[value_col]):.2f}.")
+        else:
+            parts[-1] += "."
+        # Name the highest-VALUE group too when it is a different group: that
+        # difference is the whole reason this is a separate calculation.
+        if value_col in data.columns:
+            highest = data.loc[data[value_col].idxmax()]
+            if highest[group_col] != top[group_col]:
+                parts.append(
+                    f"The highest {name} is {highest[group_col]} at "
+                    f"{float(highest[value_col]):.2f}, but it is "
+                    f"{float(highest['weight_share_pct']):.1f}% of the book and "
+                    f"contributes {float(highest[contribution_col]):.2f}.")
+        return " ".join(parts)
+    except Exception:  # noqa: BLE001 - prose must never break a good answer
+        return None
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -794,6 +835,16 @@ def run_mi_agent_query(
         result["error"] = f"The query produced no usable rows ({reason})."
         result["warnings"] = _dedupe(warnings)
         return result
+
+    # ---- P1D: a contribution answer names its answer ----------------------
+    # "Which region contributes most to the weighted average LTV?" deserves a
+    # sentence saying which one, from the executed rows. Stated with BOTH
+    # figures because the point of the calculation is that they differ: the
+    # leading contributor is rarely the group with the highest value.
+    if spec.aggregation == "contribution" and qres is not None:
+        line = _contribution_answer(spec, qres, semantics)
+        if line:
+            result["answer"] = line
 
     # ---- P0: execution receipt + semantic-completeness guard ---------------
     # The dimension and filter invariants above compare the SPEC with execution.

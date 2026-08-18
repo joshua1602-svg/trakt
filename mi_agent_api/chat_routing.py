@@ -1646,6 +1646,23 @@ _GROUPED_RANKING_RE = re.compile(
     r"\b(?:top|bottom|largest|biggest|smallest|lowest|highest)\b[^?]*?\bby\b")
 
 
+def _is_aggregate_contribution_question(question: str) -> bool:
+    """True for "which region contributes most to the weighted average LTV?".
+
+    Uses the SAME detector the P0 guard uses, so a route cannot stand down for
+    one set of questions while the guard refuses a different set. No routed
+    capability decomposes a weighted average across groups, so every one of them
+    defers to the governed contribution aggregation.
+    """
+    try:
+        from mi_agent import execution_receipt as _receipt
+
+        return bool(_receipt._detect_contribution((question or "").lower()))
+    except Exception:  # noqa: BLE001 - a detection fault must not lose a route
+        logger.exception("contribution deference check failed for %r", question)
+        return False
+
+
 def _defers_to_period_change(question: str, *, spec: Any = None,
                              view: str = "funded") -> bool:
     """True when the governed period-change route positively claims ``question``.
@@ -1670,6 +1687,8 @@ def _is_geo_exposure(question: str, *, spec: Any = None,
         return False  # a limit/breach question is a risk-monitor question
     if "bridge" in q:
         return False  # a balance bridge by region is the bridge route
+    if _is_aggregate_contribution_question(question):
+        return False  # a contribution to a weighted average is not an exposure map
     if _defers_to_period_change(question, spec=spec, view=view):
         # "Which region grew the most last month?" is a PERIOD-CHANGE question
         # that happens to name geography. This route answers at one date, so it
@@ -2098,6 +2117,10 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
 # takes no decisions.
 # --------------------------------------------------------------------------- #
 def _recognise_concentration(request: RouteRequest) -> Recognition:
+    if _is_aggregate_contribution_question(request.question):
+        # Concentration measures how exposure is DISTRIBUTED at one date; it
+        # does not decompose a weighted average across groups.
+        return Recognition.no("aggregate_contribution_question")
     matched, reason = conc_mod.is_concentration_question(
         request.question, request.spec)
     return (Recognition.yes(_WORKFLOW_CONFIDENCE, reason) if matched
@@ -2399,7 +2422,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="funded_bridge", priority=40, lens_aware=True,
             description="Governed funded-balance attribution waterfall.",
-            recognise=lambda r: bool(getattr(r.spec, "bridge_query", False)),
+            recognise=lambda r: (bool(getattr(r.spec, "bridge_query", False))
+                                 and not _is_aggregate_contribution_question(r.question)),
             handle=lambda r: _route_bridge(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,

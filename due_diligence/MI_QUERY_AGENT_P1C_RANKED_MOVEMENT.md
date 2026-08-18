@@ -436,3 +436,120 @@ scoped this phase to ranked period-over-period movement, and quietly widening sc
 regressions get in.
 
 **Everything else in the bank is either correct, disclosed, or refused.**
+
+---
+
+# Addendum — P1D: Aggregate Contribution (B11 closed)
+
+Scope: aggregate-contribution semantics only. Nothing else was widened.
+
+## A1. The defect
+
+B11 — *"Which region contributes most to the weighted average LTV?"* — returned a chart
+**titled with the question** and ordered by each region's own weighted-average LTV, so
+**West Midlands** appeared first. The correct answer is **South East**. It was the one
+silent semantic error left in the 40-question bank.
+
+## A2. The calculation, and why it is a governed aggregation of its own
+
+A portfolio weighted average is `sum(w*v) / sum(w)`, which decomposes exactly across any
+partition of the book:
+
+```
+contribution_g  =  sum over g of (w * v)  /  sum over the BOOK of w
+                =  weight_share_g  x  value_g
+```
+
+The contributions **sum back to the portfolio figure** — checked on every execution and
+disclosed if it does not hold. On the demonstration book:
+
+| Region | Region WA LTV | Share of book | Contribution |
+| --- | --- | --- | --- |
+| **South East** | 43.1412 | 26.2765% | **11.3360** |
+| London | 42.7453 | 21.0636% | 9.0037 |
+| South West | 43.3106 | 12.0847% | 5.2340 |
+| East of England | 43.0398 | 10.8696% | 4.6782 |
+| North West | 43.1382 | 6.5525% | 2.8266 |
+| **West Midlands** *(previously shown first)* | 43.9477 | 6.1953% | **2.7227** |
+| … | | | |
+| **Total** | | **100%** | **43.1562** = the portfolio WA LTV |
+
+This is `aggregation: "contribution"` — a governed aggregation, not a sort order, because a
+sort order cannot be verified by the P0 guard and a distinct aggregation can.
+
+## A3. The two intents stay distinct
+
+| Question | Aggregation | Answer |
+| --- | --- | --- |
+| "Which region has the highest LTV?" | `weighted_avg` | per-region LTV ranking — unchanged |
+| "Which region contributes most to the weighted average LTV?" | `contribution` | contribution ranking |
+
+Detection requires **both** halves: contribution language (*contributes most to, largest
+contributor to, drives most of, accounts for most of, contribution to*) **and** a weighted
+aggregate as its object — established from the governed registry (`default_aggregation:
+weighted_avg` plus a `weight_field`), not from wording alone. "Which region contributes most
+to the balance?" is not claimed: a balance is a sum, and a contribution to a sum is just its
+share. Pinned by 6 negative phrasings and 8 positive ones.
+
+## A4. The answer, the title and the receipt
+
+```
+South East contributes the most to the portfolio Current LTV: 11.34 of the 43.16
+total — 26.3% of the book at 43.14. The highest Current LTV is West Midlands at
+43.95, but it is 6.2% of the book and contributes 2.72.
+
+Calculated: Contribution to portfolio weighted-average Current LTV · grouped by
+Region · 11,035 loans · as at 30 June 2026.
+```
+
+The answer names the highest-**value** group as well as the largest **contributor**, because
+that difference is the entire reason the calculation exists. The chart is titled
+**"Contribution to Portfolio Weighted Average Current LTV by Region"** — the executed
+calculation, not the question it was asked. Both figures and the weight share are in every
+row, so a reader can check the arithmetic on screen.
+
+## A5. P0 protection
+
+A new facet kind, `aggregate_contribution`, in the number-or-subject class (refuse, never
+disclose-and-continue):
+
+* **APPLIED** only when the governed contribution aggregation actually ran.
+* **LOST → refuse** when a contribution question reaches a plain per-group ranking. Verified
+  with the spec the live model actually returned for B11: a valid weighted-average bar, for
+  a different question, correctly refused rather than presented.
+* **LOST → refuse** for every routed capability — `geo_exposure`, `concentration_analysis`,
+  `risk_limits`, `period_change_analysis`. None decomposes a weighted average across groups.
+
+The routes also stand down at recognition, using the **same detector the guard uses**, so a
+route cannot defer on one set of questions while the guard refuses a different set.
+
+A contribution question that names **no dimension** ("what drives most of the weighted
+average LTV?") is refused, not answered: choosing a grouping for the reader would answer a
+question they did not ask.
+
+## A6. Results
+
+| | Deterministic | Genuine LLM |
+| --- | --- | --- |
+| Correct | **6** (was 5) | **6** (was 5) |
+| Partial, limitation disclosed | 5 | 3 |
+| Safe refusal | 29 | 31 |
+| **Silent semantic error** | **0** | **0** |
+| **Incorrect successful answer** | **0** | **0** |
+
+**Launch gate met on both paths.** Route agreement between the two parser paths: 40/40.
+
+Against the P1C deterministic baseline, **exactly one question changed — B11**. Nothing else
+moved: no route changed, no answer changed, no spec changed. That is the evidence that the
+fix is confined to aggregate-contribution semantics.
+
+## A7. Tests
+
+| Suite | Result |
+| --- | --- |
+| `mi_agent/tests/test_p1d_aggregate_contribution.py` | 31 passed — the calculation against its definition, intent distinctness (8 positive / 6 negative phrasings), the P0 refusal, the chart title, the LLM-spec case |
+| `tests/test_p1d_aggregate_contribution_e2e.py` | 16 passed — B11 and 5 paraphrases end to end, every figure reconciled to pandas from the loan book |
+
+The e2e truth fixture restates the executor's own rules — drop rows with no value or no
+weight; bucket a missing grouping value rather than drop it — so a change to either shows up
+as a disagreement instead of being mirrored.

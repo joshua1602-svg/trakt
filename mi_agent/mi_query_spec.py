@@ -27,6 +27,11 @@ AGGREGATIONS = {
     # P1A — a filtered population expressed as a share of the whole book.
     # Distinct from the aggregations above because it needs TWO populations.
     "share",
+    # P1D — each group's CONTRIBUTION to a portfolio weighted aggregate
+    # (share of weight x the group's own value). Distinct from a per-group
+    # weighted average because a small group with a high value contributes
+    # little, and ranking the two the same way answers a different question.
+    "contribution",
 }
 OUTPUT_FORMATS = {"chart", "table", "text", "chart_and_table"}
 

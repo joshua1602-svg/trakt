@@ -84,12 +84,14 @@ def test_catalogue_exposes_real_semantic_layer():
     measure_keys = {m["key"] for m in cat["measures"]}
     assert "current_outstanding_balance" in measure_keys
     # "share" is the P1A governed filtered-population aggregation (a filtered
-    # measure over the whole-book measure). Enumerated here because the
-    # catalogue is a published contract: a new aggregation is a deliberate
-    # addition to it, never an accident.
+    # measure over the whole-book measure). "contribution" is the P1D
+    # decomposition of a portfolio WEIGHTED aggregate across groups (weight
+    # share x group value, summing back to the portfolio figure). Enumerated
+    # here because the catalogue is a published contract: a new aggregation is a
+    # deliberate addition to it, never an accident.
     assert sorted(cat["aggregations"]) == sorted(
         ["sum", "avg", "weighted_avg", "count", "count_distinct", "median",
-         "distribution", "loan_level", "balance_sum", "share"]
+         "distribution", "loan_level", "balance_sum", "share", "contribution"]
     )
 
 

@@ -1470,6 +1470,76 @@ def _share_request(q: str, semantics: dict, available_columns=None
     return ("balance", _balance_metric(semantics, available_columns))
 
 
+#: P1D — an AGGREGATE-CONTRIBUTION question.
+#:
+#: "Which region CONTRIBUTES MOST TO the weighted average LTV?" is not "which
+#: region has the highest LTV". A portfolio weighted average is
+#: sum(w_i * v_i) / sum(w_i), so group g contributes
+#:
+#:     (sum over g of w * v) / (sum over the book of w)  ==  weight_share_g * value_g
+#:
+#: and those contributions sum to the portfolio figure. A small group with a
+#: high value contributes almost nothing. On the demonstration book the two
+#: rankings are near-inverted: West Midlands has the highest regional LTV
+#: (43.90%) and contributes 2.72pp, while South East contributes 11.34pp of the
+#: portfolio's 43.15%. Answering one with the other is a silent semantic error,
+#: which is why this is a governed aggregation of its own rather than a sort
+#: order on the existing one.
+_CONTRIBUTION_RE = re.compile(
+    r"\b(?:contributes?|contributing|contributed)\s+(?:the\s+)?most\b|"
+    r"\b(?:biggest|largest|greatest|main|primary|top)\s+contributors?\b|"
+    r"\bcontributions?\s+to\b|"
+    r"\bcontributes?\s+(?:the\s+)?most\s+to\b|"
+    r"\bdriv(?:es|ing|en)\s+(?:the\s+)?most\s+of\b|"
+    r"\b(?:accounts?|accounting)\s+for\s+(?:the\s+)?most\s+of\b|"
+    r"\bwhat\s+is\s+driving\s+(?:the\s+)?(?:most\s+of\s+)?(?:the\s+)?"
+    r"(?:portfolio\s+)?(?:weighted[\s-]?average|wa)\b", re.I)
+
+#: The object must be a WEIGHTED aggregate. Two ways it qualifies: the question
+#: says so, or the governed registry says the metric's default aggregation is a
+#: weighted average. The registry is the authority; the phrase list only lets a
+#: reader be explicit.
+_WEIGHTED_AGGREGATE_RE = re.compile(
+    r"\bweighted[\s-]?(?:average|avg|mean)\b|\bwa\s+(?:ltv|rate|yield)\b|"
+    r"\bwavg\b", re.I)
+
+
+def _contribution_request(q: str, semantics: dict, available_columns=None
+                          ) -> Optional[Tuple[str, str]]:
+    """``(metric_key, weight_field)`` for an aggregate-contribution question.
+
+    Returns None unless BOTH hold, so an ordinary ranking is never converted:
+
+    * the question uses contribution language ("contributes most to", "drives
+      most of", "accounts for most of", "largest contributor to"); and
+    * the object is a weighted aggregate — the governed registry gives the
+      metric a ``weighted_avg`` default aggregation and a weight field, or the
+      question names a weighted average explicitly.
+
+    "Which region has the highest LTV?" carries no contribution language and is
+    untouched. That distinctness is the point of the function.
+    """
+    if not _CONTRIBUTION_RE.search(q):
+        return None
+    metric, _agg, _terms = _detect_metric(q, semantics)
+    if not metric:
+        return None
+    if available_columns is not None and metric not in set(available_columns):
+        return None
+    entry = (_fields(semantics) or {}).get(metric) or {}
+    weight = entry.get("weight_field") or (
+        semantics.get("metadata", {}) or {}).get("default_weight_field")
+    weighted = (str(entry.get("default_aggregation") or "").lower()
+                in ("weighted_avg", "weighted_average"))
+    if not weighted and not _WEIGHTED_AGGREGATE_RE.search(q):
+        return None
+    if not weight:
+        return None
+    if available_columns is not None and weight not in set(available_columns):
+        return None
+    return metric, weight
+
+
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None
                               ) -> Optional[Tuple[str, str]]:
     """Detect a categorical region filter in a clause -> (field_key, value)."""
@@ -1794,6 +1864,55 @@ def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[
     return spec, _det_meta("high", False, [rmetric])
 
 
+#: Adjectival forms of governed dimensions, used ONLY by the contribution
+#: recogniser below.
+_ADJECTIVAL_DIMENSIONS = {"regional": "region", "geographic": "geography",
+                         "geographical": "geography"}
+_ADJECTIVAL_DIMENSION_RE = re.compile(
+    r"\b(?:" + "|".join(_ADJECTIVAL_DIMENSIONS) + r")\b", re.I)
+
+
+def _contribution_recognizer(q: str, title: str, semantics: dict,
+                             available_columns=None):
+    """A governed aggregate-contribution plan, or None.
+
+    Needs a contribution question AND a dimension to attribute the contribution
+    across — "what drives the weighted average LTV?" with no grouping names no
+    groups to rank, so it is left alone and the P0 contribution facet refuses it
+    rather than this parser inventing a dimension.
+    """
+    request = _contribution_request(q, semantics, available_columns)
+    if request is None:
+        return None
+    metric, weight = request
+    dims, _terms, _rest = _explicit_dimensions(
+        q, semantics, grouping=True, available_columns=available_columns)
+    if not dims:
+        # "the REGIONAL contribution to ..." names the same dimension in its
+        # adjectival form. Normalised HERE rather than in the shared dimension
+        # vocabulary: widening that vocabulary changes grouping behaviour for
+        # every question in the product, and this phase is scoped to
+        # aggregate-contribution semantics.
+        normalised = _ADJECTIVAL_DIMENSION_RE.sub(
+            lambda m: _ADJECTIVAL_DIMENSIONS[m.group(0).lower()], q)
+        if normalised != q:
+            dims, _terms, _rest = _explicit_dimensions(
+                normalised, semantics, grouping=True,
+                available_columns=available_columns)
+    if not dims:
+        return None
+    spec = MIQuerySpec(
+        intent="chart", chart_type="bar", metric=metric, dimension=dims[0],
+        x=dims[0], aggregation="contribution", weight_field=weight,
+        sort_direction="desc", output_format="chart_and_table", title=title,
+        explanation=("Each group's contribution to the portfolio weighted "
+                     "average: its share of the weight multiplied by its own "
+                     "value, so the contributions sum to the portfolio "
+                     "figure."))
+    return spec, _det_meta("high", True, [dims[0]],
+                           note="aggregate_contribution")
+
+
 def _deterministic_parse(question: str, semantics: dict,
                          available_columns=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
@@ -1813,6 +1932,17 @@ def _deterministic_parse(question: str, semantics: dict,
     fc = _forecast_scale_recognizer(q, title)
     if fc is not None:
         return fc
+    # An aggregate-contribution question is a DIFFERENT calculation from both
+    # the per-group ranking and the balance bridge it can resemble in wording
+    # ("largest contributor to", "drives most of"). A bridge decomposes a
+    # BALANCE MOVEMENT between two dates; this decomposes a WEIGHTED AVERAGE at
+    # one date. Recognised first, and narrow enough that it cannot claim a
+    # genuine bridge question: the object must be a weighted aggregate, and a
+    # balance is a sum.
+    contrib = _contribution_recognizer(q, title, semantics,
+                                       available_columns=available_columns)
+    if contrib is not None:
+        return contrib
     br = _bridge_recognizer(q, title, semantics, available_columns=available_columns)
     if br is not None:
         return br

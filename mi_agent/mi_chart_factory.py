@@ -341,7 +341,14 @@ def generate_chart_title(result: MIQueryResult,
     ct = spec.chart_type
     bn = lambda k: _business_name(semantics, k)  # noqa: E731
 
-    if spec.title:
+    if spec.aggregation == "contribution":
+        # The title must describe the CALCULATION, not echo the question. A
+        # chart headed "Which region contributes most to the weighted average
+        # LTV?" but plotting each region's own LTV asserts an answer it did not
+        # compute — which is the exact defect this aggregation exists to fix.
+        title = (f"Contribution to Portfolio {_AGG_PREFIX['weighted_avg']}"
+                 f"{bn(spec.metric)} by {bn(spec.dimension or spec.x)}")
+    elif spec.title:
         title = spec.title
     else:
         metric_name = bn(spec.metric) if spec.metric else "Loan Count"
