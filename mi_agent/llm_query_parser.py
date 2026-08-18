@@ -2828,13 +2828,27 @@ def compact_catalogue(semantics: dict, mode: str = "core",
                       extra_keys: Iterable[str] = ()) -> str:
     """Compact, line-per-field catalogue. Materially smaller than the full
     JSON catalogue. Columns: key | business_name | role | format |
-    allowed_aggs | chart_roles | synonyms(<=3)."""
+    allowed_aggs | chart_roles | synonyms.
+
+    EVERY governed synonym is listed. The list used to be truncated to the
+    first three, which is how "total exposure" came to be parsed as exposure at
+    default: the registry declares ``exposure`` a synonym of
+    ``current_outstanding_balance``, but it sits fifth in that field's list and
+    so never reached the model, while ``exposure at default`` sat third on the
+    EAD line and did. The model was not misreading the question — it was never
+    shown the word that settles it.
+
+    A synonym list is curated governed vocabulary, and which three of it
+    survived was an accident of list order. Restoring the rest costs ~15% on a
+    prefix that is cached across requests, and removes a whole class of
+    disagreement between the two parsers, which read the same registry.
+    """
     extra = set(extra_keys)
     lines = ["field|business_name|role|format|aggs|chart_roles|synonyms"]
     for key, entry in _fields(semantics).items():
         if mode != "full" and entry.get("mi_tier") != "core" and key not in extra:
             continue
-        syn = ",".join((entry.get("synonyms", []) or [])[:3])
+        syn = ",".join(entry.get("synonyms", []) or [])
         lines.append("|".join([
             key,
             str(entry.get("business_name", "")),
@@ -2897,6 +2911,13 @@ _SYSTEM_INSTRUCTIONS = (
     '{\"field\": \"current_loan_to_value\", \"aggregation\": \"weighted_avg\"}], '
     '\"filters\": {\"collateral_geography\": \"London\"}}\n'
     "    For a SINGLE measure keep using 'metric' + 'aggregation' as before.\n"
+    "11. EXPOSURE. Bare 'exposure' language — exposure, total exposure, current "
+    "exposure, portfolio/book exposure, outstanding exposure — means the "
+    "catalogue's governed CURRENT exposure measure (the balance field that "
+    "lists 'exposure' among its synonyms). Use 'exposure_at_default' ONLY when "
+    "the question explicitly names EAD or exposure at default. Never substitute "
+    "one for the other: they are different measures, and one of them may be "
+    "absent from the dataset.\n"
 )
 
 

@@ -2381,7 +2381,39 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
         spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
         source_notes=notes, route=route, warnings=warnings, lens_applied=True)
     envelope["workflow"] = result
+    # Structured evidence of a SINGLE-NAME analysis, so the receipt and the P0
+    # share facet can be settled from what executed rather than from the answer
+    # text. Reading a percentage out of prose proves only that prose mentions
+    # one; this states the grain, the measure and both sides of the share.
+    single = _single_name_evidence(result)
+    if single:
+        envelope.setdefault("metadata", {})["concentration"] = single
     return envelope
+
+
+def _single_name_evidence(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """What the concentration workflow declares about a single-name result.
+
+    ``None`` when it measured dimensions rather than individual names — a
+    regional breakdown is not evidence that the largest single loan was found.
+    """
+    for entry in (result.get("single_name_results") or []):
+        cats = entry.get("categories") or []
+        if not cats:
+            continue
+        top = cats[0]
+        return {
+            "kind": entry.get("kind"),
+            "grainField": entry.get("field"),
+            "basis": entry.get("basis"),
+            "population": entry.get("population"),
+            "distinctNames": entry.get("distinct_names"),
+            "topExposure": top.get("exposure"),
+            "topShare": top.get("exposure_share"),
+            "totalExposure": entry.get("total_exposure"),
+            "reportingDate": result.get("reporting_date"),
+        }
+    return None
 
 
 #: Human wording per route for the lens disclosure below.

@@ -1293,6 +1293,48 @@ _PROPORTION_IN_ANSWER_RE = re.compile(
     r"\d[\d,.]*\s*%|\bper cent\b|\bpercent\b", re.I)
 
 
+def concentration_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The SINGLE-NAME analysis a route declares it performed.
+
+    Returns ``{}`` unless the route states the grain it ranked, both sides of
+    the share and the population. A declaration missing any of those is not
+    evidence: it cannot show that the numerator is one loan and the denominator
+    is the same governed measure over the selected population.
+    """
+    if not isinstance(envelope, dict):
+        return {}
+    block = (envelope.get("metadata") or {}).get("concentration")
+    if not isinstance(block, dict):
+        return {}
+    required = ("grainField", "topExposure", "totalExposure", "population")
+    if any(block.get(k) is None for k in required):
+        return {}
+    return block
+
+
+def _single_loan_share_proven(evidence: Dict[str, Any]) -> bool:
+    """The grain invariant, as a predicate.
+
+    Numerator is ONE name at the declared grain; denominator is the same
+    governed exposure basis over the whole selected population; and the share
+    the route reports is the one those two produce. A largest-loan answer whose
+    denominator came from somewhere else would fail here rather than read as a
+    correct percentage.
+    """
+    if not evidence or evidence.get("kind") != "loan":
+        return False
+    if evidence.get("basis") != "exposure":
+        return False
+    top, total = evidence.get("topExposure"), evidence.get("totalExposure")
+    share = evidence.get("topShare")
+    if not total or share is None:
+        return False
+    try:
+        return abs(float(share) - (float(top) / float(total))) < 1e-12
+    except Exception:  # noqa: BLE001 - unusable evidence is not proof
+        return False
+
+
 def _states_a_proportion(envelope: Optional[Dict[str, Any]]) -> bool:
     """True when the routed answer itself reports a percentage."""
     if not isinstance(envelope, dict):
@@ -1327,9 +1369,14 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
 
     for facet in facets:
         if facet.kind == KIND_SHARE:
-            # Evidence, not assumption: the route is accepted as answering a
-            # share only if its own answer actually states a percentage.
-            if route in SHARE_BEARING_ROUTES and _states_a_proportion(envelope):
+            # Execution-proven first: a route that DECLARES a single-name share,
+            # with both sides of it and the grain it used, has answered the
+            # facet whatever its prose says. Falling back to the answer text is
+            # weaker evidence, kept for routes that state a proportion without
+            # declaring one.
+            if _single_loan_share_proven(concentration_evidence(envelope)):
+                facet.status, facet.reason = APPLIED, ""
+            elif route in SHARE_BEARING_ROUTES and _states_a_proportion(envelope):
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = LOST
@@ -1555,14 +1602,17 @@ def build_routed_receipt(*, route: Optional[str], envelope: Dict[str, Any],
     spec = envelope.get("spec") if isinstance(envelope.get("spec"), dict) else {}
     ranked = ranking_evidence(envelope)
     compared = comparison_evidence(envelope)
+    concentrated = concentration_evidence(envelope)
     return ExecutionReceipt(
         measure=(_comparison_measure(compared)
+                 or _single_name_measure(concentrated)
                  or _ROUTE_LABELS.get(route or "", "Governed analysis")),
         aggregation=None,
         dimensions=([ranked["displayName"]] if ranked.get("displayName") else []),
         filters=_comparison_populations(compared),
-        population=None,
-        period=metadata.get("asOfDate") or envelope.get("asOf"),
+        population=concentrated.get("population"),
+        period=(metadata.get("asOfDate") or envelope.get("asOf")
+                or concentrated.get("reportingDate")),
         comparison_period=_ranked_period(ranked),
         scenario=None,
         ranking=_ranking_phrase(ranked),
@@ -1570,6 +1620,22 @@ def build_routed_receipt(*, route: Optional[str], envelope: Dict[str, Any],
         facets=list(facets),
         routed=True,
     )
+
+
+def _single_name_measure(evidence: Dict[str, Any]) -> Optional[str]:
+    """"Largest single-loan current exposure · share of total current exposure".
+
+    Names the calculation that ran rather than the capability that ran it:
+    "Exposure concentration" is true of a regional breakdown too, and tells a
+    reader nothing about which number they are looking at.
+    """
+    if not evidence:
+        return None
+    kind = str(evidence.get("kind") or "name")
+    measure = f"Largest single-{kind} current exposure"
+    if _single_loan_share_proven(evidence) or evidence.get("topShare") is not None:
+        measure += " · share of total current exposure"
+    return measure
 
 
 #: How a ranking direction reads in the receipt.

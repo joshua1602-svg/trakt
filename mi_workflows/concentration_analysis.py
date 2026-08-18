@@ -124,9 +124,21 @@ _DISTRIBUTION_BY_RE = re.compile(r"\bdistribution\s+(?:of\s+exposures?\s+)?by\s+
 
 #: "largest exposures" / "top 10 loans" / "biggest borrowers" — single-name or
 #: ranked concentration language.
+#: A superlative may be separated from its noun by a qualifier: "largest
+#: SINGLE-LOAN exposure", "biggest INDIVIDUAL loan". Without this group the
+#: exact B21 wording matched neither pattern below — the question was not
+#: recognised as a concentration question at all and fell through to the
+#: point-in-time path, which cannot express a largest-single-name share.
+#: Defined once so the two patterns can never disagree about what a
+#: superlative-over-names looks like.
+_SUPERLATIVE = r"(?:largest|top|biggest|highest)"
+_NAME_QUALIFIER = (r"(?:\d+\s+)?"
+                   r"(?:single[- ]?(?:loan|name|borrower|obligor)s?|"
+                   r"individual|single)?\s*")
+
 _TOP_EXPOSURE_RE = re.compile(
-    r"\b(?:largest|top|biggest)\s+(?:\d+\s+)?"
-    r"(?:exposures?|loans?|borrowers?|obligors?|concentrations?)\b")
+    r"\b" + _SUPERLATIVE + r"\s+" + _NAME_QUALIFIER
+    + r"(?:exposures?|loans?|borrowers?|obligors?|concentrations?)\b")
 
 #: Questions owned by other routes. Checked FIRST: this workflow must not
 #: steal from more specific owners, whatever else the question contains.
@@ -277,8 +289,8 @@ _SINGLE_NAME_LANGUAGE: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
 #: "largest concentrations" is deliberately absent: that is an overview of the
 #: governed dimensions, not a single-name ranking.
 _SINGLE_NAME_RE = re.compile(
-    r"\b(?:largest|top|biggest)\s+(?:\d+\s+)?"
-    r"(?:exposures?|loans?|borrowers?|obligors?)\b")
+    r"\b" + _SUPERLATIVE + r"\s+" + _NAME_QUALIFIER
+    + r"(?:exposures?|loans?|borrowers?|obligors?)\b")
 
 
 def requested_single_name_kind(question: str) -> Optional[str]:
@@ -457,8 +469,47 @@ def _controlled_failure(reason: str, *, question: str,
     }
 
 
+def _money(value: Optional[float]) -> str:
+    """A monetary amount in the request's resolved currency.
+
+    Imported lazily: this workflow is importable without the API layer, and a
+    formatting helper must never become a hard dependency of the calculation.
+    """
+    if value is None:
+        return "n/a"
+    try:
+        from mi_agent_api import currency as currency_mod
+
+        return currency_mod.format_money(float(value), suffixes=("bn", "m", "k"))
+    except Exception:  # noqa: BLE001 - presentation must not break a figure
+        return f"{float(value):,.2f}"
+
+
 def _share_pct(value: Optional[float]) -> str:
-    return "n/a" if value is None else f"{float(value) * 100:.1f}%"
+    """A share as a percentage, at enough precision to stay truthful.
+
+    One decimal place renders the largest single loan in an 11,035-loan book as
+    "0.0% of exposure" — a real, material concentration figure displayed as
+    zero. A share that is small is not a share that is absent, and rounding it
+    away is the kind of quiet misstatement a reader cannot detect.
+
+    So the precision follows the magnitude: percentages at or above 1% keep the
+    familiar single decimal, and smaller ones widen until two significant
+    figures survive. Only a genuine zero prints as "0.0%".
+    """
+    if value is None:
+        return "n/a"
+    pct = float(value) * 100.0
+    if pct == 0:
+        return "0.0%"
+    magnitude = abs(pct)
+    if magnitude >= 1:
+        return f"{pct:.1f}%"
+    if magnitude >= 0.1:
+        return f"{pct:.2f}%"
+    if magnitude >= 0.01:
+        return f"{pct:.3f}%"
+    return f"{pct:.2g}%"
 
 
 def run_concentration_analysis(
@@ -882,8 +933,19 @@ def _summary(scope: PortfolioScope, dimension_results: List[Dict[str, Any]],
         top = cats[0]
         share = (top["exposure_share"] if result["basis"] == engine.BASIS_EXPOSURE
                  else top["count_share"])
-        lines.append(f"Largest single {result['kind']} exposure is "
-                     f"{top['category']} ({_share_pct(share)} of {noun}).")
+        if result["kind"] == "loan" and result["basis"] == engine.BASIS_EXPOSURE:
+            # The AMOUNT is the answer to "what is the largest single-loan
+            # exposure"; the share answers "what share of the book is it". The
+            # loan's identifier answers neither, and printing it puts
+            # loan-level data in a portfolio answer — the table artifact
+            # carries the drill-down for anyone who needs it.
+            lines.append(
+                f"The largest single-loan exposure is "
+                f"{_money(top['exposure'])}, representing {_share_pct(share)} "
+                f"of {noun}.")
+        else:
+            lines.append(f"Largest single {result['kind']} exposure is "
+                         f"{top['category']} ({_share_pct(share)} of {noun}).")
         n = int(top_n) if top_n else DEFAULT_TOP_N
         top_share = result["top_shares"].get(f"top_{n}")
         if result["distinct_names"] > n and top_share is not None:
