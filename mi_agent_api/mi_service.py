@@ -544,8 +544,14 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         # route that reports nothing leaves these LOST and the answer refuses,
         # instead of presenting a whole-book figure for a narrowed question.
         population = receipt_mod.population_facets(spec, semantics)
+        import os as _od
+        if _od.environ.get("P1L_DEBUG"):
+            import sys as _sd
+            print(f"P1LG route={route} specfilters={(spec or {}).get('filters')} "
+                  f"evidence={(routed.get('metadata') or {}).get('populationApplied')}", file=_sd.stderr)
         receipt_mod.reconcile_population(
-            population, (routed.get("metadata") or {}).get("populationApplied"))
+            population, (routed.get("metadata") or {}).get("populationApplied"),
+            dataset_columns=(set(frame.columns) if frame is not None else None))
         facets = list(facets) + population
         if not facets and not substitution and granularity is None:
             # Nothing to adjudicate, but the answer still states what governed

@@ -879,9 +879,25 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                                f"{', '.join(str(k) for k in kept) or 'n/a'}.")})
     last_recon = (periods[-1].get("reconciliation") if periods else None) or {
         "dataset": dataset, "coverage_by_balance_pct": 100.0}
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=last_recon,
-                     source_notes=notes, warnings=warnings, route="evolution")
+    out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                    artifacts=[chart, table], reconciliation=last_recon,
+                    source_notes=notes, warnings=warnings, route="evolution")
+    if filtered:
+        # P1L: this route genuinely applies the population — per period, which is
+        # what makes a filtered trend meaningful — so it DECLARES that it did.
+        # The population ledger accepts execution evidence only, and a route that
+        # stays silent is treated as having widened. Silence from the one route
+        # that was always correct would have refused it.
+        last = next((p.get("filteredRows") for p in reversed(periods)
+                     if p.get("filteredRows") is not None), None)
+        before = next((p.get("rows") or p.get("totalRows") for p in reversed(periods)
+                       if (p.get("rows") or p.get("totalRows")) is not None), None)
+        out.setdefault("metadata", {})["populationApplied"] = {
+            "applied": [f"{key} (applied within each period)"
+                        for key in (getattr(spec, "filters", None) or {})],
+            "unavailable": [], "rowsBefore": before, "rowsAfter": last,
+        }
+    return out
 
 
 # --------------------------------------------------------------------------- #

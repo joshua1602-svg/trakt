@@ -1367,10 +1367,26 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None
       named as not applied.
     * ``VERDICT_OK`` — everything material was applied.
     """
-    blocking = [f for f in receipt.facets
-                if (f.kind in NUMBER_OR_SUBJECT_FACETS
-                    or _is_seasoning_population(f))
-                and f.status != APPLIED]
+    def _blocks(facet) -> bool:
+        if facet.status == APPLIED:
+            return False
+        if facet.kind == KIND_POPULATION:
+            # A population that vanished WITHOUT TRACE is the P1K harm: the route
+            # never looked, and a whole-book figure was returned for a narrowed
+            # question. That refuses.
+            #
+            # A population the route demonstrably TRIED and could not express
+            # (UNAVAILABLE) or that this book does not carry (UNSUPPORTED) is
+            # honest incapacity — it narrowed nothing, so no figure is being
+            # passed off as the narrow one. That is disclosed, exactly as P1I-A
+            # reasoned about an absent column and as the executor already treats
+            # an unavailable filter. Refusing it would reject sound questions
+            # over predicates the parser invented rather than over populations
+            # the user could have meant.
+            return facet.status not in DISCLOSABLE
+        return facet.kind in NUMBER_OR_SUBJECT_FACETS or _is_seasoning_population(facet)
+
+    blocking = [f for f in receipt.facets if _blocks(f)]
     if blocking:
         detail = "; ".join(f.disclosure() for f in blocking)
         return VERDICT_REFUSE, (
@@ -1540,7 +1556,8 @@ def population_facets(spec: Optional[Dict[str, Any]],
 
 
 def reconcile_population(facets: Sequence[RequestedFacet],
-                         evidence: Optional[Dict[str, Any]]) -> None:
+                         evidence: Optional[Dict[str, Any]],
+                         dataset_columns: Optional[Iterable[str]] = None) -> None:
     """Stamp population facets from EXECUTION EVIDENCE, in place.
 
     The bar is deliberately high and deliberately dumb: a facet is APPLIED only
@@ -1556,8 +1573,20 @@ def reconcile_population(facets: Sequence[RequestedFacet],
     for facet in facets:
         if facet.kind != KIND_POPULATION:
             continue
+        expressible = (dataset_columns is None
+                       or facet.field_key in set(dataset_columns))
         if facet.field_key in applied:
             facet.status, facet.reason = APPLIED, ""
+        elif not expressible:
+            # The BOOK cannot express this predicate, so it never narrowed
+            # anything and no figure is being passed off as the narrow one —
+            # the same reasoning P1I-A used for an absent column, and the same
+            # treatment the point-in-time executor already gives an unavailable
+            # filter. Disclosed, not refused; refusing here would reject
+            # questions over a bogus predicate the parser invented rather than
+            # over a population the user could actually have meant.
+            facet.status = UNSUPPORTED
+            facet.reason = "this book does not carry that field"
         elif facet.field_key in unavailable:
             facet.status = UNAVAILABLE
             facet.reason = ("this analytical route cannot restrict its "

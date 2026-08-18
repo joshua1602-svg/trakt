@@ -171,6 +171,42 @@ def test_spec_presence_is_not_execution_evidence():
     assert facets and facets[0].status == er.LOST
 
 
+def test_an_untraced_population_loss_refuses():
+    """The P1K harm: the route never looked, and a whole-book figure came back
+    for a narrowed question. That must refuse."""
+    facets = er.population_facets({"filters": {SEG: "Back Book"}})
+    er.reconcile_population(facets, None)
+    receipt = er.ExecutionReceipt(facets=facets)
+    verdict, message = er.assess(receipt)
+    assert verdict == er.VERDICT_REFUSE
+    assert "not substituted a broader figure" in (message or "")
+
+
+def test_a_population_the_route_tried_and_could_not_express_is_disclosed():
+    """Honest incapacity is not the P1K harm. A predicate the route demonstrably
+    attempted and could not apply narrowed nothing, so no figure is being passed
+    off as the narrow one — the same reasoning P1I-A used for an absent column.
+
+    This matters: without it, a bogus predicate the PARSER invented (a place
+    called "Concentration", from "the largest geographic area concentration")
+    would refuse a sound question the user actually asked."""
+    facets = er.population_facets({"filters": {"geographic_region_obligor": "X"}})
+    er.reconcile_population(
+        facets, {"applied": [], "unavailable": ["geographic_region_obligor = X"]})
+    assert facets[0].status in er.DISCLOSABLE
+    verdict, _message = er.assess(er.ExecutionReceipt(facets=facets))
+    assert verdict != er.VERDICT_REFUSE
+
+
+def test_a_field_this_book_does_not_carry_is_disclosed_not_refused():
+    facets = er.population_facets({"filters": {"no_such_field": "X"}})
+    er.reconcile_population(facets, {"applied": [], "unavailable": []},
+                            dataset_columns={"current_outstanding_balance"})
+    assert facets[0].status == er.UNSUPPORTED
+    verdict, _m = er.assess(er.ExecutionReceipt(facets=facets))
+    assert verdict != er.VERDICT_REFUSE
+
+
 def test_evidence_marks_the_facet_applied():
     facets = er.population_facets({"filters": {SEG: "Back Book"}})
     er.reconcile_population(
