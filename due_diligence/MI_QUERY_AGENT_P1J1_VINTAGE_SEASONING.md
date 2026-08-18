@@ -360,7 +360,34 @@ text — so the +3 is genuine added answerability, not churn.
 
 ## 13. Full suite
 
-_(pending — see §16)_
+`mi_agent/tests`, `mi_workflows`, `mi_agent_api/tests`, `trakt_core`, `tests` —
+run against the final code with nothing else competing for the machine:
+
+```
+8645 passed, 30 skipped, 21 xfailed, 48 warnings, 6 subtests passed in 1715.85s (0:28:35)
+```
+
+**0 failed.** (P1I-A baseline was 8,587; the +58 are this phase's new tests.)
+
+Six pre-existing tests had to be corrected on the way, across four files. Five
+encoded the conflation or its arithmetic and are recorded in §11 and in the
+commit messages; the sixth was a **governance violation this phase introduced** —
+"seasoning" briefly became a synonym of both `months_on_book` and
+`seasoning_bucket`, making resolution order-dependent.
+`test_no_synonym_maps_to_two_fields` caught it, and `months_on_book` kept the
+bare word.
+
+That six pre-existing tests asserted the vintage/provenance conflation as
+*expected behaviour* is itself a finding: the two axes were entangled in the
+test suite as well as in the code.
+
+One further failure was investigated and deliberately **not** changed:
+`test_serving_parquet::test_the_serving_copy_is_materially_faster_and_smaller`
+failed in a concurrent run. It is a timing test on shared hardware whose own
+docstring calls the 2× threshold deliberately loose, it touches only parquet/CSV
+reading, and in isolation it passes at 3.3×. It passed in another full run of the
+same code. It was contention, not a regression — so the fix was to stop running
+three heavy jobs at once, not to touch the test.
 
 ---
 
@@ -462,4 +489,18 @@ exposure with no new maths, and it serves a Treasury question asked constantly.
 
 ---
 
-P1J-1 GOVERNED VINTAGE & SEASONING: PENDING
+## 17. Gate
+
+| criterion | required | measured |
+|---|---|---|
+| INCORRECT_SUCCESSFUL | 0 | **0** |
+| SILENT_SEMANTIC_ERROR | 0 | **0** (two were removed) |
+| HARD_FAILURE | 0 | **0** (one was found and fixed) |
+| PROVENANCE_SUBSTITUTION | 0 | **0** (55 genuine LLM calls) |
+| SEASONING_SUBSTITUTION | 0 | **0** |
+| targeted bank | green | **53 / 53** |
+| immutable 40-bank | no regression | **11/40 → 14/40**, nothing regressed |
+| full suite | green | **8,645 passed, 0 failed** |
+| truth reconciliation | exact | **0 unexplained variance** |
+
+P1J-1 GOVERNED VINTAGE & SEASONING: PASS
