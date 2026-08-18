@@ -203,50 +203,95 @@ type Detail = {
   argument?: string;
   value: string;
   technical?: string;
-  tone: "mint" | "amber" | "rose" | "neutral";
 };
 
+/**
+ * The result card's tone is DERIVED from the call, never set by hand.
+ *
+ * It used to be a field on the detail, and it drifted from the row within one
+ * edit: check 7 (ESMA reporting readiness) showed a mint row — the governed
+ * layer answered — beside an amber result, because "14 of 18 required fields
+ * missing" is a concerning answer. Four more did the same (8, 24, 25, 26). On
+ * screen that reads as a contradiction: a green tick against an orange
+ * result, with nothing to say which one the viewer should believe.
+ *
+ * Both were saying true things about different questions. The row answers
+ * "did the call succeed"; the tone on the card was answering "is this
+ * finding bad". The second question is not the trace's to answer — the
+ * assessment answers it, once, with the findings that carry the severity —
+ * and that principle was already written down for the rows. It just was not
+ * applied to the cards.
+ *
+ * So the card now takes the row's tone by construction and cannot disagree
+ * with it: refused is amber, a successful retry is mint, everything else is
+ * neutral — and the invariant that matters is asserted below: the card is
+ * never amber unless its row is amber too.
+ */
+const detailTone = (call: Call | undefined): Tone =>
+  call?.refused ? "amber" : call?.adjusted ? "mint" : "neutral";
+
 const DETAILS: readonly Detail[] = [
-  { seq: 1, value: "27 of 28 measures available", tone: "neutral" },
-  { seq: 5, value: "Internal flags kept separate from breaches", tone: "neutral" },
+  { seq: 1, value: "27 of 28 measures available" },
+  { seq: 5, value: "Internal flags kept separate from breaches" },
   {
     seq: 7,
     argument: "regime: ESMA_Annex2",
-    value: "14 of 18 required fields missing",
-    tone: "amber",
+    value: "14 of 18 required fields missing"
   },
-  { seq: 8, value: "12% of the book on valuations over 5 years old", tone: "amber" },
+  { seq: 8, value: "12% of the book on valuations over 5 years old" },
   {
     seq: 9,
     argument: "dimension: days_past_due",
     value: "Refused — no such split exists",
-    technical: "TOOL_INPUT_INVALID",
-    tone: "amber",
+    technical: "TOOL_INPUT_INVALID"
   },
   {
     seq: 11,
     argument: "measures: [3]",
     value: "Refused — those measures aren't offered",
-    technical: "TOOL_INPUT_INVALID",
-    tone: "amber",
+    technical: "TOOL_INPUT_INVALID"
   },
-  { seq: 12, argument: "measures removed", value: "Asked again · answered", tone: "mint" },
+  { seq: 12, argument: "measures removed", value: "Asked again · answered" },
   {
     seq: 13,
     argument: "dimension: account_status",
-    value: "Asked a different way · answered",
-    tone: "mint",
+    value: "Asked a different way · answered"
   },
-  { seq: 21, value: "6.6% a year repaid early", technical: "OBSERVED_CPR@v2", tone: "neutral" },
+  { seq: 21, value: "6.6% a year repaid early", technical: "OBSERVED_CPR@v2" },
   {
     seq: 24,
     argument: "filter: account_status = Arrears",
-    value: "All in one region",
-    tone: "amber",
+    value: "All in one region"
   },
-  { seq: 25, argument: "filter: current_LTV = 92%", value: "All in one region", tone: "amber" },
-  { seq: 26, value: "Needs two snapshots · only one exists", tone: "amber" },
+  { seq: 25, argument: "filter: current_LTV = 92%", value: "All in one region" },
+  { seq: 26, value: "Needs two snapshots · only one exists" },
 ];
+
+/**
+ * The invariant, checked at module load so a bad edit fails the render rather
+ * than shipping a frame nobody scrubbed to.
+ *
+ * Stated precisely: a result card may be amber ONLY where its row is amber.
+ * Neutral beside a mint row is fine — silence does not contradict a tick. An
+ * amber card beside a mint one is the defect this replaced, and it is the only
+ * combination the eye reads as the demo arguing with itself.
+ */
+const assertResultTonesCannotContradict = (): void => {
+  const bySeq = new Map(CALLS.map((c) => [c.seq, c]));
+  for (const detail of DETAILS) {
+    const call = bySeq.get(detail.seq);
+    if (!call) {
+      throw new Error(`A2ADemo: result for check ${detail.seq}, which is not in the run`);
+    }
+    if (detailTone(call) === "amber" && !call.refused) {
+      throw new Error(
+        `A2ADemo: check ${detail.seq} shows an amber result against a row that succeeded`,
+      );
+    }
+  }
+};
+
+assertResultTonesCannotContradict();
 
 /** One number, three governing documents. From the finding's `rule` field. */
 export const VERDICTS = [
@@ -818,7 +863,9 @@ const DetailCard: React.FC = () => {
           fontSize: T.size.value,
           fontWeight: 600,
           lineHeight: 1.25,
-          color: current.tone === "amber" ? T.color.amber : T.color.ink100,
+          color: TONE_INK[detailTone(call)] === TONE_INK.neutral
+            ? T.color.ink100
+            : TONE_INK[detailTone(call)],
         }}
       >
         {current.value}

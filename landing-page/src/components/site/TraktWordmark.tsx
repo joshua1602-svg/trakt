@@ -26,7 +26,7 @@ export function TraktWordmark({ size = 26 }: { size?: number }) {
         />
         <circle cx="16" cy="24" r="1.8" fill="#fff" />
       </svg>
-      <span className="text-[17px] font-semibold tracking-tight text-ink-100">trakt</span>
+      <span className="text-subhead font-semibold tracking-tight text-ink-100">trakt</span>
     </>
   );
 }

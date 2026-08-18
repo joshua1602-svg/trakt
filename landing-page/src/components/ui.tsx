@@ -56,18 +56,18 @@ export function SectionHeading({
   return (
     <header className={cx("max-w-3xl", align === "center" && "mx-auto text-center")}>
       {eyebrow ? (
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-peri-400">
+        <p className="mb-3 text-small font-semibold uppercase tracking-[0.16em] text-peri-400">
           {eyebrow}
         </p>
       ) : null}
       <h2
         id={`${id}-heading`}
-        className="text-balance text-2xl font-semibold leading-tight tracking-tight text-ink-100 sm:text-3xl"
+        className="text-balance text-headline font-semibold text-ink-100"
       >
         {title}
       </h2>
       {intro ? (
-        <p className={cx("mt-4 text-[15px] leading-relaxed text-ink-300", PROSE)}>{intro}</p>
+        <p className={cx("mt-4 text-body leading-relaxed text-ink-300", PROSE)}>{intro}</p>
       ) : null}
     </header>
   );
@@ -114,7 +114,7 @@ export function Badge({
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-wide",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-small font-medium tracking-wide",
         tones[tone],
       )}
     >
@@ -124,7 +124,7 @@ export function Badge({
 }
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold " +
+  "inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-body font-semibold " +
   "transition-colors disabled:cursor-not-allowed disabled:opacity-55";
 
 export const buttonStyles = {

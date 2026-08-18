@@ -66,8 +66,8 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
         >
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line bg-navy-850/80 px-4 py-3">
             <div>
-              <p className="text-[15px] font-semibold text-ink-100">{meta.scope.client}</p>
-              <p className="mt-1 text-[12px] text-ink-300">
+              <p className="text-subhead font-semibold text-ink-100">{meta.scope.client}</p>
+              <p className="mt-1 text-small text-ink-300">
                 {meta.scope.portfolioName} · {meta.scope.loanCount} exposures ·{" "}
                 {meta.scope.totalBalanceDisplay} as at {meta.scope.asOfDisplay}
               </p>
@@ -76,10 +76,10 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
           </div>
 
           <div className="flex gap-2">
-            <div className="flex-1 rounded-xl border border-line bg-navy-950/60 px-4 py-3 text-sm text-ink-500">
+            <div className="flex-1 rounded-xl border border-line bg-navy-950/60 px-4 py-3 text-body text-ink-500">
               Ask about balance, concentration, LTV, reporting…
             </div>
-            <div className="rounded-lg bg-peri-400/60 px-5 py-3 text-sm font-semibold text-navy-950">
+            <div className="rounded-lg bg-peri-400/60 px-5 py-3 text-body font-semibold text-navy-950">
               Ask Trakt
             </div>
           </div>
@@ -106,14 +106,14 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
           data-poster-content
           className="pointer-events-none select-none px-4 pb-4 sm:px-5 sm:pb-5"
         >
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+          <p className="mb-2 text-small font-semibold uppercase tracking-wider text-ink-400">
             Try one of these
           </p>
           <div className="flex flex-wrap gap-2">
             {meta.suggestedQuestions.map((question) => (
               <span
                 key={question.id}
-                className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-xs text-ink-200"
+                className="rounded-full border border-line bg-navy-850 px-3.5 py-1.5 text-small text-ink-200"
               >
                 {question.label}
               </span>
@@ -121,7 +121,7 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
             {meta.reportActions.map((action) => (
               <span
                 key={action.id}
-                className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-xs font-medium text-peri-200"
+                className="rounded-full border border-peri-500/50 bg-peri-400/10 px-3.5 py-1.5 text-small font-medium text-peri-200"
               >
                 {action.label}
               </span>
@@ -132,7 +132,7 @@ export function QueryDemo({ meta }: { meta: DemoMetaResponse }) {
 
       {/* Below the frame, never over it — it used to cross the input row and
           the Ask Trakt button at phone width. */}
-      <figcaption className="mt-3 text-[11px] leading-relaxed text-ink-500">
+      <figcaption className="mt-3 text-small leading-relaxed text-ink-500">
         Interactive · opens with “{opening?.label ?? "a portfolio question"}”
       </figcaption>
     </figure>

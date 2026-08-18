@@ -111,8 +111,8 @@ export function LeadForm() {
         data-state-colour="lead-success"
         className="rounded-xl border border-mint-400/35 bg-mint-400/[0.07] p-6"
       >
-        <h3 className="text-base font-semibold text-ink-100">Thank you — that&apos;s with us.</h3>
-        <p className="mt-2 text-sm leading-relaxed text-ink-300">
+        <h3 className="text-subhead font-semibold text-ink-100">Thank you — that&apos;s with us.</h3>
+        <p className="mt-2 text-body leading-relaxed text-ink-300">
           We will be in touch to arrange a walkthrough against your own portfolio data,
           reporting requirements and Microsoft 365 environment.
         </p>
@@ -163,7 +163,7 @@ export function LeadForm() {
       </div>
 
       <div>
-        <label htmlFor={ids.message} className="block text-xs font-medium text-ink-300">
+        <label htmlFor={ids.message} className="block text-small font-medium text-ink-300">
           Message <span className="text-ink-500">(optional)</span>
         </label>
         <textarea
@@ -171,7 +171,7 @@ export function LeadForm() {
           name="message"
           rows={3}
           maxLength={LEAD_FIELD_LIMITS.message}
-          className="mt-1.5 w-full rounded-lg border border-line bg-navy-950 px-3.5 py-2.5 text-sm text-ink-100 placeholder:text-ink-500"
+          className="mt-1.5 w-full rounded-lg border border-line bg-navy-950 px-3.5 py-2.5 text-body text-ink-100 placeholder:text-ink-500"
           placeholder="Asset class, portfolio size, reporting requirements…"
         />
       </div>
@@ -183,7 +183,7 @@ export function LeadForm() {
       </div>
 
       <div>
-        <label htmlFor={ids.consent} className="flex items-start gap-2.5 text-xs leading-relaxed text-ink-300">
+        <label htmlFor={ids.consent} className="flex items-start gap-2.5 text-small leading-relaxed text-ink-300">
           <input
             id={ids.consent}
             name="consent"
@@ -199,14 +199,14 @@ export function LeadForm() {
           </span>
         </label>
         {errors.consent ? (
-          <p id={`${ids.consent}-error`} className="mt-1.5 text-xs text-rose-400">
+          <p id={`${ids.consent}-error`} className="mt-1.5 text-small text-rose-400">
             {errors.consent}
           </p>
         ) : null}
       </div>
 
       {message ? (
-        <p role="alert" className="rounded-lg border border-rose-400/35 bg-rose-400/10 px-3 py-2 text-sm text-rose-400">
+        <p role="alert" className="rounded-lg border border-rose-400/35 bg-rose-400/10 px-3 py-2 text-body text-rose-400">
           {message}
         </p>
       ) : null}
@@ -241,7 +241,7 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-xs font-medium text-ink-300">
+      <label htmlFor={id} className="block text-small font-medium text-ink-300">
         {label}
         {required ? <span aria-hidden="true" className="ml-0.5 text-peri-400">*</span> : null}
         {optional ? <span className="text-ink-500"> (optional)</span> : null}
@@ -256,12 +256,12 @@ function Field({
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${id}-error` : undefined}
         className={cx(
-          "mt-1.5 w-full rounded-lg border bg-navy-950 px-3.5 py-2.5 text-sm text-ink-100 placeholder:text-ink-500",
+          "mt-1.5 w-full rounded-lg border bg-navy-950 px-3.5 py-2.5 text-body text-ink-100 placeholder:text-ink-500",
           error ? "border-rose-400/60" : "border-line",
         )}
       />
       {error ? (
-        <p id={`${id}-error`} className="mt-1.5 text-xs text-rose-400">
+        <p id={`${id}-error`} className="mt-1.5 text-small text-rose-400">
           {error}
         </p>
       ) : null}
