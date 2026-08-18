@@ -183,7 +183,7 @@ class TestRoutedAnswer:
         assert payload["metric_changes"]
         assert payload["period_resolution"]["resolved_start_snapshot"][
             "reporting_date"] == "2026-05-31"
-        assert payload["audit"]["business_semantics"]["registry_version"] == "0.2.0"
+        assert payload["audit"]["business_semantics"]["registry_version"] == "0.3.0"
         # The pre-existing envelope keys are untouched.
         for key in ("ok", "question", "answer", "spec", "artifacts", "validation",
                     "warnings", "metadata", "sourceNotes"):

@@ -61,7 +61,7 @@ DEFAULT_SOURCE = REPO_ROOT / "config" / "system" / "fields_registry.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "config" / "business_semantics_registry.yaml"
 
 # Content (registry) version — bumps when curated content changes.
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 # Schema version — bumps when the entry/metadata SHAPE changes.
 SCHEMA_VERSION = 2
 
@@ -155,6 +155,11 @@ TAXONOMY: Dict[str, List[str]] = {
     ],
     "default_aggregations": [
         "average",
+        # A CARDINALITY, not an arithmetic aggregate: how many loans carry a
+        # value. Its field is an identifier, so nothing is summed or averaged.
+        # Added so "how many loans are in each book" is a governed comparison
+        # rather than a figure the comparison workflow had to decline.
+        "count",
         "distribution",
         "share",
         "sum",
@@ -272,6 +277,22 @@ _PCMP_MON = ["portfolio_comparison", "monitoring"]
 # semantics layer or the risk-monitor configuration.
 
 CURATION: Dict[str, Dict[str, Any]] = {
+
+    # ================= POPULATION =================
+    "loan_identifier": E(
+        # portfolio_comparison ONLY. Period-change over an identifier is
+        # meaningless — the movement a reader wants there is net loan growth,
+        # which is a different measure — and a period-change audit that names
+        # the identifier field trips the no-loan-level-data guard for no
+        # analytical gain. Ranking and monitoring on an identifier are likewise
+        # not concepts. Scope kept to the workflow that actually compares it.
+        "exposure", ["exposure"], _PCMP, "neutral", "count", "high",
+        "Loan cardinality: how many loans a population contains, counted on "
+        "the canonical identifier so nothing about the identifier's VALUE is "
+        "interpreted. Neutral by declaration — more loans is neither better "
+        "nor worse, it is scale — which is why a comparison may state the "
+        "difference but never reads a direction into it.",
+        display="Loan Count"),
 
     # ================= EXPOSURE / BALANCES =================
     "current_outstanding_balance": E(

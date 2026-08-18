@@ -359,7 +359,7 @@ class TestAudit:
 
     def test_the_audit_identifies_the_registry_and_calculation_versions(self, payload):
         audit = payload["audit"]
-        assert audit["business_semantics"]["registry_version"] == "0.2.0"
+        assert audit["business_semantics"]["registry_version"] == "0.3.0"
         assert audit["business_semantics"]["schema_version"] == 2
         assert audit["calculation_version"] == m.CALCULATION_VERSION
         assert audit["selection_policy"]["name"]

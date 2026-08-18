@@ -100,7 +100,7 @@ functions are never the oracle.
 | | Question | Answer | Independent truth |
 |---|---|---|---|
 | **CFO-01** | balance, loan count, WA LTV, WA rate | `Balance: £1.96bn · Loans: 11,035 · Weighted-average Current LTV: 43.16% · Weighted-average Interest Rate: 6.56%` | 1,964,886,258.21 · 11,035 · 43.156246 · 6.559723 ✅ |
-| **CFO-02** | direct vs acquired on 4 measures | 3 compared: `Direct has higher observed Current Outstanding Balance… Current Loan To Value… Youngest Borrower Age than Acquired.` **`Not compared: Loan count (…)`** — see §6.4 | balance £1,385,508,582.98 vs £579,377,675.23; LTV 43.3535/42.6846; age 72.1878/69.9570 ✅ |
+| **CFO-02** | direct vs acquired on 4 measures | all 4 compared: `Direct has higher observed Current Outstanding Balance… Loan Count… Current Loan To Value… Youngest Borrower Age than Acquired.` | balance £1,385,508,582.98 vs £579,377,675.23; **loans 7,126 vs 3,909**; LTV 43.3535/42.6846; age 72.1878/69.9570 ✅ |
 | **CFO-03** | London: balance, loans, WA LTV, avg age | `Balance: £413.80m · Loans: 1,380 · Weighted-average Current LTV: 42.75% · Average Borrower Age: 71.4` | 413,804,467.49 · 1,380 · 42.745340 · 71.383333 ✅ |
 | **CFO-04** | borrowers over 85: 4 measures | `Balance: £19.43m · Loans: 86 · Weighted-average Current LTV: 51.97% · Weighted-average Interest Rate: 6.65%` | 19,428,730.79 · 86 · 51.973389 · 6.648052 ✅ |
 | **CFO-05** | balance, loans, WA LTV **by region** | one table, 12 groups, three measure columns | every group reconciled ✅ |
@@ -228,13 +228,8 @@ express at all; and it would have made the ledger claim the workflow had
 undertaken something it never had. No facet that blocked before is non-blocking
 now. Both halves are pinned by tests.
 
-**Open governance question for you, not for me to decide:** a loan count per
-book is trivially computable and would be genuinely useful in a comparison. Two
-resolutions exist — add a governed loan-count measure to the Business Semantics
-Registry (with an explicit directionality declaration, most likely *neutral*),
-or leave counts outside the comparison surface and keep the disclosure above.
-The first is a registry-ownership decision of the kind reserved to you in the
-asset-class phase, so it is flagged rather than taken.
+**Resolved — you chose the registry route (§6.6).** The disclosure above was
+the interim state; a loan count is now compared like any other measure.
 
 ### 6.5 "The funded book" read as a place called *Funded*
 
@@ -256,9 +251,52 @@ merely reported because it is the same defect class already being fixed and the
 change is one line of an existing list. A scope-control test asserts the guard
 never shadows a word that appears in a real region name in the book.
 
+### 6.6 Loan cardinality is now a governed measure
+
+Following your decision, loan count is declared in the Business Semantics
+Registry rather than special-cased out of the comparison.
+
+The registry is auto-generated and refuses hand edits, so the change was made
+where it belongs — the **curation in the build script** — and regenerated:
+
+* `count` joins the controlled `default_aggregations` taxonomy. It is a
+  *cardinality*, not an arithmetic aggregate: the measure is declared on the
+  canonical `loan_identifier`, and the engine primitive counts **presence**
+  without coercing the column to numeric, so nothing about an identifier's
+  value is ever interpreted.
+* `loan_identifier` is curated as an `exposure` **measure**, `count`,
+  **`directionality: neutral`** — more loans is neither better nor worse, it is
+  scale, which is what stops a comparison reading a verdict into a difference
+  in book size — with `display_name: "Loan Count"`.
+* Registry content version **0.2.0 → 0.3.0** (243 entries). The controlled
+  vocabulary changed, so consumers see it.
+
+**Scoped to `portfolio_comparison` only.** The first attempt tagged it for all
+four workflows and immediately tripped an existing guard —
+`test_no_loan_level_data_appears_in_the_audit_or_evidence` — because the
+period-change audit began naming the identifier field. The guard was right:
+period-change over an identifier is not a concept (the movement a reader wants
+there is net loan growth, a different measure), and ranking or monitoring an
+identifier is meaningless. The curation was narrowed rather than the guard
+relaxed.
+
+CFO-02 now compares all four measures, reconciled to the book:
+
+| Metric | Direct | Acquired | Difference |
+|---|---|---|---|
+| Current Outstanding Balance | £1.39bn | £579.4m | £806.1m |
+| **Loan Count** | **7,126** | **3,909** | **3,217** |
+| Current Loan To Value (wt) | 43.35 | 42.68 | 0.6688 |
+| Youngest Borrower Age (avg) | 72.2 | 70.0 | 2.2 |
+
+One rendering fix went with it: an integer-unit cell was formatted `,.1f`, so
+the count read "7,126.0". Counts now render as whole numbers, keyed off the
+**aggregation** rather than the unit — the average of an integer-unit field (a
+term in months) is legitimately fractional and keeps its decimals.
+
 ---
 
-## 7. Negative and safety tests — 37 assertions
+## 7. Negative and safety tests — 39 assertions
 
 `tests/test_p1e_measure_safety.py`. Each is a way P1E could produce a confident
 wrong answer.
@@ -281,7 +319,7 @@ wrong answer.
 | P0 boundary | `KIND_UNRESOLVED_MEASURE` is a NUMBER facet (refuses), not a SHAPE facet (partial) |
 | Relationship questions | "ltv vs interest rate" stays a scatter, not a measure set |
 | Model role | prompt carries the array and both prohibitions; reconciliation cannot move a measure; an invented field cannot reach a number |
-| Routed capability gap | a comparison names the loan count it cannot compare; the ledger keeps BSR measures separate from measures the route does not express |
+| Governed loan count | the comparison compares all four measures; the count reconciles to the book and renders as a whole number; declared neutral; scoped to comparison, not period-change |
 | Parser consistency | a set the model returned as one metric is carried; a measure it read differently is never overwritten; a set it expressed itself is left alone |
 | Scope words | "the acquired book" and "the funded book" are never resolved as places; the guard never shadows a real region word |
 
@@ -395,8 +433,7 @@ the guarantee rather than the old mechanism:
    re-run of the five CFO questions, the P1E bank and the 40-question bank
    remains outstanding and should be completed before launch.**
 
-4. **A loan count is not comparable across books** — §6.4. Disclosed, not
-   silent; the governance decision is yours.
+4. ~~A loan count is not comparable across books~~ — **resolved**, §6.6.
 
 **API key handling.** None was supplied. A repository-wide scan for `sk-ant-`
 across tracked and untracked files returns nothing. No key was written to disk,
@@ -415,11 +452,15 @@ committed or printed at any point in this phase.
 | `mi_agent/mi_agent_workflow.py` | `_multi_measure_answer`, `_format_measure_value` |
 | `mi_agent/mi_query_contract.py` | requested / executed / unavailable measures on the query trace |
 | `mi_agent_api/chat_routing.py` | requested-measure invariant + explicit partial on the comparison route |
-| `mi_workflows/portfolio_risk_comparison.py` | `requested_metrics`, measure-set comparison |
+| `mi_workflows/portfolio_risk_comparison.py` | `requested_metrics`, measure-set comparison, `COUNT_MEASURE_FIELD` |
+| `scripts/build_business_semantics_registry.py` | `count` aggregation taxonomy, curated loan-cardinality entry, version 0.3.0 |
+| `config/business_semantics_registry.yaml` | regenerated (243 entries) |
+| `mi_workflows/engine.py` | `AGG_COUNT` primitive |
+| `mi_agent/business_semantics.py` | `AGG_COUNT` constant |
 | `mi_agent/tests/test_p0_execution_receipt.py` | two tests reworked (§10) |
 | `mi_agent/tests/test_p1a_single_filter.py` | one test reworked (§10) |
 | `tests/test_p1e_multi_measure.py` | **new** — contract + the five CFO questions (18) |
 | `tests/test_p1e_golden_bank.py` | **new** — 26-question bank (74) |
-| `tests/test_p1e_measure_safety.py` | **new** — negative and safety tests (37 + 1 xfail) |
+| `tests/test_p1e_measure_safety.py` | **new** — negative and safety tests (39 + 1 xfail) |
 
 **Not merged. Not pushed.**

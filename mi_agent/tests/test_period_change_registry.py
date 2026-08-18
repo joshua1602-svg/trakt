@@ -31,8 +31,8 @@ def raw():
 # --------------------------------------------------------------------------- #
 def test_loads_the_committed_v2_registry(registry):
     assert registry.schema_version == bs.SUPPORTED_SCHEMA_VERSION == 2
-    assert registry.version == "0.2.0"
-    assert len(registry) == 242
+    assert registry.version == "0.3.0"
+    assert len(registry) == 243
 
 
 def test_every_yaml_field_becomes_a_typed_entry(registry, raw):
@@ -69,7 +69,7 @@ def test_the_loader_constants_match_the_registry_taxonomy(registry):
         bs.TEMPORALITY_CUMULATIVE, bs.TEMPORALITY_STATIC_BASELINE}
     assert set(taxonomy["default_aggregations"]) == {
         bs.AGG_SUM, bs.AGG_AVERAGE, bs.AGG_WEIGHTED_AVERAGE, bs.AGG_SHARE,
-        bs.AGG_DISTRIBUTION}
+        bs.AGG_DISTRIBUTION, bs.AGG_COUNT}
     assert set(taxonomy["directionality"]) == {
         bs.DIRECTION_HIGHER_IS_BETTER, bs.DIRECTION_HIGHER_IS_WORSE,
         bs.DIRECTION_LOWER_IS_BETTER, bs.DIRECTION_LOWER_IS_WORSE,
@@ -178,7 +178,7 @@ def test_no_source_id_returns_the_same_registry(registry):
 
 def test_provenance_identifies_the_registry_that_produced_a_result(registry):
     provenance = registry.to_provenance()
-    assert provenance["registry_version"] == "0.2.0"
+    assert provenance["registry_version"] == "0.3.0"
     assert provenance["schema_version"] == 2
-    assert provenance["entry_count"] == 242
+    assert provenance["entry_count"] == 243
     assert provenance["overridden_fields"] == []

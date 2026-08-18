@@ -1933,9 +1933,15 @@ def _share_pct(value: Optional[float]) -> str:
     return "—" if value is None else f"{float(value) * 100:.1f}%"
 
 
-def _comparison_cell(value: Optional[float], unit: str) -> str:
+def _comparison_cell(value: Optional[float], unit: str,
+                     aggregation: Optional[str] = None) -> str:
     if value is None:
         return "—"
+    if aggregation == "count":
+        # A cardinality is a whole number. Keyed off the AGGREGATION, not the
+        # unit: the average of an integer-unit field (a term in months) is
+        # legitimately fractional and must keep its decimals.
+        return f"{float(value):,.0f}"
     if unit == "currency":
         return _gbp(value)
     if unit == "share":
@@ -1956,13 +1962,14 @@ def _metric_comparison_table(result: Dict[str, Any], *, spec_dict, portfolio_id,
     rows = []
     for c in comparisons:
         unit = c.get("unit") or "decimal"
+        agg = c.get("aggregation")
         rows.append({
             "metric": c["display_name"],
             "aggregation": c["aggregation"]
             + (f" (wt: {c['weight_basis']})" if c.get("weight_basis") else ""),
-            "a": _comparison_cell(c["portfolio_a"]["value"], unit),
-            "b": _comparison_cell(c["portfolio_b"]["value"], unit),
-            "difference": _comparison_cell(c["difference"]["absolute"], unit),
+            "a": _comparison_cell(c["portfolio_a"]["value"], unit, agg),
+            "b": _comparison_cell(c["portfolio_b"]["value"], unit, agg),
+            "difference": _comparison_cell(c["difference"]["absolute"], unit, agg),
             "direction": (c["directionality"]["higher"] or "—").replace(
                 "portfolio_a", label_a).replace("portfolio_b", label_b),
         })

@@ -405,37 +405,72 @@ def test_a_measure_the_model_invents_cannot_reach_a_number(semantics, columns):
 # =========================================================================== #
 # 9. A measure a ROUTED capability cannot express
 # =========================================================================== #
-def test_a_comparison_names_the_measure_it_cannot_compare(ask):
-    """The comparison route compares Business Semantics Registry measures, which
-    carry a declared directionality and comparability. A loan count carries
-    neither, so it is not compared — and before P1E it simply vanished, leaving
-    a three-measure answer to a four-measure question with nothing to show that
-    anything was missing.
+def test_a_comparison_compares_every_measure_including_the_loan_count(ask):
+    """A loan count used to vanish from a comparison.
 
-    It is now NAMED. The three governed comparisons still stand, because a
-    measure the capability does not express at all is disclosable — unlike a
-    measure the parser failed to resolve, which refuses.
+    It was excluded because it is not an arithmetic measure over a value — and
+    that was right — but the exclusion was silent, so a four-measure question
+    came back with three figures and nothing to show the fourth was missing.
+
+    Loan cardinality is now a governed Business Semantics Registry measure,
+    declared on the canonical identifier with a ``count`` aggregation, so it
+    goes through the same comparability rules as everything else.
     """
     envelope = ask("Compare the direct and acquired books on balance, loan "
                    "count, weighted-average LTV and average borrower age.")
     assert envelope["ok"] is True, envelope.get("error")
     text = answer(envelope)
-    assert "Not compared: Loan count" in text
-    for measure in ("Current Outstanding Balance", "Current Loan To Value",
-                    "Youngest Borrower Age"):
+    for measure in ("Current Outstanding Balance", "Loan Count",
+                    "Current Loan To Value", "Youngest Borrower Age"):
         assert measure in text
+    assert "Not compared" not in text
 
 
-def test_the_comparison_ledger_separates_measures_it_undertook_to_compare(ask):
-    """``requestedMetricsNotCompared`` means "a BSR measure I was asked for and
-    did not compare". A loan count was never one of those, so it is reported
-    separately rather than being injected into that ledger — which would turn a
-    disclosable gap into a refusal."""
+def test_the_compared_loan_count_reconciles_to_the_book(ask, governed_env):
+    """The figure, against pandas — and rendered as a whole number, because a
+    cardinality with a decimal place reads as an estimate."""
+    from mi_agent_api.data_source import get_dataframe
+
+    book = get_dataframe()
+    expected = {"alp_origination": int((book["source_portfolio_id"]
+                                        == "alp_origination").sum()),
+                "alp_acquired": int((book["source_portfolio_id"]
+                                     == "alp_acquired").sum())}
     envelope = ask("Compare the direct and acquired books on balance, loan "
                    "count, weighted-average LTV and average borrower age.")
-    comparison = (envelope.get("metadata") or {}).get("portfolioComparison") or {}
-    assert comparison.get("requestedMetricsNotCompared") == []
-    assert "loan_count" not in (comparison.get("requestedMetrics") or [])
+    row = next(r for artifact in envelope["artifacts"]
+               if artifact.get("type") == "table"
+               for r in (artifact.get("rows") or [])
+               if r.get("metric") == "Loan Count")
+    assert row["a"] == f"{expected['alp_origination']:,}"
+    assert row["b"] == f"{expected['alp_acquired']:,}"
+    assert row["difference"] == (
+        f"{expected['alp_origination'] - expected['alp_acquired']:,}")
+
+
+def test_the_loan_count_measure_is_declared_neutral(governed_env):
+    """More loans is neither better nor worse — it is scale. The registry says
+    so explicitly, which is what stops a comparison reading a direction into a
+    difference in book size."""
+    from mi_workflows import semantics as bsr_module
+
+    entry = bsr_module.load_business_semantics().get("loan_identifier")
+    assert entry is not None, "loan cardinality is not governed by the BSR"
+    assert entry.default_aggregation == "count"
+    assert entry.directionality == "neutral"
+    assert entry.analytical_role == "measure"
+
+
+def test_the_count_is_scoped_to_comparison_not_to_period_change(governed_env):
+    """Period-change over an identifier is not a concept, and naming the
+    identifier field in a period-change audit trips the no-loan-level-data
+    guard for no analytical gain. The curation is scoped to the workflow that
+    actually compares it."""
+    from mi_workflows import semantics as bsr_module
+
+    entry = bsr_module.load_business_semantics().get("loan_identifier")
+    assert "portfolio_comparison" in entry.workflow_tags
+    assert "period_change" not in entry.workflow_tags
 
 
 # =========================================================================== #

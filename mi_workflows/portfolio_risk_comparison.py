@@ -60,6 +60,12 @@ DATASET = "funded"
 #: Canonical reporting-date column on the governed tape.
 REPORTING_DATE_FIELD = "reporting_date"
 
+#: The governed measure behind "how many loans". Loan cardinality is declared in
+#: the Business Semantics Registry on the canonical identifier with a ``count``
+#: aggregation, so an MI spec asking for ``loan_count`` resolves here and is
+#: compared under the same rules as every other measure.
+COUNT_MEASURE_FIELD = "loan_identifier"
+
 #: Asset-class column, when the tape declares one. Absent means "not declared"
 #: — asset-specific fields are then excluded rather than guessed at.
 ASSET_CLASS_FIELD = "asset_class"
@@ -548,10 +554,11 @@ def run_portfolio_risk_comparison(
     # requested set is one list; a single requested metric is a one-element case
     # of it, so there is one code path rather than two.
     requested_fields: List[str] = []
-    #: Requested measures this comparison cannot express. Carried separately so
-    #: they are DISCLOSED rather than dropped: a loan count asked for alongside
-    #: three comparable measures used to vanish, and an answer naming three of
-    #: four reads as complete.
+    #: Requested measures this comparison cannot express at all. Carried
+    #: separately from ``requested_metrics`` — which is the set of BSR measures
+    #: the workflow undertook to compare — so anything it cannot express is
+    #: DISCLOSED rather than dropped. An answer naming three of four measures
+    #: reads as complete, which is how a requested figure used to vanish.
     uncomparable: List[Dict[str, Any]] = []
     if spec is not None:
         for measure in (getattr(spec, "measures", None) or []):
@@ -559,19 +566,12 @@ def run_portfolio_risk_comparison(
             if not name:
                 continue
             if name in ("loan_count", "count"):
-                # DISCLOSED, not compared. A loan count is not a Business
-                # Semantics Registry measure — it carries no directionality or
-                # comparability declaration — so it is reported separately from
-                # ``requested_metrics``, which is the set of BSR measures this
-                # workflow undertook to compare. It must still reach the reader:
-                # dropping it here is what let a requested figure vanish.
-                if not any(u["field"] == name for u in uncomparable):
-                    uncomparable.append({
-                        "field": name, "display_name": "Loan count",
-                        "compared": False,
-                        "reason": ("a loan count is not a Business Semantics "
-                                   "Registry measure for portfolio comparison")})
-                continue
+                # The MI spec's count measure IS a governed BSR measure: loan
+                # cardinality, declared on the canonical identifier with a
+                # neutral directionality. Resolved to that key so it goes
+                # through the same comparability rules as every other measure
+                # rather than being special-cased out of the comparison.
+                name = COUNT_MEASURE_FIELD
             if name not in requested_fields:
                 requested_fields.append(name)
         single = getattr(spec, "metric", None)

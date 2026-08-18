@@ -5,7 +5,7 @@
 # regenerate with --force (the script refuses to overwrite otherwise).
 metadata:
   schema_version: 2
-  version: 0.2.0
+  version: 0.3.0
   source_registry: config/system/fields_registry.yaml
   generator: scripts/build_business_semantics_registry.py
   description: 'Governed Business Semantics Registry: the subset of canonical registry fields that represent
@@ -13,7 +13,7 @@ metadata:
     risk comparison, ranking and monitoring workflows. See docs/business_semantics_registry_review.md
     for the full review, exclusions and uncertain entries.'
   source_field_count: 499
-  included_field_count: 242
+  included_field_count: 243
   uncertain_pending_review_count: 25
   taxonomy:
     analytical_concepts:
@@ -83,6 +83,7 @@ metadata:
     - static_baseline
     default_aggregations:
     - average
+    - count
     - distribution
     - share
     - sum
@@ -2866,6 +2867,29 @@ fields:
     - cross_asset
     confidence: medium
     rationale: Whether the loan is hedged; hedged share of rate risk.
+  loan_identifier:
+    source_field: loan_identifier
+    display_name: Loan Count
+    analytical_concept: exposure
+    analytical_role: measure
+    temporality: point_in_time
+    categories:
+    - exposure
+    workflow_tags:
+    - portfolio_comparison
+    directionality: neutral
+    default_aggregation: count
+    weight_field: null
+    share_basis: null
+    portfolio_comparability: comparable
+    supports_materiality_assessment: false
+    asset_applicability:
+    - cross_asset
+    confidence: high
+    rationale: 'Loan cardinality: how many loans a population contains, counted on the canonical identifier
+      so nothing about the identifier''s VALUE is interpreted. Neutral by declaration — more loans is
+      neither better nor worse, it is scale — which is why a comparison may state the difference but never
+      reads a direction into it.'
   loan_redemption_flag:
     source_field: loan_redemption_flag
     display_name: Loan Redemption Flag
