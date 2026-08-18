@@ -943,7 +943,8 @@ def run_mi_agent_query(
             _facets, spec=spec, query_result=qres, semantics=semantics)
         if not _substitution:
             _substitution = _receipt_mod.detect_measure_substitution(
-                question, metric_key=getattr(spec, "metric", None))
+                question, metric_key=getattr(spec, "metric", None),
+                executed_concepts=_receipt_mod.executed_measure_concepts(qres))
         if not _substitution:
             _substitution = _receipt_mod.detect_unranked_superlative(
                 question, spec=spec, query_result=qres)

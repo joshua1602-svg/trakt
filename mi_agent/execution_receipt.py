@@ -1660,14 +1660,40 @@ ROUTE_FIXED_MEASURE = {
 }
 
 
+def comparison_measure_concepts(compared: Dict[str, Any]) -> Set[str]:
+    """The measure CONCEPTS a routed comparison declares it compared.
+
+    Read from the route's own ``measuresCompared`` field list, so the answer is
+    checked against what executed rather than against the spec it was handed.
+    """
+    concepts: Set[str] = set()
+    for key in (compared or {}).get("measuresCompared") or []:
+        if key in ("loan_count", "count", "loan_identifier"):
+            concepts.add("count")
+            continue
+        concept = executed_measure_concept(key)
+        if concept:
+            concepts.add(concept)
+    return concepts
+
+
 def detect_measure_substitution(question: str, *, route: Optional[str] = None,
-                                metric_key: Optional[str] = None) -> Optional[str]:
+                                metric_key: Optional[str] = None,
+                                executed_concepts: Optional[Set[str]] = None
+                                ) -> Optional[str]:
     """The measure the answer reports is not one the question named.
 
     Only fires when the question EXPLICITLY names at least one measure and the
     executed measure is known and is none of them — so a question that names no
     measure, or a capability whose measure cannot be determined, is never
     refused on this basis.
+
+    ``executed_concepts`` is the measure SET that actually ran. It matters
+    because a spec can carry a set with no singular ``metric``: passing only
+    ``metric_key`` then yields None, the check is skipped, and "compare the two
+    books on borrower age" answered with balance and loan count reads as
+    correct. That is the defect this parameter closes — the question's measure
+    is reconciled against everything that executed, not against one slot.
     """
     named = named_measure_concepts(question)
     if not named:
@@ -1675,12 +1701,18 @@ def detect_measure_substitution(question: str, *, route: Optional[str] = None,
     # The route's own fixed measure wins over the spec's: a capability that
     # always reports exposure concentration reports exposure concentration even
     # when the spec it was handed named arrears.
-    executed = (ROUTE_FIXED_MEASURE.get(route or "")
-                or executed_measure_concept(metric_key))
-    if not executed or executed in named:
+    fixed = ROUTE_FIXED_MEASURE.get(route or "")
+    if fixed:
+        executed_set = {fixed}
+    else:
+        executed_set = set(executed_concepts or ())
+        single = executed_measure_concept(metric_key)
+        if single:
+            executed_set.add(single)
+    if not executed_set or executed_set & set(named):
         return None
-    return (f"the answer reports {executed}, but the question asked about "
-            f"{_join(named)}")
+    return (f"the answer reports {_join(sorted(executed_set))}, but the "
+            f"question asked about {_join(named)}")
 
 
 #: Granularity a route reports at, when it is fixed and may differ from the one

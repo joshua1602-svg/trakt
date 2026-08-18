@@ -523,8 +523,13 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         from mi_agent import execution_receipt as receipt_mod
 
         spec = routed.get("spec") if isinstance(routed.get("spec"), dict) else {}
+        # The measure SET the route declares it compared, not just the spec's
+        # singular metric: a P1E spec can carry a set with metric=None, and the
+        # substitution check then had nothing to compare against.
+        _compared = receipt_mod.comparison_evidence(routed)
         substitution = receipt_mod.detect_measure_substitution(
-            question, route=route, metric_key=(spec or {}).get("metric"))
+            question, route=route, metric_key=(spec or {}).get("metric"),
+            executed_concepts=receipt_mod.comparison_measure_concepts(_compared))
         facets = receipt_mod.detect_requested_facets(
             question, semantics, frame=frame,
             requested_dimensions=receipt_mod.requested_dimension_terms(
