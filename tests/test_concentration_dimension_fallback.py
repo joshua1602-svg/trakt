@@ -42,11 +42,13 @@ from mi_agent.concentration_tests.metrics import (  # noqa: E402
 )
 
 #: Trees that never carry a governed concentration configuration.
-# "out/" is gitignored run output, not configuration. Scanning it made this test
-# fail on whatever a developer had last generated there — an MI harness
-# transcript that merely MENTIONS a dimension is not a configuration using one.
+# Generated EVIDENCE is not configuration. "out/" is gitignored run output and
+# the MI baseline transcripts under due_diligence/ are committed evaluation
+# evidence; an MI harness transcript that merely MENTIONS a dimension is not a
+# configuration using one, and scanning either made this test fail on whatever
+# had last been generated or recorded.
 _SKIP_PREFIXES = ("demo-video", "frontend", "landing-page", ".git",
-                  "node_modules", "out/")
+                  "node_modules", "out/", "due_diligence/MI_40Q_PRELAUNCH_BASELINE")
 
 
 def _newly_resolvable() -> list:

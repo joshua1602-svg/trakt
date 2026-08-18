@@ -1124,6 +1124,19 @@ def ranking_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return declared
 
 
+def comparison_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What a portfolio comparison DECLARES it actually compared.
+
+    Returns ``{}`` unless the route stated the measures it compared. A route
+    that merely ran is not evidence that the requested measure was compared —
+    which is the whole defect this exists to catch.
+    """
+    if not isinstance(envelope, dict):
+        return {}
+    declared = (envelope.get("metadata") or {}).get("portfolioComparison")
+    return declared if isinstance(declared, dict) else {}
+
+
 def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional[str],
                             semantics: dict,
                             available_columns: Optional[Iterable[str]] = None,
@@ -1138,6 +1151,7 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
     """
     columns = set(available_columns or ())
     ranked = ranking_evidence(envelope)
+    compared = comparison_evidence(envelope)
     fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
     listing = route in LISTING_ROUTES
 
@@ -1186,7 +1200,24 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                                 "projection was run")
 
         elif facet.kind == KIND_COHORT_COMPARISON:
-            if route in COHORT_ROUTES:
+            if compared:
+                # The route declared what it compared. A comparison that
+                # measured NOTHING, or that dropped the measure the question
+                # named, has not compared the two books on that question — even
+                # though the route ran end to end.
+                if compared.get("requestedMetric") and not compared.get(
+                        "requestedMetricCompared"):
+                    facet.status = LOST
+                    facet.reason = ("the measure the question named was not "
+                                    "among the governed indicators compared")
+                elif not (compared.get("measuresCompared")
+                          or compared.get("dimensionsCompared")):
+                    facet.status = LOST
+                    facet.reason = ("no governed indicator was compared, so "
+                                    "nothing was measured about the difference")
+                else:
+                    facet.status, facet.reason = APPLIED, ""
+            elif route in COHORT_ROUTES:
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = LOST
@@ -1290,17 +1321,55 @@ def granularity_disclosure(question: str, route: Optional[str]
         reason=f"this answer is reported at {reported} level, not by {asked}")
 
 
+#: How a comparison aggregation reads in the receipt.
+_COMPARISON_AGG_WORDS = {
+    "average": "Average", "avg": "Average", "mean": "Average",
+    "weighted_average": "Weighted-average", "weighted_avg": "Weighted-average",
+    "sum": "Total", "median": "Median", "share": "Share of",
+}
+
+
+def _comparison_measure(compared: Dict[str, Any]) -> Optional[str]:
+    """"Average Youngest Borrower Age" — the measure the comparison EXECUTED.
+
+    Derived from the route's executed-comparison metadata, never from the
+    question's wording: a receipt that echoed the question could not expose the
+    case where the named measure was never compared.
+    """
+    if not compared:
+        return None
+    labels = [l for l in (compared.get("measureLabels") or []) if l]
+    if not labels:
+        return None
+    aggs = [a for a in (compared.get("aggregations") or []) if a]
+    lead = _COMPARISON_AGG_WORDS.get(str(aggs[0]).lower(), "") if aggs else ""
+    head = f"{lead} {labels[0]}".strip() if lead else labels[0]
+    if len(labels) > 1:
+        head += f" and {len(labels) - 1} further governed indicator(s)"
+    return head
+
+
+def _comparison_populations(compared: Dict[str, Any]) -> List[str]:
+    """"Direct vs Acquired" — the two populations that were compared."""
+    if not compared:
+        return []
+    a, b = compared.get("portfolioA"), compared.get("portfolioB")
+    return [f"{a} vs {b}"] if a and b else []
+
+
 def build_routed_receipt(*, route: Optional[str], envelope: Dict[str, Any],
                          facets: Sequence[RequestedFacet]) -> ExecutionReceipt:
     """A receipt for a routed answer, built from what the route itself declares."""
     metadata = envelope.get("metadata") or {}
     spec = envelope.get("spec") if isinstance(envelope.get("spec"), dict) else {}
     ranked = ranking_evidence(envelope)
+    compared = comparison_evidence(envelope)
     return ExecutionReceipt(
-        measure=_ROUTE_LABELS.get(route or "", "Governed analysis"),
+        measure=(_comparison_measure(compared)
+                 or _ROUTE_LABELS.get(route or "", "Governed analysis")),
         aggregation=None,
-        filters=[],
         dimensions=([ranked["displayName"]] if ranked.get("displayName") else []),
+        filters=_comparison_populations(compared),
         population=None,
         period=metadata.get("asOfDate") or envelope.get("asOf"),
         comparison_period=_ranked_period(ranked),

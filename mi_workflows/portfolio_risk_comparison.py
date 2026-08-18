@@ -535,15 +535,39 @@ def run_portfolio_risk_comparison(
 
     decisions: List[FieldDecision] = []
     mode: str
+    #: What became of a metric the caller explicitly asked for. Reported on the
+    #: result so a presenter can never mistake "nothing was compared" for "the
+    #: portfolios do not differ" — see ``requested_metric`` in the return value.
+    requested_metric: Optional[Dict[str, Any]] = None
     if metric_field and bsr.get(metric_field) is not None:
         mode = "requested_metric"
         decisions = [_comparability_decision(bsr.get(metric_field),
                                              shared_asset, columns)]
+        if not decisions[0].selected:
+            # The governed rules declined this field. That decision is sound —
+            # but it must not vanish. Previously it stayed inside `decisions`,
+            # `metric_comparisons` came back empty, and the caller rendered the
+            # empty list as "no directional differences were observed".
+            limitations.append(
+                f"'{metric_field}' was requested but not compared: "
+                f"{decisions[0].reason}")
+        requested_metric = {
+            "field": metric_field,
+            "display_name": bsr.get(metric_field).display_name,
+            "compared": bool(decisions[0].selected),
+            "reason": decisions[0].reason,
+        }
     elif metric_field and bsr.get(metric_field) is None:
         mode = "requested_metric"
         limitations.append(
             f"'{metric_field}' is not governed by the Business Semantics "
             "Registry for analytical comparison, so it is not compared")
+        requested_metric = {
+            "field": metric_field, "display_name": metric_field,
+            "compared": False,
+            "reason": ("not governed by the Business Semantics Registry for "
+                       "analytical comparison"),
+        }
     elif concept is not None:
         mode = "requested_concept"
         decisions = [_comparability_decision(e, shared_asset, columns)
@@ -587,6 +611,11 @@ def run_portfolio_risk_comparison(
         unit = engine.unit_for_field(entry.source_field, mi_semantics)
         if engine.is_monetary(unit) and not monetary_ok:
             suppressed_monetary.append(entry.source_field)
+            if requested_metric and requested_metric["field"] == entry.source_field:
+                requested_metric["compared"] = False
+                requested_metric["reason"] = (
+                    "suppressed by the currency guard: the portfolios do not "
+                    "share a single governed currency")
             continue
         comparison = _compare_metric(entry, frame_a, frame_b, unit)
         metric_comparisons.append(comparison)
@@ -656,6 +685,10 @@ def run_portfolio_risk_comparison(
         ],
         "metric_comparisons": metric_comparisons,
         "distribution_comparisons": distribution_comparisons,
+        # None unless the caller named a metric. ``compared`` is the invariant a
+        # presenter must honour: a requested metric that was not compared may
+        # never be answered as though it had been.
+        "requested_metric": requested_metric,
         "warnings": warnings,
         "limitations": limitations,
         "summary": summary,

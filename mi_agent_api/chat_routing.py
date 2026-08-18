@@ -2069,14 +2069,73 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
         return envelope
 
     sides = result["portfolio_results"]
+    metric_comparisons = result.get("metric_comparisons") or []
+    distribution_comparisons = result.get("distribution_comparisons") or []
+    requested = result.get("requested_metric") or {}
+
+    # ---- the requested-metric invariant --------------------------------- #
+    # If the caller named a metric, that metric must be in the executed
+    # comparison before this route may answer. Anything else is a refusal that
+    # names the metric and says why. The failure this prevents: "how do the two
+    # books compare on borrower age?" returning "no governed directional
+    # differences were observed" when borrower age was never compared at all.
+    if requested and not requested.get("compared"):
+        message = (
+            f"I could not compare {sides[0]['label']} with {sides[1]['label']} "
+            f"on {requested.get('display_name') or requested.get('field')}: "
+            f"{requested.get('reason')}. I have not compared a different "
+            f"measure instead, and I have not reported this as 'no difference'.")
+        envelope = _envelope(
+            ok=False, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=message, error=message, warnings=warnings + [message])
+        envelope["workflow"] = result
+        envelope["controlledRefusal"] = True
+        meta = envelope["metadata"]
+        meta["controlledRefusal"] = True
+        meta["controlledUnsupported"] = True
+        meta["portfolioComparison"] = {
+            "requestedMetric": requested.get("field"),
+            "requestedMetricCompared": False,
+            "reason": requested.get("reason"),
+            "measuresCompared": [],
+        }
+        return envelope
+
+    # ---- empty-comparison safety ---------------------------------------- #
+    # An empty comparison set means NOTHING WAS COMPARED. It does not mean the
+    # portfolios are alike, and it may never be rendered as a negative finding.
     summary_lines = result.get("summary") or []
     if summary_lines:
         answer = " ".join(summary_lines)
-    else:
+    elif metric_comparisons or distribution_comparisons:
+        # Something WAS compared and no direction emerged — a real observation.
         answer = (f"Compared {sides[0]['label']} with {sides[1]['label']} at "
-                  f"{result.get('reporting_date') or 'the current reporting date'}: "
-                  "no governed directional differences were observed across the "
-                  "selected indicators.")
+                  f"{result.get('reporting_date') or 'the current reporting date'} "
+                  f"across {len(metric_comparisons) + len(distribution_comparisons)} "
+                  f"governed indicator(s): no directional difference was observed "
+                  f"on any of them.")
+    else:
+        message = (
+            f"I did not compare {sides[0]['label']} with {sides[1]['label']}: no "
+            f"governed indicator was eligible for comparison on this book. "
+            f"Nothing was measured, so I cannot say whether the two books "
+            f"differ.")
+        envelope = _envelope(
+            ok=False, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=message, error=message, warnings=warnings + [message])
+        envelope["workflow"] = result
+        envelope["controlledRefusal"] = True
+        envelope["metadata"]["controlledRefusal"] = True
+        envelope["metadata"]["controlledUnsupported"] = True
+        envelope["metadata"]["portfolioComparison"] = {
+            "requestedMetric": requested.get("field"),
+            "requestedMetricCompared": False,
+            "reason": "no governed indicator was eligible for comparison",
+            "measuresCompared": [],
+        }
+        return envelope
 
     artifacts: List[Dict[str, Any]] = []
     table = _metric_comparison_table(result, spec_dict=request.spec_dict,
@@ -2103,6 +2162,20 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
         spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
         source_notes=notes, route=route, warnings=warnings, lens_applied=True)
     envelope["workflow"] = result
+    # The EVIDENCE the P0 guard verifies and the receipt renders: which measures
+    # were actually compared, and between which two books. Derived from executed
+    # comparison metadata, never from the question's wording.
+    envelope["metadata"]["portfolioComparison"] = {
+        "requestedMetric": requested.get("field"),
+        "requestedMetricCompared": bool(requested.get("compared")) if requested else None,
+        "measuresCompared": [c.get("field") for c in metric_comparisons],
+        "measureLabels": [c.get("display_name") for c in metric_comparisons],
+        "aggregations": [c.get("aggregation") for c in metric_comparisons],
+        "dimensionsCompared": [c.get("field") for c in distribution_comparisons],
+        "portfolioA": sides[0]["label"],
+        "portfolioB": sides[1]["label"],
+        "reportingDate": result.get("reporting_date"),
+    }
     return envelope
 
 
