@@ -300,7 +300,39 @@ No answer text differs. P1L is a safety correction and behaves like one.
 
 ## 18. Full repository suite
 
-_(filled on completion — see §20)_
+`mi_agent/tests`, `mi_workflows`, `mi_agent_api/tests`, `trakt_core`, `tests`:
+
+```
+8675 passed, 30 skipped, 21 xfailed, 6 subtests passed in 1699.42s (0:28:19)
+```
+
+**0 failed.** (P1J-1 baseline 8,645; the +30 are this phase's tests.)
+
+### What the first suite run caught
+
+The first run came back **2 failed / 8,670 passed**, and both were regressions
+this phase caused. They are recorded because one of them is the more instructive
+result in P1L:
+
+1. **`evolution` — I broke the one route that was already correct.** It applies
+   `spec.filters` *within each period*, which is exactly what makes a filtered
+   trend meaningful, but it never *declared* that it had. The ledger accepts
+   execution evidence only, so silence from the correct route refused it. It now
+   reports what it applied, using the per-period row counts it was already
+   tracking.
+2. **`geo_exposure` — the ledger surfaced a pre-existing parser defect.** Asked
+   "what is the largest geographic area concentration?", the parser invents a
+   place called **"Concentration"** — the same role-error family as "Entire",
+   "Current" and "Front". The routes used to swallow it silently. Refusing on it
+   would have rejected a sound question because of a predicate the user never
+   asked for.
+
+The second forced the design sharpening in §5: the ledger now separates a
+population that vanished **without trace** (the P1K harm — refuse) from one the
+route **demonstrably tried** and could not express (honest incapacity —
+disclose). Verified as a sharpening rather than a weakening: all five P1K
+reproductions behave identically before and after, and three tests pin the
+distinction in both directions.
 
 ---
 
@@ -337,4 +369,25 @@ Per the standing instruction, this report recommends no new analytics: the 40-ba
 is an adversarial evaluation set, and HPI stress, HHI and correlation remain out
 of scope.
 
-P1L GOVERNED POPULATION PROPAGATION: PENDING
+## 21. Acceptance gate
+
+| criterion | required | measured |
+|---|---|---|
+| INCORRECT_SUCCESSFUL | 0 | **0** |
+| SILENT_SEMANTIC_ERROR | 0 | **0** (five removed) |
+| HARD_FAILURE | 0 | **0** |
+| POPULATION_LOSS | 0 | **0** |
+| FILTER_LOSS | 0 | **0** |
+| WRONG_SCOPE | 0 | **0** |
+| WRONG_DENOMINATOR | 0 | **0** |
+| PROVENANCE_SUBSTITUTION | 0 | **0** |
+| SEASONING_SUBSTITUTION | 0 | **0** |
+| P1L targeted tests | green | **30 / 30** |
+| cross-gate consistency | no regression | **17 / 25 unchanged** |
+| genuine-LLM gate | green | **50 real calls, GREEN** |
+| P-gate regressions | green | **253 passed** |
+| immutable 40-bank | no unexplained change | **14/40, zero diffs** |
+| full repository suite | green | **8,675 passed, 0 failed** |
+| independent truth | exact | **0 unexplained variance** |
+
+P1L GOVERNED POPULATION PROPAGATION: PASS
