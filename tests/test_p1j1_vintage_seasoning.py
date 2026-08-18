@@ -494,6 +494,47 @@ def test_the_receipt_names_the_axis_that_ran(ask, question, expected):
     assert expected in answer(envelope)
 
 
+@pytest.mark.parametrize("op,value,expected", [
+    ("ge", "2024-01-01", [False, True, True]),
+    ("lt", "2024-01-01", [True, False, False]),
+    ("between", ["2024-01-01", "2026-12-31"], [False, True, True]),
+])
+def test_a_date_comparison_does_not_crash_the_executor(op, value, expected):
+    """A range over an ORIGINATION DATE is an ordinary way to ask for recent
+    lending, and the model reaches for it when asked about "newly originated
+    loans". It used to raise ValueError: could not convert string to float:
+    '2024-01-01' out of the executor and surface as "The MI Agent could not
+    complete this query" — a crash, not a governed refusal."""
+    from mi_agent.mi_query_executor import _apply_numeric_op
+
+    column = pd.Series(["2018-11-14", "2025-03-01", "2026-05-05"])
+    assert list(_apply_numeric_op(column, op, value)) == expected
+
+
+def test_a_numeric_comparison_still_works():
+    """The date path must not cost the numeric one."""
+    from mi_agent.mi_query_executor import _apply_numeric_op
+
+    column = pd.Series([10, 50, 90])
+    assert list(_apply_numeric_op(column, "gt", 40)) == [False, True, True]
+    assert list(_apply_numeric_op(column, "between", [20, 80])) == [False, True, False]
+
+
+def test_an_uncomparable_value_fails_in_a_controlled_way():
+    """Neither numeric nor a date is a governed failure, never an unhandled one."""
+    from mi_agent.mi_query_executor import MIQueryExecutionError, _apply_numeric_op
+
+    with pytest.raises(MIQueryExecutionError):
+        _apply_numeric_op(pd.Series(["2024-01-01"]), "gt", "banana")
+
+
+def test_newly_originated_loans_answer(ask, book):
+    """The phrase that exposed the crash. It must ANSWER as the front book."""
+    envelope = ask("What is the balance of newly originated loans?")
+    assert envelope["ok"] is True, envelope.get("error")
+    assert "could not complete" not in answer(envelope).lower()
+
+
 def test_the_seasoning_receipt_states_the_governed_boundary():
     """The cutoff is configurable, so a reader must be able to see WHICH
     boundary produced the population they are looking at."""

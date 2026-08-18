@@ -410,15 +410,55 @@ _OP_ALIASES = {
 
 
 def _apply_numeric_op(col: pd.Series, op: str, value: Any) -> pd.Series:
-    """Boolean mask for a numeric comparison operator against a coerced column."""
-    s = coerce_numeric(col)
+    """Boolean mask for a comparison operator against a coerced column.
+
+    A comparison whose operand is a DATE ("origination_date >= 2024-01-01") is
+    compared as a date rather than forced through ``float()``. It used to raise
+    ``ValueError: could not convert string to float: '2024-01-01'`` out of the
+    executor, which surfaced as "The MI Agent could not complete this query." —
+    a crash, not a governed refusal. A range over an origination date is an
+    ordinary way to ask for recent lending, so it must compute; anything that is
+    neither numeric nor a date raises ``MIQueryExecutionError`` and is reported
+    as a controlled failure instead of an unhandled exception.
+    """
+    def _bounds(raw: Any) -> Tuple[Any, Any]:
+        return (raw if isinstance(raw, (list, tuple)) and len(raw) == 2
+                else (None, None))
+
+    def _as_number(raw: Any) -> Optional[float]:
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _as_date(raw: Any):
+        stamp = pd.to_datetime(raw, errors="coerce")
+        return None if pd.isna(stamp) else stamp
+
     if op == "between":
-        lo, hi = (value if isinstance(value, (list, tuple)) and len(value) == 2
-                  else (None, None))
-        return (s >= float(lo)) & (s <= float(hi))
-    v = float(value)
-    return {"gt": s > v, "ge": s >= v, "lt": s < v, "le": s <= v,
-            "eq": s == v, "ne": s != v}[op]
+        lo, hi = _bounds(value)
+        lo_n, hi_n = _as_number(lo), _as_number(hi)
+        if lo_n is not None and hi_n is not None:
+            s = coerce_numeric(col)
+            return (s >= lo_n) & (s <= hi_n)
+        lo_d, hi_d = _as_date(lo), _as_date(hi)
+        if lo_d is not None and hi_d is not None:
+            d = pd.to_datetime(col, errors="coerce")
+            return (d >= lo_d) & (d <= hi_d)
+        raise MIQueryExecutionError(
+            f"range bounds {value!r} are neither numeric nor dates")
+
+    ops = lambda s, v: {"gt": s > v, "ge": s >= v, "lt": s < v, "le": s <= v,   # noqa: E731
+                        "eq": s == v, "ne": s != v}[op]
+    number = _as_number(value)
+    if number is not None:
+        return ops(coerce_numeric(col), number)
+    stamp = _as_date(value)
+    if stamp is not None:
+        return ops(pd.to_datetime(col, errors="coerce"), stamp)
+    raise MIQueryExecutionError(
+        f"value {value!r} is neither numeric nor a date, so {op!r} cannot be "
+        "applied")
 
 
 def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
