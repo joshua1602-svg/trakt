@@ -1207,6 +1207,14 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
             if any(k in group_keys for k in candidates) or \
                     any(c in result_cols for c in canonicals):
                 facet.status, facet.reason = APPLIED, ""
+            elif any(k in (getattr(spec, "filters", None) or {})
+                     for k in candidates if k):
+                # The concept was honoured as a POPULATION rather than an axis.
+                # "The back book" names the population being reported on, so it
+                # runs as a filter; read only as a grouping it looked lost, and
+                # the answer was disclosed as a partial when it was in fact
+                # exactly what was asked for.
+                facet.status, facet.reason = APPLIED, ""
             elif key and route in RANKING_ROUTES and facet.kind == KIND_RANKING:
                 facet.status, facet.reason = APPLIED, ""
             elif key in rejected:
@@ -1317,6 +1325,22 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
     )
 
 
+def _is_seasoning_population(facet) -> bool:
+    """True for a seasoning facet, whose loss can never be a mere partial.
+
+    "The back book" NARROWS the population, so dropping it changes the number:
+    a question about the seasoned book was answered with a count of the whole
+    direct book, disclosed only as a not-applied breakdown. "Front book vs back
+    book" is the other case — dropping it loses the comparison that WAS the
+    question. Either way the figure that comes back answers something else, so
+    seasoning is treated as a subject facet rather than a shape one.
+    """
+    from . import seasoning as _seasoning
+
+    keys = {facet.field_key} | set(facet.satisfied_by() or ())
+    return _seasoning.SEASONING_SEGMENT_FIELD in {k for k in keys if k}
+
+
 def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None
            ) -> Tuple[str, Optional[str]]:
     """``(verdict, refusal_or_disclosure_message)``.
@@ -1329,7 +1353,9 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None
     * ``VERDICT_OK`` — everything material was applied.
     """
     blocking = [f for f in receipt.facets
-                if f.kind in NUMBER_OR_SUBJECT_FACETS and f.status != APPLIED]
+                if (f.kind in NUMBER_OR_SUBJECT_FACETS
+                    or _is_seasoning_population(f))
+                and f.status != APPLIED]
     if blocking:
         detail = "; ".join(f.disclosure() for f in blocking)
         return VERDICT_REFUSE, (

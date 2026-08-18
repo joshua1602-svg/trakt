@@ -3440,7 +3440,19 @@ def resolve_seasoning_role(spec: MIQuerySpec, question: str,
     if not isinstance(filters, dict):
         filters = {}
     if _seasoning.SEASONING_SEGMENT_FIELD in filters:
-        return None                      # already expressed as a population
+        # Already expressed as a population — but the model spells the value its
+        # own way ("back book", "backbook", "BACK"). The governed values are
+        # "Front Book" / "Back Book", and a value that does not match matches NO
+        # ROWS, which would answer a seasoning question with an empty book. So
+        # the value is canonicalised to the segment it names; anything that names
+        # neither is left alone to fail visibly rather than be guessed at.
+        current = str(filters[_seasoning.SEASONING_SEGMENT_FIELD]).strip().lower()
+        for governed in (_seasoning.FRONT_BOOK, _seasoning.BACK_BOOK):
+            if current.replace(" ", "") == governed.lower().replace(" ", ""):
+                filters[_seasoning.SEASONING_SEGMENT_FIELD] = governed
+                spec.filters = filters
+                break
+        return None
     filters[_seasoning.SEASONING_SEGMENT_FIELD] = segment
     spec.filters = filters
 
