@@ -385,3 +385,58 @@ def test_a_loan_identifier_is_not_published_as_the_answer(ask):
     """The amount and the share answer the question; the identifier answers
     neither, and belongs in the drill-down table rather than the headline."""
     assert "ALP_ORIGINATION" not in answer(ask(B21))
+
+
+# =========================================================================== #
+# A scalar slot given a list — the crash the richer catalogue provoked
+# =========================================================================== #
+def test_a_list_in_a_scalar_slot_is_folded_not_crashed():
+    """Found by the genuine-LLM run, as a hard failure.
+
+    "Show me balance by region by borrower type" came back with
+    ``dimension=["collateral_geography", "borrower_type"]`` — the model
+    expressing two dimensions in the singular slot. That value reached the
+    validator, which looks a field key up with ``fields.get(key)``, and a list
+    is not hashable: the parse raised TypeError instead of producing a governed
+    answer or a clean refusal.
+
+    The same defect class as the list-shaped ``filters`` this file already
+    folds. Nothing is discarded — the extra dimension is carried into
+    ``dimensions``, which is the slot that expresses exactly this.
+    """
+    from mi_agent.mi_query_spec import MIQuerySpec
+
+    spec = MIQuerySpec.from_dict({
+        "metric": BALANCE,
+        "dimension": ["collateral_geography", "borrower_type"]})
+    assert spec.dimension == "collateral_geography"
+    assert spec.dimensions == ["collateral_geography", "borrower_type"]
+    # The thing that actually crashed: a field lookup over the slot value.
+    assert BALANCE in spec.referenced_fields()
+
+
+@pytest.mark.parametrize("slot", ["metric", "dimension", "x", "y", "size",
+                                  "color", "weight_field", "sort_by"])
+def test_every_scalar_slot_survives_a_list(slot):
+    """Not just ``dimension``: any scalar slot could arrive list-shaped, and
+    each of them is looked up the same way."""
+    from mi_agent.mi_query_spec import MIQuerySpec
+
+    spec = MIQuerySpec.from_dict({slot: [BALANCE, "collateral_geography"]})
+    assert getattr(spec, slot) == BALANCE
+    spec_empty = MIQuerySpec.from_dict({slot: []})
+    assert getattr(spec_empty, slot) is None
+
+
+def test_a_folded_list_slot_validates_without_raising(semantics):
+    """End to end: the validator now reaches a verdict on the spec that
+    previously killed the parse."""
+    from mi_agent.mi_query_spec import MIQuerySpec
+    from mi_agent.mi_query_validator import validate_mi_query
+
+    spec = MIQuerySpec.from_dict({
+        "intent": "chart", "chart_type": "bar", "metric": BALANCE,
+        "aggregation": "sum",
+        "dimension": ["collateral_geography", "borrower_type"]})
+    result = validate_mi_query(spec, semantics)   # must not raise
+    assert result is not None

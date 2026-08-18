@@ -450,6 +450,27 @@ class MIQuerySpec:
         for slot in _LIST_FIELD_SLOTS:
             if slot in kwargs and kwargs[slot] is None:
                 kwargs[slot] = []
+        # A SCALAR slot given a list. "Show me balance by region by borrower
+        # type" can come back with dimension=["collateral_geography",
+        # "borrower_type"] — the model expressing two dimensions in the singular
+        # slot. The value then reached the validator, which looked it up with
+        # ``fields.get(key)`` and raised TypeError: unhashable type: 'list',
+        # crashing the parse instead of producing a governed answer or a clean
+        # refusal. Same defect class as the list-shaped ``filters`` folded
+        # below, and folded the same way: nothing is discarded, and for
+        # ``dimension`` the extra names are carried into ``dimensions``, which
+        # is the slot that already expresses exactly this.
+        for slot in _SCALAR_FIELD_SLOTS:
+            value = kwargs.get(slot)
+            if not isinstance(value, (list, tuple)):
+                continue
+            names = [str(v).strip() for v in value if isinstance(v, str) and str(v).strip()]
+            kwargs[slot] = names[0] if names else None
+            if slot == "dimension" and len(names) > 1:
+                existing = [d for d in (kwargs.get("dimensions") or [])
+                            if isinstance(d, str)]
+                kwargs["dimensions"] = existing + [
+                    n for n in names if n not in existing]
         # ``filters`` accepts the canonical mapping, a list of predicate objects
         # or a single predicate object; a producer that wrote the singular
         # ``filter`` key meant the same thing. Fold them all, and carry anything
