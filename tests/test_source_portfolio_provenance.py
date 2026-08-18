@@ -243,10 +243,14 @@ class TestPortfolioLensResolver(unittest.TestCase):
         ):
             self.assertEqual(pl.resolve_lens(question).name, "total", question)
 
-        # The qualified forms must keep working: they name the book, not the
-        # dimension.
+        # The qualified PROVENANCE form must keep working: it names the book,
+        # not the dimension.
         self.assertEqual(pl.resolve_lens("directly originated loans").name, "direct")
-        self.assertEqual(pl.resolve_lens("new origination book").name, "direct")
+        # "new origination book" is the VINTAGE axis, not provenance (P1J-1
+        # ruling R2a). It previously resolved to *direct*, conflating when a
+        # loan was written with where it came from — an acquired loan can be
+        # newly originated, and a direct loan can be five years seasoned.
+        self.assertEqual(pl.resolve_lens("new origination book").name, "total")
 
     def test_comparisons(self):
         from mi_agent import portfolio_lens as pl
