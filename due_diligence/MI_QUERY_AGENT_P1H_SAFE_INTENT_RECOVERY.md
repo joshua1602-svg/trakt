@@ -2,7 +2,8 @@
 
 **Branch** `claude/mi-query-agent-review-n8d33r` · **Base** `7fa9ddf` (P1G, pushed)
 **Fixture** `demo_platform` / alderbridge — 11,035 loans, as at 30 June 2026
-**Production code changed: none.** This phase is a measurement and a finding.
+**Status: NO-GO — premise disproven.** No production code changed.
+This phase is a measurement, and the measurement is the result.
 
 ---
 
@@ -292,19 +293,34 @@ Recommended only. Not implemented.
 
 ---
 
-## Verdict
+## Verdict — NO-GO, premise disproven
 
-P1H's success criteria include *"B25 correctness improves materially under
-repeated live runs"* (6) and *"answerability improves where parser omission was
-genuinely the cause"* (13). Under your conflict ruling B25 cannot improve
-through this mechanism, and parser omission is never the cause: it accounts for
-0 of 30 refusals, and 0 of 14 on the bank curated to expose it.
+**This is a negative result, not an implementation failure.** Nothing was
+attempted and abandoned; the mechanism was measured before being built, and the
+measurement removed the reason to build it.
 
-The objective is not achievable as scoped, because the defect class it targets
-does not exist at a material rate. Reporting that is more useful than shipping a
-mechanism that never fires — and the phase did establish where the remaining
-breadth actually lives, which is §5 and §8.
+The phase rests on one empirical claim: that the LLM parser omits governed
+concepts the deterministic parser identifies, often enough to be a meaningful
+source of refusals. That claim is false on this system.
 
-Nothing regressed. Nothing was weakened. Nothing was recovered.
+```
+PARSER_OMISSION = 0 of 30 refusals in the 40-question bank
+                = 0 of 14 on the bank curated to expose it
+                = 2 of 80 live parses overall, both unrecoverable
+```
 
-`P1H SAFE INTENT RECOVERY: FAIL`
+The proposed carry-forward mechanism is therefore **rejected on the evidence**,
+not deferred. Two of the findings would make it actively unsafe rather than
+merely inert: deterministic intent is not uniformly the better authority
+(`balance below 75% LTV`, where the LLM is right and carry-forward would have
+broken a working question), and the refusals that superficially resemble
+omission are its opposite — the model adding a filter nobody asked for.
+
+`PARSER_OMISSION = 0` is the deliverable. It redirects the programme away from
+parser-merge work and towards the classification in §5, where half the remaining
+gap is fields this book does not carry and none of it is parser omission.
+
+**No production code, test code or configuration was changed by this phase.**
+The P1G safety posture at `7fa9ddf` is untouched and remains authoritative.
+
+`P1H SAFE INTENT RECOVERY: NO-GO — PREMISE DISPROVEN`
