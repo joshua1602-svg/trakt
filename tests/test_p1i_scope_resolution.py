@@ -221,6 +221,76 @@ def test_the_entire_portfolio_reconciles_to_every_book(ask, book):
 
 
 # =========================================================================== #
+# B2. Sponsored book — a governed scope phrase meaning the FULL AuM
+# =========================================================================== #
+# In Trakt, "the sponsored book" is the sponsor/client's full AuM across every
+# directly originated and acquired portfolio — equivalent to the entire book,
+# NOT the direct book and NOT the spv-sponsored cohort.
+@pytest.mark.parametrize("question", [
+    "What is the balance of the sponsored book?",
+    "What is the balance of the sponsored portfolio?",
+    "What is the sponsored AUM?",
+])
+def test_sponsored_book_is_the_full_aum(ask, book, question):
+    envelope = ask(question)
+    assert envelope["ok"] is True, envelope.get("error")
+    # every governed book, not just the direct one
+    assert len(scope_ids(envelope)) >= 2
+    # and NEVER a source-type predicate narrowing to direct
+    assert "source_portfolio_type" not in spec_filters(envelope)
+
+
+def test_sponsored_book_reconciles_to_every_book(ask, book):
+    envelope = ask("Give me balance, loan count and WA LTV for the sponsored book.")
+    delivered = kpis(envelope)
+    assert delivered[f"{BALANCE}_sum"] == pytest.approx(float(book[BALANCE].sum()), rel=1e-9)
+    assert delivered["loan_count"] == len(book)
+    assert delivered[f"{LTV}_weighted_avg"] == pytest.approx(wavg(book, LTV), rel=1e-9)
+
+
+def test_sponsored_book_overrides_a_narrower_selection(ask, book):
+    """"The sponsored book" is an EXPLICIT widening to full AuM, so it must
+    override an active narrower UI selection rather than defer to it — the
+    opposite of "the current book"."""
+    envelope = ask("What is the balance of the sponsored book?", ACQUIRED_ID)
+    assert envelope["ok"] is True, envelope.get("error")
+    assert len(scope_ids(envelope)) >= 2      # widened past the acquired selection
+    assert "source_portfolio_type" not in spec_filters(envelope)
+    assert kpis(envelope)[f"{BALANCE}_sum"] == pytest.approx(
+        float(book[BALANCE].sum()), rel=1e-9)
+
+
+def test_a_model_emitted_type_predicate_is_refused_under_full_aum(governed_env):
+    """The LLM path misread: the model emits source_portfolio_type=direct for
+    "the sponsored book". The governed intent is the full-AuM widening, so the
+    narrower predicate is refused at parse-time normalisation — never executed
+    and then dropped."""
+    from mi_agent_api.data_source import get_dataframe, semantics_path
+    from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent.mi_query_spec import MIQuerySpec
+    import mi_agent.llm_query_parser as parser
+
+    parser._SEMANTICS_FOR_SCOPE = load_mi_semantics(semantics_path())
+    cols = list(get_dataframe().columns)
+    for question in ("What is the balance of the sponsored book?",
+                     "What is the balance of the whole book?"):
+        spec = MIQuerySpec.from_dict({
+            "metric": BALANCE, "filters": {"source_portfolio_type": "direct"}})
+        rejected = parser.reject_scope_role_filters(spec, question, cols)
+        assert rejected and "source_portfolio_type" in rejected[0]
+        assert spec.filters == {}
+
+
+def test_the_sponsor_cohort_id_is_still_addressable(governed_env):
+    """The whole-client PHRASE is full AuM, but a genuine spv-sponsored cohort
+    stays reachable by its portfolio id — the phrase change does not swallow the
+    id path."""
+    from mi_agent.portfolio_lens import resolve_lens, names_total_scope
+    # An explicit portfolio id is not the full-AuM phrase.
+    assert names_total_scope("balance for spv1_sponsored") is False
+
+
+# =========================================================================== #
 # C. Current / selected portfolio
 # =========================================================================== #
 def test_current_portfolio_is_the_selected_book(ask, book):

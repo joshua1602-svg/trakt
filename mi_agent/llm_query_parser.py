@@ -3339,8 +3339,8 @@ def reject_scope_role_filters(spec: MIQuerySpec, question: str,
     scopes for one question is one too many, and the redundant one is the model's.
     """
     from .portfolio_lens import (  # local: avoids a cycle
-        LENS_ACQUIRED, LENS_DIRECT, SOURCE_TYPE_FIELD, resolve_lens,
-        scope_phrase_spans,
+        LENS_ACQUIRED, LENS_DIRECT, LENS_TOTAL, SOURCE_TYPE_FIELD,
+        names_total_scope, resolve_lens, scope_phrase_spans,
     )
 
     filters = getattr(spec, "filters", None)
@@ -3375,6 +3375,23 @@ def reject_scope_role_filters(spec: MIQuerySpec, question: str,
         rejected.append(
             f"{SOURCE_TYPE_FIELD} (scope resolved by governed lens "
             f"'{scope_lens.name}', not a predicate)")
+
+    # -- an explicit FULL-AuM scope phrase overrides a narrower type ------ #
+    # "the sponsored book" / "the whole book" / "the entire portfolio" name the
+    # client's full AuM. When the question resolves to Total AND carries an
+    # explicit full-AuM phrase, a model-emitted ``source_portfolio_type``
+    # predicate is the same scope misread as above — here it narrows the full
+    # book to one type. The governed intent is the widening, so the narrower
+    # predicate is refused, matching the deterministic path, which produces no
+    # type filter for these phrases at all. This is the ONE place a widening is
+    # correct: it is not an accident to be prevented but the stated scope, so
+    # the "nothing may widen" rule of the block above does not apply.
+    if (SOURCE_TYPE_FIELD in filters
+            and getattr(scope_lens, "name", None) == LENS_TOTAL
+            and names_total_scope(question)):
+        filters.pop(SOURCE_TYPE_FIELD, None)
+        rejected.append(
+            f"{SOURCE_TYPE_FIELD} (explicit full-AuM scope, not a predicate)")
 
     for key in list(filters):
         canonical = (fields.get(key, {}) or {}).get("canonical_field", key)

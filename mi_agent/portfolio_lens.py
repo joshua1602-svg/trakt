@@ -77,11 +77,30 @@ _ACQUIRED_TERMS = (
 # the Total book, and treating it as a scope silently widened a Direct or
 # Acquired workspace selection back to the whole platform — a silent scope
 # mutation, and exactly the class of defect the governed context exists to stop.
+#
+# This family is the EXPLICIT-WIDENING family: naming it overrides a narrower UI
+# selection (see resolve_lens_with_default via mentions_portfolio) because the
+# caller has asked, in words, for the whole book. That is the opposite of the
+# "current / selected book" family (names_selected_scope), which DEFERS to the
+# selection.
+#
+# "sponsored book / portfolio / platform / aum" is a governed Trakt scope
+# phrase: it means the sponsor's (client's) FULL AuM across every directly
+# originated and acquired portfolio — equivalent to the entire book, NOT the
+# direct book and NOT the spv-sponsored cohort. It is therefore part of this
+# explicit-widening family. Left out of it, "the sponsored book" was read on the
+# LLM path as source_portfolio_type = direct, returning the direct book's number
+# for a question about the whole book. (The sponsored SPV cohort is still
+# addressable by its portfolio id; the PHRASE "the sponsored book" is the
+# whole-client scope.)
 _TOTAL_TERMS = (
     "total portfolio", "total book", "total platform", "whole book",
     "whole portfolio", "all loans", "all portfolios", "entire portfolio",
     "entire book", "combined book", "combined portfolio", "consolidated",
     "across the book", "across all portfolios", "across all books",
+    "sponsored book", "sponsored portfolio", "sponsored platform",
+    "sponsored aum", "sponsored loan book", "sponsor book", "sponsor portfolio",
+    "sponsor aum",
 )
 
 _COMPARISON_TERMS = (" vs ", " vs. ", " versus ", "compare", "comparison",
@@ -155,6 +174,21 @@ def scope_phrase_spans(text: Optional[str]):
 def names_selected_scope(text: Optional[str]) -> bool:
     """True when the question says "the current/selected portfolio"."""
     return bool(text) and bool(_SELECTED_SCOPE_RE.search(str(text)))
+
+
+def names_total_scope(text: Optional[str]) -> bool:
+    """True when the text explicitly names the consolidated FULL-AuM scope.
+
+    The ``_TOTAL_TERMS`` family — "the whole book", "the entire portfolio", "the
+    sponsored book". Distinct from :func:`names_selected_scope`: this is an
+    EXPLICIT WIDENING to the client's full AuM, so it overrides a narrower UI
+    selection rather than deferring to it, and a narrower source-type predicate
+    emitted alongside it is a scope misread, not a filter to keep.
+    """
+    if not text:
+        return False
+    low = " " + str(text).strip().lower() + " "
+    return _contains_any(low, _TOTAL_TERMS)
 
 
 def mask_scope_phrases(text: Optional[str]) -> str:

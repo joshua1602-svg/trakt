@@ -1,6 +1,7 @@
 # MI Query Agent — P1I-A: Governed Scope-Phrase Resolution
 
-**Status:** implementation complete, gate green, not pushed pending instruction.
+**Status:** P1I-A accepted and pushed. §3.6 (sponsored-book = full AuM) added on a
+subsequent governed ruling — implementation complete, gate green, awaiting push.
 **Scope:** phrases that name the portfolio scope itself must resolve as SCOPE,
 never as a row-level predicate, a place, or a grouping axis.
 **Constraint honoured throughout:** prevent the invalid filter from being
@@ -109,6 +110,46 @@ population. Two guards keep it provably safe:
 * a **disagreeing** predicate is never dropped. That is a conflict, not a
   duplicate, and must not be resolved by quietly deleting one side of it.
 
+### 3.6 "The sponsored book" is the full AuM *(governed ruling, added after acceptance)*
+
+§10 originally recorded "the sponsored book" as a stable silent semantic error
+outside the governed vocabulary, and escalated it as a P1I-B candidate. The
+product owner then ruled that **"sponsored book" is a governed Trakt scope
+phrase**: it means the sponsor's (client's) **full AuM** across every directly
+originated and acquired portfolio — equivalent to `ENTIRE_AUM`, **not** the
+direct book, and **not** the spv-sponsored cohort. So it is now handled, not
+refused.
+
+The ruling has four parts, all implemented:
+
+* it resolves to **all** governed portfolios for the client;
+* it must **not** emit `source_portfolio_type = "direct"`;
+* used explicitly as the scope, it is an **explicit widening** to full AuM — it
+  overrides an active narrower UI selection rather than preserving it (the
+  opposite of the "current / selected book" family);
+* the receipt identifies the full AuM.
+
+Mechanism — this is the **explicit-widening** family, and it already existed:
+
+* `sponsored book / portfolio / platform / aum` (and the `sponsor …` variants)
+  join `_TOTAL_TERMS` in `portfolio_lens.py`. That single change makes
+  `mentions_portfolio` true, so `resolve_lens_with_default` takes the
+  natural-language override — Total — **over** the UI selection. That is the
+  override requirement, for free, through the seam that "whole book" and
+  "entire portfolio" already use.
+* a new `names_total_scope()` helper names that family, and
+  `reject_scope_role_filters` gains one branch: when the question resolves to
+  Total **and** carries an explicit full-AuM phrase, a model-emitted
+  `source_portfolio_type` predicate is refused at parse-time normalisation. This
+  is the **one** place a widening is correct — the full-AuM scope is the stated
+  intent, not an accident — so §3.5's "nothing may widen" rule is explicitly
+  inapplicable, and the comment says so. It fires only under both conditions, so
+  a genuine `direct vs acquired` comparison (which routes through the comparison
+  path, never a lone type predicate) is untouched.
+
+The sponsored SPV cohort remains addressable by its portfolio id; only the
+whole-client **phrase** "the sponsored book" is the full-AuM scope.
+
 ---
 
 ## 4. Questions asked of the user, and the rulings
@@ -131,7 +172,7 @@ no response-contract change, and record governed clarification as a candidate
 
 ## 5. Focused scope-resolution bank
 
-`tests/test_p1i_scope_resolution.py` — **53 tests, 53 passing.**
+`tests/test_p1i_scope_resolution.py` — **60 tests, 60 passing.**
 
 Coverage:
 
@@ -148,7 +189,8 @@ Coverage:
 * scope never becomes a cohort synonym; a real geography survives; a scope phrase and a place coexist;
 * a genuine predicate on an absent field still refuses **by name** rather than being dropped;
 * a real column is never rejected;
-* **(new)** the governed scope field is not a row predicate; the id is never rejected; a disagreeing predicate is not silently dropped; a scope predicate survives when no governed scope phrase is present; and rejecting the type predicate does not change the population.
+* the governed scope field is not a row predicate; the id is never rejected; a disagreeing predicate is not silently dropped; a scope predicate survives when no governed scope phrase is present; and rejecting the type predicate does not change the population;
+* **(sponsored, §3.6)** "the sponsored book/portfolio/aum" is the full AuM (all governed portfolios, no type predicate), reconciles to the entire book, overrides a narrower selection, and refuses a model-emitted type predicate; the spv-sponsored cohort id is still addressable.
 
 ---
 
@@ -188,7 +230,17 @@ The scorer was not relaxed. §3.5 was implemented instead.
 | direct book | 10 | 0 | 0 | 0 | 0 |
 | acquired book | 10 | 0 | 0 | 0 | 0 |
 
-**60 / 60 correct.** Every phrase was byte-identical across its ten runs
+**60 / 60 correct.**
+
+**Third run — the §3.6 sponsored ruling, ten runs per phrase:**
+
+| phrase | correct | safe refusal | wrong filter | wrong scope | crash |
+|---|---|---|---|---|---|
+| sponsored book | 10 | 0 | 0 | 0 | 0 |
+| sponsored portfolio ("sponsored AUM") | 10 | 0 | 0 | 0 | 0 |
+| sponsored book, acquired-only selected (override) | 10 | 0 | 0 | 0 | 0 |
+
+**90 / 90 correct** across the full phrase set. Every phrase was byte-identical across its ten runs
 (1 distinct answer, 1 distinct id set, 1 distinct filter set each), so this is
 stable behaviour and not a coin flip that happened to land right.
 
@@ -203,6 +255,9 @@ Recomputed directly from the fixture, not from the agent's own machinery, on the
 
 | phrase | answer | independent truth | ids correct |
 |---|---|---|---|
+| sponsored book | £1,964,886,258.21 | £1,964,886,258.21 | yes |
+| sponsored AUM | £1,964,886,258.21 | £1,964,886,258.21 | yes |
+| sponsored book, acquired-only selected (override) | £1,964,886,258.21 | £1,964,886,258.21 | yes |
 | funded book (count) | 11,035 | 11,035 | yes |
 | funded portfolio | £1,964,886,258.21 | £1,964,886,258.21 | yes |
 | whole book | £1,964,886,258.21 | £1,964,886,258.21 | yes |
@@ -249,7 +304,8 @@ filter.)
 `mi_agent/tests`, `mi_workflows`, `mi_agent_api/tests`, `trakt_core`, `tests`:
 
 ```
-8580 passed, 30 skipped, 21 xfailed, 6 subtests passed in 1715.70s (0:28:35)
+8580 passed  (P1I-A baseline)
+8587 passed, 30 skipped, 21 xfailed, 6 subtests passed in 1700.68s (0:28:20)  (+7 sponsored tests, §3.6)
 ```
 
 ---
@@ -268,7 +324,17 @@ LLM-path only (the deterministic parser answers whole-book for every one).
 | "the purchased portfolio" | SCOPE_VS_FILTER | governed acquired scope, `source_portfolio_id` | stable | correct |
 | "the retained book" | SCOPE_VS_FILTER | 1 of 6 runs emitted `source_portfolio_type = direct`; 5 of 5 on repeat did not | **intermittent** | mostly correct; the outlier narrowed silently |
 | **"the originated book"** | **SCOPE_VS_FILTER** | `source_portfolio_type = direct` → 7,126 loans | **5 / 5 stable** | ungoverned scope. The governed vocabulary deliberately excludes "originated" as a book name (it names the *dimension*), so the model asserts a scope the governed model refuses. |
-| **"the sponsored book"** | **SCOPE_VS_FILTER** | `source_portfolio_type = direct` → 7,126 loans, £1.39bn | **5 / 5 stable** | **silent semantic error.** A question about the *sponsored* book returns the *direct* book's figure. |
+| ~~"the sponsored book"~~ | SCOPE_VS_FILTER | *was* `source_portfolio_type = direct` | — | **CLOSED — governed in §3.6.** Ruled a full-AuM scope phrase; now resolves to `ENTIRE_AUM`, 90/90 live, truth-exact. No longer a residual. |
+
+> **Addendum (post-acceptance).** The sponsored-book row above is closed by the
+> §3.6 ruling and its regression bank. "The originated book" remains open and is
+> the clearest surviving instance of the P1I-B/1 class: it was **not** ruled a
+> governed scope phrase, it stably emits `source_portfolio_type = direct` on the
+> LLM path, and — unlike sponsored — it plausibly *means* the direct book, so it
+> needs a product ruling (governed synonym, or refuse) rather than a code guess.
+> I did not fold it into §3.6: the ruling was specific to "sponsored", and
+> silently also governing "originated" would be exactly the unrequested-scope
+> guess this programme refuses.
 
 Classification of the whole residual set: **SCOPE_VS_FILTER**, all of it. No
 residual MEASURE_VS_FILTER, MEASURE_VS_DIMENSION, COHORT_VS_SCOPE or
@@ -321,13 +387,13 @@ integrity defect independent of how the scope was resolved.
 
 | criterion | required | measured |
 |---|---|---|
-| WRONG_FILTER | 0 | **0** (60 live runs, 10 per phrase) |
+| WRONG_FILTER | 0 | **0** (90 live runs, 10 per phrase incl. sponsored) |
 | WRONG_SCOPE | 0 | **0** |
-| SILENT_SEMANTIC_ERROR | 0 | **0** on the P1I-A phrase set; independent truth reconciliation 8/8 exact |
+| SILENT_SEMANTIC_ERROR | 0 | **0** on the gated phrase set; independent truth reconciliation 11/11 exact |
 | HARD_FAILURE | 0 | **0** |
-| focused bank | green | 53 / 53 |
+| focused bank | green | 60 / 60 |
 | deterministic 40-bank | no regression | 11 / 40, zero changes |
-| full suite | green | **8,580 passed**, 0 failed |
+| full suite | green | **8,587 passed**, 0 failed (+7 sponsored) |
 
 The gate is met on the population it was defined over. The §10 residual is
 outside that population and is escalated above rather than absorbed into the
