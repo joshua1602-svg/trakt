@@ -19,8 +19,43 @@ left genuine product-semantic ambiguities that materially change the ceiling.
 | # | Ambiguity | Ruling |
 |---|---|---|
 | R1 | "Credit quality" on a fully-performing book (arrears/default/impairment all zero) | **Weighted-average current LTV** is the governed quality proxy (lower = better). |
-| R2 | "New origination vs the back book" (B04) | **Recent vs older vintage** (an origination-date cutoff), *not* the direct/acquired split. B04 is therefore a **vintage-family** question. |
+| R2 | "New origination vs the back book" (B04), and every new/front/back/seasoned phrase | **Vintage/seasoning axis, governed from origination date — orthogonal to provenance.** See R2a. |
 | R3 | "Product" / "by product" when governed `erm_product_type` is not populated on this book | **Safe refusal.** Governance holds: `product_type = erm_product_type`; `purpose` is loan-purpose, not product, and must not be substituted. Product questions stay blocked until the field is onboarded. |
+
+### R2a — Front/back is vintage; direct/acquired is provenance. They are separate axes.
+
+The two must never be conflated:
+
+* **Direct / acquired** = **sourcing / provenance** (`source_portfolio_type`).
+* **Front / new** vs **back / seasoned** = **vintage / seasoning**, derived from
+  origination date.
+
+They are orthogonal. A directly-originated loan written five years ago is in the
+**direct** book *and* the **back** book; an acquired loan may be new or seasoned by
+its own origination/vintage. Therefore the parser must **never** resolve:
+
+```
+back book / seasoned book / older vintages   ─X─►  acquired
+front book / new book / recent origination   ─X─►  direct
+```
+
+* "back book", "seasoned book", "older vintages" → the governed **vintage/seasoning**
+  family (origination date), **not** the acquired provenance lens.
+* "new lending", "recent originations", "front book" → the same vintage/seasoning
+  family **where the wording supports it**, **not** the direct provenance lens.
+* The **cutoff** between new/front and back/seasoned is a **governed, configurable**
+  business rule — never inferred ad hoc by the parser. The exact value is to be
+  supplied at implementation time (the 24-month split used for the B04 figure below
+  is illustrative only, for sizing).
+
+> **⚠ Production defect this ruling exposes — flagged, not fixed (see Appendix A).**
+> The live lens vocabulary in `mi_agent/portfolio_lens.py` currently violates R2a:
+> `_ACQUIRED_TERMS` contains **"back book", "backbook", "legacy book"** (→ acquired)
+> and `_DIRECT_TERMS` contains **"new origination", "newly originated"** (→ direct).
+> These vintage/recency phrases are being resolved as *provenance*. Correcting them is
+> in-scope for **P1J-1 (Vintage)**, not for P1J analysis. This is why B04, B09 and B28
+> are classified and truth-checked below on the **vintage** axis only, with any
+> provenance resolution of new/back wording treated as a defect to remove.
 
 ---
 
@@ -62,6 +97,13 @@ identity, product type, borrower type). Those are not failures; a correct system
 refuses them. The honest ceiling on *this* book is therefore well below 40, but far
 above 11.
 
+**One production semantic defect surfaced during the trace** (detail in Appendix A,
+per R2a): the lens vocabulary conflates the vintage/seasoning axis with the
+provenance axis — "back book"/"legacy book" resolve to *acquired* and
+"new origination"/"newly originated" to *direct*. Front/back is vintage; direct/
+acquired is provenance; the two are orthogonal. This is flagged, not fixed, and its
+correction is folded into the recommended vintage phase.
+
 ---
 
 ## 2. Full remaining-question inventory
@@ -90,7 +132,7 @@ return `ok=True` while answering a disclosed *narrower* question.
 | B01 | most concentrated + headroom | **correct** | — | — | (concentration, works) |
 | B02 | which **segments** driving growth this qtr | refusal | ranked-movement engine exists; "segment" undefined + routing | EXISTING_ANALYTIC_NOT_EXPOSED (+semantic) | **F2 MOVEMENT** |
 | B03 | over-reliant on any single **broker** | refusal | broker identity absent | MISSING_DATA | BROKER (blocked) |
-| B04 | credit quality of new origination vs back book | refusal | vintage_year not materialised (R1/R2: current-LTV by recent-vs-older vintage) | DERIVED_CONCEPT | **F3 VINTAGE** |
+| B04 | credit quality of new origination vs back book | refusal | vintage_year not materialised; R1/R2a: current-LTV by recent-vs-older **vintage** (NOT direct/acquired). Note: current parser sends this phrasing to `total` (new+back terms cancel), so it is not mis-answered today — but the phrases mis-map individually (Appendix A) | DERIVED_CONCEPT | **F3 VINTAGE** |
 | B05 | share breaching 75% LTV if HPI −10% | refusal | scenario engine exists, not exposed | EXISTING_ANALYTIC_NOT_EXPOSED | **F4 STRESS** |
 | B06 | exposure to borrowers over 85 | **correct** | — | — | (threshold filter, works) |
 | B07 | headroom before **London** limit binds | refusal | headroom engine exists, but **no London limit configured** | CONFIG (client limit) | F6 (conditional) |
@@ -122,7 +164,7 @@ return `ok=True` while answering a disclosed *narrower* question.
 
 | Question(s) | Prior/naive label | Corrected label | Evidence |
 |---|---|---|---|
-| B09, B28, B04 | "MISSING_DATA: vintage not available" | **DERIVED_CONCEPT** — `vintage_year` is governed (`mi_semantics_field_registry.yaml`, `derived_from: origination_date`) and `origination_date` is **present** (11,035 non-null, 2014–2026). | derivation source present; concept governed. |
+| B09, B28, B04 | "MISSING_DATA: vintage not available" | **DERIVED_CONCEPT (vintage axis, NOT provenance)** — `vintage_year` is governed (`mi_semantics_field_registry.yaml`, `derived_from: origination_date`) and `origination_date` is **present** (11,035 non-null, 2014–2026). Per R2a, "new/back" here means recent/seasoned **vintage**, never direct/acquired. | derivation source present; concept governed. |
 | B10 | "MISSING_DATA: arrears" | **EXISTING_ANALYTIC_NOT_EXPOSED** — `arrears_balance` / `number_of_days_in_arrears` present (all zero); `_eval_arrears_share` exists. Truthful answer ≈ 0%. | fields present; calc exists. |
 | B22 | "correct" (`ok=True`) | **PARTIAL** — answered top ITL3 region, not top-10 **postcode**; `postcode` is present (7,125 non-null). | route substituted ITL3; postcode present. |
 | A4 | "correct" (`ok=True`) | **PARTIAL** — answered balance by region, dropped borrower type (honestly disclosed; source genuinely absent). | one leg genuinely blocked. |
@@ -164,7 +206,7 @@ anchors, recomputed directly, not via the agent):
 - In arrears: **0.00%** of balance (fully performing book).
 - Top-10 postcode concentration: **0.38%** of the book (7,118 distinct postcodes — highly granular).
 - WA current LTV by vintage: monotone **54.5% (2014) → 34.6% (2026)** — older equity-release roll-up loans carry higher LTV as interest accretes.
-- B04 under R1/R2 (recent vs older vintage, 24-month cutoff): new **35.5%** vs back book **44.8%** → newer origination is **better** (lower LTV).
+- B04 under R1/R2a (recent vs older **vintage**, illustrative 24-month cutoff — the governed cutoff is TBD): new **35.5%** vs back book **44.8%** → newer origination is **better** (lower LTV). This split is purely by origination date; provenance (direct/acquired) plays no part.
 - NNEG headroom: 1 loan > 100% LTV, 1 loan > 90% — negligible but derivable.
 
 ---
@@ -280,16 +322,25 @@ by absent source columns (broker identity, product type, borrower structure). **
 reuse alone clears 20** — the target — and does so with low-risk exposure of analytics
 that already exist and are already tested.
 
+**The 11 → ~22 bridge (the requested increment), explicitly:** exposing existing
+analytics over present data via F1 (A7, B19), F2 (B02, B18, B24, B27), F3 (B04, B09,
+B28 — on the **vintage** axis per R2a, never provenance), F5 (B15), F6-postcode
+(B22 full) and F7 (B10) lifts the answered-as-asked count from **11 to ~22/40**. None
+of these unlocks touches the direct/acquired provenance lens; the vintage questions in
+particular resolve solely through the governed vintage/seasoning family (origination
+date), with the R2a phrase-conflation corrected as part of F3. No refusal is weakened,
+and the ~9 genuinely data-blocked questions stay safe refusals.
+
 ---
 
 ## 9. Recommended next 3–5 increments (ranked)
 
 ### P1J-1 — VINTAGE & SEASONING  *(recommended first)*
 - **Objective:** materialise the governed `vintage_year` (and seasoning) from the
-  present `origination_date`, and expose weighted-average-by-vintage so the book can
-  be sliced by origination cohort.
-- **Questions unlocked:** B09, B28, B04 (B04 via R1/R2: current-LTV, recent-vs-older
-  vintage).
+  present `origination_date`, expose weighted-average-by-vintage, **and correct the
+  R2a defect** by moving vintage/seasoning phrases off the provenance lens.
+- **Questions unlocked:** B09, B28, B04 (B04 via R1/R2a: current-LTV, recent-vs-older
+  **vintage** — never direct/acquired).
 - **Real-world questions also unlocked:** "WA LTV by vintage — which cohorts are
   richest?"; "How is new-origination quality trending vs the back book?"; "What is the
   balance and count by origination year?"; "Which vintages dominate the book?"
@@ -297,12 +348,19 @@ that already exist and are already tested.
   `analytics_lib/cohort.py::cohort_period`, the P1E multi-measure-by-group machinery,
   `semantic_resolver.resolve_dimension` (vintage synonyms already governed).
 - **New semantics required:** materialise `vintage_year` derivation on the MI frame;
-  a governed "new origination" cutoff (per R2) as configuration.
+  a governed **new/back cutoff** (per R2a) as configuration — **ask the business for
+  the exact value at implementation time**; and the R2a phrase re-homing (Appendix A):
+  remove "back book"/"backbook"/"legacy book" from `_ACQUIRED_TERMS` and "new
+  origination"/"newly originated" from `_DIRECT_TERMS`, routing them (plus "seasoned
+  book"/"front book" where wording supports) to the vintage/seasoning family. Genuine
+  provenance synonyms ("purchased"/"bought book"/"acquisition") stay on the acquired lens.
 - **New maths required:** none beyond bucketing origination_date and reusing WA-by-group.
 - **Acceptance:** independent WA-LTV-by-year recompute (already done: 54.5%→34.6%);
-  B04 new 35.5% vs back 44.8%.
-- **Risk:** the "new origination" cutoff is a config value — must be governed and
-  disclosed, not hard-coded.
+  B04 new 35.5% vs back 44.8%; plus a regression asserting "the back book"/"the seasoned
+  book" no longer resolve to the acquired provenance lens while "the acquired book" still
+  does (guard with the P1I scope bank).
+- **Risk:** the new/back cutoff is a config value — must be governed and disclosed, not
+  hard-coded; and the phrase re-homing must not disturb genuine provenance resolution.
 
 ### P1J-2 — PROJECTION
 - **Objective:** expose the existing run-rate extrapolation to answer "when will X
@@ -411,14 +469,44 @@ the highest breadth-per-unit-risk increment available.
 
 ---
 
-## Appendix — safety observation (flagged, not fixed)
+## Appendix — observations (flagged, not fixed)
 
-Per the brief, one item to flag without fixing: **B23 on the genuine-LLM path returns
-`ok=True` with a degenerate scatter** ("Count of · 11,035 loans · 5,000 groups") for a
-relationship question it cannot actually answer. This is a candidate silent-semantic
-issue — a relationship/correlation question should refuse (F9) rather than emit a
+Per the brief, items to flag without fixing.
+
+### A. Vintage/provenance conflation in the lens vocabulary  *(semantic defect, R2a)*
+
+`mi_agent/portfolio_lens.py` resolves several **vintage/seasoning** phrases as
+**provenance**, which R2a rules out. Verified live:
+
+```
+"the back book"    → lens=acquired   (source_portfolio_type = acquired)   ✗ should be vintage
+"the legacy book"  → lens=acquired                                        ✗ should be vintage
+"newly originated" → lens=direct     (source_portfolio_type = direct)     ✗ should be vintage
+```
+
+Root cause: `_ACQUIRED_TERMS` contains `"back book"`, `"backbook"`, `"legacy book"`;
+`_DIRECT_TERMS` contains `"new origination"`, `"newly originated"`. These are
+recency/seasoning concepts, not sourcing. (The exact B04 phrasing "new origination vs
+the back book" currently cancels to `total` because it trips both families at once, so
+B04 is not *mis-answered* today — but the individual phrases mis-map, and any question
+using one alone inherits the wrong scope.)
+
+Impact if left: a user asking for "the back book" silently gets the *acquired* book —
+a seasoned directly-originated loan is wrongly excluded, and an acquired-but-new loan is
+wrongly included. This is the same class of silent scope mutation P1I exists to prevent,
+on a different axis.
+
+Correction is **in scope for P1J-1** (move these phrases to the governed vintage/seasoning
+family; keep genuine provenance synonyms — "purchased", "bought book", "acquisition" — on
+the acquired lens). Not fixed here because P1J is analysis-only and the fix belongs with
+the vintage derivation and its governed cutoff.
+
+### B. B23 degenerate scatter on the LLM path  *(candidate silent-semantic issue)*
+
+**B23 on the genuine-LLM path returns `ok=True` with a degenerate scatter**
+("Count of · 11,035 loans · 5,000 groups") for a relationship question it cannot actually
+answer. A relationship/correlation question should refuse (F9) rather than emit a
 meaningless scatter marked successful. It does not affect the deterministic path and is
-not required for this analysis, so it is recorded here for a future safety pass rather
-than fixed in P1J.
+recorded here for a future safety pass rather than fixed in P1J.
 
 P1J BREADTH GAP DECOMPOSITION: COMPLETE
