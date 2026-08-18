@@ -121,6 +121,7 @@ export function AgentSection() {
             caption="One recorded run against a synthetic portfolio. Figures illustrative."
             fallback={<A2APreview />}
             plateId="a2a"
+            platePosition="lower"
           />
         </div>
       </Reveal>

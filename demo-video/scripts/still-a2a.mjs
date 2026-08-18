@@ -4,9 +4,14 @@
  *   node scripts/still-a2a.mjs            poster only
  *   node scripts/still-a2a.mjs --review   poster + one still per beat
  *
- * The poster comes from the dedicated `LandingA2APoster` composition, not a
- * frame of the loop: the page centres its play control and the frame the
- * poster is drawn from puts the concentration card exactly there.
+ * The poster IS a frame of the film — frame 1210, the moment the three
+ * verdicts have resolved against one number. It used to come from a separate
+ * `LandingA2APoster` composition, drawn because the page centred its play
+ * control over the concentration card. That bought a poster the film never
+ * shows: press play and the picture changes completely. The player now anchors
+ * the A2A plate low in the frame instead, which clears everything frame 1210
+ * draws (all of it above 65% of the height), so the still can be the real
+ * thing and cannot drift from it again.
  *
  * The review strip samples every beat of the storyboard — the frames to scrub
  * for overflow, clipping, contrast and a figure that disagrees with another
@@ -27,7 +32,13 @@ const ROOT = resolve(HERE, "..");
 const OUT = join(ROOT, "out");
 const REVIEW = join(OUT, "stills", "a2a");
 
-const POSTER_FRAME = 60;
+/**
+ * The three verdicts have resolved and the run's counters are final: the one
+ * frame that carries the whole argument. Content ends at 64% of the frame
+ * height, and `landing-page/e2e/landing.spec.ts` asserts the play plate stays
+ * below that.
+ */
+const POSTER_FRAME = 1210;
 
 /** One per beat, plus both sides of every transition that swaps the panel. */
 const REVIEW_FRAMES = [
@@ -61,14 +72,13 @@ const main = async () => {
   console.log("[still] bundling…");
   const serveUrl = await bundle({ entryPoint: join(ROOT, "src/index.ts") });
 
-  const poster = await selectComposition({ serveUrl, id: "LandingA2APoster", ...browser });
+  const demo = await selectComposition({ serveUrl, id: "LandingA2ADemo", ...browser });
   const output = join(OUT, "a2a-demo-poster.png");
-  await renderStill({ composition: poster, serveUrl, output, frame: POSTER_FRAME, ...browser });
+  await renderStill({ composition: demo, serveUrl, output, frame: POSTER_FRAME, ...browser });
   console.log(`[still] wrote ${output}`);
 
   if (!review) return;
   mkdirSync(REVIEW, { recursive: true });
-  const demo = await selectComposition({ serveUrl, id: "LandingA2ADemo", ...browser });
   for (const { frame, name } of REVIEW_FRAMES) {
     await renderStill({
       composition: demo,
