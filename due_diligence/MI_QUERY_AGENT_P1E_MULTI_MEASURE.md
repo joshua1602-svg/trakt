@@ -532,9 +532,13 @@ the guarantee rather than the old mechanism:
 
 4. ~~A loan count is not comparable across books~~ — **resolved**, §6.6.
 
-**API key handling.** None was supplied. A repository-wide scan for `sk-ant-`
-across tracked and untracked files returns nothing. No key was written to disk,
-committed or printed at any point in this phase.
+**API key handling.** A temporary key was supplied mid-phase and used for the
+acceptance pass in §9a. It was held in the environment of the harness process
+only — never written to disk, a config file, a source file or a commit, and
+never echoed. The harness asserts the key is absent from its own JSON output
+before writing it. A repository-wide scan for `sk-ant-` across tracked and
+untracked files matches only this report's prose describing the scan; no
+key-shaped token exists anywhere in the tree. **The key is safe to revoke.**
 
 ---
 
