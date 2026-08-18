@@ -1863,8 +1863,13 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     population it had narrowed.
     """
     from .portfolio_lens import mask_scope_phrases  # local: avoids a cycle
+    from .seasoning import mask_segment_phrases
 
-    m = _CATEGORICAL_FILTER_RE.search(mask_scope_phrases(clause).strip())
+    # Governed SCOPE phrases (P1I-A) and governed SEASONING phrases (P1J-1) are
+    # both claimed before the place-resolver runs. Either one read as a place
+    # invents a region that does not exist — "Entire", "Current", "Front".
+    m = _CATEGORICAL_FILTER_RE.search(
+        mask_segment_phrases(mask_scope_phrases(clause)).strip())
     if not m:
         return None
     value = m.group(1).strip()

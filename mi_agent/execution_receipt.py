@@ -78,6 +78,18 @@ KIND_RELATIONSHIP = "relationship"
 #: per-group ranking must refuse rather than present it.
 KIND_CONTRIBUTION = "aggregate_contribution"
 
+#: A material ROW POPULATION the question asked the calculation to run over —
+#: "the back book", "borrowers over 85", "loans below 75% LTV". Distinct from
+#: KIND_GEOGRAPHIC_SCOPE (one named place) and from the portfolio SCOPE, which
+#: travels on the lens rather than in spec.filters.
+#:
+#: This facet exists because P1K proved the guard was structurally blind to a
+#: dropped population: twelve of thirteen specialist routes ignored
+#: spec.filters, so a back-book question was answered across the whole book with
+#: ok=True and a spec that still claimed the filter. Presence of the filter on
+#: the spec is NOT evidence it ran; only execution evidence is.
+KIND_POPULATION = "row_population"
+
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
 #: The dataset does not carry the field the facet needs. Disclosable.
@@ -982,6 +994,9 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     KIND_COMPARISON_PERIOD, KIND_RANKING, KIND_PROJECTION,
     KIND_COHORT_COMPARISON, KIND_MULTI_MEASURE, KIND_RELATIONSHIP,
     KIND_CONTRIBUTION, KIND_UNRESOLVED_MEASURE, KIND_SHARE,
+    # Dropping the population changes WHICH ROWS were counted, so it changes
+    # every number in the answer. It can never be a partial disclosure.
+    KIND_POPULATION,
 })
 #: Facets that change the SHAPE of a still-valid answer. A partial answer is
 #: acceptable provided the unhonoured facet is named.
@@ -1502,6 +1517,55 @@ def _states_a_proportion(envelope: Optional[Dict[str, Any]]) -> bool:
     text = " ".join(str(envelope.get(k) or "")
                     for k in ("answer", "summary", "headline"))
     return bool(_PROPORTION_IN_ANSWER_RE.search(text))
+
+
+def population_facets(spec: Optional[Dict[str, Any]],
+                      semantics: Optional[dict] = None) -> List[RequestedFacet]:
+    """Raise a facet for every material row population the spec carries.
+
+    Raised from the SPEC rather than from the question text because the spec is
+    where the governed resolution already lives: P1I-A, P1J-1 and the filter
+    parsers have all had their say by then, so this reads one settled answer
+    instead of re-deriving the population a fourteenth time.
+    """
+    from .population import material_predicates
+
+    out: List[RequestedFacet] = []
+    for predicate in material_predicates((spec or {}).get("filters"), semantics):
+        facet = RequestedFacet(kind=KIND_POPULATION,
+                               label=f"the population {predicate.describe()}",
+                               field_key=predicate.field)
+        out.append(facet)
+    return out
+
+
+def reconcile_population(facets: Sequence[RequestedFacet],
+                         evidence: Optional[Dict[str, Any]]) -> None:
+    """Stamp population facets from EXECUTION EVIDENCE, in place.
+
+    The bar is deliberately high and deliberately dumb: a facet is APPLIED only
+    when the route reports having applied that field. A route that reports
+    nothing leaves every population facet LOST, and because the kind is
+    number-changing the answer then refuses rather than presenting a whole-book
+    figure. Spec presence, route identity and receipt wording are not evidence —
+    that was exactly how the P1K silent errors passed.
+    """
+    applied = {str(a).split(" ")[0] for a in ((evidence or {}).get("applied") or [])}
+    unavailable = {str(u).split(" ")[0]
+                   for u in ((evidence or {}).get("unavailable") or [])}
+    for facet in facets:
+        if facet.kind != KIND_POPULATION:
+            continue
+        if facet.field_key in applied:
+            facet.status, facet.reason = APPLIED, ""
+        elif facet.field_key in unavailable:
+            facet.status = UNAVAILABLE
+            facet.reason = ("this analytical route cannot restrict its "
+                            "calculation to that population")
+        else:
+            facet.status = LOST
+            facet.reason = ("this analytical route calculated across the whole "
+                            "book; it did not narrow to the requested population")
 
 
 def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional[str],

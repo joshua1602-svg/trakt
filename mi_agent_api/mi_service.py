@@ -539,6 +539,14 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                 question, semantics,
                 available_columns=set(frame.columns) if frame is not None else None))
         granularity = receipt_mod.granularity_disclosure(question, route)
+        # P1L: the material row population the spec carries. Raised from the
+        # governed spec, proven from execution evidence the route reports — a
+        # route that reports nothing leaves these LOST and the answer refuses,
+        # instead of presenting a whole-book figure for a narrowed question.
+        population = receipt_mod.population_facets(spec, semantics)
+        receipt_mod.reconcile_population(
+            population, (routed.get("metadata") or {}).get("populationApplied"))
+        facets = list(facets) + population
         if not facets and not substitution and granularity is None:
             # Nothing to adjudicate, but the answer still states what governed
             # capability produced it and as at when — the receipt is required on
@@ -550,10 +558,13 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             if line:
                 routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{line}"
             return routed
+        _population = [f for f in facets if f.kind == receipt_mod.KIND_POPULATION]
         facets = receipt_mod.reconcile_routed_facets(
-            facets, route=route, semantics=semantics,
+            [f for f in facets if f.kind != receipt_mod.KIND_POPULATION],
+            route=route, semantics=semantics,
             available_columns=set(frame.columns) if frame is not None else None,
             envelope=routed)
+        facets = list(facets) + _population
         # A temporal route may have compared a shorter span than the question
         # named ("since inception" answered as one month). Verified against the
         # periods the route itself declares.
@@ -652,6 +663,33 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             frame, err = ds._resolve_query_frame("funded", pid)
             return None if err else frame
 
+        # P1L — GOVERNED POPULATION PROPAGATION.
+        #
+        # The population is resolved ONCE, here, and the specialist routes
+        # receive an ALREADY-CORRECT frame rather than each re-interpreting
+        # spec.filters for itself. Thirteen routes reading the same dict would
+        # be thirteen chances to disagree about what "the back book" means.
+        #
+        # A route that resolves its frame through this seam therefore honours
+        # the population automatically and reports evidence. A route that builds
+        # its own frame (or reads a run artefact) reports nothing, and the P0
+        # population ledger then refuses rather than letting a whole-book figure
+        # answer a narrowed question.
+        from mi_agent import population as _population_mod
+
+        _predicates = _population_mod.material_predicates(
+            (parsed.spec.filters if parsed is not None else None), semantics)
+        _population_evidence: Dict[str, Any] = {}
+
+        def _population_frame(cid, rid):
+            frame_in = _routed_frame(cid, rid)
+            if frame_in is None or not _predicates:
+                return frame_in
+            narrowed, ev = _population_mod.apply_population(
+                frame_in, _predicates, semantics)
+            _population_evidence.update(ev.to_dict())
+            return narrowed
+
         routed = chat_routing_mod.try_route(
             req.question, portfolio_id=portfolio_id, view=view,
             output_root=ds._onboarding_output_root(),
@@ -664,9 +702,12 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             history_model_provider=lambda: ds._pipeline_history(client_id),
             as_of=req.as_of_date,
             source_lens=req.source_portfolio_lens or None,
-            frame_resolver=_routed_frame,
+            frame_resolver=_population_frame,
             extra_filters=req.filters or None,
             parsed=parsed)
+        if isinstance(routed, dict) and _population_evidence:
+            routed.setdefault("metadata", {})["populationApplied"] = dict(
+                _population_evidence)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None

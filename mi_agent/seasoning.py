@@ -152,6 +152,27 @@ def segments_named(text: Optional[str]) -> List[str]:
     return found
 
 
+def mask_segment_phrases(text: Optional[str]) -> str:
+    """``text`` with seasoning-segment phrases blanked, preserving offsets.
+
+    The same discipline P1I-A applies to governed SCOPE phrases, extended to the
+    seasoning vocabulary P1J-1 introduced. Without it "how many acquired loans
+    are in the front book?" had the place-resolver read "front" as a region,
+    producing a filter on a collateral geography called "Front" that matched no
+    rows — so a governed population of 250 loans was unreachable.
+
+    Blanking rather than deleting keeps every other offset valid.
+    """
+    if not text:
+        return text or ""
+    out = list(str(text))
+    for rx, _segment in _segment_res():
+        for match in rx.finditer(str(text)):
+            for i in range(match.start(), match.end()):
+                out[i] = " "
+    return "".join(out)
+
+
 def resolve_segment_population(text: Optional[str]) -> Optional[str]:
     """The single seasoning segment a question SELECTS, or None.
 
