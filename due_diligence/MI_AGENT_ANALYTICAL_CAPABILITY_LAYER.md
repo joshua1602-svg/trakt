@@ -365,7 +365,7 @@ HARD_FAILURE          = 0
 | 30-question simple-MI regression bank, before vs after | **0 changed answers of 30** — route, ok flag and answer text byte-identical |
 | 252-question MI calibration bank, run end to end at the baseline commit **and** on this branch | **3 changed of 252** — every one a refusal that became a correct answer (below) |
 | P-gates (P0, P1C–P1N), fabricated population, `mi_agent`, `mi_agent_api`, workflows | **3,113 passed, 1 skipped, 21 xfailed, 0 failed** |
-| New analytical layer suite | **84 passed** |
+| New analytical layer suite | **89 passed** |
 | Full repository suite | *see §12* |
 
 **The 252-question sweep is the strongest no-regression evidence here.** It was
@@ -426,7 +426,7 @@ seasoning partition, the portfolio lens and the P0 execution receipt.
 | `.../__init__.py` | 55 | package contract |
 | `mi_agent/execution_receipt.py` | +107 | `analytical_evidence` and four evidence-based facet branches |
 | `mi_agent_api/*` | +56 | one recogniser registration, one un-narrowed frame resolver, two route-inventory tests updated |
-| tests + fixtures | 1,413 | 84 tests, a second book, a weekly pipeline pack |
+| tests + fixtures | 1,472 | 89 tests, a second book, a weekly pipeline pack |
 
 **No new mathematics was written.** The only arithmetic in the layer is adding
 up subtotals a governed function returned, at call sites that say so.
@@ -453,7 +453,12 @@ seam they did not previously cover:
   sets would have claimed all of them for every analytical answer. Instead the
   layer publishes what it actually computed and the receipt checks that. Every
   new branch is gated on that block being present, so **no other route's
-  reconciliation changes at all**.
+  reconciliation changes at all** — tested directly: `analytical_evidence`
+  returns `{}` for a `None` envelope, an empty one, a `risk_limits` one and a
+  portfolio-comparison one, and a claim that does not name its plan and
+  capabilities is not accepted as evidence. The strictness cuts the right way
+  too: a plan that ran but projected nothing LOSES the forward-projection
+  facet, which route membership could never express.
 * Measure, statistic and scope identity, provenance, seasoning, filter
   preservation, denominator correctness and execution receipts are untouched.
 

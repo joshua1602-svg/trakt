@@ -160,6 +160,65 @@ class TestDeterministicSourceDiscipline:
 
 
 # --------------------------------------------------------------------------- #
+# 2b. The execution receipt reads the layer's evidence, and only the layer's
+# --------------------------------------------------------------------------- #
+class TestReceiptEvidenceIsOptIn:
+    """Every new reconciliation branch is gated on evidence only this layer
+    publishes, so no other route's receipt can change."""
+
+    def test_a_non_analytical_envelope_yields_no_evidence(self):
+        from mi_agent import execution_receipt as receipt
+
+        for envelope in (None, {}, {"metadata": {}},
+                         {"metadata": {"route": "risk_limits"}},
+                         {"metadata": {"portfolioComparison": {"cohortConcept": "x"}}}):
+            assert receipt.analytical_evidence(envelope) == {}
+
+    def test_a_claim_without_a_plan_is_not_accepted_as_evidence(self):
+        from mi_agent import execution_receipt as receipt
+
+        assert receipt.analytical_evidence(
+            {"metadata": {"analyticalComposition": {"projected": True}}}) == {}
+        assert receipt.analytical_evidence(
+            {"metadata": {"analyticalComposition": {
+                "intent": "x", "capabilities": []}}}) == {}
+
+    def test_a_real_block_is_accepted(self):
+        from mi_agent import execution_receipt as receipt
+
+        block = {"intent": "funded_balance_outlook",
+                 "capabilities": ["funded_balance_forecast"], "projected": True}
+        assert receipt.analytical_evidence(
+            {"metadata": {"analyticalComposition": block}}) == block
+
+    def test_a_forward_facet_is_lost_when_the_plan_did_not_project(self):
+        """The evidence makes the guard STRICTER: a plan that ran but projected
+        nothing loses the facet, which route membership could never express."""
+        from mi_agent import execution_receipt as receipt
+
+        facet = receipt.RequestedFacet(kind=receipt.KIND_PROJECTION,
+                                       label="a forward projection")
+        receipt.reconcile_routed_facets(
+            [facet], route=route_mod.ROUTE_NAME, semantics={},
+            envelope={"metadata": {"analyticalComposition": {
+                "intent": "x", "capabilities": ["portfolio_snapshot"],
+                "projected": False}}})
+        assert facet.status == receipt.LOST
+
+    def test_a_forward_facet_is_applied_when_the_plan_did_project(self):
+        from mi_agent import execution_receipt as receipt
+
+        facet = receipt.RequestedFacet(kind=receipt.KIND_PROJECTION,
+                                       label="a forward projection")
+        receipt.reconcile_routed_facets(
+            [facet], route=route_mod.ROUTE_NAME, semantics={},
+            envelope={"metadata": {"analyticalComposition": {
+                "intent": "x", "capabilities": ["funded_balance_forecast"],
+                "projected": True}}})
+        assert facet.status == receipt.APPLIED
+
+
+# --------------------------------------------------------------------------- #
 # 3. Planning, and the deference rule
 # --------------------------------------------------------------------------- #
 class TestPlanning:
