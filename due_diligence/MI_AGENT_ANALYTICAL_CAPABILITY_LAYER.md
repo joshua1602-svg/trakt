@@ -366,7 +366,8 @@ HARD_FAILURE          = 0
 | 252-question MI calibration bank, run end to end at the baseline commit **and** on this branch | **3 changed of 252** — every one a refusal that became a correct answer (below) |
 | P-gates (P0, P1C–P1N), fabricated population, `mi_agent`, `mi_agent_api`, workflows | **3,113 passed, 1 skipped, 21 xfailed, 0 failed** |
 | New analytical layer suite | **89 passed** |
-| Full repository suite | **8,940 passed, 26 skipped, 21 xfailed, 0 failed, 0 errors** in 45:24 |
+| Full repository suite, at exact HEAD | **8,947 passed, 26 skipped, 21 xfailed, 0 failed, 0 errors** in 43:38 |
+| Full repository suite, at the baseline `7dffa6c`, same environment | 8,857 passed, 26 skipped, 21 xfailed |
 
 **The 252-question sweep is the strongest no-regression evidence here.** It was
 run twice through the real `POST /mi/query` path against the same book — once
@@ -385,6 +386,18 @@ to refused. `fcast_195` asks *by month* and receives a point forecast plus a
 monthly expected-completion profile rather than a monthly balance series; that
 is a partial reading of the question, stated as what it is, and strictly better
 than the refusal it replaces.
+
+**The suite delta reconciles exactly.** Collection counts are 8,905 at the
+baseline and 8,994 at HEAD — a difference of **+89, precisely the number of
+tests this work adds**. The baseline run shows one failure,
+`test_checked_in_registry_matches_generator`, which is an artefact of running
+from a git worktree rather than a regression: the checked-in registry records an
+absolute `source_registry: /home/user/trakt/...` path, so the generator run from
+any other directory produces a different metadata value. **The branch fails that
+same test identically from a worktree, and both trees pass it in place** — it is
+directory-dependent, not commit-dependent. (It is a real, pre-existing
+portability wart worth someone's attention: that governance test only passes
+from one absolute path. Out of scope here and untouched.)
 
 The 30-question regression bank covers exactly what the brief named as
 must-not-regress:
