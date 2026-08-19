@@ -24,7 +24,54 @@ guard, and no test phrasing added as an exact string patch.
 
 ## 1. Executive verdict
 
-*(filled at the end of this document)*
+**The recognition surface now matches the architecture behind it.**
+
+The same 752-run bank, unaltered — same 44 phrasings, same two books, same
+repetitions, same frozen scorer, same declared expected intents:
+
+| | Baseline `104c89d` | V1 |
+|---|---|---|
+| CORRECT + CORRECT_WITH_DISCLOSED_LIMITATION | 425 (56.5%) | **675 (89.8%)** |
+| SAFE_REFUSAL | 140 (18.6%) | 77 (10.2%) |
+| **INCORRECT_SUCCESSFUL** | **40** | **0** |
+| **SILENT_SEMANTIC_ERROR** | **147** | **0** |
+| **HARD_FAILURE** | 0 | **0** |
+| **Unsafe total** | **187 (24.9%)** | **0 (0.0%)** |
+| genuine LLM parses | 648 (86%) | 641 (85%) |
+
+**Every one of the 187 unsafe outcomes is gone, and not one was traded for
+another.** 16 of 44 variations changed verdict; every change moved toward
+safety or toward a correct answer. Zero regressions into an unsafe class. Zero
+capabilities lost.
+
+Four intents that were systemically broken now work under every phrasing tested:
+
+| | Baseline | V1 |
+|---|---|---|
+| Q1 new-origination profile | 0 of 80 acceptable | **74 correct, 6 safe refusals, 0 unsafe** |
+| Q4 completion run rate | 24 of 48 unsafe | **28 correct, 20 safe refusals, 0 unsafe** |
+| Q6 limits closest to breach | 23 of 48 unsafe | **47 correct, 1 refusal, 0 unsafe** |
+| Q7 vintages vs front book | 20 of 80 unsafe | **80 correct, 0 refusals, 0 unsafe** |
+| Q8 relative movement | 40 of 240 unsafe | **240 correct, 0 unsafe** |
+
+Q8 was the brief's control, and it is the cleanest single result: the identical
+sentence *"Are X and Y balances developing differently over time?"* resolves the
+same way across all three governed population resolvers — provenance, seasoning
+and dimension value — where before it produced three different outcomes.
+
+**Every number the layer produced was right.** 6,856 numeric findings reconciled
+independently against the fixture CSVs with pandas — **zero mismatches**. That
+includes 1,020 checks on the two new lending windows, whose truth was recomputed
+from `origination_date` against each snapshot date rather than taken from the
+code under test.
+
+**It generalises.** 44 of 44 variations reach the same verdict on both books.
+166 of 176 variation × book × arm groups are identical across every repeat.
+
+**And it did not disturb what worked.** 0 of 30 simple-MI answers changed; 8 of
+9 canonical CFO answers are byte-identical on both books; a 79-question sweep of
+ordinary MI phrasings run against both checkouts on the same data is 76/79
+identical, with all three differences improvements.
 
 ## 2. The six governed analytical families
 
@@ -304,6 +351,32 @@ Same words, three resolvers, one outcome. The cause was a single missing
 comparison concept — *"differently"* — in a vocabulary that was a private copy of
 one that had it.
 
+### 9.1 Contention this change CREATED, and how it was found
+
+Widening a recognition surface can move a question off a route that was already
+answering it. Two instances occurred and both were caught and fixed before the
+final measurement; they are recorded because a report that only lists the wins
+is not a measurement.
+
+**Q2.4 — a milestone answered as a balance.** *"Based on the current book and
+pipeline, how long until we reach £100m?"* moved from `forecast_extrapolation`
+to the analytical layer, which answered a **date** question with a **projected
+balance**. The cause was mine: the funded-balance-outlook gate had been matching
+"forecast / project / expect" literally, and once it consulted the whole forecast
+signal it also saw "how long until". Both are forecast questions; only one is a
+projected value. Fixed by having the gate ask the boundary which operation it
+recognised — MILESTONE and HORIZON belong to the forecast route, PROJECT_VALUE
+is composed here.
+
+**This was found by the rerun itself**, in the first of four arms: 3 unsafe runs
+out of 188, all the same variation. Had the bank not been rerun in full, it would
+have shipped.
+
+**The metric-evolution series** — see §11.5.
+
+Both fixes are deference, not precedence: no priority, confidence or
+registration order was changed for any route.
+
 ## 10. No change to the analytical engines
 
 Not one line of `mi_workflows/engine.py`, the deterministic executors, the
@@ -345,8 +418,9 @@ that already worked. Four independent checks, all run on the final tree.
 | `tests/test_p1n_statistic_breadth.py` | passed |
 | `tests/test_p1e_golden_bank.py` | passed |
 | `mi_agent/tests/test_mi_calibration_bank.py` (252-question bank) | 245 passed, 13 xfailed |
-| `tests/test_analytical_intent_boundary.py` (**new**) | 81 passed |
-| **Combined focused run** | **757 passed, 13 xfailed** |
+| `tests/test_analytical_intent_boundary.py` (**new**) | 110 passed |
+| `mi_agent_api/tests/test_forecast_extrapolation.py` | passed |
+| **Combined focused run** | **796 passed, 13 xfailed** |
 
 ### 11.2 The 30-question simple-MI bank
 
@@ -412,4 +486,209 @@ asks the evolution route's **own recogniser** whether it owns the question, and
 stands down when it does. The deference lifts when a composition is also asked
 for, because a single-measure series does not carry what the book is made of.
 Four tests hold the boundary in place.
+
+## 12. The 752-run rerun, against the frozen baseline
+
+**The bank was rerun unaltered**: the same 44 phrasings, the same two books, the
+same repetition counts (5 for Q1/Q3/Q5/Q7/Q8, 3 elsewhere), the same two arms
+(production and forced-LLM), and the same scorer — `nl_score.py` was not
+modified, and re-running it over the frozen baseline files reproduces the
+published baseline distribution exactly, which is what makes the comparison
+sound.
+
+### 12.1 Distribution
+
+| Outcome | Baseline | V1 |
+|---|---|---|
+| CORRECT | 405 (53.9%) | **675 (89.8%)** |
+| CORRECT_WITH_DISCLOSED_LIMITATION | 20 (2.7%) | 0 |
+| HONEST_PARTIAL | 0 | 0 |
+| SAFE_REFUSAL | 140 (18.6%) | 77 (10.2%) |
+| INCORRECT_SUCCESSFUL | 40 (5.3%) | **0** |
+| SILENT_SEMANTIC_ERROR | 147 (19.5%) | **0** |
+| HARD_FAILURE | 0 | **0** |
+
+The disclosed-limitation class emptying is itself a result: the one variation in
+it (Q7.3) was being answered *adjacently* by the generic executor grouping on the
+seasoning segment. It is now answered by the capability that owns it.
+
+### 12.2 Every variation that moved
+
+16 of 44 changed verdict. Every one is listed; every one improved.
+
+| Variation | Baseline | V1 | Now answered by |
+|---|---|---|---|
+| Q1.1 *"profile of our new lending…"* | SILENT | **CORRECT** | `analytical_composition` |
+| Q1.2 *"originating different types… vs a few months ago"* | SILENT | **CORRECT** | `analytical_composition` |
+| Q1.3 *"recent lending vs earlier in the year"* | SILENT | **CORRECT** | `analytical_composition` |
+| Q1.4 *"risk and borrower profile of new business"* | INCORRECT | **CORRECT** | `analytical_composition` |
+| Q3.1 *"how much at offer and how much completes"* | SAFE_REFUSAL | **CORRECT** | `analytical_composition` |
+| Q3.4 *"how much sitting at offer… and when"* | SAFE_REFUSAL | **CORRECT** | `analytical_composition` |
+| Q4.1 *"what completion rate are we running at?"* | SILENT | **CORRECT** | `forecast_extrapolation` |
+| Q4.2 *"how many loans are we completing?"* | SILENT | **SAFE_REFUSAL** | fail-closed |
+| Q6.2 *"where are we closest to our limits?"* | SILENT | **CORRECT** | `risk_limits` |
+| Q6.3 *"which of our limits are most at risk?"* | SILENT | **CORRECT** | `risk_limits` |
+| Q7.1 *"front book vs older lending, risk"* | SAFE_REFUSAL | **CORRECT** | `analytical_composition` |
+| Q7.2 *"are older loans riskier…?"* | SILENT | **CORRECT** | `analytical_composition` |
+| Q7.3 *"recent originations versus the back book"* | DISCLOSED | **CORRECT** | `analytical_composition` |
+| Q8.3 / provenance | INCORRECT | **CORRECT** | `analytical_composition` |
+| Q8.3 / seasoning | SILENT | **CORRECT** | `analytical_composition` |
+| Q8.3 / dimension value | SAFE_REFUSAL | **CORRECT** | `analytical_composition` |
+
+**Regressions into an unsafe class: NONE. Capabilities lost (ok → not ok):
+NONE.** Both are asserted mechanically by the comparison script, not read off
+by eye.
+
+### 12.3 Generalisation
+
+| | |
+|---|---|
+| Variations reaching the same verdict on **both books** | **44 / 44 (100%)** |
+| Variation × book × arm groups identical across every repeat | **166 / 176 (94%)** |
+| Genuine LLM parses (`parser_used == "llm"`) | 641 / 752 (85%) |
+
+The 10 groups that varied all move between CORRECT and SAFE_REFUSAL — never
+between two different answers, and never into an unsafe class. The cause in every
+case is the LLM parse emitting a population predicate the governed route did not
+apply (for example `origination_date >= 2024-01-01` where the plan resolved the
+RECENT window), which the pre-existing P1L population ledger refuses. That is the
+guard doing its job, and it behaved identically in the baseline.
+
+### 12.4 Numerical reconciliation
+
+| Arm | Findings reconciled | Mismatches |
+|---|---|---|
+| Alderbridge production | 1,704 / 1,704 | 0 |
+| Alderbridge forced-LLM | 1,704 / 1,704 | 0 |
+| Kestrelmoor production | 1,724 / 1,724 | 0 |
+| Kestrelmoor forced-LLM | 1,724 / 1,724 | 0 |
+| **Total** | **6,856 / 6,856** | **0** |
+
+2.6× the baseline's 2,686 findings, because far more questions now reach a
+capability that produces them. Truth computed independently with pandas from the
+fixture CSVs; populations verified by row count as well as by value.
+
+**The two new lending windows are verified, not merely exercised**: 1,020 of
+those checks are on `new` and `recent`, whose truth is recomputed from
+`origination_date` against each snapshot date rather than read from the code
+under test.
+
+### 12.5 The gate
+
+| §12 criterion | Required | Measured |
+|---|---|---|
+| INCORRECT_SUCCESSFUL | 0 | **0** |
+| SILENT_SEMANTIC_ERROR | 0 | **0** |
+| HARD_FAILURE | 0 | **0** |
+| CORRECT / DISCLOSED | ≥ 80% commercial target | **89.8%** |
+| remainder HONEST_PARTIAL or SAFE_REFUSAL | all | **77 of 77** |
+
+The 89.8% was not reached by broadening unsafe inference. It was reached by
+routing questions to capabilities that already existed, and by refusing the ones
+nothing can answer — the remaining 10.2% are all stated refusals, and §13
+accounts for every one of them.
+
+## 13. Truth and safety validation of every newly successful question
+
+§14 of the brief: success is not awarded because the prose sounds plausible. For
+each of the 15 variations that moved into a correct outcome, the whole chain was
+read — family, operation, population predicate and row count, period, capability
+calls, findings, guard verdict and narrative — and the figures reconciled
+independently.
+
+| Variation | Plan | Population actually applied | Rows |
+|---|---|---|---|
+| Q1.1, Q1.4 | `origination_profile_change` | `months_on_book le 1` | 11,035 → **115** |
+| Q1.2, Q1.3 | `origination_profile_change` | `months_on_book le 3` | 11,035 → **258** |
+| Q3.1, Q3.4 | `pipeline_offer_outlook` | `pipeline_stage = OFFER` (pipeline dataset) | **157 cases** |
+| Q4.1 | *(no plan)* `forecast_extrapolation` | whole book, as the run-rate requires | — |
+| Q6.2, Q6.3 | *(no plan)* `risk_limits` | the governed limit schedule | — |
+| Q7.1, Q7.3 | `vintage_risk_comparison` | `seasoning_segment` Front **and** Back | 1,177 / 9,858 |
+| Q7.2 | `vintage_risk_comparison` | `seasoning_segment = Back Book` **and** `months_on_book le 3` | 9,858 / 258 |
+| Q8.3 / seasoning | `population_movement_comparison` | Front **and** Back | 1,177 / 9,858 |
+| Q8.3 / provenance | `population_movement_comparison` | portfolio lens Direct **and** Acquired | 7,126 / 3,909 |
+| Q8.3 / dimension | `population_movement_comparison` | `collateral_geography` South East **and** London | 2,420 / 1,380 |
+
+Three things this table is meant to let a reader check:
+
+* **The population is the one the question named, and it was applied.** Every row
+  shows a `rowsBefore → rowsAfter` narrowing recorded by the governed population
+  ledger, not a claim. Q1's 115 and 258 match a pandas recomputation of
+  `months_on_book ≤ 1` and `≤ 3` against the same snapshot exactly.
+* **Both sides of a comparison were measured separately.** Q7.2 is the sharpest:
+  *"Are older loans riskier than the loans we've originated recently?"* resolves
+  to Back Book **against Recent lending (L3M)** — two different governed
+  windows, in the order the sentence names them.
+* **The period is real and disclosed.** Every movement finding carries
+  `{start, end, method, available}`; Q1 compares 2026-04-30 against 2026-06-30
+  and says so in the answer.
+
+**Q4.1 and Q6.2/Q6.3 produce no analytical plan at all, and that is the correct
+outcome.** They are answered by `forecast_extrapolation` and `risk_limits` — the
+routes that own those families — reached because the boundary settled a governed
+flag the parse had left unset. No new analytic was introduced for either.
+
+### 13.1 Every remaining refusal, accounted for
+
+77 refusals across 9 variations. None is silent; every one states a reason.
+
+| Variation | Runs | Cause |
+|---|---|---|
+| Q5.4 | 20 | forward projection requested; `risk_limits` is point-in-time. **Unchanged from baseline** |
+| Q2.3 | 12 | forward projection requested; no route claimed it. **Unchanged from baseline** |
+| Q9.1 | 12 | parse asked for a period comparison; the plan measures one point in time. **Unchanged from baseline** |
+| **Q4.2** | **12** | **the new fail-closed rule** — a pipeline question, and there is no governed COUNT run rate |
+| Q4.4 | 8 | LLM parse emitted `origination_date >= LAST_4_WEEKS`; the run-rate route does not narrow. Pre-existing P1L ledger |
+| Q1.3 | 6 | LLM parse emitted `origination_date >= 2024-01-01`; the plan resolved the RECENT window. Pre-existing P1L ledger |
+| Q3.4 | 4 | LLM parse emitted `account_status = offer` against the funded frame; the plan reads the pipeline extract. Pre-existing P1L ledger |
+| Q3.3 | 2 | as Q3.4, with `pipeline_stage = Offer` |
+| Q6.3 | 1 | LLM parse emitted `arrears_balance > 0`; the limit schedule does not narrow by it. Pre-existing P1L ledger |
+
+**Only 12 of the 77 come from the new rule.** The other 65 are the existing P1L
+population ledger and P0 projection facet refusing exactly as they did before —
+in several cases refusing a population the *model* invented, which is what that
+guard exists for. Nothing was weakened to raise the correct-answer rate.
+
+## 14. Scope, residual gaps and verdict
+
+### 14.1 What was deliberately not done
+
+Every item the brief placed out of scope stayed out:
+
+| Out of scope | Status |
+|---|---|
+| new deterministic analytics | none added |
+| new statistical capabilities | none added |
+| new forecast methodologies | none added |
+| the bubble-disclosure fix | not touched |
+| the threshold-attachment fix | not touched |
+| telemetry | not touched |
+| a clarification UX redesign | not touched — the refusal reuses the existing controlled-refusal envelope |
+| broker / product data | not touched |
+| new asset classes | not touched |
+| generic LLM fine-tuning | none |
+| prompt self-learning | none |
+
+### 14.2 Residual gaps, stated plainly
+
+**A pipeline STOCK question with no forward element is refused, not answered.**
+*"How many cases are at offer?"* names a governed stage and the `pipeline_stock`
+capability exists, but the analytical layer's contract is that it engages only
+for **composite** work — two or more capabilities — so a single-capability plan
+is not built, and no other route owns a bare stage count. The refusal is honest
+and is a strict improvement on the baseline (which answered "11,035 loans"), but
+it is a lost answer rather than a gained one. Closing it means either a
+single-capability plan shape or a pipeline-stock route, and both are new plan
+surface rather than intent recognition — out of scope for V1.
+
+**There is no governed COUNT run rate.** *"How many loans are we completing at
+the moment?"* is refused because the completion run-rate capability produces a
+currency rate and nothing else, and answering in pounds would be a measure
+substitution. Building a count run rate is new deterministic analytics (§16).
+
+**The lending windows are nested, and a narrow one has no governed complement.**
+"New lending" (L1M) and "recent lending" (L3M) have no automatic other side, so a
+comparative question naming only one of them resolves a pair only when the named
+window is one half of the front/back binary. This is deliberate — synthesising
+"everything that is not new lending" would be inventing a population.
 
