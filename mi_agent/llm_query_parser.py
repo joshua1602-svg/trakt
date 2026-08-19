@@ -3525,6 +3525,18 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
     entry = ((semantics or {}).get("fields") or {}).get(metric) or {}
     current = getattr(spec, "aggregation", None)
     if _statistic.satisfies(named, current):
+        # A plain "average" is satisfied by EITHER governed averaging statistic,
+        # but WHICH one it means is the field's house convention, not whichever
+        # the parser picked on the day. "What is the average LTV in London?" came
+        # back as a simple mean of 39.6193 while the same question over the whole
+        # book gave the governed weighted average of 43.1562 — one phrasing, two
+        # statistics, 7% apart. Normalising a bare mean to the field's default
+        # makes the convention deterministic across both parser paths, and leaves
+        # measures whose default IS the simple mean (borrower age) untouched.
+        if named == _statistic.MEAN:
+            governed = _statistic.concrete_for(named, entry)
+            if governed and current != governed:
+                spec.aggregation = governed
         return named
     # NB: ``loan_level`` is deliberately NOT rewritten to a min/max, even though
     # a superlative question looks like it wants one. "Largest loan balance" is
