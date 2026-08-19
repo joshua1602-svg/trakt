@@ -1,9 +1,9 @@
 # ESCALATION — Silent aggregation substitution produces a plausible incorrect successful answer
 
 **Raised during:** Commercial Beta Readiness Review (review/measure only)
-**Status:** OPEN — escalated, not fixed. No production code has been changed.
+**Status:** RULED — classified by the product owner, not yet fixed. No production code has been changed.
 **Baseline:** `983a755` (clean tree, P1L suite 8,675 passed / 0 failed)
-**Severity:** BETA BLOCKER (candidate) — see §6 for the reasoning and the counter-argument.
+**Severity:** **BETA BLOCKER** — ruled by the product owner. See §6 for the reasoning and the counter-argument that was considered and overruled.
 
 The Commercial Beta Readiness brief requires that a safety defect capable of producing a
 plausible incorrect successful answer be escalated separately rather than absorbed into a
@@ -162,14 +162,39 @@ scratchpad/cbr_med_rep.py                      # 5x repeat, genuine LLM, 1 disti
 scratchpad/cbr_stat.py {deterministic|llm}     # the wider statistic sweep
 ```
 
-## 11. Direction requested
+## 11. Direction received — product owner ruling
 
-1. Confirm the **BETA BLOCKER** classification, or overrule it to a disclosed Beta
-   limitation with the counter-argument in §6 accepted.
-2. Confirm the intended semantics for a disallowed aggregation: **refuse** (my
-   recommendation, consistent with the max/min precedent) versus **compute-and-disclose**.
-3. Confirm whether `median LTV` should become *supported* (a weighted median is a genuine
-   product question, not merely a permission change) or remain a governed refusal.
+Both questions were put to the product owner with the counter-argument in §6 stated fairly.
+The rulings are:
 
-The readiness review is paused. On direction I will either resume it with this finding
-carried into the scorecard as a named blocker, or take a separate implementation brief.
+**R1 — Classification: BETA BLOCKER.** The §6 counter-argument (the calculation trace names
+the substituted statistic) was considered and overruled. A wrong plausible figure asserted
+as the answer on LTV and interest rate blocks client deployment.
+
+**R2 — Semantics: REFUSE, AND WIDEN WHERE GENUINELY SUPPORTED.** Two obligations, not one:
+
+1. A request for an aggregation the field's registry does not permit must be **refused**,
+   following the existing max/min precedent and the P1I-A rule — *prevent the invalid
+   result from being created in the first place; do not create it and disclose it later*.
+   The refusal should use the governed B20 template, naming the statistic requested and the
+   aggregations the field does support.
+2. The **deterministic parser must emit `median` where the registry already permits it**
+   (`current_outstanding_balance`, `youngest_borrower_age`), so that the two parser paths
+   agree. Today the deterministic path substitutes even on fields that allow median
+   (rows 3 and 4 of the deterministic table in §3), while the LLM path answers them
+   correctly — a parity gap that would otherwise persist behind the refusal.
+
+Note that R2 requires the fix to *widen* supported behaviour as well as tighten it. A
+refusal-only change would leave the deterministic path refusing questions the LLM path
+answers correctly, which would be a regression in breadth dressed as a safety fix.
+
+**Not ruled, deferred to roadmap:** whether `median LTV` should become *supported* — a
+weighted median is a genuine product question, not merely a registry permission change.
+Until it is, median LTV is a governed refusal.
+
+## 12. Status of the work
+
+Implementation is **not** in scope of the Commercial Beta Readiness Review, which is
+review/measure/report only. This defect is carried into the readiness scorecard as a
+**named Beta blocker**, and the fix specified by R2 is the first item of the recommended
+development roadmap. It awaits a separate implementation brief.
