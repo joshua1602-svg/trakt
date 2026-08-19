@@ -357,7 +357,7 @@ HARD_FAILURE          = 0
 | 30-question simple-MI regression bank, before vs after | **0 changed answers of 30** — route, ok flag and answer text byte-identical |
 | 252-question MI calibration bank, run end to end at the baseline commit **and** on this branch | **3 changed of 252** — every one a refusal that became a correct answer (below) |
 | P-gates (P0, P1C–P1N), fabricated population, `mi_agent`, `mi_agent_api`, workflows | **3,113 passed, 1 skipped, 21 xfailed, 0 failed** |
-| New analytical layer suite | **82 passed** |
+| New analytical layer suite | **84 passed** |
 | Full repository suite | *see §12* |
 
 **The 252-question sweep is the strongest no-regression evidence here.** It was
@@ -418,7 +418,7 @@ seasoning partition, the portfolio lens and the P0 execution receipt.
 | `.../__init__.py` | 55 | package contract |
 | `mi_agent/execution_receipt.py` | +107 | `analytical_evidence` and four evidence-based facet branches |
 | `mi_agent_api/*` | +56 | one recogniser registration, one un-narrowed frame resolver, two route-inventory tests updated |
-| tests + fixtures | 1,368 | 82 tests, a second book, a weekly pipeline pack |
+| tests + fixtures | 1,413 | 84 tests, a second book, a weekly pipeline pack |
 
 **No new mathematics was written.** The only arithmetic in the layer is adding
 up subtotals a governed function returned, at call sites that say so.

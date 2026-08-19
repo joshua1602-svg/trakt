@@ -350,6 +350,51 @@ class TestGovernedPopulations:
 
 
 # --------------------------------------------------------------------------- #
+# 4b. A plan that runs but does not answer is a refusal, not a partial answer
+# --------------------------------------------------------------------------- #
+class TestUnsatisfiedPlans:
+    """The half a composite plan DID compute answers a different question.
+
+    A funded-balance outlook that resolved the funded balance but no forecast is
+    usable and not satisfied; offering it would hand a point-in-time figure to
+    someone who asked where the book is going.
+    """
+
+    def _result(self, findings):
+        from mi_workflows.analytical import orchestrator as orch
+
+        plan = contract_mod.AnalyticalPlan(
+            intent="funded_balance_outlook",
+            calls=(contract_mod.CapabilityCall("funded_balance_forecast", {}),
+                   contract_mod.CapabilityCall("pipeline_completion_forecast", {})),
+            required_kinds=(contract_mod.KIND_FORECAST,))
+        return orch.AnalyticalResult(plan=plan, findings=tuple(findings),
+                                     execution=())
+
+    def test_a_plan_missing_its_required_kind_is_usable_but_not_satisfied(self):
+        funded = contract_mod.Finding(
+            capability="funded_balance_forecast", kind=contract_mod.KIND_MEASURE,
+            label="Current funded balance", value=1_000_000.0)
+        missing = contract_mod.Finding(
+            capability="funded_balance_forecast", kind=contract_mod.KIND_FORECAST,
+            label="Forecast funded balance",
+            status=contract_mod.STATUS_UNAVAILABLE,
+            note="No governed pipeline source is available for this book.")
+        result = self._result([funded, missing])
+        assert result.usable is True
+        assert result.satisfied is False
+        assert any("No governed pipeline source" in r
+                   for r in result.unmet_reasons())
+
+    def test_a_plan_that_produced_its_required_kind_is_satisfied(self):
+        result = self._result([contract_mod.Finding(
+            capability="funded_balance_forecast",
+            kind=contract_mod.KIND_FORECAST, label="Forecast funded balance",
+            forecast_value=1_100_000.0)])
+        assert result.satisfied is True
+
+
+# --------------------------------------------------------------------------- #
 # 5. An LLM may propose a plan; it may not calculate, and it may not invent
 # --------------------------------------------------------------------------- #
 class TestLlmProposedPlans:
