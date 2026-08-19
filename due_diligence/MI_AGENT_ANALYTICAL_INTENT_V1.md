@@ -9,9 +9,16 @@ guard, and no test phrasing added as an exact string patch.
 `104c89d` — the frozen 752-run measurement in
 `due_diligence/MI_AGENT_ANALYTICAL_NL_ROBUSTNESS.md`.
 
-**Change.** Two production commits (`a6331aa`, `cf7e673`), one new module and
-one new test file. Full diff: 11 files, +1,780 / −70 (of which 303 lines are the new
-test suite and 108 the architecture note).
+**Change.** Six commits, one new module and one new test file:
+
+| | |
+|---|---|
+| `a6331aa` | the boundary: six families, the lending ruling, the fail-closed rule |
+| `cf7e673` | make a refused envelope say one thing — guard and receipt agree with the answer |
+| `235ba7b` | settle `forecast_mode` only for a PIPELINE run rate (§9) |
+| `bd97c2b` | leave a single-measure series with the `evolution` route (§11.5) |
+| `9b925eb` | correct the lending-role docstring to what the code does |
+| `0bcf9de` | prove every governed operation is reachable |
 
 ---
 
