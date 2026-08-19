@@ -400,3 +400,58 @@ class TestOwnershipDeference:
                           "back book over the last few months?", spec=spec)
         assert plan is not None
         assert plan.intent == "population_movement_comparison"
+
+
+class TestOperationCoverage:
+    """Every governed operation §2 declares must be reachable from a question.
+
+    A declaration nothing can produce is decoration. This is the check that the
+    operation set is a description of what the boundary recognises rather than a
+    wish list — and it fails loudly if a future edit strands one.
+    """
+
+    #: One ordinary question per governed operation. These are NOT production
+    #: vocabulary and nothing reads them at runtime; they exist so the
+    #: declarations in FAMILIES cannot quietly become unreachable.
+    REACHES = {
+        intent_mod.OP_SNAPSHOT: "How does the risk profile of the front book compare with the back book?",
+        intent_mod.OP_COMPOSITION: "What is the mix of the book?",
+        intent_mod.OP_COMPARISON: "How does the front book profile compare with the back book?",
+        intent_mod.OP_CHANGE: "How has the profile of the book changed?",
+        intent_mod.OP_DIVERGENCE: "How has the front book profile changed relative to the back book?",
+        intent_mod.OP_ATTRIBUTION: "How has the mix changed and what drove it?",
+        intent_mod.OP_STOCK: "How much is at offer?",
+        intent_mod.OP_MOVEMENT: "How many loans are we completing at the moment?",
+        intent_mod.OP_CONVERSION: "How much of the pipeline is expected to complete?",
+        intent_mod.OP_RUN_RATE: "What is our completion run rate?",
+        intent_mod.OP_EXPECTED_COMPLETION: "How much of the offer pipeline do we expect to complete?",
+        intent_mod.OP_TIMING: "When do we expect the offer pipeline to complete?",
+        intent_mod.OP_MIX: "What is the profile of the offer pipeline?",
+        intent_mod.OP_CONCENTRATION: "Are we within our concentration limits?",
+        intent_mod.OP_STATUS: "Are we within our concentration limits?",
+        intent_mod.OP_HEADROOM: "Which limits have the least headroom?",
+        intent_mod.OP_RANKING: "Which limits have the least headroom?",
+        intent_mod.OP_FORECAST_BREACH: "Are we likely to breach any limits next quarter?",
+        intent_mod.OP_PROJECT_VALUE: "What will the funded balance be?",
+        intent_mod.OP_MILESTONE: "When will we reach £100m?",
+        intent_mod.OP_HORIZON: "When will we reach £100m?",
+        intent_mod.OP_SCENARIO: "What if conversion improved, when would we reach £100m?",
+        intent_mod.OP_DELTA: "How has the balance changed?",
+        intent_mod.OP_TREND: "What is the balance trend?",
+        intent_mod.OP_ACCELERATION: "Is balance growth accelerating?",
+        intent_mod.OP_EVOLUTION: "How have the vintages evolved?",
+    }
+
+    def test_every_declared_operation_is_declared_by_some_family(self):
+        declared = set()
+        for family in intent_mod.FAMILIES.values():
+            declared |= set(family.operations)
+        assert set(self.REACHES) == declared, (
+            "the coverage table and the family declarations disagree: "
+            f"{set(self.REACHES) ^ declared}")
+
+    @pytest.mark.parametrize("operation", sorted(REACHES))
+    def test_every_declared_operation_is_reachable(self, operation):
+        question = self.REACHES[operation]
+        assert operation in intent_mod.classify(question).operations, (
+            f"{operation} is declared but no question reaches it")
