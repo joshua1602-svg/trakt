@@ -366,7 +366,7 @@ HARD_FAILURE          = 0
 | 252-question MI calibration bank, run end to end at the baseline commit **and** on this branch | **3 changed of 252** — every one a refusal that became a correct answer (below) |
 | P-gates (P0, P1C–P1N), fabricated population, `mi_agent`, `mi_agent_api`, workflows | **3,113 passed, 1 skipped, 21 xfailed, 0 failed** |
 | New analytical layer suite | **89 passed** |
-| Full repository suite | *see §12* |
+| Full repository suite | **8,940 passed, 26 skipped, 21 xfailed, 0 failed, 0 errors** in 45:24 |
 
 **The 252-question sweep is the strongest no-regression evidence here.** It was
 run twice through the real `POST /mi/query` path against the same book — once
