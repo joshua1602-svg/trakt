@@ -1117,7 +1117,14 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     for facet in facets:
         if facet.kind == KIND_STATISTIC:
             requested = (facet.concepts or (None,))[0]
-            if _statistic.satisfied_by_any(requested, ran):
+            # An analytic mode (contribution, share) is not a statistic that can
+            # stand in for another, and it carries its own governed guard. An
+            # empty ``ran`` means the route published no statistic evidence at
+            # all — this facet then has nothing to reconcile and must not refuse
+            # on an absence the route never claimed to report.
+            if not ran or any(r in _statistic.ANALYTIC_MODES for r in ran):
+                facet.status, facet.reason = APPLIED, ""
+            elif _statistic.satisfied_by_any(requested, ran):
                 facet.status, facet.reason = APPLIED, ""
             else:
                 # REJECTED, not LOST: the statistic was considered and a
@@ -1683,6 +1690,19 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
         return (fields.get(key, {}) or {}).get("canonical_field", key)
 
     for facet in facets:
+        if facet.kind == KIND_STATISTIC:
+            # P1M. Specialist routes publish no statistic evidence — a portfolio
+            # comparison declares the measures it compared, not the aggregation
+            # each ran under. Refusing on that absence would reject every routed
+            # answer to a question containing the word "average".
+            #
+            # This is safe because the guarantee for these paths is upstream: an
+            # ungoverned statistic is refused at the parse boundary and never
+            # reaches a route at all. The facet's job on the point-in-time path
+            # is to catch a statistic lost INSIDE a measure set, which routes do
+            # not build.
+            facet.status, facet.reason = APPLIED, ""
+            continue
         if facet.kind == KIND_SHARE:
             # Execution-proven first: a route that DECLARES a single-name share,
             # with both sides of it and the grain it used, has answered the

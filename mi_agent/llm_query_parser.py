@@ -3474,8 +3474,28 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
     # checks identity across the whole executed set.
     if len([m for m in (getattr(spec, "measures", None) or []) if m.get("field")]) > 1:
         return named
+    # The same reasoning read from the QUESTION rather than the spec. A request
+    # for more measures than the contract carries is refused by P1E, and the spec
+    # that reaches here is already degraded — attributing the question's
+    # statistic to whichever measure survived produced a refusal that named the
+    # wrong problem ("weighted average Valuation is not governed") for a question
+    # whose actual fault was asking for six measures.
+    try:
+        from .execution_receipt import named_measure_concepts  # local: cycle
+
+        if len(named_measure_concepts(question)) > 1:
+            return named
+    except Exception:  # noqa: BLE001 - the guard must never break a parse
+        pass
     entry = ((semantics or {}).get("fields") or {}).get(metric) or {}
-    if _statistic.satisfies(named, getattr(spec, "aggregation", None)):
+    current = getattr(spec, "aggregation", None)
+    if _statistic.satisfies(named, current):
+        return named
+    # "Which region contributes most to the weighted average LTV" names a
+    # weighted average, but the spec's aggregation is a CONTRIBUTION — the
+    # decomposition of exactly that weighted average. Rewriting it to a plain
+    # weighted average would destroy the analytic the question asked for.
+    if str(current or "") in _statistic.ANALYTIC_MODES:
         return named
     concrete = _statistic.concrete_for(named, entry)
     # ``concrete`` is None exactly when the registry does not permit the

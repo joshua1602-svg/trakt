@@ -49,6 +49,14 @@ GOVERNED_STATISTICS = (
 #:
 #: An explicitly WEIGHTED average is a different request: it names the weighting,
 #: so only ``weighted_avg`` satisfies it.
+#: Aggregations that are ANALYTIC MODES rather than statistics: a contribution
+#: decomposes a weighted average across groups, a share is a ratio of two
+#: populations, a distribution is a shape. Each has its own governed guard
+#: (P1A, P1D), and none of them is a statistic that could stand in for another,
+#: so the statistic identity check does not apply to them.
+ANALYTIC_MODES = frozenset({"contribution", "share", "distribution", "loan_level",
+                            "balance_sum"})
+
 MEAN = "mean"
 _MEAN_FAMILY = frozenset({"avg", "weighted_avg"})
 _COUNT_FAMILY = frozenset({"count", "count_distinct"})
