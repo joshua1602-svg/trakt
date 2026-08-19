@@ -235,8 +235,11 @@ reporting snapshots) with a governed twelve-week pipeline pack.
 
 **Q8 is a generic pattern, not a fixed pair.** The same plan answers *"how has
 the balance from the South East changed relative to London?"* — 2,420 vs 1,380
-loans, £516.2m vs £413.8m — and would answer front vs back, resolving each side
-through the governed resolver that owns the concept.
+loans, £516.2m vs £413.8m — resolving each side through the governed resolver
+that owns the concept: the portfolio lens for provenance, the seasoning
+partition for front/back, and a literal match against the values the book
+carries for a dimension. The front/back **plan** resolves correctly too, but one
+phrasing of it is refused upstream by a pre-existing parser defect — see G4.
 
 **Remaining gap on Q5.** *"…in the next three months"* is answered with the
 current limit position. The forward-looking capability already exists —
@@ -352,11 +355,31 @@ HARD_FAILURE          = 0
 | Asset | Result |
 |---|---|
 | 30-question simple-MI regression bank, before vs after | **0 changed answers of 30** — route, ok flag and answer text byte-identical |
+| 252-question MI calibration bank, run end to end at the baseline commit **and** on this branch | **3 changed of 252** — every one a refusal that became a correct answer (below) |
 | P-gates (P0, P1C–P1N), fabricated population, `mi_agent`, `mi_agent_api`, workflows | **3,113 passed, 1 skipped, 21 xfailed, 0 failed** |
 | New analytical layer suite | **82 passed** |
 | Full repository suite | *see §12* |
 
-The regression bank covers exactly what the brief named as must-not-regress:
+**The 252-question sweep is the strongest no-regression evidence here.** It was
+run twice through the real `POST /mi/query` path against the same book — once
+from a git worktree at the frozen baseline `7dffa6c`, once on this branch — and
+the two outputs compared question by question. 249 are byte-identical in route,
+`ok` flag and answer text. The three that changed:
+
+| Id | Question | Before | After |
+|---|---|---|---|
+| `fcast_195` | *forecast funded balance by month* | `evolution`, refused: *"a forward projection … this is a point-in-time answer"* | answered: £1.96bn funded → £1.98bn forecast, with the monthly expected-completion profile |
+| `fcast_200` | *forecast funded balance* | refused: *"'Forecast Funded Balance' is not available in this dataset"* | answered |
+| `fcast_201` | *what is the projected funded balance next quarter* | refused, same message | answered |
+
+Not one previously-correct answer changed, and no question moved from answered
+to refused. `fcast_195` asks *by month* and receives a point forecast plus a
+monthly expected-completion profile rather than a monthly balance series; that
+is a partial reading of the question, stated as what it is, and strictly better
+than the refusal it replaces.
+
+The 30-question regression bank covers exactly what the brief named as
+must-not-regress:
 total AuM, WA LTV, borrower age, balance by region, filters, tables, heatmaps,
 min/max/median, front/back, direct/acquired, sponsored book, risk limits,
 concentration, evolution, temporal compare and portfolio summary.
@@ -402,7 +425,8 @@ up subtotals a governed function returned, at call sites that say so.
 
 ## 12. Governance preserved
 
-Every control the brief lists remains authoritative, and two were **strengthened**:
+Every control the brief lists remains authoritative. Two of them now reach a
+seam they did not previously cover:
 
 * **P1L population propagation.** Populations are applied through
   `mi_agent.population.apply_population`, and the layer publishes
@@ -447,7 +471,7 @@ compare with the front book; how one part of the book has moved relative to
 another; and what the book is forecast to reach given the pipeline. Each answer
 is composed from governed deterministic capabilities, carries the population and
 period it was measured over, names the engine that produced every figure, and
-states what it could not compute. Two of the five were previously refused, one
+states what it could not compute. Three of the five were previously refused, one
 was answered wrongly with `ok=True`, and one refused for the wrong reason.
 
 The four questions the product already answered correctly are answered by
@@ -460,8 +484,8 @@ remaining gaps are configuration and data, not capability — with one
 pre-existing parser defect that this work reproduces at baseline and does not
 touch.
 
-**Not merged. Not pushed for release.** Full-suite evidence is recorded below
-for review.
+**Not merged.** The branch is pushed for review only; the regression evidence is
+in §10 and the reconciliation in §9.
 
 | Dimension | Score | Basis |
 |---|---|---|
