@@ -393,6 +393,14 @@ def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
         return None
     if _any(text, ("run rate", "run-rate")):
         return None  # the run-rate route owns this
+    # A MILESTONE is a different question from a PROJECTED VALUE. "How long
+    # until we reach £100m?" wants a DATE, and `forecast_extrapolation` solves
+    # for it against the completion run-rate; this plan produces a balance. The
+    # two are not interchangeable, and answering one with the other is the
+    # route contention this layer exists to prevent rather than create.
+    if (intent_mod.OP_MILESTONE in reading.operations
+            or intent_mod.OP_HORIZON in reading.operations):
+        return None
     return AnalyticalPlan(
         intent=INTENT_FUNDED_BALANCE_OUTLOOK,
         required_kinds=(KIND_FORECAST,),

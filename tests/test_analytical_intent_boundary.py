@@ -391,6 +391,25 @@ class TestOwnershipDeference:
         assert self._plan("Is the credit quality of new origination better or "
                           "worse than the back book?", spec=spec) is None
 
+    def test_a_milestone_question_stays_with_the_forecast_route(self):
+        """"How long until we reach £100m?" wants a DATE, and the forecast route
+        solves for it against the completion run-rate. The funded-balance outlook
+        produces a BALANCE. Answering one with the other is exactly the route
+        contention this layer exists to prevent rather than create."""
+        for question in (
+                "Based on the current book and pipeline, how long until we "
+                "reach £100m?",
+                "When do we expect the funded book to reach £100m?",
+                "Given the pipeline, when will the book cross £100m?"):
+            assert self._plan(question) is None, question
+
+    def test_a_projected_value_question_still_reaches_the_analytical_layer(self):
+        """The other side of the same distinction: asking what the balance WILL
+        BE is a projected value, and it is composed here."""
+        plan = self._plan("If the current pipeline converts as expected, what "
+                          "will our funded balance be?")
+        assert plan is not None and plan.intent == "funded_balance_outlook"
+
     def test_that_deference_lifts_when_the_question_needs_more_than_one_snapshot(self):
         """The executor reads ONE snapshot. A question that also needs two is not
         answerable by grouping, however the parse was resolved."""
