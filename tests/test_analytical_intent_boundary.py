@@ -351,3 +351,52 @@ class TestStructuralInvariants:
     @pytest.mark.parametrize("question", QUESTIONS)
     def test_classification_is_deterministic(self, question):
         assert intent_mod.classify(question) == intent_mod.classify(question)
+
+
+class TestOwnershipDeference:
+    """§5 — existing route ownership stays valid. The family layer must not force
+    a question through the analytical layer unnecessarily."""
+
+    def _plan(self, question, spec=None, frame=None):
+        from mi_workflows.analytical import planner as planner_mod
+
+        return planner_mod.plan_for(question, spec=spec, frame=frame)
+
+    def test_a_single_measure_series_stays_with_the_evolution_route(self):
+        """"Show the balance evolution for the front book" asks for one measure
+        across every retained period, and `evolution` answers exactly that. A
+        two-snapshot movement is LESS than a series."""
+        spec = _Spec(metric="current_outstanding_balance")
+        spec.chart_type = "line"
+        spec.x = "reporting_date"
+        assert self._plan("Show the balance evolution for the front book",
+                          spec=spec) is None
+
+    def test_a_series_question_that_also_wants_the_composition_does_not_defer(self):
+        """A single-measure series does not carry what the book is made of."""
+        spec = _Spec(metric="current_outstanding_balance")
+        spec.chart_type = "line"
+        spec.x = "reporting_date"
+        plan = self._plan(
+            "How has the profile of our new lending changed over time?", spec=spec)
+        assert plan is not None
+        assert plan.intent == "origination_profile_change"
+
+    def test_a_comparison_the_parse_already_resolved_stays_with_the_executor(self):
+        """A measure grouped on the dimension that partitions the two named
+        populations IS the comparison asked for. Replacing it with a narrative
+        would be a trade, not an improvement."""
+        spec = _Spec(metric="current_loan_to_value",
+                     dimension=season.SEASONING_SEGMENT_FIELD)
+        assert self._plan("Is the credit quality of new origination better or "
+                          "worse than the back book?", spec=spec) is None
+
+    def test_that_deference_lifts_when_the_question_needs_more_than_one_snapshot(self):
+        """The executor reads ONE snapshot. A question that also needs two is not
+        answerable by grouping, however the parse was resolved."""
+        spec = _Spec(metric="current_outstanding_balance",
+                     dimension=season.SEASONING_SEGMENT_FIELD)
+        plan = self._plan("How has the front book balance moved relative to the "
+                          "back book over the last few months?", spec=spec)
+        assert plan is not None
+        assert plan.intent == "population_movement_comparison"

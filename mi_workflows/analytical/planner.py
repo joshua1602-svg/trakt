@@ -279,6 +279,31 @@ def plan_for(question: str, *, spec: Any = None, frame=None,
     return None
 
 
+def _evolution_route_owns(question, spec, reading) -> bool:
+    """Whether the metric-evolution route already owns this as a SERIES.
+
+    "Show the balance evolution for the front book" asks for one measure across
+    every retained reporting period, and ``evolution`` answers exactly that,
+    scoped to the population. A two-snapshot movement is less than a series, so
+    claiming it here would trade a working capability for a different one.
+
+    The deference lifts when a COMPOSITION is also asked for. "How has the
+    profile of our new lending changed?" wants what the book is made of as well
+    as what the number did, and a single-measure series does not carry it.
+
+    Asked of the owning route's OWN recogniser rather than of a copy of its
+    vocabulary, so the two cannot drift.
+    """
+    if intent_mod.FAMILY_MIX_PROFILE in reading.families:
+        return False
+    try:
+        from mi_agent_api import chat_routing as _routing
+
+        return bool(_routing._is_evolution(question, spec))
+    except Exception:  # noqa: BLE001 - if we cannot ask, we do not defer
+        return False
+
+
 def _plan_origination_profile_change(question, text, spec, frame, semantics, reading
                                      ) -> Optional[AnalyticalPlan]:
     """Q: how has the profile of new originations changed lately?
@@ -298,6 +323,8 @@ def _plan_origination_profile_change(question, text, spec, frame, semantics, rea
         return None  # two windows is a population comparison, not a trend
     population = pops.lending_window_population(reading.lending_windows[0])
     if population is None:
+        return None
+    if _evolution_route_owns(question, spec, reading):
         return None
     # "the last few months" asks across the retained window, not just the last
     # pair of snapshots. Which snapshots were actually compared is disclosed on
