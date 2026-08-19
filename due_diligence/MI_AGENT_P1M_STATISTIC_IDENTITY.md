@@ -225,7 +225,7 @@ tests/test_p1c_ranked_movement_e2e.py   tests/test_p1g_measure_identity.py
 tests/test_p1d_aggregate_contribution   tests/test_p1i_scope_resolution.py
 tests/test_p1e_golden_bank.py           tests/test_p1j1_vintage_seasoning.py
 tests/test_p1e_measure_safety.py        tests/test_p1l_population_propagation.py
-tests/test_p1e_multi_measure.py         teststs/test_p1m_statistic_identity.py
+tests/test_p1e_multi_measure.py         tests/test_p1m_statistic_identity.py
 
 496 passed, 1 xfailed
 ```
@@ -233,7 +233,7 @@ tests/test_p1e_multi_measure.py         teststs/test_p1m_statistic_identity.py
 No previously governed semantic identity was weakened. Three scoping errors in the first cut of
 P1M were caught by these suites, not by my own tests — recorded in §13.
 
-`tests/test_p1m_statistic_identity.py` adds **52** tests: the identity relation including every
+`tests/test_p1m_statistic_identity.py` adds **54** tests: the identity relation including every
 adversarial substitution the brief names (§10), vocabulary narrowness, registry permission, the
 parser seam, end-to-end positives and refusals, receipts, and P1E composition.
 
@@ -248,7 +248,19 @@ No churn, explained or otherwise. The bank was not optimised and was not touched
 
 ## 11. Full repository suite
 
-See §14 — reported from the definitive run.
+Definitive run, against the corrected code:
+
+```
+8,784 passed, 30 skipped, 21 xfailed, 48 warnings, 6 subtests passed
+0 failed                                        in 1746.97s (0:29:06)
+```
+
+Baseline for comparison was 8,675 passed at `983a755`; the increase is the 54 tests P1M adds
+(52 in the new bank, plus the two added for the repair discriminator) alongside the growth from
+the readiness review. No test was deleted, skipped or weakened.
+
+The first run of this suite failed 3 — see §13. Those failures were correct and the code was
+wrong; this run is against the fix.
 
 ## 12. Telemetry status: **DEFERRED**
 
@@ -343,4 +355,4 @@ this work — with the note that telemetry is now explicitly deferred rather tha
 
 ---
 
-P1M STATISTIC IDENTITY: PENDING FULL SUITE
+P1M STATISTIC IDENTITY: PASS
