@@ -649,8 +649,12 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     if rating:
         requirements.append(REQ_PERIOD_COMPARISON)
         if not families:
+            # RUN_RATE is a governed operation of PIPELINE, not of
+            # MOVEMENT_TREND. A rate question that names no pipeline concept is
+            # a movement question, and is reported as one — an operation is
+            # never reported outside the family that governs it.
             families.append(FAMILY_MOVEMENT_TREND)
-            operations.append(OP_RUN_RATE)
+            operations += [OP_DELTA, OP_TREND]
         matched += _hits(text, _RUN_RATE_TERMS)
 
     if not families:
@@ -729,7 +733,18 @@ def governed_flags(reading: AnalyticalIntent, spec: Any) -> Dict[str, Any]:
             and not getattr(spec, FLAG_RISK_LIMIT, False)):
         flags[FLAG_RISK_LIMIT] = True
 
-    wants_rate = OP_RUN_RATE in reading.operations
+    # Deliberately narrow: only a PIPELINE run rate. `forecast_extrapolation`
+    # computes the COMPLETION run rate — the flow of cases out of the pipeline
+    # into the funded book — and nothing else.
+    #
+    # This narrowness is load-bearing, not fastidious. `forecast_mode` is a flag
+    # three other recognisers DECLINE on (`concentration_analysis`,
+    # `portfolio_risk_comparison`, `period_change_analysis`), so setting it on a
+    # question they own would divert it to a route that cannot answer it. "How
+    # has concentration by region changed per month?" carries a rate concept and
+    # belongs to period change; it must not become a completion forecast.
+    wants_rate = (OP_RUN_RATE in reading.operations
+                  and FAMILY_PIPELINE in reading.families)
     if (wants_rate and not reading.counts_requested
             and getattr(spec, FLAG_FORECAST_MODE, None) is None):
         flags[FLAG_FORECAST_MODE] = "extrapolation"

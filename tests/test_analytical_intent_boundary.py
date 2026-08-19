@@ -301,3 +301,53 @@ class TestFailClosed:
     def test_a_rate_always_needs_two_snapshots(self):
         reading = intent_mod.classify("What is our completion run rate?")
         assert intent_mod.REQ_PERIOD_COMPARISON in reading.requirements
+
+    def test_a_rate_question_another_route_owns_is_not_diverted(self):
+        """`forecast_mode` is a flag three other recognisers DECLINE on, so
+        setting it on a question they own would divert it to a route that cannot
+        answer it. Only a PIPELINE run rate — the completion flow — is handed to
+        the completion-run-rate capability."""
+        spec = _Spec()
+        reading, applied = intent_mod.settle(
+            "How has concentration by region changed per month?", spec)
+        assert intent_mod.SIGNAL_RUN_RATE in reading.signals
+        assert intent_mod.FAMILY_PIPELINE not in reading.families
+        assert applied == {}
+        assert spec.forecast_mode is None
+
+
+class TestStructuralInvariants:
+
+    QUESTIONS = [
+        "balance by region",
+        "How has the profile of our new lending changed over the last few months?",
+        "How much is at offer and how much completes, and when?",
+        "Where are we closest to our limits?",
+        "When do we reach £100m at the current run rate?",
+        "Are direct and acquired balances developing differently over time?",
+        "How does the front book compare with our older lending on risk?",
+        "How has concentration by region changed per month?",
+        "What is our new lending run rate?",
+        "Which vintage is weakest?",
+    ]
+
+    @pytest.mark.parametrize("question", QUESTIONS)
+    def test_no_operation_is_reported_outside_its_family(self, question):
+        """An operation names something a family governs. Reporting one whose
+        family was not recognised would be describing an analysis nobody owns."""
+        reading = intent_mod.classify(question)
+        governed = set()
+        for family in reading.families:
+            governed |= set(intent_mod.FAMILIES[family].operations)
+        stray = set(reading.operations) - governed
+        assert not stray, f"{question!r} reports ungoverned operation(s) {stray}"
+
+    @pytest.mark.parametrize("question", QUESTIONS)
+    def test_a_recognised_question_always_names_a_governed_owner(self, question):
+        reading = intent_mod.classify(question)
+        if reading.recognised:
+            assert reading.owners
+
+    @pytest.mark.parametrize("question", QUESTIONS)
+    def test_classification_is_deterministic(self, question):
+        assert intent_mod.classify(question) == intent_mod.classify(question)
