@@ -9,16 +9,22 @@ guard, and no test phrasing added as an exact string patch.
 `104c89d` — the frozen 752-run measurement in
 `due_diligence/MI_AGENT_ANALYTICAL_NL_ROBUSTNESS.md`.
 
-**Change.** Six commits, one new module and one new test file:
+**Change.** 12 commits, one new module, one new test file, and the measurement artefacts:
 
 | | |
 |---|---|
-| `a6331aa` | the boundary: six families, the lending ruling, the fail-closed rule |
-| `cf7e673` | make a refused envelope say one thing — guard and receipt agree with the answer |
-| `235ba7b` | settle `forecast_mode` only for a PIPELINE run rate (§9) |
-| `bd97c2b` | leave a single-measure series with the `evolution` route (§11.5) |
-| `9b925eb` | correct the lending-role docstring to what the code does |
-| `0bcf9de` | prove every governed operation is reachable |
+| `a6331aa` | Decide, once, what kind of question this is |
+| `cf7e673` | Make a refused answer say one thing |
+| `235ba7b` | Hand a run-rate question to the run-rate route only when it is one |
+| `bd97c2b` | Leave a series question with the route that answers it as a series |
+| `9b925eb` | Say what the lending-role resolver actually does |
+| `0bcf9de` | Prove the governed operations are reachable, not decorative |
+| `0060751` | Record the change set in the report front matter |
+| `d116bdb` | Leave a milestone with the route that solves for the date |
+| `c108b0e` | Report what the rerun measured |
+| `9125e77` | Leave the three neighbouring forward questions with their owners |
+| `044d13b` | Record the two routes the full suite caught |
+| `5f5d697` | Make the measurement auditable rather than narrated |
 
 ---
 
