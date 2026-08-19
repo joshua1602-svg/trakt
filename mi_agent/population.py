@@ -178,3 +178,69 @@ def _mask(column: pd.Series, predicate: Predicate) -> pd.Series:
     from .mi_query_executor import _apply_numeric_op
 
     return _apply_numeric_op(column, op, value)
+
+# --------------------------------------------------------------------------- #
+# Fabricated populations — the mirror of the P1L loss check
+# --------------------------------------------------------------------------- #
+#: The governed population CONCEPTS, and the spec keys that execute each of them.
+#: A concept is executed if the spec filters on any of its keys; the derivation is
+#: authorised, so "back book" may legitimately run as ``months_on_book > cutoff``
+#: without the user ever saying "months_on_book".
+_CONCEPT_KEYS = {
+    "seasoning": ("seasoning_segment", "seasoning_bucket", "months_on_book"),
+    "provenance": ("source_portfolio_type",),
+}
+
+#: Question vocabulary that REQUESTS each concept, beyond the segment phrases the
+#: seasoning module already owns. Taken from the registry synonyms for those
+#: fields rather than invented here, so the two stay in step.
+_CONCEPT_TERMS = {
+    "seasoning": ("months on book", "time on book", "mob", "seasoning", "loan age",
+                  "seasoning band", "seasoning bucket", "seasoning cohort",
+                  "months on book band", "time on book band"),
+    "provenance": ("source portfolio type", "origination type", "book type",
+                   "direct or acquired", "portfolio type"),
+}
+
+
+def _requests_concept(concept: str, question: str) -> bool:
+    """Does the QUESTION ask for this governed population concept?
+
+    Asked of the governed vocabularies that already own each concept — the
+    seasoning segment phrases from :mod:`mi_agent.seasoning`, the provenance
+    lens from :mod:`mi_agent.portfolio_lens` — so this adds no new population
+    model and cannot drift from them.
+    """
+    text = (question or "").lower()
+    if any(term in text for term in _CONCEPT_TERMS[concept]):
+        return True
+    if concept == "seasoning":
+        from .seasoning import segments_named
+
+        return bool(segments_named(question))
+    from .portfolio_lens import resolve_lens
+
+    return getattr(resolve_lens(question), "name", "") in ("direct", "acquired")
+
+
+def fabricated_concepts(filters: Optional[Mapping[str, Any]], question: str) -> List[str]:
+    """Governed population concepts the SPEC executes that the QUESTION never asked for.
+
+    P1L protects one direction: a population the question requested must reach
+    execution or the answer refuses. This is the missing mirror. A model that
+    invents a population is not caught by that check, because the predicate really
+    was applied, the frame really was narrowed and the evidence really was
+    recorded — so the facet is legitimately APPLIED and every guard reports
+    success while the answer covers the wrong book.
+
+    The case that forced this: "what is the balance of the sponsored book?" is a
+    governed ENTIRE_AUM phrase, and the model emitted ``seasoning_segment = back
+    book``. On the demonstration book that returned £1.793bn against a true
+    £1.964bn — 8.7% low, entirely plausible, with ok=True and no warning.
+
+    Concepts, never literal words: a question naming "back book" authorises the
+    whole seasoning derivation, including a bare ``months_on_book`` predicate.
+    """
+    present = {str(k) for k in (filters or {})}
+    return [concept for concept, keys in _CONCEPT_KEYS.items()
+            if (present & set(keys)) and not _requests_concept(concept, question)]

@@ -29,6 +29,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from .mi_query_spec import MAX_MEASURES, MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
 from . import statistic as _statistic
+from . import population as _population_mod
 
 logger = logging.getLogger(__name__)
 
@@ -3237,6 +3238,13 @@ _MISSING_COL_MARK = "not present in dataset columns"
 #: "median LTV" became a weighted average and was returned as a success.
 _AGG_NOT_ALLOWED_MARK = "not allowed for metric"
 
+#: A governed population concept the spec executes that the question never asked
+#: for. Not repairable by re-prompting: the model has already demonstrated it
+#: will invent a population for this wording, and a second attempt may invent a
+#: different one. Recovery is the deterministic interpretation, which resolves
+#: the governed scope phrase correctly, or a refusal.
+_FABRICATED_POP_MARK = "population not requested"
+
 
 def _missing_column_only(errors: List[str]) -> bool:
     """True if every validation error is a missing-dataset-column error."""
@@ -3942,7 +3950,19 @@ def parse_with_repair(
             llm_statistic = resolve_statistic_role(spec, user_question, semantics)
             vr = validate_mi_query(spec, semantics, available_columns=cols)
             errors = list(vr.errors)
-            vr_ok = vr.ok
+            # A population the QUESTION never asked for. P1L guards the losing
+            # direction; this is the mirror. The spec validates perfectly well —
+            # ``seasoning_segment = back book`` is a real column and a real value
+            # — so nothing downstream can tell that the user asked about the
+            # whole book. Caught here, at the same normalisation seam that owns
+            # the other population roles.
+            fabricated = _population_mod.fabricated_concepts(
+                getattr(spec, "filters", None), user_question)
+            vr_ok = vr.ok and not fabricated
+            if fabricated:
+                errors = errors + [
+                    f"{_FABRICATED_POP_MARK}: {', '.join(sorted(fabricated))} "
+                    f"(the question does not request this population)"]
 
         if original_error_count is None:
             original_error_count = len(errors)
@@ -3984,6 +4004,14 @@ def parse_with_repair(
         # average. Stop here and let the refusal stand.
         if spec is not None and _statistic_not_permitted(errors, llm_statistic):
             repair_skipped_reason = "statistic_not_permitted"
+            break
+
+        # Do not re-prompt a model that invented a population: it may invent a
+        # different one. The deterministic parse already resolves the governed
+        # scope phrase — that is the sanctioned recovery, and it is what the
+        # safety net below applies.
+        if spec is not None and any(_FABRICATED_POP_MARK in e for e in errors):
+            repair_skipped_reason = "fabricated_population"
             break
 
         prompt = _repair_prompt(base_prompt, raw_text, errors)
