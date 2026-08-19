@@ -372,10 +372,27 @@ is composed here.
 out of 188, all the same variation. Had the bank not been rerun in full, it would
 have shipped.
 
+**Q4 conversion and scenario — two routes taken over.** The full suite caught
+two more, in `mi_agent_api/tests/test_chat_routing_e2e.py`:
+
+| Question | Owner | What happened |
+|---|---|---|
+| *"What conversion do we need to reach £50m funded balance?"* | `forecast_extrapolation` | claimed by the analytical layer and answered with a projected balance — the question is an **inverse solve** for the conversion needed |
+| *"If our completed conversion rate increased by 10%, what is the impact on the time to reach £50m?"* | `scenario` | claimed, then failed outright |
+
+Same root cause as Q2.4 and one level deeper: the funded-balance outlook had no
+way to read a **named monetary target** or a **conditional**, so it claimed
+anything forward-looking that mentioned the pipeline and a balance. It now asks
+the owning recognisers and the governed parse — a target value, a milestone or a
+what-if all belong elsewhere — and what remains is the single forward question
+this plan does answer.
+
 **The metric-evolution series** — see §11.5.
 
-Both fixes are deference, not precedence: no priority, confidence or
-registration order was changed for any route.
+All four fixes are deference, not precedence: no priority, confidence or
+registration order was changed for any route. Three of the four were found by a
+regression gate rather than by inspection, which is the argument for running all
+of them rather than the ones that seemed relevant.
 
 ## 10. No change to the analytical engines
 
@@ -418,9 +435,9 @@ that already worked. Four independent checks, all run on the final tree.
 | `tests/test_p1n_statistic_breadth.py` | passed |
 | `tests/test_p1e_golden_bank.py` | passed |
 | `mi_agent/tests/test_mi_calibration_bank.py` (252-question bank) | 245 passed, 13 xfailed |
-| `tests/test_analytical_intent_boundary.py` (**new**) | 110 passed |
-| `mi_agent_api/tests/test_forecast_extrapolation.py` | passed |
-| **Combined focused run** | **796 passed, 13 xfailed** |
+| `tests/test_analytical_intent_boundary.py` (**new**) | 113 passed |
+| `mi_agent_api/tests/` (all, incl. routing e2e) | passed |
+| **Combined focused run** | **1,989 passed, 13 xfailed** |
 
 ### 11.2 The 30-question simple-MI bank
 
