@@ -154,6 +154,17 @@ Accumulated suites: **2,922 passed, 1 skipped, 21 xfailed, 0 failed.** No existi
 deleted, weakened or modified — the fix required no change to any prior expectation, which is
 the strongest evidence that it did not disturb governed behaviour.
 
+**Full repository suite:**
+
+```
+8,854 passed, 30 skipped, 21 xfailed, 48 warnings, 6 subtests passed
+0 failed                                        in 2622.40s (0:43:42)
+```
+
+Baseline at `aa5436c` (P1N) was 8,833 passed; the increase is the 21 tests this fix adds. Green
+on the first run — no test required correction, which for a change that touches the parse seam
+is the outcome worth noting.
+
 ## 9. Beta-blocker verdict
 
 **The fabricated-population Beta blocker is CLOSED.**
@@ -171,4 +182,4 @@ ruled leaves bubble charts not commercially ready until fixed. That is untouched
 
 ---
 
-FABRICATED POPULATION SAFETY FIX: PENDING FULL SUITE
+FABRICATED POPULATION SAFETY FIX: PASS
