@@ -28,6 +28,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .mi_query_spec import MAX_MEASURES, MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
+from . import statistic as _statistic
 
 logger = logging.getLogger(__name__)
 
@@ -3226,10 +3227,28 @@ def parse_user_question(
 
 _MISSING_COL_MARK = "not present in dataset columns"
 
+#: P1M. The validator's phrasing for "this field does not permit that statistic".
+#: Like a missing column, this is NOT a repairable parse error: the only way for
+#: the model to satisfy it is to substitute a DIFFERENT statistic, which is
+#: exactly the defect P1M exists to remove. Spending a repair call on it is how
+#: "median LTV" became a weighted average and was returned as a success.
+_AGG_NOT_ALLOWED_MARK = "not allowed for metric"
+
 
 def _missing_column_only(errors: List[str]) -> bool:
     """True if every validation error is a missing-dataset-column error."""
     return bool(errors) and all(_MISSING_COL_MARK in e for e in errors)
+
+
+def _statistic_not_permitted(errors: List[str]) -> bool:
+    """True if any validation error is an ungoverned-statistic refusal.
+
+    ``any``, not ``all``: a spec can fail for several reasons at once, and a
+    repair that fixed the others would still have to change the statistic to
+    become valid. Once the requested statistic is ungoverned, the honest outcome
+    is a refusal no matter what else is wrong with the spec.
+    """
+    return any(_AGG_NOT_ALLOWED_MARK in e for e in (errors or []))
 
 
 def _repair_prompt(base_prompt: Dict[str, str], previous_json: str,
@@ -3412,6 +3431,49 @@ def reject_scope_role_filters(spec: MIQuerySpec, question: str,
             filters.pop(key, None)
             rejected.append(f"{key} (scope phrase, not a predicate)")
     return rejected
+
+
+def resolve_statistic_role(spec: MIQuerySpec, question: str,
+                           semantics=None) -> Optional[str]:
+    """Make the statistic the question NAMED the statistic the spec carries.
+
+    P1M. Two parsers lost the requested statistic in two different ways, and both
+    ended in the same wrong number.
+
+    The deterministic parser has no vocabulary for "median", so the field's
+    default aggregation was applied and nothing recorded that a different
+    statistic had been asked for — the request never reached the governance layer
+    that would have refused it. This function puts it there.
+
+    The rule is deliberately one-directional: it only overwrites the spec's
+    aggregation when the aggregation ALREADY THERE does not satisfy what the
+    question asked for. So "what is the average LTV?" keeps ``weighted_avg`` —
+    the house convention for a ratio measure is what a plain "average" means, and
+    rewriting it to a simple mean would be its own silent substitution.
+
+    When the named statistic is not permitted for the field, the spec is left
+    carrying the statistic the USER asked for rather than the one the registry
+    would default to. Validation then refuses it. That is the point: a request
+    the product cannot honour must fail loudly at the boundary instead of being
+    quietly rounded to the nearest thing that works.
+
+    Returns the statistic named, for the receipt and the facet ledger.
+    """
+    named = _statistic.statistic_named(question)
+    if not named or spec is None:
+        return None
+    metric = getattr(spec, "metric", None)
+    if not metric:
+        return named
+    entry = ((semantics or {}).get("fields") or {}).get(metric) or {}
+    if _statistic.satisfies(named, getattr(spec, "aggregation", None)):
+        return named
+    concrete = _statistic.concrete_for(named, entry)
+    # ``concrete`` is None exactly when the registry does not permit the
+    # statistic. Carrying the raw request forward is what makes validation
+    # refuse instead of the default silently standing in for it.
+    spec.aggregation = concrete or (named if named != _statistic.MEAN else "avg")
+    return named
 
 
 def resolve_seasoning_role(spec: MIQuerySpec, question: str,
@@ -3686,6 +3748,9 @@ def parse_with_repair(
     det_spec, det_meta = _deterministic_parse(user_question, semantics,
                                               available_columns=cols)
     det_seasoning = resolve_seasoning_role(det_spec, user_question, cols)
+    # P1M: before validation, so an ungoverned statistic is REFUSED here rather
+    # than silently replaced by the field default further down.
+    det_statistic = resolve_statistic_role(det_spec, user_question, semantics)
     det_vr = validate_mi_query(det_spec, semantics, available_columns=cols)
 
     def _det_result(parser_detail: str, repair_skipped_reason=None) -> Tuple[MIQuerySpec, dict]:
@@ -3703,6 +3768,7 @@ def parse_with_repair(
             "status": ("parsed deterministically" if det_vr.ok
                        else "deterministic parse failed validation"),
             "seasoning_population": det_seasoning,
+            "requested_statistic": det_statistic,
         }
         meta.update({k: det_meta[k] for k in (
             "explicit_dimension_requested", "requested_dimension_terms",
@@ -3735,6 +3801,16 @@ def parse_with_repair(
             meta["status"] = ("explicit request references a column missing from "
                               "the dataset; LLM repair skipped")
             return spec, meta
+
+    # P1M. The question names a statistic the registry does not permit for the
+    # measure. No amount of re-prompting can fix that without changing the
+    # statistic, so the LLM is not asked: this refuses on the deterministic spec.
+    if _statistic_not_permitted(det_vr.errors):
+        spec, meta = _det_result("validation_failed",
+                                 repair_skipped_reason="statistic_not_permitted")
+        meta["status"] = ("the requested statistic is not governed for this "
+                          "measure; LLM repair skipped")
+        return spec, meta
 
     # ---- LLM path (with repair loop) --------------------------------------
     global _SEMANTICS_FOR_SCOPE
@@ -3776,6 +3852,10 @@ def parse_with_repair(
             # a filter on a column the book does not have.
             scope_rejected = reject_scope_role_filters(spec, user_question, cols)
             llm_seasoning = resolve_seasoning_role(spec, user_question, cols)
+            # P1M: the model can also omit a statistic the question named. Same
+            # one-directional rule as the deterministic path — an aggregation
+            # that already satisfies the request is left exactly as it is.
+            llm_statistic = resolve_statistic_role(spec, user_question, semantics)
             vr = validate_mi_query(spec, semantics, available_columns=cols)
             errors = list(vr.errors)
             vr_ok = vr.ok
@@ -3795,6 +3875,7 @@ def parse_with_repair(
                 "specialist_intent_carried": carried,
                 "scope_role_rejected": list(scope_rejected),
                 "seasoning_population": llm_seasoning,
+                "requested_statistic": llm_statistic,
                 "ok": True,
                 "validation_errors": [],
                 "repair_attempts": i,
@@ -3812,6 +3893,15 @@ def parse_with_repair(
             repair_skipped_reason = "missing_dataset_columns"
             break
 
+        # P1M. The model asked for a statistic the registry does not permit. A
+        # repair can only satisfy that error by asking for a DIFFERENT statistic,
+        # and the repaired spec then validates cleanly and is returned as a
+        # success — which is precisely how "median LTV" shipped a weighted
+        # average. Stop here and let the refusal stand.
+        if spec is not None and _statistic_not_permitted(errors):
+            repair_skipped_reason = "statistic_not_permitted"
+            break
+
         prompt = _repair_prompt(base_prompt, raw_text, errors)
 
     # ---- deterministic safety net ----------------------------------------
@@ -3819,7 +3909,8 @@ def parse_with_repair(
     # fallback for the MI Agent: when the LLM call failed outright, or produced a
     # spec that does not validate, prefer a VALID deterministic parse over a
     # broken LLM one rather than erroring the whole query.
-    if det_vr.ok and not (repair_skipped_reason == "missing_dataset_columns"):
+    if det_vr.ok and repair_skipped_reason not in (
+            "missing_dataset_columns", "statistic_not_permitted"):
         spec, meta = _det_result("deterministic_fallback")
         meta["llm"] = llm_meta
         meta["repair_skipped_reason"] = repair_skipped_reason

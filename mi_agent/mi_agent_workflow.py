@@ -45,6 +45,13 @@ _MISSING_FIELD_RE = re.compile(
     r"Canonical column '([^']+)' \(for semantic field '([^']+)'\) not present")
 _UNKNOWN_FIELD_RE = re.compile(r"Unknown semantic field: '([^']+)'")
 
+#: P1M. "This measure does not permit that statistic." Named separately from the
+#: generic validation failure because the reader needs to be told two specific
+#: things: which statistic they asked for, and that the neighbouring statistic
+#: the product COULD have computed was not quietly put in its place.
+_AGG_NOT_ALLOWED_RE = re.compile(
+    r"Aggregation '([^']+)' not allowed for metric '([^']+)'")
+
 
 def _validation_refusal(errors: List[str], semantics: dict) -> str:
     """A refusal that says what could not be fulfilled, in the house style.
@@ -78,9 +85,42 @@ def _validation_refusal(errors: List[str], semantics: dict) -> str:
                 f"client does not include {columns}. These fields are not reported, "
                 "so the question cannot be answered from the current data (no value "
                 "was fabricated).")
+    refusal = _statistic_refusal(errors, semantics)
+    if refusal:
+        return refusal
     detail = "; ".join(errors or []) or "the requested combination is not supported"
     return ("I could not build a governed query for this question: " + detail +
             ". No substitute figure has been returned.")
+
+
+def _statistic_refusal(errors: List[str], semantics: dict) -> Optional[str]:
+    """P1M refusal for a statistic the registry does not govern for a measure.
+
+    Says the three things a reader needs and nothing more: the statistic they
+    asked for, the measure they asked for it on, and — explicitly — that the
+    statistic the product does govern was NOT substituted. The last clause is the
+    point of the message. A reader who has just been refused a median is entitled
+    to know that the number they did not receive is not hiding somewhere in the
+    answer as a weighted average.
+    """
+    from . import statistic as _statistic
+
+    for err in errors or []:
+        match = _AGG_NOT_ALLOWED_RE.search(err)
+        if not match:
+            continue
+        requested, metric = match.group(1), match.group(2)
+        entry = ((semantics.get("fields", {}) if isinstance(semantics, dict) else {})
+                 .get(metric) or {})
+        measure = (entry.get("business_name") or entry.get("display_name")
+                   or metric.replace("_", " "))
+        asked = _statistic.label(requested)
+        governed = _statistic.label(entry.get("default_aggregation"))
+        tail = (f" I have not substituted {governed} {measure}."
+                if governed else " No substitute figure has been returned.")
+        return (f"I understood that you asked for {asked} {measure}, but {asked} "
+                f"is not currently a governed statistic for {measure}." + tail)
+    return None
 
 
 def _reporting_date_label(df) -> Optional[str]:
