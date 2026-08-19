@@ -134,11 +134,18 @@ def test_a_zero_weight_book_is_refused_not_reported_as_zero(semantics):
 
 def test_a_metric_with_no_governed_weighted_average_is_rejected(book, semantics):
     """A contribution to a weighted average is undefined where the registry
-    does not allow a weighted average for the metric."""
+    does not allow a weighted average for the metric.
+
+    The example was ``youngest_borrower_age`` until P1N, which permitted an
+    exposure-weighted borrower age by product ruling. The invariant is unchanged
+    — only the metric that illustrates it — so the case moves to a measure that
+    still has no governed weighted average. Balance is the natural one: weighting
+    a balance by balance is degenerate, which is why the registry omits it.
+    """
     from mi_agent.mi_query_validator import validate_mi_query
 
     spec = MIQuerySpec(intent="chart", chart_type="bar",
-                       metric="youngest_borrower_age", dimension=_REGION,
+                       metric="current_outstanding_balance", dimension=_REGION,
                        x=_REGION, aggregation="contribution")
     verdict = validate_mi_query(spec, semantics, available_columns=_COLUMNS)
     assert not verdict.ok

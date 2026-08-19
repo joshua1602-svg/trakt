@@ -1121,6 +1121,15 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     for facet in facets:
         if facet.kind == KIND_STATISTIC:
             requested = (facet.concepts or (None,))[0]
+            # P1N. A superlative over a GROUPED result is a ranking, not a
+            # statistic on the measure: "largest balance by LTV" ranks the
+            # bands, it does not ask for the biggest single loan. Read from
+            # execution rather than from the question, because the text-side
+            # test misses phrasings where the grouping is recognised only by the
+            # parser ("largest balance BY LTV" names no dimension term).
+            if requested in ("min", "max") and group_keys:
+                facet.status, facet.reason = APPLIED, ""
+                continue
             # An analytic mode (contribution, share) is not a statistic that can
             # stand in for another, and it carries its own governed guard. An
             # empty ``ran`` means the route published no statistic evidence at

@@ -406,12 +406,20 @@ def test_loan_count_still_counts(ask, book):
     assert float(kpi_values(envelope).get("Loan")) == pytest.approx(len(book))
 
 
-def test_extreme_value_questions_keep_their_existing_governed_behaviour(ask):
-    """Brief §7F. min/max were already guarded and must not change."""
-    for question in ("What is the maximum LTV?", "What is the minimum LTV?"):
-        envelope = ask(question)
-        assert envelope.get("ok") is False
-        assert scalar(envelope) is None
+def test_extreme_value_questions_are_now_governed_statistics(ask, book):
+    """Superseded by P1N, deliberately.
+
+    At P1M these refused, and the refusal was correct for the reason the guard
+    gave: no aggregation could express a single extreme, so any answer would have
+    covered the whole book. P1N added governed ``min``/``max``, so the extreme is
+    now the statistic that runs and the figure reconciles to the fixture. The
+    P1M invariant is untouched — what changed is that the requested statistic
+    became available, not that a substitution became permissible.
+    """
+    assert scalar(ask("What is the maximum LTV?")) == pytest.approx(
+        float(book[LTV].max()), rel=1e-9)
+    assert scalar(ask("What is the minimum LTV?")) == pytest.approx(
+        float(book[LTV].min()), rel=1e-9)
 
 
 # -- receipts name the statistic that ran (brief §12) ------------------------ #

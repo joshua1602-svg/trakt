@@ -3526,17 +3526,14 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
     current = getattr(spec, "aggregation", None)
     if _statistic.satisfies(named, current):
         return named
-    # P1N. A superlative question that the parser turned into a LOAN-LEVEL table
-    # is asking for one extreme value, and now there is a statistic that says so.
-    # "What is the highest LTV for loans over £500k" came back as a ten-row table
-    # that had also dropped the threshold, while "maximum LTV" answered it
-    # exactly. An explicit top-N request ("the top 10 loans by LTV") genuinely
-    # wants the table and is left alone.
-    if (str(current or "") == "loan_level" and named in ("min", "max")
-            and not getattr(spec, "top_n", None)):
-        spec.aggregation = named
-        spec.ranking_mode = None
-        return named
+    # NB: ``loan_level`` is deliberately NOT rewritten to a min/max, even though
+    # a superlative question looks like it wants one. "Largest loan balance" is
+    # an established governed LOAN-LEVEL RANKING — a table of the biggest loans,
+    # with intent=table and sort_direction=desc — and converting it to a scalar
+    # deleted that capability (caught by test_mi_ranking_matrix and the
+    # calibration bank). The extreme-value STATISTIC is reached through
+    # "maximum"/"minimum"; the ranking TABLE is reached through "largest"/
+    # "highest". Both are governed, and neither is allowed to eat the other.
     # "Which region contributes most to the weighted average LTV" names a
     # weighted average, but the spec's aggregation is a CONTRIBUTION — the
     # decomposition of exactly that weighted average. Rewriting it to a plain
