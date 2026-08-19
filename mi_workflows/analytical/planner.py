@@ -40,6 +40,7 @@ from .contract import (
     KIND_MEASURE,
     KIND_MOVEMENT,
 )
+from . import intent as intent_mod
 from .executors import (
     PROFILE_DIMENSIONS, PROFILE_MEASURES, PROFILE_MOVEMENT_MEASURES,
     WINDOW_LATEST_PAIR, WINDOW_RETAINED,
@@ -48,32 +49,19 @@ from .registry import CAPABILITIES, CapabilityRegistry, UnknownCapabilityError
 from . import populations as pops
 
 # --------------------------------------------------------------------------- #
-# Controlled vocabulary — layer-local, so no shared recogniser's vocabulary
-# shifts underneath a route that already works.
+# Plan-shaping vocabulary.
+#
+# The FAMILY and OPERATION vocabularies used to live here as well. They now live
+# once, in :mod:`mi_workflows.analytical.intent`, and every builder below asks
+# that boundary what it recognised — so there is one analytical recognition
+# surface rather than a private copy per plan, and widening a concept widens it
+# everywhere it means the same thing.
+#
+# What remains here is what genuinely shapes a PLAN rather than identifying an
+# intent: which pipeline stage to read, whether the question wants the whole
+# retained window or the last pair of snapshots, and what to decline outright.
 # --------------------------------------------------------------------------- #
-_PROFILE_TERMS = ("profile", "characteristics", "mix", "composition",
-                  "what kind of", "what sort of", "make-up", "makeup")
-
-_CHANGE_TERMS = ("changed", "change", "changing", "moved", "movement",
-                 "shifted", "shift", "trend", "evolved", "evolving",
-                 "grown", "growth", "grew", "declined", "fallen", "risen")
-
-#: Comparative framing. Deliberately includes "relative to", which the shared
-#: portfolio-lens vocabulary does not carry — widening that vocabulary would
-#: change how every other route reads a question.
-_COMPARATIVE_TERMS = (" relative to ", " compared with ", " compared to ",
-                      " versus ", " vs ", " vs. ", " against ", "compare",
-                      "comparison", " than ", " how does ", " how do ")
-
-_RISK_PROFILE_TERMS = ("risk profile", "credit profile", "risk characteristics",
-                       "how risky", "riskiness")
-
-_VINTAGE_TERMS = ("vintage", "vintages", "seasoned", "seasoning", "older loans",
-                  "cohort", "cohorts")
-
 _OFFER_TERMS = ("offer", "offers", "offered")
-_PIPELINE_TERMS = ("pipeline", "kfi", "application", "applications",
-                   "outstanding offers", "case", "cases")
 _COMPLETION_TERMS = ("complete", "completes", "completing", "completion",
                      "completions", "convert", "converting", "conversion",
                      "drawdown", "draw down", "fund", "funded")
@@ -112,7 +100,14 @@ def _any(text: str, terms: Sequence[str]) -> bool:
 
 
 def _is_comparative(text: str) -> bool:
-    return _any(text, _COMPARATIVE_TERMS)
+    """Whether the question sets one thing against another.
+
+    Delegates to the boundary's comparison vocabulary rather than keeping a
+    second copy: two comparison vocabularies is exactly how "are X and Y
+    developing differently?" came to resolve one way and "how has X moved
+    relative to Y?" another, for the same question.
+    """
+    return intent_mod.is_comparative(text)
 
 
 # --------------------------------------------------------------------------- #
@@ -146,14 +141,35 @@ def resolve_population_pair(question: str, frame=None, semantics=None
             return (pops.provenance_population(_portfolio_lens.LENS_DIRECT),
                     pops.provenance_population(_portfolio_lens.LENS_ACQUIRED))
 
-    # 2. Seasoning — the governed binary partition.
-    named = _seasoning.segments_named(question)
-    if len(named) >= 2:
-        return (pops.seasoning_population(named[0]),
-                pops.seasoning_population(named[1]))
-    if len(named) == 1 and _is_comparative(text):
-        return (pops.seasoning_population(named[0]),
-                pops.seasoning_population(pops.other_seasoning_segment(named[0])))
+    # 2. Seasoning — the governed lending windows, of which the binary
+    #    front/back partition is two. Ordered by position in the question, so
+    #    the first population named is the subject and the second the comparand
+    #    and no delta arrives with its sign reversed.
+    #
+    #    Consulted ONLY when the analytical context settles the lending role as a
+    #    POPULATION. In a run-rate or volume context "new lending" is an
+    #    origination FLOW and narrowing the book to it would answer a different
+    #    question — the ruling is explicit that the role is contextual.
+    windows = _seasoning.lending_windows_named(question)
+    if windows and intent_mod.classify(question).lending_role == intent_mod.ROLE_POPULATION:
+        if len(windows) >= 2:
+            first = pops.lending_window_population(windows[0])
+            second = pops.lending_window_population(windows[1])
+            if first is not None and second is not None:
+                return (first, second)
+        if len(windows) == 1 and _is_comparative(text):
+            # One side of the governed BINARY partition makes the other side
+            # available by construction. A narrower window (new / recent) has no
+            # governed complement, so nothing is synthesised for it.
+            key = windows[0]
+            if key in (_seasoning.LENDING_FRONT_BOOK, _seasoning.LENDING_BACK_BOOK):
+                other = (_seasoning.LENDING_BACK_BOOK
+                         if key == _seasoning.LENDING_FRONT_BOOK
+                         else _seasoning.LENDING_FRONT_BOOK)
+                first = pops.lending_window_population(key)
+                second = pops.lending_window_population(other)
+                if first is not None and second is not None:
+                    return (first, second)
 
     # 3. Two values of one governed dimension, matched literally against the
     #    values the book actually carries. A category the book does not hold is
@@ -240,10 +256,16 @@ def plan_for(question: str, *, spec: Any = None, frame=None,
     if _any(text, _EXPORT_TERMS):
         return None
 
+    # The governed analytical intent boundary reads the question ONCE, and every
+    # builder below asks IT which family and operations were recognised rather
+    # than carrying a private vocabulary. One recognition surface, six families,
+    # no per-question phrase lists.
+    reading = intent_mod.classify(question, spec=spec)
+
     for build in (_plan_origination_profile_change, _plan_pipeline_offer_outlook,
                   _plan_funded_balance_outlook, _plan_vintage_risk_comparison,
                   _plan_population_movement_comparison):
-        plan = build(question, text, spec, frame, semantics)
+        plan = build(question, text, spec, frame, semantics, reading)
         if plan is not None:
             errors = validate(plan, registry)
             if errors:  # a deterministic plan that fails its own contract is a bug
@@ -252,23 +274,30 @@ def plan_for(question: str, *, spec: Any = None, frame=None,
     return None
 
 
-def _plan_origination_profile_change(question, text, spec, frame, semantics
+def _plan_origination_profile_change(question, text, spec, frame, semantics, reading
                                      ) -> Optional[AnalyticalPlan]:
-    """Q: how has the profile of new originations changed lately?"""
-    if not _any(text, _CHANGE_TERMS):
+    """Q: how has the profile of new originations changed lately?
+
+    One governed lending window, measured across the retained snapshots. The
+    comparand is a PRIOR PERIOD, not a second population — "compared with a few
+    months ago" and "changed over the last few months" ask the same thing, and
+    the boundary reads both as a CHANGE.
+    """
+    if intent_mod.SIGNAL_CHANGE not in reading.signals:
         return None
-    if not _any(text, _PROFILE_TERMS):
+    if intent_mod.FAMILY_MOVEMENT_TREND not in reading.families:
         return None
-    named = _seasoning.segments_named(question)
-    if len(named) != 1:
+    if reading.lending_role != intent_mod.ROLE_POPULATION:
         return None
-    if _is_comparative(text):
-        return None  # a two-population comparison, not a single-population trend
-    population = pops.seasoning_population(named[0])
-    pops.assert_not_fabricated([population], question)
+    if len(reading.lending_windows) != 1:
+        return None  # two windows is a population comparison, not a trend
+    population = pops.lending_window_population(reading.lending_windows[0])
+    if population is None:
+        return None
     # "the last few months" asks across the retained window, not just the last
     # pair of snapshots. Which snapshots were actually compared is disclosed on
     # the answer either way, so the reader can see the window they were given.
+    pops.assert_not_fabricated([population], question)
     window = WINDOW_RETAINED if _any(text, _RECENT_TERMS) else WINDOW_LATEST_PAIR
     return AnalyticalPlan(
         intent=INTENT_ORIGINATION_PROFILE_CHANGE,
@@ -291,14 +320,20 @@ def _plan_origination_profile_change(question, text, spec, frame, semantics
         ))
 
 
-def _plan_pipeline_offer_outlook(question, text, spec, frame, semantics
+def _plan_pipeline_offer_outlook(question, text, spec, frame, semantics, reading
                                  ) -> Optional[AnalyticalPlan]:
-    """Q: what is in the pipeline at offer, how much completes, and when?"""
-    if not _any(text, _PIPELINE_TERMS):
+    """Q: what is in the pipeline at offer, how much completes, and when?
+
+    Gated on the governed OFFER STAGE being named, not on the word "pipeline":
+    "how much is sitting at offer today" is a pipeline question whether or not
+    the sentence contains the word.
+    """
+    if intent_mod.FAMILY_PIPELINE not in reading.families:
         return None
     if not _any(text, _OFFER_TERMS):
         return None
-    if not (_any(text, _COMPLETION_TERMS) or _any(text, _TIMING_TERMS)):
+    if not (_any(text, _COMPLETION_TERMS) or _any(text, _TIMING_TERMS)
+            or intent_mod.SIGNAL_FORECAST in reading.signals):
         return None
     return AnalyticalPlan(
         intent=INTENT_PIPELINE_OFFER_OUTLOOK,
@@ -315,12 +350,12 @@ def _plan_pipeline_offer_outlook(question, text, spec, frame, semantics
         ))
 
 
-def _plan_funded_balance_outlook(question, text, spec, frame, semantics
+def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
                                  ) -> Optional[AnalyticalPlan]:
     """Q: given the pipeline, what is the forecast funded balance?"""
     forecast_named = _any(text, _FORECAST_BALANCE_TERMS)
-    composed = (_any(text, _PIPELINE_TERMS)
-                and _any(text, ("forecast", "project", "expect"))
+    composed = (intent_mod.FAMILY_PIPELINE in reading.families
+                and intent_mod.SIGNAL_FORECAST in reading.signals
                 and _any(text, ("balance", "book", "aum", "loans")))
     if not (forecast_named or composed):
         return None
@@ -340,17 +375,63 @@ def _plan_funded_balance_outlook(question, text, spec, frame, semantics
         ))
 
 
-def _plan_vintage_risk_comparison(question, text, spec, frame, semantics
+def _executor_already_compares(spec, reading, pair) -> bool:
+    """Whether the point-in-time executor can already answer this comparison.
+
+    §5 of the intent brief: existing route ownership stays valid, and the family
+    layer must not force a question through the analytical layer UNNECESSARILY.
+    This is the test of "unnecessarily", and it is structural rather than a list
+    of exceptions.
+
+    The executor can answer a two-population comparison when the governed parse
+    has ALREADY resolved it — a measure, grouped by the governed dimension that
+    partitions the two populations. Both sides are then present in one chart,
+    computed by the governed aggregation, with nothing narrowed and nothing
+    passed off as the other. That is a real comparison; taking it away and
+    replacing it with a narrative would be a trade, not an improvement.
+
+    It applies ONLY when the comparison is the whole question. A question that
+    also needs two periods, a forecast, the pipeline extract or a limit schedule
+    is not answerable from one snapshot of the loan tape however it is grouped,
+    so the deference does not apply and the analytical layer proceeds.
+    """
+    metric = getattr(spec, "metric", None)
+    dimension = getattr(spec, "dimension", None)
+    if not metric or not dimension:
+        return False
+    columns = [set(p.filters or {}) for p in pair]
+    if not all(len(c) == 1 for c in columns) or columns[0] != columns[1]:
+        return False          # not two values of one governed column
+    if next(iter(columns[0])) != str(dimension):
+        return False          # grouped by something else entirely
+    if any(isinstance(v, dict) for p in pair for v in (p.filters or {}).values()):
+        return False          # a RANGE window is not a groupable partition
+    unmet = intent_mod.unmet_requirements(
+        reading, evidence={"dataset": "funded", "periods": 1,
+                           "grouping": str(dimension)})
+    return not unmet
+
+
+def _plan_vintage_risk_comparison(question, text, spec, frame, semantics, reading
                                   ) -> Optional[AnalyticalPlan]:
-    """Q: how does the risk profile of older vintages compare with the front book?"""
-    if not _is_comparative(text):
+    """Q: how does the risk profile of older vintages compare with the front book?
+
+    Two governed origination cohorts, set against each other on the risk measures
+    the book carries. Gated on the boundary's MIX_PROFILE and VINTAGE_COHORT
+    families rather than on a vintage word list, so "are older loans riskier than
+    the ones we've written recently?" reaches the same plan as "compare the
+    credit profile of the front book with our seasoned loans".
+    """
+    if intent_mod.SIGNAL_COMPARISON not in reading.signals:
         return None
-    if not (_any(text, _RISK_PROFILE_TERMS) or _any(text, _PROFILE_TERMS)):
+    if intent_mod.FAMILY_MIX_PROFILE not in reading.families:
         return None
-    if not _any(text, _VINTAGE_TERMS):
+    if intent_mod.FAMILY_VINTAGE_COHORT not in reading.families:
         return None
     pair = resolve_population_pair(question, frame, semantics)
     if pair is None:
+        return None
+    if _executor_already_compares(spec, reading, pair):
         return None
     pops.assert_not_fabricated(list(pair), question)
     measures = list(PROFILE_MEASURES)
@@ -372,19 +453,25 @@ def _plan_vintage_risk_comparison(question, text, spec, frame, semantics
         ))
 
 
-def _plan_population_movement_comparison(question, text, spec, frame, semantics
+def _plan_population_movement_comparison(question, text, spec, frame, semantics, reading
                                          ) -> Optional[AnalyticalPlan]:
-    """Q: how has the balance from X changed relative to Y?"""
-    if not _is_comparative(text):
+    """Q: how has the balance from X changed relative to Y?
+
+    Two governed populations, each measured across the same governed snapshots,
+    then compared. "Are X and Y developing differently over time?" is the same
+    question as "how has X moved relative to Y" — the boundary reads both as a
+    MOVEMENT_TREND with a comparison, which is why they now resolve alike.
+    """
+    if intent_mod.SIGNAL_COMPARISON not in reading.signals:
         return None
-    if not _any(text, _CHANGE_TERMS):
+    if intent_mod.FAMILY_MOVEMENT_TREND not in reading.families:
         return None
     pair = resolve_population_pair(question, frame, semantics)
     if pair is None:
         return None
     pops.assert_not_fabricated(list(pair), question)
     measures = ["current_outstanding_balance"]
-    if _any(text, _PROFILE_TERMS) or _any(text, _RISK_PROFILE_TERMS):
+    if intent_mod.FAMILY_MIX_PROFILE in reading.families:
         measures = list(PROFILE_MOVEMENT_MEASURES)
     return AnalyticalPlan(
         intent=INTENT_POPULATION_MOVEMENT_COMPARISON,

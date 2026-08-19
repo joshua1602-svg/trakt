@@ -178,6 +178,14 @@ seasoning:
   # Back book = everything older. Client-configurable; never hard-coded.
   front_book_max_months: 12
 
+  # Governed LENDING WINDOWS. The finer reading of the same months-on-book axis:
+  # "new lending" and "recent lending" are narrower than the front book, and
+  # nested inside it. Front and back are not repeated here — they are taken from
+  # front_book_max_months above, so the four windows cannot disagree.
+  lending_windows:
+    new_max_months: 1
+    recent_max_months: 3
+
   # Inclusive integer month bands. Must partition [0, inf) with no gap or
   # overlap; the last band omits max_months (open-ended).
   buckets:

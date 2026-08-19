@@ -718,14 +718,21 @@ class TestSecondBookAcceptance:
         comparison = _finding(answer, metric="current_loan_to_value",
                               kind=contract_mod.KIND_COMPARISON)
         assert comparison is not None
+        # ORIENTATION FOLLOWS THE QUESTION. Q7 asks how OLDER VINTAGES compare
+        # with the front book, so the older side is the subject and the front
+        # book the comparand — and the delta therefore carries the sign the
+        # reader asked for. Before the analytical intent boundary, "older
+        # vintages" was not recognised as a governed population at all and the
+        # pair was assembled from "front book" alone, which put the two sides in
+        # the opposite order to the sentence.
         _close(comparison["value"],
-               _wavg(front["current_loan_to_value"],
-                     front["current_outstanding_balance"]), tolerance=1e-6)
-        _close(comparison["comparandValue"],
                _wavg(back["current_loan_to_value"],
                      back["current_outstanding_balance"]), tolerance=1e-6)
-        assert comparison["population"]["rows"] == len(front)
-        assert comparison["comparand"]["rows"] == len(back)
+        _close(comparison["comparandValue"],
+               _wavg(front["current_loan_to_value"],
+                     front["current_outstanding_balance"]), tolerance=1e-6)
+        assert comparison["population"]["rows"] == len(back)
+        assert comparison["comparand"]["rows"] == len(front)
 
     def test_q7_vintages_reconcile_and_cover_the_whole_book(self, answers, truth,
                                                             second_book):

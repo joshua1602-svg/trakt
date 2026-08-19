@@ -88,6 +88,25 @@ def seasoning_population(segment: str) -> PopulationSpec:
         filters={_seasoning.SEASONING_SEGMENT_FIELD: segment})
 
 
+#: A lending-window population is still a SEASONING population — same axis, same
+#: governed config, same concept as far as the fabrication guard is concerned.
+#: It is not a fourth kind.
+def lending_window_population(key: str) -> Optional[PopulationSpec]:
+    """One governed lending window (``new`` / ``recent`` / front / back).
+
+    The predicate comes from :mod:`mi_agent.seasoning`, which owns the ruling and
+    the thresholds; this function only wraps it. Front and back keep the
+    ``seasoning_segment`` predicate they already had, so a question that resolved
+    to one of them before resolves to exactly the same rows now.
+    """
+    config = _seasoning.load_seasoning_config()
+    window = config.lending_window(key)
+    if window is None:
+        return None
+    return PopulationSpec(key=window.key, label=window.label,
+                          kind=KIND_SEASONING, filters=window.predicate())
+
+
 def provenance_population(lens_term: str) -> PopulationSpec:
     """A direct or acquired population, resolved through the portfolio lens."""
     lens = _portfolio_lens.resolve_lens(lens_term)

@@ -53,6 +53,7 @@ from .recogniser_registry import (
 
 from mi_workflows import concentration_analysis as conc_mod
 from mi_workflows import portfolio_risk_comparison as prc_mod
+from mi_workflows.analytical import intent as analytical_intent
 from mi_workflows.analytical import route as analytical_mod
 from mi_workflows.semantics import load_business_semantics
 
@@ -2809,6 +2810,26 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     parsed.merge_filters(extra_filters)
     spec = parsed.spec
 
+    # THE ANALYTICAL INTENT BOUNDARY.
+    #
+    # Before any recogniser is consulted, read the question for its governed
+    # analytical FAMILY and OPERATIONS, and settle the governed intent flags the
+    # parser left open. This is routing, not analysis: every flag it can set is
+    # one an existing route already recognises, and it never overrides a flag the
+    # parser has already settled.
+    #
+    # It exists because the same governed question reached two different answers
+    # depending on wording — "which limits have the least headroom?" reached the
+    # limits route; "where are we closest to our limits?" did not, and the funded
+    # executor answered it with weighted average LTV by region. The family is the
+    # same; only the phrasing differed. See
+    # ``mi_workflows/analytical/intent.py`` for the six families.
+    try:
+        analytical_reading, analytical_flags = analytical_intent.settle(question, spec)
+    except Exception as exc:  # noqa: BLE001 - the boundary must never break routing
+        _logger.warning("analytical intent boundary failed: %s", exc)
+        analytical_reading, analytical_flags = None, {}
+
     request = RouteRequest(
         question=question, spec=spec, spec_dict=spec.to_dict(),
         semantics=semantics, view=view, client_id=client_id, run_id=run_id,
@@ -2853,5 +2874,23 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
             _logger.warning("route %s failed: %s", recogniser.name, exc)
             continue
         if envelope is not None:
+            _stamp_analytical_intent(envelope, analytical_reading, analytical_flags)
             return _disclose_lens_scope(envelope, question, source_lens)
     return None
+
+
+def _stamp_analytical_intent(envelope: Dict[str, Any], reading, flags) -> None:
+    """Publish what the boundary recognised, on the answer it shaped.
+
+    Evidence, not decoration: a reader (and the fail-closed check downstream)
+    must be able to see which family a question was read as, and which governed
+    flag — if any — was settled on its behalf.
+    """
+    if not isinstance(envelope, dict) or reading is None or not reading.recognised:
+        return
+    meta = envelope.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        block = reading.to_dict()
+        if flags:
+            block["flagsApplied"] = dict(flags)
+        meta["analyticalIntent"] = block

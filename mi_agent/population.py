@@ -215,9 +215,15 @@ def _requests_concept(concept: str, question: str) -> bool:
     if any(term in text for term in _CONCEPT_TERMS[concept]):
         return True
     if concept == "seasoning":
-        from .seasoning import segments_named
+        from .seasoning import names_lending_window
 
-        return bool(segments_named(question))
+        # The GOVERNED LENDING WINDOWS, which are a superset of the binary
+        # segment phrases: a question naming "our new lending" has requested the
+        # seasoning concept just as surely as one naming "the front book", and
+        # under the 2026-08 ruling it names a governed window. Consulting the
+        # window vocabulary rather than the segment vocabulary keeps this guard
+        # in step with the axis instead of with one partition of it.
+        return names_lending_window(question)
     from .portfolio_lens import resolve_lens
 
     return getattr(resolve_lens(question), "name", "") in ("direct", "acquired")

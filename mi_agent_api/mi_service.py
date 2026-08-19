@@ -603,6 +603,80 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
     return routed
 
 
+def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
+                            view: str) -> Dict[str, Any]:
+    """§7 THE FAIL-CLOSED SAFETY RULE.
+
+    A materially analytical question that no governed route claimed has reached
+    the generic point-in-time executor. That executor answers from ONE snapshot
+    of the funded tape with whatever measure and dimension the parse produced. It
+    has no concept of a pipeline, a limit, a run rate or a forecast — so for a
+    question in one of those families it cannot be right, only plausible.
+
+    These are the four measured cases this exists to stop, all of them ``ok=True``
+    with a green guard before it:
+
+        "How many loans are we completing at the moment?"  -> 11,035 loans
+        "What completion rate are we running at?"          -> £1.96bn
+        "Where are we closest to our limits?"              -> WA LTV by region
+        "Which of our limits are most at risk?"            -> balance by status
+
+    The check is STRUCTURAL and runs AFTER execution, not before it, for the same
+    reason the P0 receipt does: the question is not what the answer was meant to
+    be, it is what the answer demonstrably carries. An answer that DOES carry the
+    structure the question needs is left completely alone — "how does the front
+    book compare with the back book?", answered by grouping on the seasoning
+    segment with both sides present, is a real comparison reached by another
+    mechanism, and refusing it would lose a capability the product has.
+
+    Never refuses a question the boundary did not recognise as materially
+    analytical. "Balance by region" is not analytical and keeps the answer it has
+    always had.
+    """
+    if not isinstance(result, dict) or not result.get("ok"):
+        return result
+    try:
+        from mi_workflows.analytical import intent as intent_mod
+
+        reading = intent_mod.classify(question)
+        if not reading.materially_analytical:
+            return result
+        spec = result.get("spec") if isinstance(result.get("spec"), dict) else {}
+        evidence = {
+            # The point-in-time path reads the funded/arrears view of the loan
+            # tape. It never reads the governed pipeline extract.
+            "dataset": view,
+            # And it reads ONE governed snapshot. A cross-period answer comes
+            # from a route, and a route would have claimed the question.
+            "periods": 1,
+            "forecast": False,
+            "limits": False,
+            "grouping": spec.get("dimension") or "",
+            "populations": 0,
+        }
+        unmet = intent_mod.unmet_requirements(reading, evidence=evidence)
+        if not unmet:
+            return result
+
+        message = intent_mod.refusal_message(reading, unmet)
+        result["ok"] = False
+        result["error"] = message
+        result["answer"] = message
+        result["artifacts"] = []
+        result["controlledRefusal"] = True
+        result.setdefault("warnings", []).append(message)
+        meta = result.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            block = reading.to_dict()
+            block["unmet"] = list(unmet)
+            block["failClosed"] = True
+            meta["analyticalIntent"] = block
+    except Exception:  # noqa: BLE001 - the boundary must never break an answer
+        logger.exception("analytical fail-closed check failed for question=%r",
+                         question)
+    return result
+
+
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
                   deps: CapabilityDependencies) -> Dict[str, Any]:
     """The analytical pipeline.
@@ -784,6 +858,9 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # operator must see, not a silent downgrade.
     if llm_cfg.enabled and not llm_cfg.available and isinstance(result, dict):
         result.setdefault("warnings", []).extend(llm_cfg.warnings)
+    # §7 — a materially analytical question must never leave here with a
+    # confident current-position figure that answers something else.
+    result = _fail_closed_analytical(result, question=req.question, view=view)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))

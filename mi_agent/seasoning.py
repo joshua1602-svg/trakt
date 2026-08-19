@@ -70,6 +70,11 @@ class SeasoningConfig:
 
     front_book_max_months: int
     bands: Tuple[SeasoningBand, ...]
+    #: The two finer lending windows of the governed ruling. Defaults match the
+    #: ruling; both are config-driven for the same reason the front/back boundary
+    #: is — a client re-cuts "new" by editing config, never by changing code.
+    new_max_months: int = 1
+    recent_max_months: int = 3
 
     def segment_for(self, months: Optional[float]) -> Optional[str]:
         """Binary front/back for a months-on-book value (None ⇒ unknown)."""
@@ -89,6 +94,37 @@ class SeasoningConfig:
     @property
     def band_names(self) -> List[str]:
         return [b.name for b in self.bands]
+
+    def lending_windows(self) -> Tuple["LendingWindow", ...]:
+        """The four governed windows, most specific first.
+
+        Built from THIS config, so a client that moves the front/back boundary
+        moves the front and back windows with it and nothing can disagree.
+        """
+        return (
+            LendingWindow(LENDING_NEW,
+                          f"New lending (last {self.new_max_months} month"
+                          f"{'s' if self.new_max_months != 1 else ''})",
+                          max_months=self.new_max_months),
+            LendingWindow(LENDING_RECENT,
+                          f"Recent lending (last {self.recent_max_months} months)",
+                          max_months=self.recent_max_months),
+            LendingWindow(LENDING_FRONT_BOOK,
+                          self.describe_segment(FRONT_BOOK),
+                          max_months=self.front_book_max_months,
+                          segment=FRONT_BOOK),
+            LendingWindow(LENDING_BACK_BOOK,
+                          self.describe_segment(BACK_BOOK),
+                          after_months=self.front_book_max_months,
+                          segment=BACK_BOOK),
+        )
+
+    def lending_window(self, key: str) -> Optional["LendingWindow"]:
+        """One governed window by key, or ``None`` for a key we do not govern."""
+        for window in self.lending_windows():
+            if window.key == key:
+                return window
+        return None
 
     def describe_segment(self, segment: str) -> str:
         """Receipt-grade label, e.g. ``Front Book (0-12 months)``.
@@ -129,6 +165,69 @@ _SEGMENT_PHRASES: Tuple[Tuple[str, str], ...] = (
     (r"\bseasoned loans\b", BACK_BOOK),
 )
 
+#: ---------------------------------------------------------------------------
+#: GOVERNED LENDING WINDOWS — the business ruling of 2026-08.
+#: ---------------------------------------------------------------------------
+#: A second, FINER reading of the same axis. The binary front/back partition
+#: above answers "which side of the book is this loan on"; a lending window
+#: answers "how recently was it written", and the ruling names four:
+#:
+#:     NEW         originated in the last 1 month     (L1M)
+#:     RECENT      originated in the last 3 months     (L3M)
+#:     FRONT BOOK  originated in the last 12 months    (L12M)
+#:     BACK BOOK   older than 12 months                (>L12M)
+#:
+#: They are NESTED, not a partition: every NEW loan is also RECENT and also
+#: FRONT BOOK. That is deliberate — a CFO asking about "new lending" and a CFO
+#: asking about "the front book" are asking two different questions, and
+#: collapsing them into one segment is the defect this ruling exists to fix.
+#:
+#: All four are expressed on ``months_on_book``, the SAME derived axis the
+#: segment and the bands already use, so there is one model and no second
+#: mechanism. FRONT/BACK keep their existing ``seasoning_segment`` predicate so
+#: nothing that already resolves them changes.
+#:
+#: WHAT THIS DELIBERATELY DOES NOT DO: it does not add "new lending" to
+#: ``_SEGMENT_PHRASES``. Those phrases select a population EVERYWHERE in the
+#: stack, and the ruling is explicit that "lending" carries a role that depends
+#: on analytical context — a POPULATION of loans in a profile/mix/risk question,
+#: an ORIGINATION FLOW in a run-rate/volume question. The role decision is taken
+#: by the analytical intent layer, which is the only place that context exists.
+#: This module supplies the windows and the vocabulary; it takes no view on role.
+LENDING_NEW = "new"
+LENDING_RECENT = "recent"
+LENDING_FRONT_BOOK = "front_book"
+LENDING_BACK_BOOK = "back_book"
+
+#: Fixed evaluation order, most specific first. A question naming both "new
+#: lending" and "the back book" is a comparison, and the caller sees both.
+LENDING_WINDOW_KEYS: Tuple[str, ...] = (
+    LENDING_NEW, LENDING_RECENT, LENDING_FRONT_BOOK, LENDING_BACK_BOOK)
+
+
+@dataclass(frozen=True)
+class LendingWindow:
+    """One governed origination window, as a row predicate on months on book."""
+
+    key: str
+    label: str
+    #: Inclusive upper bound in months. ``None`` ⇒ open-ended (back book).
+    max_months: Optional[int] = None
+    #: EXCLUSIVE lower bound in months. ``None`` ⇒ from origination.
+    after_months: Optional[int] = None
+    #: Set when the window is exactly one side of the binary segment, so those
+    #: two keep the predicate they already had rather than gaining a second one.
+    segment: Optional[str] = None
+
+    def predicate(self) -> Dict[str, Any]:
+        """The governed row predicate, in ``spec.filters`` form."""
+        if self.segment is not None:
+            return {SEASONING_SEGMENT_FIELD: self.segment}
+        if self.after_months is not None:
+            return {MONTHS_ON_BOOK_FIELD: {"op": "gt", "value": self.after_months}}
+        return {MONTHS_ON_BOOK_FIELD: {"op": "le", "value": self.max_months}}
+
+
 _SEGMENT_RES: Tuple[Tuple[Any, str], ...] = ()
 
 
@@ -150,6 +249,111 @@ def segments_named(text: Optional[str]) -> List[str]:
         if rx.search(str(text)) and segment not in found:
             found.append(segment)
     return found
+
+
+#: Vocabulary that names a governed LENDING WINDOW. Every entry is anchored on a
+#: lending / origination / book noun, because a bare "new" or "recent" is a time
+#: adverb about the QUESTION ("what is the balance recently?") rather than a
+#: cohort of loans, and a population must never be created from a word that
+#: might have meant something else.
+#:
+#: The front/back entries are NOT repeated here — they are taken from
+#: ``_SEGMENT_PHRASES`` at lookup time, so the two vocabularies cannot drift.
+#:
+#: This is a CONCEPT vocabulary, not a question template list: it names the ways
+#: a book is described, not the ways a question is asked.
+_LENDING_PHRASES: Tuple[Tuple[str, str], ...] = (
+    # NEW — the most recent origination flow.
+    (r"\bnew lending\b", LENDING_NEW),
+    (r"\bnew business\b", LENDING_NEW),
+    (r"\bnew loans?\b", LENDING_NEW),
+    (r"\bnew advances?\b", LENDING_NEW),
+    (r"\bnewly written\b", LENDING_NEW),
+    (r"\bnew(?:ly)? funded\b", LENDING_NEW),
+    # RECENT — a slightly wider window than NEW, and explicitly so.
+    (r"\brecent lending\b", LENDING_RECENT),
+    (r"\brecent business\b", LENDING_RECENT),
+    (r"\brecent loans?\b", LENDING_RECENT),
+    (r"\brecent advances?\b", LENDING_RECENT),
+    (r"\blending recently\b", LENDING_RECENT),
+    # The VERB of origination, in the present. "Are we originating different
+    # loans now?" names the loans currently being written; the past tense ("what
+    # we were originating earlier") names a prior period, which is a comparand
+    # rather than a second population and is handled as one.
+    (r"\boriginating\b", LENDING_RECENT),
+    (r"\bwe(?:'ve| have) originated recently\b", LENDING_RECENT),
+    (r"\boriginated recently\b", LENDING_RECENT),
+    # BACK BOOK — the same side the segment vocabulary already names, reached by
+    # the "older" family of words the segment vocabulary deliberately excludes
+    # because they read as an axis rather than a side. In a LENDING context they
+    # are unambiguous: "older lending" is a population of older loans.
+    (r"\bolder lending\b", LENDING_BACK_BOOK),
+    (r"\bolder loans?\b", LENDING_BACK_BOOK),
+    (r"\bolder business\b", LENDING_BACK_BOOK),
+    (r"\bolder vintages?\b", LENDING_BACK_BOOK),
+    (r"\bearlier lending\b", LENDING_BACK_BOOK),
+    (r"\bearlier originations?\b", LENDING_BACK_BOOK),
+    (r"\blegacy lending\b", LENDING_BACK_BOOK),
+    (r"\bseasoned lending\b", LENDING_BACK_BOOK),
+)
+
+#: The segment phrases, expressed as lending windows. One mapping, one owner.
+_SEGMENT_TO_WINDOW = {FRONT_BOOK: LENDING_FRONT_BOOK, BACK_BOOK: LENDING_BACK_BOOK}
+
+_LENDING_RES: Tuple[Tuple[Any, str], ...] = ()
+
+
+def _lending_res() -> Tuple[Tuple[Any, str], ...]:
+    global _LENDING_RES
+    if not _LENDING_RES:
+        import re
+        _LENDING_RES = tuple((re.compile(p, re.I), key)
+                             for p, key in _LENDING_PHRASES)
+    return _LENDING_RES
+
+
+def lending_windows_named(text: Optional[str]) -> List[str]:
+    """The governed lending windows a question names, in first-seen order.
+
+    Both vocabularies are consulted — the segment phrases this module already
+    owns AND the lending phrases above — so "compare new lending with the back
+    book" yields ``["new", "back_book"]`` and a caller sees a genuine pair.
+
+    Order is by POSITION IN THE QUESTION, not by vocabulary, because the first
+    population a comparative question names is its subject and the second its
+    comparand, and reversing them reverses the sign of every delta reported.
+
+    This function decides WHICH windows are named. It does NOT decide whether
+    they should be executed as a population — that is a role decision, and it
+    depends on analytical context this module cannot see. See the ruling note
+    above ``LENDING_NEW``.
+    """
+    if not text:
+        return []
+    hits: List[Tuple[int, str]] = []
+    for rx, key in _lending_res():
+        match = rx.search(str(text))
+        if match:
+            hits.append((match.start(), key))
+    for rx, segment in _segment_res():
+        match = rx.search(str(text))
+        if match:
+            hits.append((match.start(), _SEGMENT_TO_WINDOW[segment]))
+    found: List[str] = []
+    for _position, key in sorted(hits):
+        if key not in found:
+            found.append(key)
+    return found
+
+
+def names_lending_window(text: Optional[str]) -> bool:
+    """Whether a question names any governed lending window at all.
+
+    Used by the fabricated-population guard: a question that names one has
+    REQUESTED the seasoning concept, and may therefore be answered with a
+    seasoning population. One that names none may not.
+    """
+    return bool(lending_windows_named(text))
 
 
 def mask_segment_phrases(text: Optional[str]) -> str:
@@ -224,9 +428,14 @@ def load_seasoning_config(path: Optional[Path | str] = None) -> SeasoningConfig:
     block = (data.get("seasoning") or {}) if isinstance(data, dict) else {}
     bands = _coerce_bands(block.get("buckets"))
     front = block.get("front_book_max_months")
+    windows = (block.get("lending_windows") or {}) if isinstance(block, dict) else {}
+    new_max = windows.get("new_max_months")
+    recent_max = windows.get("recent_max_months")
     return SeasoningConfig(
         front_book_max_months=int(front) if front is not None else 12,
         bands=bands,
+        new_max_months=int(new_max) if new_max is not None else 1,
+        recent_max_months=int(recent_max) if recent_max is not None else 3,
     )
 
 
