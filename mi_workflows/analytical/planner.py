@@ -72,8 +72,13 @@ _FORECAST_BALANCE_TERMS = ("forecast funded balance", "forecast balance",
                            "expected funded balance", "forecast aum",
                            "where will the book", "what will the book be")
 
+#: Plan shape, not intent: whether the question wants the WHOLE retained window
+#: or only the last pair of snapshots. "a few months ago" names the same window
+#: as "the last few months" — it is the same request, read from the other end.
 _RECENT_TERMS = ("last few months", "recent months", "past few months",
-                 "recently", "last several months", "over the last few")
+                 "recently", "last several months", "over the last few",
+                 "months ago", "few months", "earlier in the year",
+                 "earlier this year", "last few weeks")
 
 #: A question naming one of these is asking for a raw tape or an export, not an
 #: analysis. Declined outright so the layer never intercepts a data request.

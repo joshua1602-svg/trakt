@@ -665,6 +665,20 @@ def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
         result["artifacts"] = []
         result["controlledRefusal"] = True
         result.setdefault("warnings", []).append(message)
+        # The receipt and the guard must tell the SAME story as the answer.
+        # A green guard beside a refusal reads as a spurious refusal, and an
+        # execution summary still carrying "11,035 loans" leaves on the envelope
+        # the very figure the refusal says it will not substitute — a reader (or
+        # a channel rendering the receipt) would find the number anyway.
+        from mi_agent import execution_receipt as receipt_mod
+
+        result["executionSummary"] = None
+        result["semanticGuard"] = {
+            "verdict": receipt_mod.VERDICT_REFUSE, "message": message,
+            "route": None,
+            "facets": [{"kind": r, "status": receipt_mod.UNAVAILABLE,
+                        "label": intent_mod.REQUIREMENT_REASONS.get(r, r)}
+                       for r in unmet]}
         meta = result.setdefault("metadata", {})
         if isinstance(meta, dict):
             block = reading.to_dict()
