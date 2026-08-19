@@ -507,7 +507,7 @@ in §10 and the reconciliation in §9.
 | Numerical correctness | **A** | 211 figures, two books, zero variance |
 | Governance | **A** | P1L and the fabrication guard hold; the receipt was made stricter |
 | Generalisation | **A** | inverted economics, same behaviour, no fixture-specific code |
-| No regression | **A** | 0 of 30 changed answers; 3,112 accumulated tests green |
+| No regression | **A** | 0 of 30 on the regression bank, 249 of 252 byte-identical on the calibration bank, and the 3 that moved went refusal → correct |
 | Forward limit analysis (Q5) | **C** | capability exists; blocked on an approved configuration |
 | Pipeline availability | **C** | demonstration book carries none; honest refusal without it |
 
