@@ -60,12 +60,26 @@ Three changes, none of them about medians.
 
 | # | Change | Why it is the smallest form |
 |---|---|---|
-| 1 | `_statistic_not_permitted(errors)` — an ungoverned statistic is **not a repairable parse error** | Mirrors the existing `_missing_column_only` precedent exactly, including its stated reason: "the LLM cannot fix this without an unapproved substitution". Requires no vocabulary, so it covers *every* statistic any field denies. |
+| 1 | `_statistic_not_permitted(errors, requested)` — an ungoverned statistic is **not a repairable parse error** | Mirrors the existing `_missing_column_only` precedent, including its stated reason: "the LLM cannot fix this without an unapproved substitution". |
 | 2 | `resolve_statistic_role(spec, question, semantics)` — carry the named statistic into the spec | Closes the deterministic hole: the request now reaches the governance layer that refuses it. **One-directional**: it only overwrites an aggregation that does *not* already satisfy the request. |
 | 3 | `KIND_STATISTIC` facet, reconciled against execution evidence | The backstop. Catches a statistic lost *inside a measure set*, which the parse boundary cannot see. |
 
-The guard on the deterministic safety net (`repair_skipped_reason not in (...)`) is what makes
-change 1 hold; without it the refusal was re-answered one branch later.
+The guard on the deterministic safety net is what makes change 1 hold; without it the refusal was
+re-answered one branch later.
+
+**Change 1 is conditioned on the statistic the user named**, which the first cut got wrong. Two
+specs fail with the identical validation error and deserve opposite treatment:
+
+| Spec | What happened | Correct outcome |
+|---|---|---|
+| "what is the **median** LTV?" | the model asked for a median; the registry governs none for LTV; the only repair available is a *different* statistic | **refuse** |
+| "**weighted** ltv by region" | the user asked for a weighted average and the model returned a `sum` on a percent metric; repair can only move the spec back *towards* the request | **repair** |
+
+So a permission error stops repair only when the rejected statistic is the one the question
+named, and the deterministic fallback is withheld only when it would not honour that statistic.
+A question naming no statistic has none that a repair could move away from. The first cut
+treated every aggregation-permission error as non-repairable, which withheld correct answers to
+protect a statistic the user never asked for — caught by the full suite (§13).
 
 **Why change 2 is one-directional.** "Average LTV" must keep its exposure-weighted definition —
 the house convention for a ratio measure is what a plain "average" means. Rewriting it to a
@@ -291,6 +305,24 @@ because they show where the check must *not* reach:
 A fourth, found by my own bank: the statistic facet is raised by the word "average", so it was
 re-triggering the low-confidence caveat on exactly the plain KPI answers that test exists to
 keep it off.
+
+**A fifth, and the most substantive, found only by the full repository suite.**
+`mi_agent/tests/test_streamlit_mi_agent.py` exercises the repair loop and the deterministic
+fallback using an invalid LLM spec built as **`sum` on a percent metric** — which raises the
+*same* validation error as an ungoverned median. Treating that error as categorically
+non-repairable stopped repair and blocked the fallback for a question ("weighted ltv by region")
+whose user request was perfectly governable, and which the deterministic parser answers
+correctly.
+
+Three tests failed and all three were right. The correction is in §3: the block is conditioned
+on the statistic the *user* named rather than on the one the *model* produced. This is a sharper
+and more defensible rule than the one it replaced, and it is the reason the brief's instruction
+to run the full suite before claiming a verdict earned its place — the focused bank, the
+commercial bank, the 40-bank and every P-gate were green while this was still wrong.
+
+Two of my own tests were updated to the refined signature, and two were added for the new
+discriminator: repair is permitted when the model invented the statistic, and blocked when the
+invented one is what was asked for.
 
 ## 14. Beta-blocker verdict
 
