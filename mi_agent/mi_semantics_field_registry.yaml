@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-08-18T21:21:41.889101+00:00'
+  generated_at: '2026-08-19T09:18:43.966146+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -196,6 +196,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -261,6 +263,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -328,6 +332,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -610,6 +616,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -642,6 +650,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -706,6 +716,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -738,6 +750,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -773,6 +787,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -807,6 +823,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -839,6 +857,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -871,6 +891,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -905,6 +927,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1105,6 +1129,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1251,6 +1277,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1342,6 +1370,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1375,6 +1405,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1681,6 +1713,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -1712,6 +1746,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1743,6 +1779,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -2206,8 +2244,11 @@ fields:
     chartable: true
     allowed_aggregations:
     - avg
+    - weighted_avg
     - median
     - distribution
+    - min
+    - max
     default_aggregation: avg
     allowed_chart_roles:
     - x
@@ -2216,7 +2257,7 @@ fields:
     - filter
     - color
     default_chart_role: x
-    weight_field: null
+    weight_field: current_outstanding_balance
     bucket_field: null
     notes: ''
     virtual: true
@@ -2300,6 +2341,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -2578,6 +2621,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -2643,6 +2688,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -2675,6 +2722,8 @@ fields:
     - avg
     - median
     - distribution
+    - min
+    - max
     default_aggregation: avg
     allowed_chart_roles:
     - x
@@ -2705,6 +2754,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3034,6 +3085,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3134,6 +3187,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -3165,6 +3220,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3198,6 +3255,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3725,8 +3784,11 @@ fields:
     chartable: true
     allowed_aggregations:
     - avg
+    - weighted_avg
     - median
     - distribution
+    - min
+    - max
     default_aggregation: avg
     allowed_chart_roles:
     - x
@@ -3735,6 +3797,6 @@ fields:
     - filter
     - color
     default_chart_role: x
-    weight_field: null
+    weight_field: current_outstanding_balance
     bucket_field: age_bucket
     notes: ''

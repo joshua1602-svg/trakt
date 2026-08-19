@@ -605,7 +605,8 @@ def _is_filter_subject(q: str, start: int, end: int) -> bool:
 
 def named_measure_concepts(question: str) -> List[str]:
     """Distinct measure concepts the question names, in order of appearance."""
-    q = (question or "").lower()
+    # P1N: a weighting phrase names the STATISTIC, not a second measure.
+    q = _statistic.mask_statistic_phrases((question or "").lower())
     found: List[Tuple[int, str]] = []
     seen: Set[str] = set()
     consumed: List[Tuple[int, int]] = []
@@ -799,7 +800,8 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
             kind=KIND_MULTI_MEASURE,
             label="more than one measure (" + _join(concepts) + ")",
             concepts=tuple(concepts)))
-    requested_statistic = _statistic.statistic_named(question)
+    requested_statistic = _statistic.statistic_named(
+        question, grouped=bool(requested_dimensions))
     if requested_statistic:
         facets.append(RequestedFacet(
             kind=KIND_STATISTIC,
@@ -826,6 +828,8 @@ _AGGREGATION_LABELS = {
     "weighted_avg": "Weighted-average",
     "avg": "Average",
     "median": "Median",
+    "min": "Minimum",
+    "max": "Maximum",
     "sum": "Total",
     "balance_sum": "Total",
     "count": "Count of",
@@ -1344,6 +1348,7 @@ def detect_substitution(facets: Sequence[RequestedFacet], *, spec, query_result,
 _MEASURE_AGG_WORDS = {
     "sum": "", "balance_sum": "", "count": "", "count_distinct": "Distinct ",
     "avg": "Average ", "median": "Median ", "weighted_avg": "Weighted-average ",
+    "min": "Minimum ", "max": "Maximum ",
 }
 
 
@@ -2153,6 +2158,12 @@ _SUPERLATIVE_RE = re.compile(
 def detect_unranked_superlative(question: str, *, spec, query_result) -> Optional[str]:
     """A superlative question answered over the whole, unranked population."""
     if not _SUPERLATIVE_RE.search(question or ""):
+        return None
+    # P1N. A governed min/max IS the single extreme value. Before P1N no
+    # aggregation could express one, so any superlative answered by a summary was
+    # necessarily the whole-book figure for a different question; now it is the
+    # answer, and this guard would refuse the very capability that closes the gap.
+    if str(getattr(spec, "aggregation", "") or "") in ("min", "max"):
         return None
     if getattr(spec, "top_n", None) or getattr(spec, "ranking_mode", None):
         return None

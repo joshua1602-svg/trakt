@@ -117,18 +117,40 @@ def satisfied_by_any(requested: Optional[str],
 #: "the total number of loans" is a count, not a sum — so recognising them would
 #: buy no safety and risk refusing sound questions.
 #:
-#: Ranking words ("highest", "largest") are deliberately ABSENT: in "which region
-#: has the highest average LTV" they name a ranking over groups, not the statistic
-#: applied to the measure. The existing extreme-value guard owns min/max, and
-#: ``satisfies`` still covers them for any spec that carries one.
+#: ORDER IS SIGNIFICANT. A superlative and a statistic can appear in the same
+#: question — "which region has the **highest average** LTV" — and there the
+#: superlative RANKS GROUPS while the statistic is the average. Listing the
+#: explicit statistic words first means the average wins that sentence, and
+#: "the highest LTV" (no competing statistic) reads as a maximum.
+#:
+#: A superlative on its own is still not enough: see ``statistic_named``'s
+#: ``grouped`` argument, which withholds a min/max reading from a question that
+#: names a grouping dimension, because that is a ranking over groups.
+#:
+#: "Oldest" and "youngest" are deliberately ABSENT. The measure is literally
+#: called ``youngest_borrower_age``, so "the youngest borrower age" is the field
+#: name rather than a statistic on it, and "oldest borrower" would have to mean
+#: the maximum of a field whose own name says youngest. That ambiguity is
+#: reported rather than guessed at.
 _STATISTIC_PHRASES: Sequence[tuple[str, str]] = (
     (r"\bweighted[-\s]+(?:average|avg|mean)\b", "weighted_avg"),
+    (r"\bexposure[-\s]+weighted\b", "weighted_avg"),
     (r"\bmedian\b", "median"),
     (r"\baverage\b", MEAN),
     (r"\bmean\b", MEAN),
 )
 
+#: Superlatives, considered only after the statistic words above and only for a
+#: question that is not a grouped ranking. Kept to the smallest commercially
+#: natural set — "largest loan" and "highest LTV" are how the questions are
+#: actually asked.
+_SUPERLATIVE_PHRASES: Sequence[tuple[str, str]] = (
+    (r"\b(?:maximum|max|highest|largest|biggest)\b", "max"),
+    (r"\b(?:minimum|min|lowest|smallest)\b", "min"),
+)
+
 _STATISTIC_RES: tuple = ()
+_SUPERLATIVE_RES: tuple = ()
 
 
 def _statistic_res() -> tuple:
@@ -139,16 +161,66 @@ def _statistic_res() -> tuple:
     return _STATISTIC_RES
 
 
-def statistic_named(text: Optional[str]) -> Optional[str]:
+def _superlative_res() -> tuple:
+    global _SUPERLATIVE_RES
+    if not _SUPERLATIVE_RES:
+        _SUPERLATIVE_RES = tuple((re.compile(p, re.I), s)
+                                 for p, s in _SUPERLATIVE_PHRASES)
+    return _SUPERLATIVE_RES
+
+
+#: Statistic phrases that also contain MEASURE vocabulary and would otherwise be
+#: read as a measure in their own right. "exposure-weighted borrower age" names
+#: ONE measure weighted by exposure; without masking, "exposure" resolved to the
+#: balance measure, the question became a two-measure request, and the weighted
+#: average was refused as a lost statistic. Same discipline P1I-A applies to
+#: governed scope phrases and P1J-1 to seasoning phrases.
+_MASKED_PHRASES = (r"\bexposure[-\s]+weighted\b",
+                   r"\bweighted[-\s]+(?:average|avg|mean)\b")
+
+_MASK_RES: tuple = ()
+
+
+def mask_statistic_phrases(text: Optional[str]) -> str:
+    """``text`` with weighting phrases blanked, preserving offsets.
+
+    Blanking rather than deleting keeps every other span offset valid, which the
+    measure/dimension/filter resolvers all depend on.
+    """
+    global _MASK_RES
+    if not text:
+        return text or ""
+    if not _MASK_RES:
+        _MASK_RES = tuple(re.compile(p, re.I) for p in _MASKED_PHRASES)
+    out = list(str(text))
+    for rx in _MASK_RES:
+        for match in rx.finditer(str(text)):
+            for i in range(match.start(), match.end()):
+                out[i] = " "
+    return "".join(out)
+
+
+def statistic_named(text: Optional[str], grouped: bool = False) -> Optional[str]:
     """The statistic a question explicitly asks for, or None.
 
     First match wins in declaration order, so "weighted average" is read as a
     weighted mean rather than as a bare mean that happens to follow the word
-    "weighted".
+    "weighted", and "the highest AVERAGE LTV" is read as an average.
+
+    ``grouped`` says the question names a grouping dimension. A superlative there
+    is a RANKING over groups — "which region has the highest LTV" asks which
+    region wins, not for one extreme loan — so no min/max is read from it and the
+    existing ranking facet stays in charge. Explicit statistic words are
+    unaffected: a grouped question can still ask for an average.
     """
     if not text:
         return None
     for rx, statistic in _statistic_res():
+        if rx.search(str(text)):
+            return statistic
+    if grouped:
+        return None
+    for rx, statistic in _superlative_res():
         if rx.search(str(text)):
             return statistic
     return None

@@ -264,7 +264,22 @@ CURATION: Dict[str, dict] = {
         "business_description": "Age of the youngest borrower on the loan.",
         "synonyms": ["age", "borrower age", "youngest borrower age",
                      "applicant age", "customer age", "youngest age"],
-        "overrides": {"bucket_field": "age_bucket"},
+        # P1N: exposure-weighted borrower age is commercially meaningful for an
+        # equity-release book — a £750k loan to an 88-year-old carries far more
+        # of the portfolio's longevity risk than a £90k loan to a 68-year-old,
+        # and the simple mean hides that. ``default_aggregation`` stays ``avg``:
+        # "average borrower age" must keep meaning the simple mean, and the
+        # weighted figure is reached only by asking for it.
+        # The weight is the SAME governed exposure field every other weighted
+        # measure uses (registry ``metadata.default_weight_field``, and the
+        # executor's own fallback hierarchy). Pinned rather than left implicit
+        # because validation requires an explicit weight before it will permit a
+        # weighted average — no new weighting concept is introduced.
+        "overrides": {"bucket_field": "age_bucket",
+                      "allowed_aggregations": ["avg", "weighted_avg", "median",
+                                               "distribution", "min", "max"],
+                      "default_aggregation": "avg",
+                      "weight_field": "current_outstanding_balance"},
     },
     # ---------------- CORE — portfolio dimensions ----------------
     "origination_date": {
@@ -1130,9 +1145,16 @@ CURATION: Dict[str, dict] = {
                                "derived in the state layer).",
         "synonyms": ["months on book", "time on book", "mob", "seasoning",
                      "loan age"],
+        # P1N: exposure-weighted seasoning. The simple mean months-on-book
+        # counts a £50k loan and a £750k loan equally; the exposure-weighted
+        # figure states how seasoned the MONEY is, which is the portfolio
+        # question. ``default_aggregation`` stays ``avg`` for the same reason as
+        # borrower age.
         "overrides": {"role": "metric", "format": "integer", "chartable": True,
-                      "allowed_aggregations": ["avg", "median", "distribution"],
+                      "allowed_aggregations": ["avg", "weighted_avg", "median",
+                                               "distribution", "min", "max"],
                       "default_aggregation": "avg",
+                      "weight_field": "current_outstanding_balance",
                       "allowed_chart_roles": ["x", "y", "bucket", "filter", "color"],
                       "default_chart_role": "x", "bucket_field": None},
     },
@@ -1298,20 +1320,25 @@ def infer_aggregations(role: str, fmt: str, name: str,
     if role == "dimension":
         return ["count", "balance_sum"], "count"
     if role == "metric":
+        # P1N: ``min``/``max`` are added where a LOAN-LEVEL EXTREME reads as a
+        # real business figure — the largest loan, the highest LTV, the oldest
+        # borrower. They are NOT added to ``number_of_*`` count metrics, where
+        # "the maximum number of properties" is a curiosity rather than MI, nor
+        # to dimensions, flags, dates or identifiers.
         if fmt == "currency":
-            return ["sum", "avg", "median"], "sum"
+            return ["sum", "avg", "median", "min", "max"], "sum"
         if fmt == "percent":
             # Rate/LTV/percentage fields prefer weighted_avg over a simple
             # arithmetic average for portfolio MI (when a balance weight exists).
             default = "weighted_avg" if has_weight else "avg"
-            return ["avg", "weighted_avg", "distribution"], default
+            return ["avg", "weighted_avg", "distribution", "min", "max"], default
         if fmt == "integer":
             if _is_count_metric(name):
                 # ``number_of_*`` style counts: useful as sum/avg/median/distribution.
                 return ["sum", "avg", "median", "distribution"], "sum"
             # Ages / days / terms: not sensible to sum across loans.
-            return ["avg", "median", "distribution"], "avg"
-        return ["sum", "avg", "median"], "avg"
+            return ["avg", "median", "distribution", "min", "max"], "avg"
+        return ["sum", "avg", "median", "min", "max"], "avg"
     return [], ""
 
 

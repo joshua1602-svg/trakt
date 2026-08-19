@@ -261,7 +261,8 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
                      balance_col: Optional[str] = None) -> float:
     """Compute a single scalar aggregation over ``df``.
 
-    Supports: sum, avg, median, count, count_distinct, weighted_avg, balance_sum.
+    Supports: sum, avg, median, min, max, count, count_distinct, weighted_avg,
+    balance_sum.
     ``distribution`` and ``loan_level`` are structural (not scalar) and are
     handled by the per-chart logic, not here.
     """
@@ -292,6 +293,10 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
         return float(vals.mean())
     if aggregation == "median":
         return float(vals.median())
+    if aggregation == "min":
+        return float(vals.min())
+    if aggregation == "max":
+        return float(vals.max())
     if aggregation == "weighted_avg":
         if not weight_col:
             raise MIQueryExecutionError("weighted_avg requires a weight field")

@@ -918,6 +918,9 @@ def detect_measure_set(text: str, semantics: dict, available_columns=None, *,
     borrower AGE" as a measure cannot also be read as a grouping by age band —
     the same consume-the-span discipline the single-measure parser follows.
     """
+    # P1N: "exposure-weighted borrower age" names one measure and a weighting,
+    # not two measures. Masked before the hits are taken, offsets preserved.
+    text = _statistic.mask_statistic_phrases(text)
     chosen = _measure_hits(text, semantics, available_columns)
 
     measures: List[Dict[str, str]] = []
@@ -3485,7 +3488,13 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
 
     Returns the statistic named, for the receipt and the facet ledger.
     """
-    named = _statistic.statistic_named(question)
+    # A grouped spec makes a superlative a RANKING over groups, not a statistic
+    # on the measure — "which region has the highest LTV" wants the winning
+    # region, not one extreme loan. The ranking facet already owns that.
+    grouped = bool(getattr(spec, "dimension", None)
+                   or (getattr(spec, "dimensions", None) or [])
+                   or (getattr(spec, "hierarchy", None) or []))
+    named = _statistic.statistic_named(question, grouped=grouped)
     if not named or spec is None:
         return None
     metric = getattr(spec, "metric", None)
@@ -3516,6 +3525,17 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
     entry = ((semantics or {}).get("fields") or {}).get(metric) or {}
     current = getattr(spec, "aggregation", None)
     if _statistic.satisfies(named, current):
+        return named
+    # P1N. A superlative question that the parser turned into a LOAN-LEVEL table
+    # is asking for one extreme value, and now there is a statistic that says so.
+    # "What is the highest LTV for loans over £500k" came back as a ten-row table
+    # that had also dropped the threshold, while "maximum LTV" answered it
+    # exactly. An explicit top-N request ("the top 10 loans by LTV") genuinely
+    # wants the table and is left alone.
+    if (str(current or "") == "loan_level" and named in ("min", "max")
+            and not getattr(spec, "top_n", None)):
+        spec.aggregation = named
+        spec.ranking_mode = None
         return named
     # "Which region contributes most to the weighted average LTV" names a
     # weighted average, but the spec's aggregation is a CONTRIBUTION — the

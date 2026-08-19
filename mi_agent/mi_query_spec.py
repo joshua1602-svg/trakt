@@ -24,6 +24,10 @@ CHART_TYPES = {"bar", "line", "scatter", "bubble", "heatmap", "treemap", "none"}
 AGGREGATIONS = {
     "sum", "avg", "weighted_avg", "count", "count_distinct",
     "median", "distribution", "loan_level", "balance_sum",
+    # P1N — the extreme value OF A MEASURE. Distinct from a ranking, which
+    # orders GROUPS and returns the winning group: "the highest LTV" is one
+    # number over a population, "which region has the highest LTV" is a ranking.
+    "min", "max",
     # P1A — a filtered population expressed as a share of the whole book.
     # Distinct from the aggregations above because it needs TWO populations.
     "share",
