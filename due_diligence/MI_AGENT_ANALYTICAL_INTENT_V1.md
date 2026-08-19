@@ -446,6 +446,7 @@ that already worked. Four independent checks, all run on the final tree.
 | `tests/test_analytical_intent_boundary.py` (**new**) | 113 passed |
 | `mi_agent_api/tests/` (all, incl. routing e2e) | passed |
 | **Combined focused run** | **1,989 passed, 13 xfailed** |
+| **Full suite, shipped tree** | **9,061 passed, 0 failed**, 26 skipped, 21 xfailed (baseline 8,947; the difference is the 114 tests added here) |
 
 ### 11.2 The 30-question simple-MI bank
 
@@ -1521,3 +1522,56 @@ comparative question naming only one of them resolves a pair only when the named
 window is one half of the front/back binary. This is deliberate — synthesising
 "everything that is not new lending" would be inventing a population.
 
+### 14.3 The gates, all measured on the shipped tree
+
+| Gate | Required | Measured |
+|---|---|---|
+| INCORRECT_SUCCESSFUL over 752 runs | 0 | **0** |
+| SILENT_SEMANTIC_ERROR over 752 runs | 0 | **0** |
+| HARD_FAILURE over 752 runs | 0 | **0** |
+| CORRECT / DISCLOSED | ≥ 80% | **89.4%** (672 / 752) |
+| remainder HONEST_PARTIAL or SAFE_REFUSAL | all | **80 of 80** |
+| numeric findings reconciled | all | **6,856 / 6,856**, 0 mismatches |
+| nine canonical CFO questions, both books | all green | **18 / 18 `ok=True`**; 16 byte-identical, Q7 changed orientation to follow the question (§11.3) |
+| 30-question simple-MI bank | no change | **0 of 30 changed** |
+| 252-question calibration bank | green | **245 passed, 13 xfailed** |
+| named baseline suites (P1I, P1J-1, P1L, P1M, P1N, P1E, fabricated-population, analytical layer) | green | **green** |
+| full test suite | green | **9,061 passed, 0 failed** |
+| regressions into an unsafe class | none | **none** |
+| capabilities lost | none | **none** |
+
+### 14.4 Verdict
+
+The brief asked for better analytical-intent recognition without touching the
+deterministic analytics beneath it, and set the primary gate on safety rather
+than on coverage. Both were met, and the second was met by the first: the way
+the unsafe count reached zero was by routing questions to capabilities that
+already existed and refusing the ones nothing can answer — not by inferring
+more freely.
+
+What was actually built is small. One module that classifies and routes and
+computes nothing; four governed lending windows on an axis that already existed;
+two governed flags settled before routing; and one structural check that refuses
+an answer which does not carry what its question needs. No engine changed, no
+route was rewritten, no precedence was altered, and no test phrasing was added
+as a string patch.
+
+Three qualifications belong in the same breath as the result.
+
+**Three of the four route contentions this change created were caught by
+regression gates, not by inspection** (§9.1, §11.5). The 752-run bank found one;
+the full suite found two more, and both were live defects — a question answered
+in the wrong unit and a route that failed outright. That is the strongest
+argument in this report for running every gate rather than the ones that looked
+relevant, and it is an argument about my own reliability, not the product's.
+
+**Q1.3 is a real cost.** *"How does recent lending compare with what we were
+originating earlier in the year?"* was a silent wrong answer before and is a
+stated refusal in 13 of 20 runs now. Safer, and not a correct answer.
+
+**Two capability gaps are named rather than closed** (§14.2): a pipeline stock
+question with no forward element, and a count-based run rate. Both refuse
+honestly; both would need new plan surface or new analytics, which the brief put
+out of scope.
+
+ANALYTICAL INTENT V1: PASS
