@@ -3465,6 +3465,15 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
     metric = getattr(spec, "metric", None)
     if not metric:
         return named
+    # A MEASURE SET carries a statistic per measure, and the one the question
+    # names belongs to the measure it modifies — "balance, loan count and
+    # weighted average LTV" asks for a weighted average of the LTV, not of the
+    # balance. Forcing the question-level statistic onto whichever measure
+    # happens to be primary refused a question that answers correctly. P1E
+    # already guards that no measure is dropped, and the statistic facet still
+    # checks identity across the whole executed set.
+    if len([m for m in (getattr(spec, "measures", None) or []) if m.get("field")]) > 1:
+        return named
     entry = ((semantics or {}).get("fields") or {}).get(metric) or {}
     if _statistic.satisfies(named, getattr(spec, "aggregation", None)):
         return named

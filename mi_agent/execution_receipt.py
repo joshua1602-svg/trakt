@@ -40,6 +40,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
+from . import statistic as _statistic
+
 # --------------------------------------------------------------------------- #
 # Vocabulary
 # --------------------------------------------------------------------------- #
@@ -89,6 +91,19 @@ KIND_CONTRIBUTION = "aggregate_contribution"
 #: ok=True and a spec that still claimed the filter. Presence of the filter on
 #: the spec is NOT evidence it ran; only execution evidence is.
 KIND_POPULATION = "row_population"
+
+#: P1M. The STATISTIC the question asked for — the median, the average, the
+#: weighted average. Distinct from the MEASURE (which quantity) and from the
+#: POPULATION (which rows): a question can name the right measure over the right
+#: rows and still be answered with the wrong statistic.
+#:
+#: This facet exists because the statistic was the one axis of a question that
+#: nothing reconciled. "What is the median LTV?" returned 43.1562 — the weighted
+#: average — against a true median of 39.6757, with ok=True and no warning,
+#: because the registry does not permit a median for LTV and the request was
+#: quietly rounded to the statistic that was permitted. Presence of an
+#: aggregation on the spec is NOT evidence that the requested statistic ran.
+KIND_STATISTIC = "requested_statistic"
 
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
@@ -784,6 +799,12 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
             kind=KIND_MULTI_MEASURE,
             label="more than one measure (" + _join(concepts) + ")",
             concepts=tuple(concepts)))
+    requested_statistic = _statistic.statistic_named(question)
+    if requested_statistic:
+        facets.append(RequestedFacet(
+            kind=KIND_STATISTIC,
+            label=f"the {_statistic.label(requested_statistic)}",
+            concepts=(requested_statistic,)))
     for slot in _unresolved_measure_slots(q, semantics, frame):
         # LOST at construction: the parser never resolved these words, so no
         # execution could have honoured them and there is no evidence to weigh.
@@ -901,8 +922,13 @@ class ExecutionReceipt:
         # the funded balance?") as low, and printing a caveat on answers that are
         # unambiguously right would train readers to ignore it, which is worse
         # than not printing it. The raw value stays in the structured summary.
+        # P1M: the statistic facet is raised by the word "average", so it is
+        # present on almost every measure question. Counting it here would print
+        # the caveat on exactly the plain KPI answers this test exists to keep it
+        # off, so it does not qualify as a scope-related facet.
+        scope_facets = [f for f in self.facets if f.kind != KIND_STATISTIC]
         if (self.parser_confidence and self.parser_confidence != "high"
-                and self.facets):
+                and scope_facets):
             line += (f" Interpretation confidence: {self.parser_confidence} — "
                      "check the scope above matches your question.")
         return line
@@ -997,6 +1023,9 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # Dropping the population changes WHICH ROWS were counted, so it changes
     # every number in the answer. It can never be a partial disclosure.
     KIND_POPULATION,
+    # A substituted statistic IS the number. There is no version of "here is the
+    # weighted average, you asked for the median" that is a partial answer.
+    KIND_STATISTIC,
 })
 #: Facets that change the SHAPE of a still-valid answer. A partial answer is
 #: acceptable provided the unhonoured facet is named.
@@ -1037,6 +1066,24 @@ def _comparison_ops_applied(spec) -> int:
     return n
 
 
+def executed_statistics(query_result: Any) -> List[str]:
+    """The statistics execution reports having run.
+
+    Read from the executor's declared measure set where there is one, and
+    otherwise from the aggregation the executor published for the branch it
+    dispatched on. Never from the question, and never from the field's default —
+    those are the two things the request has to be checked AGAINST.
+    """
+    meta = getattr(query_result, "metadata", None) or {}
+    executed = [str((m or {}).get("aggregation") or "")
+                for m in (meta.get("measures_executed") or [])]
+    executed = [e for e in executed if e]
+    if executed:
+        return executed
+    published = meta.get("aggregation")
+    return [str(published)] if published else []
+
+
 def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                      semantics: dict, available_columns: Optional[Iterable[str]] = None,
                      route: Optional[str] = None,
@@ -1066,7 +1113,22 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     comparison_ops = _comparison_ops_applied(spec)
     thresholds_seen = 0
 
+    ran = executed_statistics(query_result)
     for facet in facets:
+        if facet.kind == KIND_STATISTIC:
+            requested = (facet.concepts or (None,))[0]
+            if _statistic.satisfied_by_any(requested, ran):
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                # REJECTED, not LOST: the statistic was considered and a
+                # different one ran, which is a reason the reader can be given.
+                # It still refuses — a statistic is never a partial disclosure.
+                facet.status = REJECTED
+                facet.reason = (
+                    f"{facet.label} was requested; the calculation ran "
+                    + _join([_statistic.label(r) for r in ran] or ["nothing"])
+                    + " instead, and no substitute has been presented as the answer")
+            continue
         if facet.kind == KIND_GEOGRAPHIC_SCOPE:
             if narrowed and any(facet.label.lower() in v or v in facet.label.lower()
                                 for v in values):
