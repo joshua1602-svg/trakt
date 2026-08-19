@@ -474,3 +474,39 @@ class TestOperationCoverage:
         question = self.REACHES[operation]
         assert operation in intent_mod.classify(question).operations, (
             f"{operation} is declared but no question reaches it")
+
+
+class TestForwardQuestionOwnership:
+    """Three forward questions look like "what will the balance be" and are not.
+    Each already has an owner that solves it properly, and answering any of them
+    with a projected balance is a different number to a different question."""
+
+    def _plan(self, question, spec=None):
+        from mi_workflows.analytical import planner as planner_mod
+
+        return planner_mod.plan_for(question, spec=spec)
+
+    def test_a_named_monetary_target_stays_with_the_forecast_route(self):
+        """"What conversion do we need to reach £50m?" is an inverse solve
+        against the completion run-rate, not a projected balance."""
+        spec = _Spec()
+        spec.forecast_target_value = 50_000_000.0
+        assert self._plan("What conversion do we need to reach £50m funded "
+                          "balance?", spec=spec) is None
+
+    def test_a_what_if_stays_with_the_scenario_route(self):
+        assert self._plan(
+            "If our completed conversion rate increased by 10%, what is the "
+            "impact on the time to reach £50m funded balance?") is None
+
+    def test_a_plain_projected_balance_is_still_composed(self):
+        """The one forward question this plan DOES own: no target, no
+        conditional, no date."""
+        for question in (
+                "What do we expect the funded book to grow to based on the "
+                "current pipeline?",
+                "If the current pipeline converts as expected, what will our "
+                "funded balance be?"):
+            plan = self._plan(question)
+            assert plan is not None, question
+            assert plan.intent == "funded_balance_outlook"

@@ -382,6 +382,39 @@ def _plan_pipeline_offer_outlook(question, text, spec, frame, semantics, reading
         ))
 
 
+def _forecast_route_owns(question, spec, reading) -> bool:
+    """Whether the forecast or scenario route already owns this forward question.
+
+    This plan answers ONE forward question: given the pipeline, what will the
+    funded balance BE. Three neighbouring questions look like it and are not it,
+    and each already has an owner that solves it properly:
+
+    * **a what-if** — "if conversion improved by 10%, ..." — is the ``scenario``
+      route, which perturbs the run-rate and re-solves;
+    * **a named monetary TARGET** — "...to reach £50m" — is a milestone or an
+      inverse solve ("what conversion do we need"), which
+      ``forecast_extrapolation`` computes against the completion run-rate;
+    * **a DATE** — "how long until we reach £100m?" — is the same route's
+      milestone solve.
+
+    All three would be answered here with a projected balance, which is a
+    different number answering a different question. Asked of the owning
+    recognisers and of the governed parse rather than of a copy of their
+    vocabularies, so the four cannot drift apart.
+    """
+    if getattr(spec, "forecast_target_value", None) is not None:
+        return True
+    if (intent_mod.OP_MILESTONE in reading.operations
+            or intent_mod.OP_HORIZON in reading.operations):
+        return True
+    try:
+        from mi_agent_api import chat_routing as _routing
+
+        return bool(_routing._is_scenario(question))
+    except Exception:  # noqa: BLE001 - if we cannot ask, we do not defer
+        return False
+
+
 def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
                                  ) -> Optional[AnalyticalPlan]:
     """Q: given the pipeline, what is the forecast funded balance?"""
@@ -393,13 +426,7 @@ def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
         return None
     if _any(text, ("run rate", "run-rate")):
         return None  # the run-rate route owns this
-    # A MILESTONE is a different question from a PROJECTED VALUE. "How long
-    # until we reach £100m?" wants a DATE, and `forecast_extrapolation` solves
-    # for it against the completion run-rate; this plan produces a balance. The
-    # two are not interchangeable, and answering one with the other is the
-    # route contention this layer exists to prevent rather than create.
-    if (intent_mod.OP_MILESTONE in reading.operations
-            or intent_mod.OP_HORIZON in reading.operations):
+    if _forecast_route_owns(question, spec, reading):
         return None
     return AnalyticalPlan(
         intent=INTENT_FUNDED_BALANCE_OUTLOOK,
