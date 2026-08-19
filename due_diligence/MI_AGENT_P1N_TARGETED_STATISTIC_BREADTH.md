@@ -196,14 +196,20 @@ P1N statistic breadth · full mi_agent suite
 
 `tests/test_p1n_statistic_breadth.py` adds **49** tests.
 
-Two existing tests were updated where a **ruling** changed their premise, not their invariant:
+Three existing tests were updated where a **ruling** changed their premise, not their invariant:
 
 | Test | Why | Change |
 |---|---|---|
 | `test_a_metric_with_no_governed_weighted_average_is_rejected` (P1D) | used borrower age as the measure with no weighted average — P1N grants it one by ruling | moved to balance, where weighting a measure by itself stays degenerate |
 | `test_extreme_value_questions_keep_their_existing_governed_behaviour` (P1M) | pinned "maximum LTV" as a refusal, correct when no statistic could express an extreme | now asserts the governed extreme reconciles to the fixture |
+| `test_catalogue_exposes_real_semantic_layer` (API) | enumerates the published aggregation contract so a new one is never accidental | contract now names `min`/`max`, with the statistic-vs-ranking note |
 
-Neither weakens a refusal; both record the reasoning in place.
+None weakens a refusal; each records the reasoning in place.
+
+Worth stating plainly: **every one of these was found by the repository's own suites, not by my
+tests.** The ranking-table collapse, the grouped-superlative case, the P1D premise and the
+catalogue contract all passed my P1N bank while the code was wrong. The focused bank, both
+regression banks and the P-gates were green when the first full suite found the last of them.
 
 ## 10. Commercial Beta bank
 
@@ -229,7 +235,20 @@ No churn. The bank was not touched and this phase is not justified by it.
 
 ## 12. Full repository suite
 
-See §14 — reported from the definitive run.
+Definitive run, against the corrected code:
+
+```
+8,833 passed, 30 skipped, 21 xfailed, 48 warnings, 6 subtests passed
+0 failed                                        in 1769.35s (0:29:29)
+```
+
+Baseline at `abb9cad` (P1M) was 8,784 passed; the increase is the 49 tests P1N adds. No test was
+deleted, skipped or weakened.
+
+The first run of this suite failed 1 — `test_catalogue_exposes_real_semantic_layer`, which
+enumerates every governed aggregation precisely so that a new one is *"a deliberate addition to
+it, never an accident"*. It did its job: `min`/`max` are that deliberate addition, so the
+published contract now names them. This run is against the fix.
 
 ## 13. Remaining statistic decisions
 
@@ -251,4 +270,4 @@ See §14 — reported from the definitive run.
 
 ---
 
-P1N TARGETED STATISTIC BREADTH: PENDING FULL SUITE
+P1N TARGETED STATISTIC BREADTH: PASS
