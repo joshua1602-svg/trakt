@@ -320,3 +320,89 @@ changed. The full production diff:
 test that parses every module in the analytical package and fails on a `pandas`
 or `numpy` import covers it.
 
+## 11. Regression — the WIN-WIN rule
+
+The rule is that improving analytical recognition must not break a capability
+that already worked. Four independent checks, all run on the final tree.
+
+### 11.1 The named baseline suites
+
+| Suite | Result |
+|---|---|
+| `tests/test_analytical_capability_layer.py` | 90 passed |
+| `tests/test_fabricated_population.py` | passed |
+| `tests/test_p1i_scope_resolution.py` (governed scope) | passed |
+| `tests/test_p1j1_vintage_seasoning.py` (vintage / seasoning) | 53 passed |
+| `tests/test_p1l_population_propagation.py` | passed |
+| `tests/test_p1m_statistic_identity.py` | passed |
+| `tests/test_p1n_statistic_breadth.py` | passed |
+| `tests/test_p1e_golden_bank.py` | passed |
+| `mi_agent/tests/test_mi_calibration_bank.py` (252-question bank) | 245 passed, 13 xfailed |
+| `tests/test_analytical_intent_boundary.py` (**new**) | 81 passed |
+| **Combined focused run** | **757 passed, 13 xfailed** |
+
+### 11.2 The 30-question simple-MI bank
+
+**0 of 30 answers changed** — route, `ok` and answer text byte-identical to the
+frozen baseline, including the two that legitimately refuse.
+
+### 11.3 The nine canonical CFO questions, both books
+
+**8 of 9 byte-identical on each book**, and all nine `ok=True`. The ninth is Q7,
+and it changed on purpose.
+
+> *"How does the risk profile of older vintages compare with the front book?"*
+>
+> | | subject | comparand |
+> |---|---|---|
+> | baseline | Front Book | Back Book |
+> | V1 | **Back Book** | **Front Book** |
+>
+> Same two governed populations, same row counts, same figures — Alderbridge
+> 43.97% vs 34.71% weighted-average LTV, Kestrelmoor 39.16% vs 29.14%. Only the
+> **orientation** moved, and it moved to follow the question: *older vintages* is
+> the subject of that sentence and the front book is what it is compared with.
+>
+> Before this work, *"older vintages"* was not recognised as a governed
+> population at all, so the pair was assembled from *"front book"* alone and the
+> binary partition supplied the other side — which put the two sides in the
+> opposite order to the sentence and reported every delta with the opposite sign.
+> `test_q7_compares_the_two_governed_sides_and_reconciles` now asserts the
+> question's own orientation.
+>
+> This is reported as a **change, not a silent improvement**, because §10
+> requires trade-offs to be surfaced. It is not a trade: nothing was lost.
+
+### 11.4 A 79-question sweep, baseline against V1, same data
+
+Run through the production `POST /mi/query` entrypoint on the *same* checkout,
+switching only the code under test, and deliberately weighted toward the
+territory this change could disturb — seasoning populations, evolution series,
+concentration language, pipeline stages, provenance comparisons, plain
+point-in-time MI.
+
+**76 of 79 identical. 3 changed, all in the product's favour, none a loss.**
+
+| Question | Baseline | V1 |
+|---|---|---|
+| *"How has the front book changed?"* | `period_change_analysis` **refused** — the front-book population could not be applied | **answered**, population honoured, 1,177 loans, £175.4m → £171.7m |
+| *"How has the back book changed over the last few months?"* | `period_change_analysis` **refused** — same cause | **answered**, 9,858 loans, £1.75bn → £1.79bn |
+| *"How many cases are at offer?"* | generic executor: **"11,035 loans"** | **controlled refusal** — a pipeline question, and the funded tape is not the pipeline |
+
+The third is the fail-closed rule working on a question **that is not in the
+44-variation bank at all** — independent evidence that it generalises rather
+than fitting the test set.
+
+### 11.5 One capability that was nearly traded, and was not
+
+An intermediate build claimed *"Show the balance evolution for the front book"*
+for the analytical layer and answered it with a two-snapshot movement. The
+`evolution` route had been answering it as a **three-period series**, scoped to
+the population — and a movement between two snapshots is *less* than a series.
+
+That is exactly the trade §10 forbids, so it was not accepted. The planner now
+asks the evolution route's **own recogniser** whether it owns the question, and
+stands down when it does. The deference lifts when a composition is also asked
+for, because a single-measure series does not carry what the book is made of.
+Four tests hold the boundary in place.
+

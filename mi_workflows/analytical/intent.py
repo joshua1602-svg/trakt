@@ -476,9 +476,17 @@ def lending_role(text: str, families: Sequence[str]) -> Optional[str]:
     ORIGINATED-IN-PERIOD context makes it an ORIGINATION FLOW. Resolved from
     analytical context, never from the sentence.
 
-    Returns ``None`` when the context settles neither. That is a real outcome,
-    not a failure: an unresolved role means no population may be created, and
-    the boundary's fail-closed rule then applies rather than a guess.
+    The FLOW test runs first and is the narrow one: a window named alongside a
+    rate, a volume or an amount-originated-in-a-period is a measure of what was
+    written, and narrowing the book to it would answer a different question.
+    Everything else is a population, because a named origination window IS a
+    cohort of loans — that is what the words mean when nothing reframes them.
+
+    ``None`` is returned only when the caller passes no window at all; callers
+    ask this question only when one was named. It is kept in the signature
+    because an unresolved role must mean "create no population", and a caller
+    reading a role should never have to distinguish "no window" from "a window
+    whose role I guessed".
     """
     if _any(text, _ORIGINATION_FLOW_TERMS) or _any(text, _RUN_RATE_TERMS):
         return ROLE_FLOW
