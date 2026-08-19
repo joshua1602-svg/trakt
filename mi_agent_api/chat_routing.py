@@ -53,6 +53,7 @@ from .recogniser_registry import (
 
 from mi_workflows import concentration_analysis as conc_mod
 from mi_workflows import portfolio_risk_comparison as prc_mod
+from mi_workflows.analytical import route as analytical_mod
 from mi_workflows.semantics import load_business_semantics
 
 from trakt_core.portfolio import (
@@ -2547,6 +2548,18 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
     resolution on the common path for no decision.
     """
     registry.extend([
+        # 0. The ANALYTICAL CAPABILITY LAYER. Registered first, and at a higher
+        #    confidence, because a question whose answer is two or more governed
+        #    capabilities must not be answered in part by whichever single
+        #    capability below happens to match it first. Safe to put here only
+        #    because its recognition is strict: it matches ONLY when the
+        #    deterministic planner composes a multi-capability plan, and the
+        #    planner declines every question a route below already owns
+        #    (mi_workflows/analytical/planner.py). Its handler also returns None
+        #    when a plan produces nothing computable, so a book missing the data
+        #    a plan needs falls through to exactly the behaviour it had before.
+        analytical_mod.recogniser(),
+
         # 1. What-if / scenario perturbs the run-rate and re-solves the
         #    milestone. Returns None when the magnitude cannot be quantified, so
         #    it falls through to forecast / conversion.
@@ -2762,6 +2775,7 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               parsed: Optional[Any] = None,
               registry: Optional[RecogniserRegistry] = None,
               capability_resolver: Optional[Callable[[Optional[str]], Any]] = None,
+              base_frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None,
               ) -> Optional[Dict[str, Any]]:
     """Route a question to a governed capability, or return ``None`` to defer to
     the point-in-time MI Agent path.
@@ -2802,6 +2816,7 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         pipeline_root=pipeline_root, history_model=history_model,
         history_model_provider=history_model_provider, as_of=as_of,
         source_lens=source_lens, frame_resolver=frame_resolver,
+        base_frame_resolver=base_frame_resolver,
         parse_meta=parsed.meta, semantics_context=parsed.semantics_context)
 
     # The governed scope this request runs in, resolved lazily and AT MOST ONCE

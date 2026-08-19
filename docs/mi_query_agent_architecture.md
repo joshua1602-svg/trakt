@@ -860,7 +860,7 @@ from code.
    resolves each through the same `resolve_capability_state` — the multi-
    capability orchestration lives in the workflow layer, not here.
 
-### What was deliberately NOT done
+### What was deliberately NOT done *(at the time this section was written)*
 
 No period-change analysis, portfolio risk comparison, covenant headroom, driver
 attribution, explanatory workflows, workflow planner, materiality logic,
@@ -868,3 +868,40 @@ comparison engine or multi-capability orchestration. Routing dispatches to **one
 deterministic capability** and stops. The confidence field, the metadata slot and
 the semantics context are all *inert* today — carried, never interpreted — which
 is what keeps them free of assumptions the real registry would contradict.
+
+---
+
+## 12. The analytical capability layer
+
+Step 3 above has since been taken, and taken as described: **registration, not
+restructuring.** `mi_workflows/analytical/` composes two or more governed
+deterministic capabilities into one answer, and registers through the existing
+registry with no change to it.
+
+```mermaid
+flowchart LR
+  Q["question"] --> PL["planner<br/>which capabilities, and why"]
+  PL --> RG["capability registry<br/>validate declared inputs"]
+  RG --> EX["EXISTING deterministic engines"]
+  EX --> F["structured findings<br/>value · population · period · evidence"]
+  F --> N["narrative"]
+  F --> R["execution receipt"]
+```
+
+| | |
+|---|---|
+| Route | `analytical_composition`, priority 5, confidence 0.8, `lens_aware` |
+| Capabilities | ten, declared in `mi_workflows/analytical/registry.py`, each naming the engine it delegates to |
+| Owns a calculation? | **No.** A test parses every module in the package and fails if one imports `pandas` or `numpy` |
+| Engages when | the deterministic planner composes **two or more** capabilities |
+| Declines when | a single existing route owns the question (`AnalyticalCapability.route_owner`), or a plan produces nothing computable — the handler then returns `None` and the question falls through unchanged |
+| LLM role | may PROPOSE a plan (`planner.plan_from_proposal`); the proposal is validated against the registry and rejected whole on an unknown capability, a missing input or a population the question never named. It never calculates |
+| Governance | populations go through `mi_agent.population.apply_population`; every plan is checked by `mi_agent.population.fabricated_concepts` before any data is read; the route publishes `metadata.analyticalComposition`, which `execution_receipt.analytical_evidence` reconciles the question's facets against |
+
+**File ownership.** Planning and deference belong in
+`mi_workflows/analytical/planner.py`; a capability declaration in
+`registry.py`; an adapter over an existing engine in `executors.py`; the answer
+shape in `route.py`. A new analytical capability is a declaration plus an
+adapter — no change to routing, the receipt or the parser.
+
+Evidence: `due_diligence/MI_AGENT_ANALYTICAL_CAPABILITY_LAYER.md`.

@@ -38,7 +38,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import (
+    Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple,
+)
 
 from . import statistic as _statistic
 
@@ -1530,6 +1532,7 @@ _ROUTE_LABELS = {
     "scenario": "Scenario projection",
     "cohort_progression": "Cohort progression",
     "cohort_conversion": "Cohort conversion",
+    "analytical_composition": "Composed governed capabilities",
 }
 
 
@@ -1561,6 +1564,50 @@ def comparison_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
     declared = (envelope.get("metadata") or {}).get("portfolioComparison")
     return declared if isinstance(declared, dict) else {}
+
+
+def _analytical_narrowed_to(evidence: Mapping[str, Any],
+                            facet: "RequestedFacet") -> bool:
+    """Did the analytical plan narrow to the value this facet names?
+
+    Matched on the VALUE the plan declares it filtered on, because the field a
+    facet resolves to and the field a plan narrowed on can be two names for the
+    same geography (obligor vs collateral). A row count is required: a predicate
+    that selected nothing has not scoped the answer to anything.
+    """
+    wanted = str(facet.label or "").strip().lower()
+    if not wanted:
+        return False
+    for entry in evidence.get("narrowedTo") or ():
+        if not isinstance(entry, Mapping) or not entry.get("rows"):
+            continue
+        if str(entry.get("value") or "").strip().lower() == wanted:
+            return True
+    return False
+
+
+def analytical_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What the ANALYTICAL CAPABILITY LAYER declares it actually computed.
+
+    Returns ``{}`` for every other route, so nothing about their reconciliation
+    changes. Where the block IS present it is stronger evidence than route
+    membership: a composite plan compares periods, projects forward or splits a
+    book by cohort only for the questions that asked it to, so route identity
+    could not tell those apart — and a route set that claimed all three for
+    every analytical answer would weaken the guard rather than satisfy it.
+
+    Only a block naming the plan and its capabilities is accepted. A claim
+    without them cannot be checked against what the question asked for, which is
+    the standard the other readers here already hold routes to.
+    """
+    if not isinstance(envelope, dict):
+        return {}
+    block = (envelope.get("metadata") or {}).get("analyticalComposition")
+    if not isinstance(block, dict):
+        return {}
+    if not block.get("intent") or not block.get("capabilities"):
+        return {}
+    return block
 
 
 _PROPORTION_IN_ANSWER_RE = re.compile(
@@ -1695,6 +1742,7 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
     columns = set(available_columns or ())
     ranked = ranking_evidence(envelope)
     compared = comparison_evidence(envelope)
+    analytical = analytical_evidence(envelope)
     fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
     listing = route in LISTING_ROUTES
 
@@ -1733,7 +1781,18 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                                 "the book the figure represents")
 
         elif facet.kind == KIND_GEOGRAPHIC_SCOPE:
-            if listing:
+            if analytical:
+                # A composite plan may answer a two-place question by measuring
+                # BOTH places as governed populations. Proven from the row
+                # predicates it declares it narrowed to, with their row counts —
+                # a claim without a narrowed population is still lost.
+                if _analytical_narrowed_to(analytical, facet):
+                    facet.status, facet.reason = APPLIED, ""
+                else:
+                    facet.status = LOST
+                    facet.reason = ("this analytical plan did not narrow to "
+                                    f"{facet.label}")
+            elif listing:
                 facet.status = UNSUPPORTED
                 facet.reason = ("this answer covers every region rather than "
                                 f"narrowing to {facet.label}")
@@ -1755,7 +1814,17 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                                 "run, so this figure is unstressed")
 
         elif facet.kind == KIND_COMPARISON_PERIOD:
-            if route in TEMPORAL_ROUTES:
+            if analytical:
+                # Proven per answer: the layer names the two reporting dates it
+                # compared, so a plan that ran point-in-time capabilities only
+                # is still reported as losing the facet.
+                if len(analytical.get("periodsCompared") or ()) >= 2:
+                    facet.status, facet.reason = APPLIED, ""
+                else:
+                    facet.status = LOST
+                    facet.reason = ("this analytical plan measured one point in "
+                                    "time; no period comparison was calculated")
+            elif route in TEMPORAL_ROUTES:
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = LOST
@@ -1763,7 +1832,14 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                                 "comparison was calculated")
 
         elif facet.kind == KIND_PROJECTION:
-            if route in PROJECTION_ROUTES:
+            if analytical:
+                if analytical.get("projected"):
+                    facet.status, facet.reason = APPLIED, ""
+                else:
+                    facet.status = LOST
+                    facet.reason = ("this analytical plan ran no forward "
+                                    "projection")
+            elif route in PROJECTION_ROUTES:
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = LOST
@@ -1772,8 +1848,10 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
 
         elif facet.kind == KIND_COHORT_COMPARISON:
             wanted = tuple(facet.concepts or ())
-            executed_concept = (compared.get("cohortConcept")
-                                if compared else None)
+            executed_concept = ((analytical.get("cohortConcept") if analytical
+                                 else None)
+                                or (compared.get("cohortConcept")
+                                    if compared else None))
             if wanted and executed_concept and executed_concept not in wanted:
                 # SEMANTIC IDENTITY on the routed path. The comparison route
                 # splits the book by how loans were SOURCED; a question about
@@ -1806,6 +1884,17 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                                     "nothing was measured about the difference")
                 else:
                     facet.status, facet.reason = APPLIED, ""
+            elif analytical:
+                # The layer states the populations it compared and the measures
+                # it compared them on. Both are required: two populations with
+                # nothing measured about the difference is not a comparison.
+                if (len(analytical.get("populationsCompared") or ()) >= 2
+                        and analytical.get("measuresCompared")):
+                    facet.status, facet.reason = APPLIED, ""
+                else:
+                    facet.status = LOST
+                    facet.reason = ("this analytical plan did not compare two "
+                                    "governed populations on a measure")
             elif route in COHORT_ROUTES:
                 facet.status, facet.reason = APPLIED, ""
             else:
@@ -1830,6 +1919,18 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.status = UNAVAILABLE
                 facet.reason = ("not compared for these books: "
                                 + _join([str(f) for f in not_compared]))
+
+        elif facet.kind in (KIND_MULTI_MEASURE, KIND_RELATIONSHIP) and analytical:
+            # A composite plan CAN express one measure relative to another: it
+            # measures both sides and states the difference between them. Proven
+            # from the comparison it declares, never from route identity.
+            if (analytical.get("measuresCompared")
+                    and len(analytical.get("populationsCompared") or ()) >= 2):
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = UNSUPPORTED
+                facet.reason = ("this analytical plan produced a single measure, "
+                                "so the full question was not expressed")
 
         elif facet.kind in (KIND_MULTI_MEASURE, KIND_RELATIONSHIP):
             facet.status = UNSUPPORTED

@@ -73,8 +73,15 @@ class TestRegistration:
             < names.index("period_movement")
 
     def test_existing_route_order_is_preserved(self):
-        """Adding the workflow must not reorder the migrated chain."""
-        workflow_routes = {prc.WORKFLOW_ID, "concentration_analysis"}
+        """Adding the workflow must not reorder the migrated chain.
+
+        Workflow-layer routes register above the chain and are excluded here;
+        what is asserted is that the twelve migrated routes keep their relative
+        order, which is what decides how a question the old chain answered is
+        answered now.
+        """
+        workflow_routes = {prc.WORKFLOW_ID, "concentration_analysis",
+                           "analytical_composition"}
         names = [n for n in REGISTRY.names() if n not in workflow_routes]
         assert names == [
             "scenario", "cohort_conversion", "forecast_extrapolation",

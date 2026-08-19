@@ -710,7 +710,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             source_lens=req.source_portfolio_lens or None,
             frame_resolver=_population_frame,
             extra_filters=req.filters or None,
-            parsed=parsed)
+            parsed=parsed,
+            base_frame_resolver=_routed_frame)
         if isinstance(routed, dict) and _population_evidence:
             routed.setdefault("metadata", {})["populationApplied"] = dict(
                 _population_evidence)
@@ -799,6 +800,10 @@ _RUN_SCOPED_ROUTES = {
     # Period Change Analysis resolves and compares two governed snapshots, so
     # the run it closed on is genuinely part of the answer.
     "period_change_analysis",
+    # The analytical capability layer composes dated snapshots and the weekly
+    # pipeline extract, so the run it closed on is part of the answer for the
+    # same reason.
+    "analytical_composition",
 }
 
 
