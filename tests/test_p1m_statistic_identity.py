@@ -184,22 +184,45 @@ def test_a_permitted_statistic_is_resolved_and_executed():
     assert spec.aggregation == "median"
 
 
+_MEDIAN_DENIED = ("Aggregation 'median' not allowed for metric "
+                  "'current_loan_to_value' (allowed: ['avg', 'distribution', "
+                  "'weighted_avg'])")
+
+
 def test_an_ungoverned_statistic_is_not_a_repairable_parse_error():
     """Why the LLM path shipped it: repair could only satisfy the error by
     asking for a different statistic, and the repaired spec then validated."""
-    assert _statistic_not_permitted(
-        ["Aggregation 'median' not allowed for metric 'current_loan_to_value' "
-         "(allowed: ['avg', 'distribution', 'weighted_avg'])"])
+    assert _statistic_not_permitted([_MEDIAN_DENIED], "median")
     assert not _statistic_not_permitted(
-        ["Canonical column 'x' (for semantic field 'y') not present"])
+        ["Canonical column 'x' (for semantic field 'y') not present"], "median")
 
 
 def test_one_ungoverned_statistic_is_enough_to_stop_repair():
     """`any`, not `all`: fixing the other errors would still leave a spec that
     can only become valid by substituting the statistic."""
-    assert _statistic_not_permitted([
-        "some other validation problem",
-        "Aggregation 'median' not allowed for metric 'current_loan_to_value'"])
+    assert _statistic_not_permitted(
+        ["some other validation problem", _MEDIAN_DENIED], "median")
+
+
+def test_repair_is_allowed_when_the_model_invented_the_statistic():
+    """The discriminator, and the reason a blanket rule was wrong.
+
+    "Weighted ltv by region" asks for a weighted average. A model that returns a
+    SUM on a percent metric has simply got it wrong, and a repair can only move
+    the spec back towards what was asked for. Blocking repair there withheld a
+    correct answer to protect a statistic the user never requested.
+    """
+    invented = ("Aggregation 'sum' not allowed for metric "
+                "'current_loan_to_value' (allowed: ['avg', 'weighted_avg'])")
+    assert not _statistic_not_permitted([invented], "weighted_avg")
+    assert not _statistic_not_permitted([invented], S.MEAN)
+    # ... but the same error blocks repair when the SUM is what was asked for.
+    assert _statistic_not_permitted([invented], "sum")
+
+
+def test_a_question_naming_no_statistic_never_blocks_repair():
+    """No named statistic means no statistic a repair could move away from."""
+    assert not _statistic_not_permitted([_MEDIAN_DENIED], None)
 
 
 # --------------------------------------------------------------------------- #

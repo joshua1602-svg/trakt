@@ -3240,15 +3240,41 @@ def _missing_column_only(errors: List[str]) -> bool:
     return bool(errors) and all(_MISSING_COL_MARK in e for e in errors)
 
 
-def _statistic_not_permitted(errors: List[str]) -> bool:
-    """True if any validation error is an ungoverned-statistic refusal.
+_AGG_REJECTED_RE = re.compile(r"Aggregation '([^']+)' not allowed for metric")
 
-    ``any``, not ``all``: a spec can fail for several reasons at once, and a
-    repair that fixed the others would still have to change the statistic to
-    become valid. Once the requested statistic is ungoverned, the honest outcome
-    is a refusal no matter what else is wrong with the spec.
+
+def _statistic_not_permitted(errors: List[str],
+                             requested: Optional[str] = None) -> bool:
+    """True if a validation error refuses the statistic THE USER ASKED FOR.
+
+    The distinction is the whole point. Two different specs fail with the same
+    validation error and deserve opposite treatment:
+
+      * "what is the median LTV?" -> the model asked for a median, the registry
+        does not govern one for LTV, and the only repair available is to ask for
+        a DIFFERENT statistic. That is the defect. Refuse.
+      * "weighted ltv by region" -> the model returned a sum on a percent metric.
+        The user asked for a weighted average; the model simply got it wrong, and
+        a repair can only move the spec back TOWARDS what was asked for. Repair.
+
+    So a permission error blocks repair only when the rejected statistic is the
+    one the question named. ``requested`` of None means the question named no
+    statistic, in which case no repair can move away from one.
+
+    ``any``, not ``all``: a spec can fail for several reasons at once, and fixing
+    the others would still leave a spec that can only become valid by
+    substituting the statistic.
     """
-    return any(_AGG_NOT_ALLOWED_MARK in e for e in (errors or []))
+    if not requested:
+        return False
+    for err in (errors or []):
+        if _AGG_NOT_ALLOWED_MARK not in err:
+            continue
+        match = _AGG_REJECTED_RE.search(err)
+        rejected = match.group(1) if match else None
+        if rejected is None or _statistic.satisfies(requested, rejected):
+            return True
+    return False
 
 
 def _repair_prompt(base_prompt: Dict[str, str], previous_json: str,
@@ -3834,7 +3860,7 @@ def parse_with_repair(
     # P1M. The question names a statistic the registry does not permit for the
     # measure. No amount of re-prompting can fix that without changing the
     # statistic, so the LLM is not asked: this refuses on the deterministic spec.
-    if _statistic_not_permitted(det_vr.errors):
+    if _statistic_not_permitted(det_vr.errors, det_statistic):
         spec, meta = _det_result("validation_failed",
                                  repair_skipped_reason="statistic_not_permitted")
         meta["status"] = ("the requested statistic is not governed for this "
@@ -3927,7 +3953,7 @@ def parse_with_repair(
         # and the repaired spec then validates cleanly and is returned as a
         # success — which is precisely how "median LTV" shipped a weighted
         # average. Stop here and let the refusal stand.
-        if spec is not None and _statistic_not_permitted(errors):
+        if spec is not None and _statistic_not_permitted(errors, llm_statistic):
             repair_skipped_reason = "statistic_not_permitted"
             break
 
@@ -3938,8 +3964,20 @@ def parse_with_repair(
     # fallback for the MI Agent: when the LLM call failed outright, or produced a
     # spec that does not validate, prefer a VALID deterministic parse over a
     # broken LLM one rather than erroring the whole query.
-    if det_vr.ok and repair_skipped_reason not in (
-            "missing_dataset_columns", "statistic_not_permitted"):
+    # The statistic block belongs to the USER'S request, not to the model's. If
+    # the LLM invented an impermissible aggregation ("sum" on a percent metric)
+    # for a question that asked for something else entirely, the deterministic
+    # parse still honours what was actually asked and must still answer — that is
+    # what the fallback is for. It is withheld only when the deterministic spec
+    # would NOT honour the statistic the question named, which is the case the
+    # blocker is about; a question whose own statistic is ungoverned has already
+    # refused above, before any model call.
+    _fallback_honours_request = (
+        repair_skipped_reason != "statistic_not_permitted"
+        or _statistic.satisfies(det_statistic,
+                                getattr(det_spec, "aggregation", None)))
+    if (det_vr.ok and repair_skipped_reason != "missing_dataset_columns"
+            and _fallback_honours_request):
         spec, meta = _det_result("deterministic_fallback")
         meta["llm"] = llm_meta
         meta["repair_skipped_reason"] = repair_skipped_reason
