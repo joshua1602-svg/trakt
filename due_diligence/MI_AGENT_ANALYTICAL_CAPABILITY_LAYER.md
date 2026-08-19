@@ -280,6 +280,14 @@ that the capability reads the book rather than a tuned assumption. No
 Alderbridge-specific constant, threshold, region, portfolio id or column exists
 anywhere in the layer.
 
+**Behaviour on a book with ONE retained snapshot** (a realistic onboarding
+state, tested by deleting the two earlier reporting dates from the second book):
+Q1 refuses with the real reason — *"Fewer than two governed reporting snapshots
+are retained for this book, so no movement can be measured"* — Q7 answers
+normally, because a point-in-time comparison needs no history, and Q8's plan
+produces nothing computable so the handler defers and the question falls through
+to exactly the refusal it had before this layer existed.
+
 **Behaviour with no pipeline at all** (the demonstration book as published):
 Q3 defers to the existing pipeline-view refusal, and Q9 refuses with the real
 reason — *"No governed pipeline source is available for this book, so a forecast
