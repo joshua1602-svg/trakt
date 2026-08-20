@@ -1,0 +1,183 @@
+# Semantic expectations for the ten traced questions.
+#
+# THE RULE THIS FILE IS WRITTEN UNDER
+# -----------------------------------
+# Each expectation is derived from TWO sources only: the question text, and the
+# governed definitions (config/client/pipeline_expected_funding.yaml,
+# config/mi/buckets.yaml seasoning block, and the six families / governed
+# operations declared in mi_workflows/analytical/intent.py). It is NOT derived
+# from what the agent resolved. Where the two disagree, THIS FILE STANDS and the
+# disagreement is reported; the expectation is never edited to match the agent.
+#
+# DISCLOSURE OF A WEAKNESS IN THIS CONTROL
+# ----------------------------------------
+# The brief asks that this file be written before reading the agent's
+# resolutions. It was not: the author had already read the ten traces while
+# investigating items 1-3, and cannot un-see them. That weakens this control and
+# the weakness is stated rather than papered over. Two things partly mitigate it:
+# every expectation below carries its DERIVATION, so a reader can check it
+# against the question text without reference to any agent output; and the file
+# does record disagreements (Q9.3) and tensions (Q1.1, Q1.2, Q7.2) rather than
+# agreeing throughout, which is what a bent fixture would do.
+# The durable fix is to author expectations at bank-definition time, before any
+# measurement runs — proposed as a change, not claimed as done.
+#
+# FIELDS
+#   family      : one or more of the six governed families
+#   operation   : one or more governed operations of those families
+#   population  : the row set the answer must be computed over, as a predicate
+#                 in governed terms
+#   period      : the reporting basis the answer must use
+#   derivation  : why, from the question text and the governed definitions
+#   tension     : a competing reading the question also supports, recorded
+#                 rather than resolved
+
+Q1.1:
+  question: How has the profile of our new lending changed over the last few months?
+  family: [MIX_PROFILE, MOVEMENT_TREND, VINTAGE_COHORT]
+  operation: [CHANGE, COMPOSITION]
+  population: "months_on_book <= 1"
+  period: two governed snapshots spanning several months
+  derivation: >-
+    "profile" names MIX_PROFILE; "changed" names MOVEMENT_TREND and the CHANGE
+    operation. "our new lending" names the governed NEW window, which the 2026-08
+    ruling fixes at L1M (config/mi/buckets.yaml seasoning.lending_windows.
+    new_max_months = 1). "over the last few months" qualifies the COMPARISON
+    WINDOW, not the population.
+  tension: >-
+    A reader could take "over the last few months" as qualifying the lending
+    rather than the window, which would make the population RECENT (L3M) or
+    wider. The governed ruling attaches the window to the noun phrase "new
+    lending", so L1M is the defensible reading — but the question is genuinely
+    ambiguous and a one-month population answering a "last few months" question
+    is a narrow reading of it.
+
+Q1.2:
+  question: Are we originating different types of loans now compared with a few months ago?
+  family: [MIX_PROFILE, MOVEMENT_TREND]
+  operation: [CHANGE, COMPOSITION]
+  population: "months_on_book <= 3"
+  period: two governed snapshots ~3 months apart
+  derivation: >-
+    "types of loans" names MIX_PROFILE; "compared with a few months ago" is a
+    comparison against a past period, i.e. CHANGE. The present-tense verb
+    "originating" names current origination, which the governed lending
+    vocabulary maps to the RECENT window (L3M).
+  tension: >-
+    "now" argues for the NEW window (L1M) rather than RECENT (L3M). The
+    vocabulary maps the verb to RECENT; the adverb points narrower. Recorded.
+
+Q3.1:
+  question: How much do we currently have at offer and how much of it is likely to complete?
+  family: [PIPELINE, FORECAST_PROJECTION]
+  operation: [STOCK, EXPECTED_COMPLETION]
+  population: "pipeline_stage == OFFER, latest weekly extract"
+  period: as at the latest pipeline extract
+  derivation: >-
+    "at offer" names the governed OFFER stage of the pipeline dataset; "how much
+    ... likely to complete" names EXPECTED_COMPLETION. Both halves are scoped to
+    OFFER by "of it".
+
+Q4.2:
+  question: How many loans are we completing at the moment?
+  family: [PIPELINE]
+  operation: [MOVEMENT, RUN_RATE]
+  population: "completions per unit time — a flow, not a stock"
+  period: a rate, therefore two or more observations
+  measure: count
+  expected_outcome: refusal
+  derivation: >-
+    "completing at the moment" names a rate of completion, which is PIPELINE
+    MOVEMENT/RUN_RATE. "How many" makes the measure a COUNT. No governed
+    capability produces a count run-rate — the completion run-rate capability
+    produces a currency rate only — so the correct outcome is a refusal, not a
+    figure in the wrong unit.
+
+Q6.2:
+  question: Where are we closest to our limits?
+  family: [LIMITS_CONCENTRATION]
+  operation: [HEADROOM, RANKING, STATUS]
+  population: "the governed limit schedule for the portfolio"
+  period: point in time, latest reporting date
+  derivation: >-
+    "limits" names the governed control, so LIMITS_CONCENTRATION; "closest to"
+    names HEADROOM and a RANKING over it. The population is the limit schedule,
+    not the loan tape.
+
+Q7.2:
+  question: Are older loans riskier than the loans we've originated recently?
+  family: [MIX_PROFILE, VINTAGE_COHORT]
+  operation: [COMPARISON, DIVERGENCE]
+  population: "seasoning_segment == Back Book  AGAINST  months_on_book <= 3"
+  period: point in time, latest reporting date
+  derivation: >-
+    "riskier" names the governed risk measures, so MIX_PROFILE; two origination
+    cohorts set against each other names VINTAGE_COHORT and COMPARISON. "older
+    loans" is the BACK BOOK (>L12M); "originated recently" is the RECENT window
+    (L3M). Subject first, comparand second, in the order the sentence names them.
+  tension: >-
+    These two windows are not complementary — BACK BOOK is >12 months and RECENT
+    is <=3 months, so loans originated 4-12 months ago are in NEITHER side. A
+    reader could reasonably expect BACK BOOK against FRONT BOOK, which partitions
+    the book exhaustively. The governed vocabulary gives RECENT for "originated
+    recently", so the delivered pair is defensible; the gap in coverage is real
+    and is not disclosed to the reader by the answer.
+
+Q8.3/provenance:
+  question: Are direct and acquired balances developing differently over time?
+  family: [MOVEMENT_TREND]
+  operation: [DELTA, TREND, COMPARISON]
+  population: "source_portfolio_type == direct  AGAINST  == acquired"
+  period: two or more governed snapshots
+  derivation: >-
+    "developing ... over time" names MOVEMENT_TREND with DELTA and TREND;
+    "differently" makes it a COMPARISON. The two populations are the governed
+    provenance lenses. Provenance is a fixed attribute, so membership does not
+    change between snapshots and a balance-movement reading is sound.
+
+Q8.3/seasoning:
+  question: Are the front book and the back book balances developing differently over time?
+  family: [MOVEMENT_TREND, VINTAGE_COHORT]
+  operation: [DELTA, TREND, COMPARISON, EVOLUTION]
+  population: "seasoning_segment == Front Book  AGAINST  == Back Book"
+  period: two or more governed snapshots
+  derivation: >-
+    As the provenance case, but the two populations are the governed seasoning
+    partition.
+  tension: >-
+    Seasoning membership is TIME-RELATIVE: a loan moves from front to back book
+    by ageing. The two snapshots therefore describe overlapping but different
+    row sets, and a balance-movement reading conflates membership change with
+    balance change. See item 3.
+
+Q8.3/dimension_value:
+  question: Are North West and Scotland balances developing differently over time?
+  family: [MOVEMENT_TREND]
+  operation: [DELTA, TREND, COMPARISON]
+  population: "collateral_geography == North West  AGAINST  == Scotland"
+  period: two or more governed snapshots
+  derivation: >-
+    As the provenance case, with two literal values of a governed dimension.
+    Geography is a fixed attribute, so membership is stable.
+
+Q9.3:
+  question: If the current pipeline converts as expected, what will our funded balance be?
+  family: [PIPELINE, FORECAST_PROJECTION]
+  operation: [PROJECT_VALUE, EXPECTED_COMPLETION]
+  population: "pipeline_stage in [KFI, APPLICATION, OFFER] — the OPEN pipeline"
+  period: funded balance at the latest reporting date, plus expected completions
+  # The population that must feed the HEADLINE figure, checked specifically.
+  # A composed answer that ALSO reports another population is not thereby
+  # correct: what matters is which row set produced the number the reader acts
+  # on.
+  headline_finding: forecast_funded_balance
+  headline_addend_population: "pipeline_stage in [KFI, APPLICATION, OFFER]"
+  headline_addend_value_expected_from: open-pipeline expectation
+  derivation: >-
+    "the current pipeline" that "converts as expected" is the set of cases that
+    have YET to convert. A case the extract already shows at COMPLETED has
+    converted; it is not part of a forward expectation, and the governed config
+    says so explicitly (config/client/pipeline_expected_funding.yaml
+    exclude_stages: [WITHDRAWN, COMPLETED]). The expected addend is therefore
+    the OPEN-pipeline expectation, and the forecast balance is the current
+    funded balance plus that figure.

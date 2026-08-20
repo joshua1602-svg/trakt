@@ -86,6 +86,17 @@ def capture(response: dict) -> dict:
         "llm": meta.get("llm") or {},
         "intent": plan.get("intent"),
         "capabilities": [c.get("capability") for c in (plan.get("calls") or [])],
+        # RECORDED, not derived later. The boundary's own classification and the
+        # plan it produced, captured at measurement time. Before this, a trace
+        # had to re-run intent.classify afterwards and assert it was a pure
+        # function of the question — an assertion, not a control. Now the run
+        # file carries what the running system actually decided.
+        "analyticalIntent": meta.get("analyticalIntent"),
+        "planCalls": [{"capability": c.get("capability"),
+                       "because": c.get("because"),
+                       "inputs": {k: (v.get("label") if isinstance(v, dict) and "label" in v else v)
+                                  for k, v in (c.get("inputs") or {}).items()}}
+                      for c in (plan.get("calls") or [])],
         "requiredKinds": plan.get("requiredKinds"),
         "planOrigin": plan.get("origin"),
         "composition": meta.get("analyticalComposition") or {},
