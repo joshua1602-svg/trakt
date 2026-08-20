@@ -1,12 +1,13 @@
 {
   "pack": "client_readiness",
   "separateFrom": "due_diligence/evidence/MANIFEST.json",
-  "generatedAtTree": "7142582",
+  "generatedAtTree": "f9c2c4a",
   "manifestNotes": {
     "immutableV1": "This pack is SEPARATE from the V1 manifest and shares no artefact with it. The V1 three-snapshot funded tapes, the twelve-week pipeline extracts and everything hashed against them are untouched; pipeline_fixture.py and the default path of second_book.build() still produce them byte-for-byte.",
     "notCommitted": "The artefacts below are reproduced from the generator, not stored. 211 MB raw / ~30 MB gzipped, and the repository already gitignores the V1 funded tapes on the same basis. A digest fails when the generator drifts; a committed copy silently diverges from it.",
     "supersetProperty": "The thirteen-month kestrelmoor funded history reproduces the V1 three cuts byte-for-byte. Any measurement that moves between the V1 fixture and this one is therefore attributable to the added history, not to a regenerated book.",
     "stressBook": "kestrelmoor carries a declining-KFI profile over the final thirteen weeks (intake 61 -> 21/week); alderbridge is stationary as the control.",
+    "noExpectedDrift": "Every production file hashed in the V1 manifest is either byte-identical in the working tree or pinned in productionSources here, at its current state. There is no open-ended 'expected drift' state: a V1 code+config file that matches neither is a verification failure. The V1 code+config hashes are NOT re-baselined \u2014 they record which code the V1 measurement ran against, and that claim stays true.",
     "manifestRepair": "three_axis.py, hashed in the V1 manifest, was extended IN PLACE during Tranche D to add an answer-type axis. The manifest was not updated, so V1 verification failed from commit c9ac20b onward and was not noticed because nothing ran the verifier automatically. Repaired additively: three_axis.py is restored to its hashed content and verifies, the extended instrument is tranche_d/three_axis_typed.py, and tests/test_evidence_manifest.py now runs both verifications in the suite. The relocated instrument reproduces the recorded det_post figures exactly \u2014 176 answer-type matches, 0 diverge, 740/752 semantic.",
     "groundTruth": "The pipeline generator's per-transition probabilities are chosen so the implied stage-to-funding rates equal the governed 0.20/0.45/0.75 exactly. They are recoverable from matured observations to within 0.001-0.027, which is what lets an empirical estimator be judged against truth rather than against itself."
   },
@@ -185,8 +186,106 @@
     {
       "group": "instrument",
       "path": "due_diligence/evidence/client_readiness/hash_fixture_pack.py",
-      "bytes": 9691,
-      "sha256": "18454e6cdb5ebf0da19f6459aef8e9d892091cf244bd0f771d09f9c0ec9b2c40"
+      "bytes": 12031,
+      "sha256": "15b86f85958b208ce83d0add0fb808c9d19a727f6f95cd118b96decf3e8d40f1"
+    }
+  ],
+  "productionSources": [
+    {
+      "group": "code+config",
+      "path": "config/mi/golden_questions/ere_mi_calibration_250.yaml",
+      "bytes": 217154,
+      "sha256": "ce56f10b47c0a4a2596c3f12d0ae1626cf3b901ba64d63112d32d708a7680ee9"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/answer_type.py",
+      "bytes": 8720,
+      "sha256": "79a1508404ef78390f904f6e437d7568ea63426f5c54d8dec4b3beb83d100aa5"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/build_mi_semantics_registry.py",
+      "bytes": 79780,
+      "sha256": "cf84b42887b56295ca5ee69a3ba4aa332b9295fba487e07f6d94cce99ca8ffd3"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/execution_receipt.py",
+      "bytes": 114072,
+      "sha256": "a1291047cd0e5f9d2bdfa98b29427e30297f463de1c1d1143ca80a44d2024c81"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/llm_query_parser.py",
+      "bytes": 214490,
+      "sha256": "8e1ee96c9d66723248da5c9e2e338d070c0057ca3cd4872416f2e3594e469e94"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/mi_calibration.py",
+      "bytes": 20569,
+      "sha256": "0fc94bf160611bbbe50955daabae26c333415c0784102d7d905e1eb7f8ecdb83"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/mi_query_executor.py",
+      "bytes": 76273,
+      "sha256": "474aa1d47b8b23d753ed4bb8f315a582c98dbcdc20747fb71e4c3972063fd98e"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/mi_semantics_field_registry.yaml",
+      "bytes": 87849,
+      "sha256": "9a21cbd4cfc19f18d4cd9da33da5fb7a726e6f856b449f5189a12f835271dacc"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/period_request.py",
+      "bytes": 8817,
+      "sha256": "070a881576992336e0cd98fe4342f5250f316465931110c20efc09e5ff66af7b"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/population.py",
+      "bytes": 17233,
+      "sha256": "cf1be92108ba376158597f8bc2c7f17ff274b2d6f87a79057dba45c386721346"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/region_resolution.py",
+      "bytes": 10143,
+      "sha256": "a0ce7cff0deb515453b5cecb3f62cb016508abc8b70b186f2833fffc2b1f38b3"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/chat_routing.py",
+      "bytes": 156307,
+      "sha256": "966623b005e271c1c644e053917940483533831f7e5e42091b3089072cfe9eb7"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/mi_service.py",
+      "bytes": 46154,
+      "sha256": "1ad3635f24355d596c8f025b4ba618ccce06d34762b627902c4fb623606da8a4"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/movement_summary.py",
+      "bytes": 19275,
+      "sha256": "5f3f8d7de393ed543ad233159edaedf4127a71a17f86b58315ffa3f286d7526c"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/period_change_route.py",
+      "bytes": 51808,
+      "sha256": "654f87b8f5a3618578793a80b3444741144b18e1b54510ff734eb037ffcfdfd0"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_workflows/analytical/executors.py",
+      "bytes": 57000,
+      "sha256": "4b53a1b08cc9f0436ae1aabe156c5937612c3c0b8ec77714b68a2c076b0443b2"
     }
   ],
   "artefacts": [

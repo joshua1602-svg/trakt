@@ -680,8 +680,17 @@ is answerable on any book reporting a broker; no real book here does. Where the
 field is absent the evaluator demands a controlled refusal that **names** it,
 which is stricter than the original expectation rather than weaker.
 
-**What re-pointing then exposed.** The 21 remaining failures are one defect
-class at two severities, and the more serious one was invisible before:
+**What re-pointing then exposed.** The 21 remaining failures are **one defect
+class at two severities** — not two findings. All 21 arise from a single absent
+field, `borrower_type`, and all 21 are the same mechanism: a question naming
+something the book does not carry, resolved to something else instead of being
+refused.
+
+> **21 = 13 + 8.** Thirteen where the substitution is caught, eight where it is
+> not. The split is by *severity of outcome*, not by defect.
+
+Stated that way because the earlier draft described one class while listing two
+backlog items, leaving the reader to reconcile it:
 
 * **13 cases** — the resolver reaches for a *different* dimension (Amortisation
   Type, Age Bucket) when `borrower_type` is absent. Fail-closed catches the
@@ -860,16 +869,14 @@ changed nothing about that.)*
 
 ### 12a. Added by Tranche E
 
-**Honour-or-clarify for POPULATIONS (highest priority).** The rule is
-implemented for periods and not for populations. Eight calibration cases pin it:
-a question naming a field the book does not report is answered over the broader
-population with a disclosure attached, rather than clarified. `borrower_type` is
-the field that exposes it; the defect is general. Fix beside the field resolver.
-
-**Field resolution must not substitute a dimension the question did not name.**
-Thirteen cases, caught fail-closed today. Same class as the D2 no-silent-
-substitution work, and the same site as the categorical domain validation
-already queued.
+**Honour-or-clarify for POPULATIONS — ONE item, 21 cases (highest priority).**
+Previously listed as two, which contradicted the finding: 13 unnamed-dimension
+substitutions and 8 broader-population answers are the same class at two
+severities, all from one absent field. The rule is implemented for periods and
+never applied to populations. A question naming a field, population or dimension
+the book does not carry must clarify or refuse, never be answered over a
+substituted broader set. Same site as the D2 no-silent-substitution work and the
+categorical domain validation already queued.
 
 **Measure the client's actual extract retention at onboarding.** §5.14 shows no
 Tranche E figure depends on the 26-week assumption, and that the only property
@@ -985,6 +992,57 @@ evidence drift stays fatal.
 > it should expect.** A control nobody runs is documentation. A control that
 > fires on routine work trains its readers to ignore it, which is worse than
 > having none, because it also supplies false assurance.
+
+### 13a.3 The counter-example: a control that did its job
+
+Both failures above are controls that had stopped controlling. This is what one
+looks like working, and it is the argument for the rule rather than an aside.
+
+Re-pointing the calibration bank put a `demo_platform` path into
+`mi_agent/mi_calibration.py`. `tests/test_governance_source_policy.py` forbids
+production modules referencing the demo generator, because a production
+dependency on it would make the demo pack part of the **deployed runtime**. The
+test failed on the next full run — **within one commit of the regression being
+introduced** — and named the offending file.
+
+Three properties made that possible, and they are exactly the ones §13a.1 and
+§13a.2 say to build in:
+
+* it runs on every change, in the ordinary suite, with nobody deciding to invoke it;
+* it fires on a real violation and not on expected movement, so its output means something;
+* it names the file, so the fix took minutes rather than an investigation.
+
+The fix was not to weaken the rule. `mi_calibration` no longer names a book at
+all — the caller supplies the tape or sets `MI_CALIBRATION_BOOK` — because a
+measurement module that knows where fixtures live is *how* that dependency
+creeps in. The property that mattered survived untouched: there is still no
+fallback to `build_fixture`.
+
+Note the contrast with §13a.2 precisely. The manifest verifier and this
+governance test guard comparable risks. One had been failing on ordinary work
+for so long that nobody ran it, and lost a real alarm in its own noise. The
+other caught an architectural regression the same day. The difference is not
+importance; it is whether the control distinguishes violation from movement.
+
+### 13a.4 No permanent "expected drift"
+
+The repaired verifier initially reported two production files as *expected
+drift*. That was a softer state than it looked: a manifest whose whole value is
+that drift is unexpected cannot carry a standing list of drift that is fine. It
+is the same shape as the stale manifest — a control quietly reporting a
+condition nobody acts on.
+
+The V1 `code+config` hashes are **not** re-baselined: they record which code the
+V1 measurement ran against, and that claim stays true forever. Instead the
+property is closed. Every production file the V1 manifest hashes must now be
+**either** byte-identical in the working tree **or** pinned at its current state
+in the successor manifest's `productionSources`. A file that is neither is a
+verification failure — `UNPINNED CODE` — not an expected drift.
+
+Sixteen production files this sprint changed are pinned there, and the two that
+had drifted are among them. A test proves the new failure mode fires, by
+pointing the verifier at an empty successor manifest and requiring a non-zero
+exit.
 
 ## 14. Evidence
 

@@ -91,7 +91,37 @@ def test_production_code_moving_on_is_reported_but_not_fatal():
     proc = _run_verifier()
     assert proc.returncode == 0
     if "code moved on since" in proc.stdout:
-        assert "not a\nfailure" in proc.stdout or "not a failure" in proc.stdout
+        # Drift is reported, and reported as RE-PINNED — never as an open-ended
+        # "expected" state, which would soften the property being verified.
+        assert "RE-PINNED" in proc.stdout
+        assert "not re-baselined" in proc.stdout
+
+
+@pytest.mark.skipif(not _VERIFIER.exists(), reason="evidence pack not present")
+def test_production_code_that_moved_and_is_not_re_pinned_is_fatal(tmp_path):
+    """Drift is allowed; becoming UNPINNED is not.
+
+    A V1 code+config file must be byte-identical in the working tree, or pinned
+    at its current state in the successor manifest. A permanent "expected drift"
+    state would soften the property that makes a manifest evidence at all — the
+    same shape as the stale manifest that failed silently for a fortnight.
+
+    Simulated by pointing the verifier at an EMPTY successor manifest, so the
+    files that legitimately moved this sprint have nowhere to be pinned.
+    """
+    import json
+    import os
+    if not all(p.exists() for p in _FIXTURE_PROBES):
+        pytest.skip("generated fixtures not materialised in this tree")
+    empty = tmp_path / "successor.json"
+    empty.write_text(json.dumps({"productionSources": []}))
+    env = dict(os.environ, TRAKT_SUCCESSOR_MANIFEST=str(empty))
+    proc = subprocess.run([sys.executable, str(_VERIFIER)],
+                          capture_output=True, text=True, cwd=str(_REPO), env=env)
+    if "code moved on since" not in _run_verifier().stdout:
+        pytest.skip("no production code has moved on in this tree")
+    assert proc.returncode != 0, "unpinned production code must be fatal"
+    assert "UNPINNED CODE" in proc.stdout
 
 
 @pytest.mark.skipif(not _VERIFIER.exists(), reason="evidence pack not present")

@@ -49,9 +49,43 @@ def locate(rel: str) -> Path | None:
 #: hypothetical: it is why the real breakage of Tranche D — an EVIDENCE artefact
 #: edited in place — sat unnoticed for a whole tranche.
 #:
-#: So code drift is now classified, not failed: reported as INFO against the
-#: recorded tree, with the manifest left untouched. Evidence drift stays fatal.
+#: So code drift is CLASSIFIED rather than blindly failed — but it is not
+#: waved through either. A permanent "expected drift" state would soften the
+#: very property that makes a manifest evidence, which is the same shape as the
+#: stale manifest that failed silently for a fortnight. The property is closed
+#: instead: a V1 ``code+config`` file must be byte-identical in the working
+#: tree, OR pinned at its current state in the successor manifest. Neither is a
+#: FAILURE. Evidence drift stays fatal as before.
 CODE_GROUP = "code+config"
+
+#: The successor manifest, where production code this sprint changed is pinned.
+#: Overridable so the UNPINNED-CODE path can be TESTED — a failure mode nobody
+#: has ever seen fire is an untested claim about the control.
+SUCCESSOR = Path(os.environ.get("TRAKT_SUCCESSOR_MANIFEST")
+                 or (EV / "client_readiness" / "MANIFEST.json"))
+
+
+def successor_pins() -> dict:
+    """path -> sha256, for production code pinned by the successor manifest."""
+    if not SUCCESSOR.exists():
+        return {}
+    try:
+        doc = json.loads(SUCCESSOR.read_text())
+    except Exception:                            # pragma: no cover - unreadable
+        return {}
+    return {a["path"]: a["sha256"]
+            for a in (doc.get("productionSources") or []) if a.get("path")}
+
+
+_SUCCESSOR_PINS = successor_pins()
+
+
+def _successor_label() -> str:
+    """A readable path, even when the successor is overridden out of the tree."""
+    try:
+        return str(SUCCESSOR.relative_to(REPO))
+    except ValueError:
+        return str(SUCCESSOR)
 
 
 def git_blob(ref: str, rel: str) -> bytes | None:
@@ -85,8 +119,23 @@ for a in M["artefacts"]:
                             f"{ref[:7]} no longer carries the hashed bytes")
             continue
         checked += 1
-        if hashlib.sha256(p.read_bytes()).hexdigest() != a["sha256"]:
-            code_drift.append(a["path"])
+        on_disk = hashlib.sha256(p.read_bytes()).hexdigest()
+        if on_disk != a["sha256"]:
+            # It moved. That is allowed only if its CURRENT state is pinned.
+            pinned = _SUCCESSOR_PINS.get(a["path"])
+            if pinned is None:
+                failures.append(
+                    f"UNPINNED CODE    {a['path']} has moved on from the V1 "
+                    f"manifest and is not pinned in "
+                    f"{_successor_label()}. Production code may change; "
+                    f"it may not become unpinned.")
+            elif pinned != on_disk:
+                failures.append(
+                    f"STALE PIN        {a['path']} matches neither the V1 "
+                    f"manifest nor its pin in "
+                    f"{_successor_label()} — regenerate that manifest.")
+            else:
+                code_drift.append(a["path"])
         continue
     raw = p.read_bytes()
     if a.get("gzSha256") is not None:
@@ -127,11 +176,12 @@ if absent:
     print(f"recorded missing: {len(absent)}")
 if code_drift:
     ref = (M.get("generatedFromTree") or "")[:7]
-    print(f"\ncode moved on since {ref} ({len(code_drift)}) — expected, not a "
-          f"failure. The manifest records which code the V1 measurement ran "
-          f"against; it does not freeze the product:")
+    print(f"\ncode moved on since {ref} ({len(code_drift)}) — each one RE-PINNED "
+          f"at its current state in {_successor_label()}. The V1 hashes "
+          f"record which code the V1 measurement ran against and are not "
+          f"re-baselined; nothing is left merely 'expected to drift':")
     for path in code_drift:
-        print(f"  {path}")
+        print(f"  {path}  -> {_SUCCESSOR_PINS[path][:16]}…")
 if failures:
     print(f"\nFAILURES ({len(failures)}):")
     for f in failures:

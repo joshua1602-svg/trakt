@@ -50,6 +50,40 @@ GENERATOR_SOURCES = (
 )
 
 
+#: PRODUCTION CODE this sprint changed, pinned at its CURRENT state.
+#:
+#: Why this section exists at all. The V1 manifest hashes fifteen production
+#: files under a ``code+config`` group, recording which code the V1 measurement
+#: ran against. Those hashes are a historical claim and stay true forever, so
+#: re-baselining them would destroy the very provenance they carry. But leaving
+#: the working tree merely "drifted" from them is no better: a permanent
+#: expected-drift state softens exactly the property that makes a manifest
+#: evidence, and it is the same shape as the stale manifest that failed silently
+#: for a fortnight.
+#:
+#: So the property is closed rather than softened. Every production file the V1
+#: manifest hashes is either byte-identical in the working tree, OR pinned here
+#: at its new state. A file that is neither is a verification FAILURE, not an
+#: expected drift. The verifier enforces exactly that.
+PRODUCTION_SOURCES = (
+    "config/mi/golden_questions/ere_mi_calibration_250.yaml",
+    "mi_agent/answer_type.py",
+    "mi_agent/build_mi_semantics_registry.py",
+    "mi_agent/execution_receipt.py",
+    "mi_agent/llm_query_parser.py",
+    "mi_agent/mi_calibration.py",
+    "mi_agent/mi_query_executor.py",
+    "mi_agent/mi_semantics_field_registry.yaml",
+    "mi_agent/period_request.py",
+    "mi_agent/population.py",
+    "mi_agent/region_resolution.py",
+    "mi_agent_api/chat_routing.py",
+    "mi_agent_api/mi_service.py",
+    "mi_agent_api/movement_summary.py",
+    "mi_agent_api/period_change_route.py",
+    "mi_workflows/analytical/executors.py",
+)
+
 #: Measurement instruments written or relocated during this sprint. Hashed here
 #: rather than in the V1 manifest, and hashed at all because an instrument that
 #: changes between two runs makes their comparison meaningless — the failure this
@@ -108,6 +142,12 @@ def build_manifest(root: Path) -> Dict[str, object]:
                 "sha256": _sha256(_REPO_ROOT / rel)}
                for rel in GENERATOR_SOURCES]
 
+    production = [{"group": "code+config", "path": rel,
+                   "bytes": (_REPO_ROOT / rel).stat().st_size,
+                   "sha256": _sha256(_REPO_ROOT / rel)}
+                  for rel in PRODUCTION_SOURCES
+                  if (_REPO_ROOT / rel).exists()]
+
     instruments = [{"group": "instrument", "path": rel,
                     "bytes": (_REPO_ROOT / rel).stat().st_size,
                     "sha256": _sha256(_REPO_ROOT / rel)}
@@ -130,6 +170,7 @@ def build_manifest(root: Path) -> Dict[str, object]:
             "notCommitted": "The artefacts below are reproduced from the generator, not stored. 211 MB raw / ~30 MB gzipped, and the repository already gitignores the V1 funded tapes on the same basis. A digest fails when the generator drifts; a committed copy silently diverges from it.",
             "supersetProperty": "The thirteen-month kestrelmoor funded history reproduces the V1 three cuts byte-for-byte. Any measurement that moves between the V1 fixture and this one is therefore attributable to the added history, not to a regenerated book.",
             "stressBook": "kestrelmoor carries a declining-KFI profile over the final thirteen weeks (intake 61 -> 21/week); alderbridge is stationary as the control.",
+            "noExpectedDrift": "Every production file hashed in the V1 manifest is either byte-identical in the working tree or pinned in productionSources here, at its current state. There is no open-ended 'expected drift' state: a V1 code+config file that matches neither is a verification failure. The V1 code+config hashes are NOT re-baselined — they record which code the V1 measurement ran against, and that claim stays true.",
             "manifestRepair": "three_axis.py, hashed in the V1 manifest, was extended IN PLACE during Tranche D to add an answer-type axis. The manifest was not updated, so V1 verification failed from commit c9ac20b onward and was not noticed because nothing ran the verifier automatically. Repaired additively: three_axis.py is restored to its hashed content and verifies, the extended instrument is tranche_d/three_axis_typed.py, and tests/test_evidence_manifest.py now runs both verifications in the suite. The relocated instrument reproduces the recorded det_post figures exactly — 176 answer-type matches, 0 diverge, 740/752 semantic.",
             "groundTruth": "The pipeline generator's per-transition probabilities are chosen so the implied stage-to-funding rates equal the governed 0.20/0.45/0.75 exactly. They are recoverable from matured observations to within 0.001-0.027, which is what lets an empirical estimator be judged against truth rather than against itself.",
         },
@@ -145,6 +186,7 @@ def build_manifest(root: Path) -> Dict[str, object]:
         },
         "generatorSources": sources,
         "instrumentSources": instruments,
+        "productionSources": production,
         "artefacts": artefacts,
     }
 
