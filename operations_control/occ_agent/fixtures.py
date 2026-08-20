@@ -446,6 +446,83 @@ def generate_response(*, roles: List[str], client_name: str,
     return out
 
 
+def generate_answers(form: Any, *, client_name: str = "") -> Dict[str, Any]:
+    """A synthetic client response for ONE case's own outstanding questions.
+
+    The counterpart to :func:`generate_response`, which makes up FILES. This
+    makes up ANSWERS — and it is the one an operator reaches for at "receive
+    client responses", where a generated loan tape does nothing for a checklist
+    of eight unanswered questions.
+
+    Every value is derived from the question's OWN declaration — its type, its
+    validation rule, its declared options — so a field added to the catalogue is
+    answerable here without a line changing, and an answer is always one the
+    client form would have accepted. Nothing is invented that the catalogue did
+    not describe, and nothing is guessed at: an enum takes its first declared
+    option rather than a value someone thought sounded right.
+
+    Deterministic, like every other fixture: the same case yields the same
+    answers, so a practice run is repeatable.
+
+    Returns a mapping of authoritative catalogue key to value, ready for
+    ``OccAgentService.submit_client_response`` — which validates it exactly as
+    it validates a real client's.
+    """
+    domain = f"{_slug(client_name or 'practice') or 'practice'}.example"
+    answers: Dict[str, Any] = {}
+    for step in getattr(form, "steps", []) or []:
+        for group in getattr(step, "groups", []) or []:
+            for field_ in getattr(group, "fields", []) or []:
+                value = _answer_for(field_, domain)
+                if value is not None:
+                    answers[field_.key] = value
+    return answers
+
+
+def _answer_for(f: Any, domain: str) -> Any:
+    """One plausible, valid answer for one question.
+
+    ``None`` means "leave it unanswered" — used where nothing sensible can be
+    made up, which is better than filling a box with noise a reviewer then has
+    to unpick.
+    """
+    kind = str(getattr(f, "type", "") or "text").lower()
+    rule = str(getattr(f, "validation", "") or "").lower()
+    label = str(getattr(f, "label", "") or "this")
+    options = [str(o.get("value")) for o in (getattr(f, "options", None) or [])
+               if isinstance(o, dict) and o.get("value")]
+
+    # Declared options first: an enum's own vocabulary is never guessable.
+    if options:
+        return [options[0]] if kind == "multi_enum" else options[0]
+    if rule == "lei" or kind == "lei":
+        return _SYNTHETIC_LEI
+    if rule == "email" or kind == "email":
+        # Distinct per question, so two contacts are not the same address.
+        return f"{_slug(label) or 'contact'}@{domain}"
+    if rule == "colour" or kind == "colour":
+        return "#1F3B5C"
+    if rule == "country" or kind == "country":
+        return "GB"
+    if rule == "currency" or kind == "currency":
+        return "GBP"
+    if kind == "boolean":
+        return True
+    if kind == "date":
+        return REPORTING_DATE
+    if kind in ("number", "integer", "decimal"):
+        return 0
+    if kind == "multiline":
+        return (f"Practice answer for {label.lower()}. Synthetic content for a "
+                "rehearsal; no client supplied this.")
+    if kind in ("text", "identifier"):
+        return f"Practice {label.lower()}"
+    # entity_reference, portfolio_reference, product_selection and anything
+    # added later: these point at records rather than carry a value, and a made
+    # up pointer would be worse than an unanswered question.
+    return None
+
+
 def generatable_roles() -> List[str]:
     """The roles :func:`generate_response` can actually produce."""
     return sorted(_ROLE_GENERATORS)

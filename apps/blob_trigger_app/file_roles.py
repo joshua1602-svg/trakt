@@ -60,11 +60,17 @@ DEFAULT_ROLE_RULES: List[Tuple[str, List[List[str]]]] = [
     ("funder_pi_extract", [["funder", "principal", "interest"],
                            ["principal", "and", "interest"],
                            ["funder", "p&i"], ["funder", "pi"]]),
+    # ``collateral extract`` deliberately NOT listed here. Property and
+    # valuation detail is now captured under the collateral tape, and the
+    # client is asked for that one rather than for both — so a file that says
+    # "collateral" must reach collateral_extract, not this rule.
     ("property_extract",  [["propertyextract"], ["property", "extract"],
-                           ["valuation", "extract"], ["collateral", "extract"]]),
+                           ["valuation", "extract"]]),
     ("loan_extract",      [["loanextract"], ["loan", "extract"],
                            ["loan", "tape"], ["loanbook"], ["loan", "report"]]),
     ("cashflow_extract",  [["cashflow"], ["cash", "flow"]]),
+    ("origination_pipeline", [["origination", "pipeline"], ["pipeline"],
+                              ["origination"]]),
     ("collateral_extract", [["collateral"]]),
 ]
 

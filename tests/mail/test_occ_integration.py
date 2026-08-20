@@ -125,10 +125,34 @@ def test_the_receipt_on_the_run_reports_a_real_send(mailed, opened, graph):
     assert receipt["to"] == [ME]
     assert MAILBOX in receipt["statement"]
     assert "<0001@traktinfra.io>" in receipt["statement"]
-    # And the artefacts it names are the ones that were attached.
-    attached = {a["name"] for a in
-                graph.sent_payloads()[0]["message"]["attachments"]}
-    assert attached == {a["name"] for a in receipt["artefacts"]}
+
+    # The run still records the SOURCE artefacts it approved — the markdown
+    # pack and the covering text are unchanged in the case store, which is what
+    # keeps the original auditable.
+    assert {a["name"] for a in receipt["artefacts"]} == {
+        "onboarding_pack.md", "covering_email.txt"}
+
+    # What the CLIENT received is one PDF: the covering text is the body, and
+    # markdown is a source format that never reaches them.
+    message = graph.sent_payloads()[0]["message"]
+    assert [a["name"] for a in message["attachments"]] == [
+        "Trakt_Onboarding_Checklist_Northstar_Lending.pdf"]
+    assert message["body"]["contentType"] == "HTML"
+
+
+def test_the_source_markdown_is_kept_even_though_it_is_not_sent(mailed, opened,
+                                                                graph):
+    """Auditability: the pack the human approved stays byte-for-byte in the
+    case store, whatever format the client was sent."""
+    sent = mailed.send_pack(
+        mailed.approve_pack(mailed.draft_pack(opened, actor=ACTOR),
+                            actor=ACTOR),
+        actor=ACTOR, to=[ME])
+    stored = mailed.store.read_package(TENANT, sent.case_ref,
+                                       "onboarding_pack.md")
+    assert stored.startswith("# Onboarding")
+    assert mailed.store.read_package(TENANT, sent.case_ref,
+                                     "covering_email.txt")
 
 
 def test_the_audit_chain_carries_the_message_identifier(mailed, opened, graph):

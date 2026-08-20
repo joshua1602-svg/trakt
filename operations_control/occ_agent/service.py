@@ -579,6 +579,50 @@ class OccAgentService:
                     detail={"items": len(chosen)})
         return agent_case
 
+    def clarifications_available(self, agent_case: AgentCase
+                                 ) -> Dict[str, Any]:
+        """Phase two: what a delivered file has now made askable.
+
+        Read-only. Returns the deferred questions that are still outstanding,
+        with the evidence to put them against, plus a short account of what was
+        analysed. Empty until a file has arrived.
+        """
+        from . import clarification as _clarification
+        artefacts = agent_case.run.received_artefacts
+        items = _clarification.outstanding(agent_case.case, artefacts,
+                                           cat=self.onboarding.catalogue)
+        return {"items": items,
+                "summary": _clarification.summary(items, artefacts)}
+
+    def request_clarifications(self, agent_case: AgentCase, *, actor: str,
+                               note: str = "", due_date: str = "") -> AgentCase:
+        """Ask the deferred questions, now that there is a file to ask about.
+
+        Deliberately routed through :meth:`request_client_information` rather
+        than creating a request of its own: the deferred questions are ordinary
+        information requests, and they get the same record, the same status
+        transitions and the same audit as an operator's. There is no second
+        channel to a client, and no gate is skipped.
+        """
+        available = self.clarifications_available(agent_case)
+        items = available["items"]
+        if not items:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_CLARIFY",
+                "There is nothing to clarify yet. Trakt asks these once it has "
+                "a file to ask about, and either no file has arrived or it "
+                "answered everything itself.", http_status=409)
+        agent_case = self.request_client_information(
+            agent_case, actor=actor, items=items, due_date=due_date,
+            note=note or "Clarification after the first delivery.")
+        self._audit(agent_case.run, "clarifications_requested",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis="the questions the catalogue defers until a "
+                                   "representative file has been analysed",
+                    detail=available["summary"])
+        return agent_case
+
     def send_request_by_email(self, agent_case: AgentCase, *,
                               actor: str) -> None:
         """The external-email seam. Always refused in synthetic mode."""
@@ -1000,6 +1044,47 @@ class OccAgentService:
                     detail={"intended_live_uri": artefact.intended_live_uri,
                             "execution_status": "simulated_only",
                             "sha256": artefact.sha256})
+        return agent_case
+
+    def generate_synthetic_answers(self, agent_case: AgentCase, *,
+                                   actor: str) -> AgentCase:
+        """Answer THIS case's own outstanding client questions, synthetically.
+
+        The counterpart to :meth:`generate_synthetic_response`, which makes up
+        files. At "receive client responses" an operator is looking at a
+        checklist of unanswered questions, and generating a loan tape does
+        nothing for it — the two are different acts and this is the second one.
+
+        The answers are derived from the served form's own declarations and
+        then submitted through :meth:`submit_client_response`, so they take the
+        identical validated path a real client's answers take: authoritative
+        keys, checked against the form actually served, written by
+        ``OnboardingService.save_step`` exactly as submitted. Nothing here
+        writes to a case directly, and no validation is skipped.
+        """
+        from . import fixtures as _fixtures
+
+        # Deliberately NOT gated on the run's state. A client may answer at any
+        # point, so `submit_client_response` is ungated too — and this must not
+        # be harder to reach than the path it stands in for. `ACTION_ANSWER` is
+        # a different thing: answering an EXCEPTION raised during a run.
+        form = self.client_form(agent_case)
+        answers = _fixtures.generate_answers(
+            form, client_name=self.facts(agent_case).client_name)
+        if not answers:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_ANSWER",
+                "There is nothing outstanding for Trakt to answer on this "
+                "case.", http_status=409)
+        agent_case = self.submit_client_response(
+            agent_case, actor=actor, response=answers)
+        self._audit(agent_case.run, "synthetic_answers_generated",
+                    actor_type=ACTOR_AGENT, actor=actor,
+                    classification=EXEC_SYNTHETICALLY_EXECUTED,
+                    decision_basis="answers derived from the served form's own "
+                                   "declared types and options; submitted "
+                                   "through the ordinary client-response path",
+                    detail={"answers": len(answers)})
         return agent_case
 
     def generate_synthetic_response(self, agent_case: AgentCase, *,

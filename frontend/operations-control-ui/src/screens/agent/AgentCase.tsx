@@ -184,7 +184,11 @@ export function AgentCaseScreen() {
             busy={busy}
             canAsk={available.has("request_client_information")}
             onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
-            onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
+            // Answers the outstanding questions. This panel used to call
+            // generateAgentResponse, which makes up the data FILES — so the
+            // call succeeded, the checklist was untouched, and the button
+            // looked broken.
+            onGenerate={() => void act(() => client.generateAgentAnswers(caseId))}
           />
         );
       case "artefacts":

@@ -468,6 +468,25 @@ def load_fixture_artefacts(case_ref: str, body: LoadFixture,
                 agent_case, actor=principal.name))}
 
 
+@router.post("/cases/{case_ref}/responses/generate")
+def generate_answers(case_ref: str, body: TenantBody,
+                     principal: Principal = Depends(authenticate)
+                     ) -> Dict[str, Any]:
+    """Answer this case's outstanding client questions, synthetically.
+
+    Distinct from ``/artefacts/generate``, which makes up FILES. Both exist
+    because "receive client responses" and "receive required artefacts" are
+    two different steps, and a generated loan tape does nothing for a checklist
+    of unanswered questions.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.generate_synthetic_answers(
+                agent_case, actor=principal.name))}
+
+
 @router.post("/cases/{case_ref}/artefacts/generate")
 def generate_response(case_ref: str, body: TenantBody,
                       principal: Principal = Depends(authenticate)

@@ -24,8 +24,25 @@ from .conftest import CLIENT_SECRET, MAILBOX, FakeGraph, mail_env
 PACK = [{"name": "onboarding_pack.md", "ref": "blob://synthetic/pack.md"},
         {"name": "covering_email.txt", "ref": "blob://synthetic/email.txt"}]
 
+PACK_MARKDOWN = b"""# Onboarding \xe2\x80\x94 Northstar Lending
+
+Reference: ONB-2026-0007
+
+There are 2 questions for you, 1 of them required.
+
+## About your business
+
+- [required] **Legal entity name**
+      As registered at Companies House.
+- [optional] **Trading name**
+
+## Files to send
+
+- **Primary loan tape** - required
+"""
+
 STORED = {
-    "blob://synthetic/pack.md": b"# Onboarding pack\n\n1. Legal entity name\n",
+    "blob://synthetic/pack.md": PACK_MARKDOWN,
     "blob://synthetic/email.txt": b"To: client\nSubject: Trakt onboarding\n",
 }
 
@@ -59,6 +76,8 @@ def test_an_approved_pack_is_sent_and_the_receipt_names_the_message(graph):
     assert MAILBOX in receipt.statement
     assert "Alice" in receipt.statement
     assert receipt.receipt_id in receipt.statement
+    assert "Trakt_Onboarding_Checklist_Northstar_Lending.pdf" in \
+        receipt.statement
 
 
 def test_the_receipt_id_is_the_header_on_the_message_that_was_sent(graph):
@@ -68,22 +87,55 @@ def test_the_receipt_id_is_the_header_on_the_message_that_was_sent(graph):
     assert {"name": RECEIPT_HEADER, "value": receipt.receipt_id} in headers
 
 
-def test_the_approved_bytes_are_what_is_attached(graph):
+def test_the_client_receives_one_pdf_and_no_markdown(graph):
+    """The two defects, asserted: no covering_email.txt, no .md."""
     deliver(adapter(graph))
     attachments = graph.sent_payloads()[0]["message"]["attachments"]
-    assert [a["name"] for a in attachments] == ["onboarding_pack.md",
-                                                "covering_email.txt"]
-    assert base64.b64decode(attachments[0]["contentBytes"]) == \
-        STORED["blob://synthetic/pack.md"]
+    assert [a["name"] for a in attachments] == [
+        "Trakt_Onboarding_Checklist_Northstar_Lending.pdf"]
     assert attachments[0]["@odata.type"] == "#microsoft.graph.fileAttachment"
+    assert attachments[0]["contentType"] == "application/pdf"
+    assert base64.b64decode(attachments[0]["contentBytes"]).startswith(b"%PDF-")
 
 
-def test_the_subject_and_body_are_sent_verbatim(graph):
-    """The adapter composes nothing: what a human approved is what goes out."""
-    deliver(adapter(graph), subject="EXACTLY THIS", body="and exactly this")
+def test_the_covering_message_is_in_the_body_not_an_attachment(graph):
+    deliver(adapter(graph), body="Please complete the attached pack.")
+    message = graph.sent_payloads()[0]["message"]
+    assert message["body"]["contentType"] == "HTML"
+    assert "Please complete the attached pack." in message["body"]["content"]
+    names = [a["name"] for a in message["attachments"]]
+    assert "covering_email.txt" not in names
+    assert "onboarding_pack.md" not in names
+
+
+def test_the_subject_and_the_approved_words_are_sent_verbatim(graph):
+    """The adapter reformats; it does not rewrite. Every approved word
+    survives into the body it renders."""
+    deliver(adapter(graph), subject="EXACTLY THIS",
+            body="First approved line.\n\nSecond approved line.")
     message = graph.sent_payloads()[0]["message"]
     assert message["subject"] == "EXACTLY THIS"
-    assert message["body"]["content"] == "and exactly this"
+    assert "First approved line." in message["body"]["content"]
+    assert "Second approved line." in message["body"]["content"]
+
+
+def test_the_body_is_html_with_no_remote_resources(graph):
+    """A body that fetches anything renders as a broken box for most clients
+    and trips image blocking for the rest."""
+    deliver(adapter(graph))
+    content = graph.sent_payloads()[0]["message"]["body"]["content"]
+    assert "<table" in content
+    for forbidden in ("<script", "<img", "http://", "https://", "@import"):
+        assert forbidden not in content, forbidden
+
+
+def test_a_communication_with_no_pack_sends_the_body_alone(graph):
+    """A follow-up need not carry a checklist."""
+    receipt = deliver(adapter(graph), artefacts=[])
+    message = graph.sent_payloads()[0]["message"]
+    assert "attachments" not in message
+    assert receipt.sent is True
+    assert "No attachment." in receipt.statement
 
 
 def test_an_unconfirmed_send_is_reported_as_unconfirmed_not_as_confirmed(graph):
@@ -152,9 +204,24 @@ def test_an_empty_approved_document_refuses_the_send(graph):
 
 
 def test_documents_too_large_for_one_message_refuse_the_send(graph):
+    """Measured on the base64 payload, which is what Graph's limit counts."""
+    huge = [{"name": "tape.csv", "ref": "blob://synthetic/tape.csv"}]
     with pytest.raises(MailDeliveryRefused):
-        deliver(adapter(graph, resolver=lambda _ref: b"x" * (2 * 1024 * 1024)))
+        deliver(adapter(graph, resolver=lambda _ref: b"x" * (3 * 1024 * 1024)),
+                artefacts=huge)
     assert graph.send_count == 0
+
+
+def test_an_artefact_that_is_not_a_pack_is_attached_unchanged(graph):
+    """Only the two known presentation artefacts are special-cased."""
+    extra = PACK + [{"name": "sample.csv", "ref": "blob://synthetic/s.csv"}]
+    store = dict(STORED, **{"blob://synthetic/s.csv": b"id,balance\n1,100\n"})
+    deliver(adapter(graph, resolver=store.get), artefacts=extra)
+    attachments = graph.sent_payloads()[0]["message"]["attachments"]
+    assert [a["name"] for a in attachments] == [
+        "Trakt_Onboarding_Checklist_Northstar_Lending.pdf", "sample.csv"]
+    assert base64.b64decode(attachments[1]["contentBytes"]) == \
+        b"id,balance\n1,100\n"
 
 
 def test_more_documents_than_a_pack_can_carry_is_refused(graph):

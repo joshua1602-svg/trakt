@@ -34,13 +34,16 @@ So a resolution failure refuses the send, leaving the pack in
 from __future__ import annotations
 
 import base64
+import datetime as _dt
 import logging
 import mimetypes
+import re
 from typing import Any, Callable, Dict, List, Optional
 
 from operations_control.engine import OpsError
 from operations_control.occ_agent.communication import Receipt
 
+from . import presentation as _presentation
 from .config import ADDRESS_RE, MailConfig, MailNotConfigured, load
 from .graph_client import GraphMailClient, GraphMailError, Transport, from_config
 
@@ -106,17 +109,40 @@ class GraphMailAdapter:
                 actor: str) -> Receipt:
         """Send, then report what is actually true about the send."""
         recipients = self._recipients(to)
-        attachments, attached = self._attachments(artefacts)
 
-        # The receipt id is minted BEFORE the send so it can travel with the
-        # message as an internet header. The audit record and the message in
-        # the mailbox then name each other, in both directions.
+        # The receipt id is minted BEFORE anything is rendered, so it can be
+        # stamped on every page of the PDF, printed in the email footer AND
+        # carried as the message's internet header. One approved communication,
+        # one identifier, visible in all three places.
         receipt = Receipt(adapter=self.name, sent=False, to=recipients,
                           subject=subject, artefacts=list(artefacts),
                           content_hash=content_hash)
+
+        pack_markdown, passthrough = self._resolve(artefacts)
+        try:
+            presented = _presentation.build(
+                body, pack_markdown, receipt_id=receipt.receipt_id,
+                content_hash=content_hash, generated_at=_generated_at(),
+                fallback_case_ref=_case_ref_in(subject))
+        except _presentation.PresentationError as exc:
+            logger.warning("mail: could not render the client pack (%s)", exc)
+            raise MailDeliveryRefused(
+                f"The approved pack could not be prepared for the client "
+                f"({exc}), so nothing was sent. The pack is still approved.",
+                http_status=500) from None
+
+        attachments = list(passthrough)
+        if presented.pdf:
+            attachments.insert(0, _attachment(presented.pdf_name,
+                                              presented.pdf))
+        attached = [a["name"] for a in attachments]
+        self._assert_within_budget(attachments)
+
         try:
             result = self.client.send(to=recipients, subject=subject,
-                                      body=body, receipt_id=receipt.receipt_id,
+                                      body=presented.html_body,
+                                      body_type="HTML",
+                                      receipt_id=receipt.receipt_id,
                                       attachments=attachments)
         except GraphMailError as exc:
             logger.warning("mail: send refused for %s (retryable=%s status=%s)",
@@ -168,12 +194,25 @@ class GraphMailAdapter:
                 http_status=409)
         return cleaned
 
-    def _attachments(self, artefacts: List[Dict[str, str]]
-                     ) -> "tuple[List[Dict[str, Any]], List[str]]":
-        """Resolve each approved artefact to bytes, or refuse the send."""
+    def _resolve(self, artefacts: List[Dict[str, str]]
+                 ) -> "tuple[str, List[Dict[str, Any]]]":
+        """Read the approved artefacts, and sort them into what they are for.
+
+        Two are special, and both were client-facing defects:
+
+        * ``covering_email.txt`` holds the covering message, which is already
+          the email body. Attaching it sent the client the same words twice.
+          It is read and discarded here, not sent.
+        * ``onboarding_pack.md`` is the pack in its SOURCE format. It stays in
+          the case store as the auditable original; what the client receives is
+          the PDF rendered from it.
+
+        Anything else is attached as it stands, so a later artefact does not
+        need this method changed to reach a client.
+        """
         declared = [a for a in (artefacts or []) if isinstance(a, dict)]
         if not declared:
-            return [], []
+            return "", []
         if self.resolver is None:
             raise MailDeliveryRefused(
                 "This pack has approved documents but the mail adapter has no "
@@ -183,9 +222,8 @@ class GraphMailAdapter:
                 f"A pack may carry at most {MAX_ATTACHMENTS} documents; this "
                 f"one has {len(declared)}. Nothing was sent.", http_status=409)
 
-        built: List[Dict[str, Any]] = []
-        names: List[str] = []
-        total = 0
+        pack_markdown = ""
+        passthrough: List[Dict[str, Any]] = []
         for artefact in declared:
             name = str(artefact.get("name") or "").strip()
             ref = str(artefact.get("ref") or "").strip()
@@ -206,14 +244,45 @@ class GraphMailAdapter:
                 raise MailDeliveryRefused(
                     f"The approved document {name!r} is empty, so nothing was "
                     "sent.", http_status=409)
-            total += len(data)
-            if total > MAX_TOTAL_ATTACHMENT_BYTES:
-                raise MailDeliveryRefused(
-                    "The approved documents are too large to send as one "
-                    "message, so nothing was sent.", http_status=409)
-            built.append(_attachment(name, data))
-            names.append(name)
-        return built, names
+
+            if name == _presentation.COVERING_TEXT:
+                continue                    # it is the body, not a document
+            if name.lower().endswith(".md"):
+                pack_markdown = data.decode("utf-8", errors="replace")
+                continue                    # rendered to PDF, not attached
+            passthrough.append(_attachment(name, data))
+        return pack_markdown, passthrough
+
+    def _assert_within_budget(self, attachments: List[Dict[str, Any]]) -> None:
+        """Refuse a message Graph would reject for size, before sending it.
+
+        Measured on the base64 payload rather than the source bytes, because
+        that is what actually travels and what the 4 MB request limit counts.
+        """
+        total = sum(len(a.get("contentBytes") or "") for a in attachments)
+        if total > MAX_TOTAL_ATTACHMENT_BYTES:
+            raise MailDeliveryRefused(
+                "The approved documents are too large to send as one "
+                "message, so nothing was sent.", http_status=409)
+
+
+def _generated_at() -> str:
+    """The date printed on the checklist. A date, not a timestamp: a client
+    reading it does not need the second it was rendered."""
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%d %B %Y")
+
+
+_CASE_REF_IN_SUBJECT = re.compile(r"\(([A-Z]{2,8}-\d{4}-\d{4,8})\)")
+
+
+def _case_ref_in(subject: str) -> str:
+    """The case reference from the approved subject line.
+
+    Only a fallback: the pack document states its own reference, and that is
+    what is used when it is present.
+    """
+    found = _CASE_REF_IN_SUBJECT.search(subject or "")
+    return found.group(1) if found else ""
 
 
 def _statement(mailbox: str, result: Any, attached: List[str],
@@ -231,6 +300,8 @@ def _statement(mailbox: str, result: Any, attached: List[str],
     line = " ".join(parts) + "."
     if attached:
         line += f" Attached: {', '.join(attached)}."
+    else:
+        line += " No attachment."
     if result.confirmed:
         line += (f" Confirmed in Sent Items as internet message id "
                  f"{result.internet_message_id or '(none reported)'}")
