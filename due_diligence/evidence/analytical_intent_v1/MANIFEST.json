@@ -1,6 +1,6 @@
 {
   "pack": "analytical_intent_v1",
-  "reportHead": "bbd5929",
+  "reportHead": "0495aa0",
   "runFilesProducedAtTree": "044d13b",
   "productionCodeLastChangedAt": "9125e77",
   "note": "Every commit after 044d13b changed only due_diligence/. The run files therefore describe the production code at 9125e77, which is identical to that at reportHead.",
