@@ -106,10 +106,21 @@ def test_the_pack_covers_the_areas_the_brief_names(service, opened):
     assert "data_definitions" in deferred
 
 
-def test_the_pack_states_that_mappings_are_not_collected(service, opened):
+def test_mappings_are_not_collected_and_the_pack_still_says_so_internally(
+        service, opened):
+    """The governed decision is unchanged; only its audience is.
+
+    The client-facing document no longer prints an inventory of questions it is
+    NOT asking — it made a short request read as a long one, and a client does
+    not need it. The statement itself is still carried on the pack and still
+    put to the OPERATOR in the review package, which is where the decision
+    actually has to be visible.
+    """
     built = service.build_pack(opened)
     assert built.mapping_statement == _pack.MAPPING_STATEMENT
-    assert "does not ask you to map" in built.document()
+    assert "does not ask you to map" in built.mapping_statement
+    # Not printed at the client any more.
+    assert "does not ask you to map" not in built.document()
     # And no question asks for one.
     fields = {q.field for s in built.sections for q in s.questions}
     assert "file_role_schemas" not in fields
@@ -126,8 +137,10 @@ def test_the_catalogue_still_records_mappings_as_not_collected():
 def test_the_pack_asks_what_the_numbers_mean_rather_than_how_to_map_them():
     """Decision 1's permitted scope, split by who can answer when.
 
-    The business meaning is a property of how the CLIENT runs their book, so it
-    is asked during onboarding. What is specific to a FILE waits for one.
+    Neither is asked cold. Mappings are learned from a representative file and
+    approved by an operator; meaning is put to the client the same way, against
+    what was actually found in the file. Both sections are still declared and
+    still collected — the change is WHEN they are asked, not WHETHER.
     """
     cat = catalogue()
     business = cat.section("data_semantics")
@@ -141,7 +154,8 @@ def test_the_pack_asks_what_the_numbers_mean_rather_than_how_to_map_them():
                      "cashflow_basis", "accrued_interest_treatment",
                      "redemption_definition", "status_definitions"):
         assert expected in business_keys, expected
-    assert not business.deferred_until
+    assert business.deferred_until, \
+        "meaning is asked ABOUT A FILE, so it waits for one"
 
     technical_keys = {f.key for f in technical.fields}
     for expected in ("source_file", "description", "proprietary_fields",

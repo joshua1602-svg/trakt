@@ -56,6 +56,28 @@ MAPPING_STATEMENT = (
     "before."
 )
 
+#: What the first communication says about effort. Deliberately not a count.
+#: "There are 33 questions outstanding" is true, useless and discouraging: it
+#: measures Trakt's catalogue rather than the client's work, and most of those
+#: questions are a single word. What a client needs to know is how big the job
+#: is and that it does not grow silently.
+EFFORT_STATEMENT = (
+    "To complete initial setup we need a small number of details and "
+    "representative portfolio data artefacts. Once we have the file(s), Trakt "
+    "analyses them and will revert to you only where something needs "
+    "clarifying.")
+
+SECTION_NEEDED_HELP = (
+    "These are the details we cannot begin without.")
+
+SECTION_CONFIRM_HELP = (
+    "We already hold these. Please tell us if any are incorrect — there is "
+    "nothing to re-enter.")
+
+SECTION_OPTIONAL_HELP = (
+    "Anything here that is unusual about your book is useful to us, and all of "
+    "it is optional. Leave it blank and nothing is held up.")
+
 #: Where an answer stands, from the client's point of view.
 ANSWERED = "answered"
 OUTSTANDING = "outstanding"
@@ -72,6 +94,10 @@ class PackQuestion:
     help: str = ""
     status: str = OUTSTANDING
     value: Any = None
+    #: The value as a client reads it — the catalogue's own declared label for
+    #: an enum option, where there is one. ``value`` stays raw; this is only
+    #: how it is shown.
+    display_value: str = ""
     provenance: str = ""
     index: Optional[int] = None
     item: str = ""
@@ -100,12 +126,14 @@ class PackSection:
     #: For a repeatable section: which item, and what it is called.
     index: Optional[int] = None
     item: str = ""
+    #: The catalogue's own answer to "may the client leave this blank?".
+    optional_context: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {"key": self.key, "label": self.label, "help": self.help,
                 "repeatable": self.repeatable, "step": self.step,
                 "step_label": self.step_label, "index": self.index,
-                "item": self.item,
+                "item": self.item, "optional_context": self.optional_context,
                 "questions": [q.to_dict() for q in self.questions],
                 "outstanding": self.outstanding}
 
@@ -209,33 +237,100 @@ class OnboardingPack:
                     if q.required])
 
     def document(self) -> str:
-        """The pack as a document a human can read and a client can answer."""
+        """The pack as a document a human can read and a client can answer.
+
+        Three sections, in this order, and the order is the point:
+
+        1. **what we need now** — only what genuinely blocks the first
+           ingestion;
+        2. **what we already understand** — stated for correction, never
+           re-asked;
+        3. **optional context** — offered, explicitly blank-able.
+
+        Everything a file will answer is simply absent. It is not listed and
+        not explained: a client does not need an inventory of questions they
+        are NOT being asked, and printing one made a short request look long.
+        Nothing is lost by it — a deferred question is still declared, still
+        required of the onboarding record, and still asked, after the first
+        delivery and against what was actually found in it. What is not asked
+        stays visible to the OPERATOR, in the pack's ``not_asked`` population
+        and in the review package.
+        """
         lines = [f"# Onboarding — {self.client_name or self.case_ref}",
-                 "", f"Reference: {self.case_ref}", ""]
-        lines += [f"There are {self.question_count} question"
-                  f"{'s' if self.question_count != 1 else ''} for you, "
-                  f"{self.required_count} of them required. Everything else "
-                  "Trakt either already holds or works out itself.", ""]
+                 "", f"Reference: {self.case_ref}", "", EFFORT_STATEMENT, ""]
+
+        essential = [step for step in self._steps() if not step["optional"]]
+        optional = [step for step in self._steps() if step["optional"]]
+
+        lines += ["## What we need from you now", ""]
+        if essential:
+            lines += [SECTION_NEEDED_HELP, ""]
+            lines += self._render_steps(essential)
+        else:
+            lines += ["Nothing — we have what we need to begin.", ""]
+
+        lines += ["### Files to send", ""]
+        for row in self.artefacts.required:
+            lines.append(f"- [required] **{row['label']}**")
+        for row in self.artefacts.optional:
+            lines.append(f"- [optional] **{row['label']}**")
+        if self.artefacts.note:
+            lines += ["", self.artefacts.note]
+        lines.append("")
 
         if self.confirmations:
-            lines += ["## Please check these are right", "",
-                      "Trakt already holds these. Tell us if any are wrong.",
-                      ""]
+            lines += ["## Please confirm what we already understand", "",
+                      SECTION_CONFIRM_HELP, ""]
             for question in self.confirmations:
-                where = f" — {question.item}" if question.item else ""
-                lines.append(f"- **{question.label}**{where}: "
-                             f"{_render(question.value)}")
+                lines.append(self._confirm_line(question))
             lines.append("")
 
-        for step in self._steps():
-            lines += [f"## {step['label']}", ""]
+        if optional:
+            lines += ["## Optional context", "", SECTION_OPTIONAL_HELP, ""]
+            lines += self._render_steps(optional)
+
+        return "\n".join(lines)
+
+    def _confirm_line(self, question: "PackQuestion") -> str:
+        """One already-known fact, stated the way a client would say it.
+
+        Two things are stripped, because both made the list read as machine
+        output rather than as a summary somebody could check:
+
+        * the **qualifier** — "Legal name — Mortgage Capital: Mortgage Capital"
+          repeats the client's own name twice and says nothing. It is kept only
+          where it genuinely disambiguates, and never when it is an internal
+          identifier (anything path-shaped), the client's name, or the value
+          itself;
+        * the **raw enum** — ``calendar_month_end`` becomes "Calendar month
+          end", using the label the CATALOGUE already declares for that option
+          rather than a transformation invented here, so the client reads the
+          same words the platform uses everywhere else.
+        """
+        shown = question.display_value or _render(question.value)
+        item = (question.item or "").strip()
+        redundant = (not item or "/" in item
+                     or item == (self.client_name or "").strip()
+                     or item == shown)
+        where = "" if redundant else f" — {item}"
+        return f"- **{question.label}**{where}: {shown}"
+
+    def _render_steps(self, steps: List[Dict[str, Any]]) -> List[str]:
+        """The questions of some steps, as the client sees them.
+
+        Headings are one level deeper than they used to be: a step is now part
+        of a named section rather than a section of its own.
+        """
+        lines: List[str] = []
+        for step in steps:
+            lines += [f"### {step['label']}", ""]
             if step["help"]:
                 lines += [step["help"], ""]
             for section in step["sections"]:
                 if section.repeatable and section.item:
-                    lines += [f"### {section.item}", ""]
+                    lines += [f"#### {section.item}", ""]
                 elif len(step["sections"]) > 1:
-                    lines += [f"### {section.label}", ""]
+                    lines += [f"#### {section.label}", ""]
                 for question in section.questions:
                     mark = "[required]" if question.required else "[optional]"
                     lines.append(f"- {mark} **{question.label}**")
@@ -245,35 +340,7 @@ class OnboardingPack:
                         lines.append(f"      Currently: "
                                      f"{_render(question.value)}")
                 lines.append("")
-
-        lines += ["## Files to send", ""]
-        for row in self.artefacts.required:
-            lines.append(f"- **{row['label']}** — required")
-        for row in self.artefacts.optional:
-            lines.append(f"- {row['label']} — optional")
-        if self.artefacts.note:
-            lines += ["", self.artefacts.note]
-        lines += ["", "## How to send them", ""]
-        for key, value in (("Channel", self.delivery.channel),
-                           ("File format", self.delivery.file_format),
-                           ("How often", self.delivery.cadence)):
-            if value:
-                lines.append(f"- {key}: {value}")
-        for location in self.delivery.locations:
-            lines.append(f"- {location['label']}: `{location['location']}`")
-        if self.delivery.naming:
-            lines += ["", self.delivery.naming]
-
-        lines += ["", "## What we are NOT asking you for", "",
-                  self.mapping_statement, ""]
-        deferred = sorted({row["label"] for row in self.not_asked
-                           if row["category"] == "first_delivery"})
-        if deferred:
-            lines += ["Trakt reads these from the first file you send, so "
-                      "there is nothing for you to fill in:", ""]
-            lines += [f"- {label}" for label in deferred]
-            lines.append("")
-        return "\n".join(lines)
+        return lines
 
     def _steps(self) -> List[Dict[str, Any]]:
         """The pack's sections regrouped into the client-facing steps."""
@@ -287,7 +354,11 @@ class OnboardingPack:
             out.append({"key": key,
                         "label": sections[0].step_label or key,
                         "help": _step_help(key),
-                        "sections": sections})
+                        "sections": sections,
+                        # A step is optional context only when EVERY section in
+                        # it is: one essential section makes the whole step
+                        # something the client has to read.
+                        "optional": all(s.optional_context for s in sections)})
         return out
 
 
@@ -367,11 +438,14 @@ def _sections_from_form(form: "_client_form.ClientForm",
                     sensitive=f.sensitive,
                     writes_to=(declared.writes_to if declared else ""),
                     step=step.key, step_label=step.label))
+            declared_section = cat.section(group.key)
             out.append(PackSection(
                 key=group.key, label=group.label, help=group.help,
                 repeatable=group.repeatable, questions=questions,
                 step=step.key, step_label=step.label, item=group.item,
-                index=group.index))
+                index=group.index,
+                optional_context=bool(declared_section is not None
+                                      and declared_section.optional_context)))
     return out
 
 
@@ -385,7 +459,25 @@ def _question_from(row: _classification.Classification, cat: Catalogue,
         required=row.required,
         evidence_required=bool(f and f.evidence_required),
         sensitive=bool(f and f.sensitive),
-        writes_to=(f.writes_to if f else ""))
+        writes_to=(f.writes_to if f else ""),
+        display_value=_option_label(f, row.value))
+
+
+def _option_label(f: Optional[Any], value: Any) -> str:
+    """The declared label for an enum value, or "" to render the value itself.
+
+    Uses the catalogue's own ``options`` so a client reads "Calendar month end"
+    rather than ``calendar_month_end`` — the same words the platform uses
+    everywhere else, rather than a prettifier invented for the pack.
+    """
+    if f is None or not getattr(f, "options", None) or value is None:
+        return ""
+    labels = {str(o.get("value")): str(o.get("label") or o.get("value"))
+              for o in f.options if isinstance(o, dict)}
+    if isinstance(value, (list, tuple)):
+        shown = [labels.get(str(v), str(v)) for v in value]
+        return ", ".join(shown) if shown else ""
+    return labels.get(str(value), "")
 
 
 def _artefacts(outcome: str) -> ArtefactRequest:
@@ -396,8 +488,7 @@ def _artefacts(outcome: str) -> ArtefactRequest:
                   for r in vocab.required_roles(outcome)],
         optional=[{"role": r, "label": vocab.label(r)}
                   for r in vocab.optional_roles(outcome)],
-        note="One file per book per period. Send the whole file each time — "
-             "Trakt takes the latest, and does not merge partial deliveries.")
+        note="")
 
 
 def _delivery(case: OnboardingCase,
@@ -437,24 +528,21 @@ def _email(case: OnboardingCase, pack: OnboardingPack) -> DraftEmail:
           ("reporting_contact_email", "operational_contact_email")
           if contacts.get(key)]
     name = pack.client_name or "there"
-    outstanding = pack.outstanding
     body = "\n".join([
         f"Dear {name},",
         "",
-        "We are setting your portfolio up on Trakt. Attached is the "
-        "onboarding pack: it lists what we still need from you, and the files "
-        "to send with it.",
+        "We are setting your portfolio up on Trakt.",
         "",
-        (f"There are {outstanding} question{'s' if outstanding != 1 else ''} "
-         "outstanding. Everything else we have already, either from you or "
-         "because Trakt works it out."
-         if outstanding else
-         "We have everything we need — please confirm the details in the pack "
-         "are right."),
+        "The attached checklist covers what we need to get started.",
         "",
-        "On field mappings: you do not need to map anything to our format. "
-        "Send a representative file and we will do that here, and confirm it "
-        "with you.",
+        ("To complete initial setup we need a small number of details and "
+         "representative portfolio data artefacts."
+         if pack.outstanding else
+         "We already have everything we need — please just check the details "
+         "in the checklist are right."),
+        "",
+        "Once we have the file, Trakt analyses it and will revert to you only "
+        "where something needs clarifying.",
         "",
         "Kind regards,",
         "Trakt Operations",
