@@ -52,6 +52,13 @@ REQUIRED_SCRIPTS = (
     "engine/gate_5_delivery/xml_builder_annex2.py",
 )
 
+#: Imported at runtime but NOT at application import time, so a missing one
+#: would not fail the import check above. ``trakt_mail`` is loaded when the OCC
+#: Agent mounts, and its absence is deliberately non-fatal there (a pack is
+#: recorded rather than sent) — which is exactly why it has to be asserted here
+#: instead. A silently mail-less deployment is the failure this catches.
+REQUIRED_LAZY_MODULES = ("trakt_mail.adapter",)
+
 EXPECTED_TITLE = "Trakt Operations Control API"
 
 
@@ -102,6 +109,14 @@ def main() -> None:
     if missing_router:
         fail("application is missing included-router route(s): "
              + ", ".join(missing_router))
+
+    import importlib
+    for module in REQUIRED_LAZY_MODULES:
+        try:
+            importlib.import_module(module)
+        except Exception as exc:  # noqa: BLE001 — report, do not raise
+            fail(f"could not import {module}, which the OCC Agent loads at "
+                 f"runtime ({type(exc).__name__}: {exc})")
 
     print(f"artefact OK: {app.title} — {len(served)} served paths, "
           f"{len(REQUIRED_FILES)} governed config files, "

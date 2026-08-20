@@ -106,6 +106,10 @@ jobs:
         #                        with cwd = the package root
         #   apps/                blob_trigger_app storage / layout / persistence
         #   trakt_core/          governed context, errors, tenancy, policy
+        #   trakt_mail/          the Microsoft Graph outbound mail adapter, which
+        #                        operations_control/api/app.py imports when it
+        #                        mounts the OCC Agent. Absent, the import fails
+        #                        and the OCC Agent tab silently does not mount.
         #   mi_agent/            now a HARD dependency: api/app.py imports
         #                        concentration_routes at module level, which
         #                        reaches mi_agent.concentration_tests for the
@@ -133,6 +137,7 @@ jobs:
             engine/ \
             apps/ \
             trakt_core/ \
+            trakt_mail/ \
             mi_agent/ \
             analytics_lib/ \
             config/ \
