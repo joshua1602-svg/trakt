@@ -1,0 +1,14 @@
+alderbridge (pre-Tranche-B reproduction)
+  basis            : mixed_historical_and_config
+  by source        : {"configured_stage_rate": {"count": 32, "amount": 5550243.24}, "historical_stage_rate": {"count": 472, "amount": 88808167.37}}
+  excluded_amount  : 0.0
+  excluded_count   : 0
+  active_gross_amount: 94358410.61
+  blended_weighted_conversion: 0.1608
+kestrelmoor (pre-Tranche-B reproduction)
+  basis            : mixed_historical_and_config
+  by source        : {"configured_stage_rate": {"count": 46, "amount": 4752205.09}, "historical_stage_rate": {"count": 686, "amount": 71924889.05}}
+  excluded_amount  : 0.0
+  excluded_count   : 0
+  active_gross_amount: 76677094.14
+  blended_weighted_conversion: 0.1625

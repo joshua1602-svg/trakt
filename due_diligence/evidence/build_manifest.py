@@ -132,6 +132,100 @@ for name in ("nl_alderbridge_production.json", "nl_alderbridge_forced_llm.json",
 add("baseline", V1 / "baseline/nl_harness_that_produced_runs.py",
     "the harness revision that produced BOTH the baseline and the V1 run files", EV)
 
+# --- 7. FORECAST & COMPOSITION HARDENING -------------------------------------
+for name, role in (
+    ("three_axis.py", "SEMANTIC / ARITHMETIC / PRESENTATION scorer against the "
+                      "frozen expectations; arithmetic delegated to nl_reconcile.py"),
+    ("ab_summary.py", "like-for-like A/B over two code revisions, frozen scorer"),
+    ("censoring.py", "TRANCHE C investigation — censoring and maturity of the "
+                     "empirical stage rates. No serving path imports it."),
+    ("classify_substance_guarded.py",
+     "substance partition, identical rule to analytical_intent_v1/"
+     "classify_substance.py, guarded so it can be imported"),
+    ("tb_prep.py", "prep-layer report, post-Tranche-B"),
+    ("tb_prep_before.py",
+     "prep-layer report with the PRE-Tranche-B exclusion tier reproduced "
+     "in-process; no production file edited"),
+    ("neutrality2.py", "A5 numerical-neutrality proof for Tranche A"),
+    ("neutrality_probe.py", "A5 support"),
+):
+    add("measurement:fch", FCH / name, role, EV)
+
+add("measurement:fch", FCH / "nl_harness_det.py",
+    "DETERMINISTIC bank harness — a separate instrument, LLM parser off, so the "
+    "parse is a pure function of the question and the parser mix is identical "
+    "across revisions by construction. Produced the det_pre / det_post runs.", EV)
+HARNESS_DET = sha(FCH / "nl_harness_det.py") if (FCH / "nl_harness_det.py").exists() else None
+HARNESS_CURRENT = sha(V1 / "nl_harness.py") if (V1 / "nl_harness.py").exists() else None
+
+#: The like-for-like A/B. Stored gzipped; the sha256 is of the UNCOMPRESSED
+#: bytes, matching the V1 convention.
+import gzip
+for tree, label in (("det_pre", "pre-sprint 49e00b5"), ("det_post", "post-Tranche-B")):
+    for name in ("nl_alderbridge_production.json", "nl_alderbridge_forced_llm.json",
+                 "nl_kestrelmoor_production.json", "nl_kestrelmoor_forced_llm.json"):
+        gz = FCH / "tranche_b" / tree / (name + ".gz")
+        if not gz.exists():
+            entries.append({"group": f"run-file:{tree}", "path": name,
+                            "role": "MISSING", "status": "MISSING"})
+            continue
+        raw = gzip.decompress(gz.read_bytes())
+        entries.append({
+            "group": f"run-file:{tree}",
+            "path": str(gz.relative_to(EV)),
+            "role": f"752-run bank, deterministic parse, {label} (uncompressed sha256)",
+            "bytes": gz.stat().st_size,
+            "uncompressedBytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "gzSha256": sha(gz),
+            "producedByHarnessSha256": HARNESS_DET,
+            "producedAtTree": "49e00b5" if tree == "det_pre" else "6f61365"})
+
+#: The LLM arm, run on an exhausted API key. Published because it is real
+#: measurement; NOT comparable to the V1 baseline, because its parser mix differs.
+for tree, label in (("tb_pre", "pre-sprint 49e00b5"), ("tb", "post-Tranche-B")):
+    for name in ("nl_alderbridge_production.json", "nl_alderbridge_forced_llm.json",
+                 "nl_kestrelmoor_production.json", "nl_kestrelmoor_forced_llm.json"):
+        gz = FCH / "tranche_b" / "llm_arm_degraded" / tree / (name + ".gz")
+        if not gz.exists():
+            continue
+        raw = gzip.decompress(gz.read_bytes())
+        entries.append({
+            "group": f"run-file:llm-degraded:{tree}",
+            "path": str(gz.relative_to(EV)),
+            "role": (f"752-run bank, LLM arm on an EXHAUSTED key, {label} "
+                     "(uncompressed sha256). See report §7.1 — not comparable "
+                     "to the V1 baseline."),
+            "bytes": gz.stat().st_size,
+            "uncompressedBytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "gzSha256": sha(gz),
+            "producedByHarnessSha256": HARNESS_CURRENT,
+            "producedAtTree": "49e00b5" if tree == "tb_pre" else "6f61365"})
+
+for rel, role in (
+    ("tranche_b/ab_deterministic.txt", "the like-for-like A/B result"),
+    ("tranche_b/ab_llm_arm_degraded.txt", "the degraded LLM arm, with every differing run"),
+    ("tranche_b/three_axis_det_pre.txt", "three-axis score, pre-sprint"),
+    ("tranche_b/three_axis_det_post.txt", "three-axis score, post-Tranche-B"),
+    ("tranche_b/reconcile_det_pre.txt", "independent reconciliation, pre-sprint"),
+    ("tranche_b/reconcile_det_post.txt", "independent reconciliation, post-Tranche-B"),
+    ("tranche_b/truth_pipeline_output.txt", "independent pipeline recomputation output"),
+    ("tranche_b/prep_before.txt", "prep-layer report, pre-Tranche-B tier"),
+    ("tranche_b/prep_after.txt", "prep-layer report, post-Tranche-B"),
+    ("tranche_b/simple_mi_bank_30.json", "30-question simple-MI bank, post-Tranche-B"),
+    ("tranche_b/wide_bank_80.json", "80-question wide bank, post-Tranche-B"),
+    ("tranche_b/cfo9_alderbridge.json", "nine canonical CFO questions, Alderbridge"),
+    ("tranche_b/cfo9_kestrelmoor.json", "nine canonical CFO questions, Kestrelmoor"),
+    ("tranche_b/q9_findings_alderbridge.json", "Q9 findings, Alderbridge"),
+    ("tranche_b/q9_findings_kestrelmoor.json", "Q9 findings, Kestrelmoor"),
+    ("tranche_a_neutrality.txt", "Tranche A numerical-neutrality proof output"),
+    ("tranche_c_censoring.txt", "Tranche C censoring / maturity output"),
+):
+    add("output:fch", (FCH / rel).resolve(), role, EV.resolve())
+add("output:fch", REPO / "due_diligence/MI_AGENT_FORECAST_COMPOSITION_HARDENING.md",
+    "the report", REPO)
+
 manifest = {
     "packs": ["analytical_intent_v1", "forecast_composition_hardening"],
     "reportHead": git("rev-parse", "--short", "HEAD"),
@@ -145,16 +239,33 @@ manifest = {
             "revision is a provenance error. Where they diverge the divergence "
             "is recorded with its reason, as below."),
         "harnessDivergence": (
-            "The four V1 run files and the four baseline run files were ALL "
-            "produced by harness sha256 " + HARNESS_THAT_PRODUCED_RUNS[:16] + "… "
-            "(6,285 bytes), pinned at evidence/analytical_intent_v1/baseline/"
-            "nl_harness_that_produced_runs.py. The harness under "
-            "evidence/analytical_intent_v1/nl_harness.py has since been changed "
-            "to record metadata.analyticalIntent and the built plan at run time. "
-            "That revision has produced NO run file yet: re-measurement is "
-            "deliberately deferred so a single re-run covers both the harness "
-            "change and any answer change from this sprint. At that point both "
-            "hashes move together and this note is removed."),
+            "RESOLVED IN PART. The four V1 run files and the four baseline run "
+            "files were ALL produced by harness sha256 "
+            + HARNESS_THAT_PRODUCED_RUNS[:16] + "… (6,285 bytes), pinned at "
+            "evidence/analytical_intent_v1/baseline/"
+            "nl_harness_that_produced_runs.py. The revision under "
+            "evidence/analytical_intent_v1/nl_harness.py, which records "
+            "metadata.analyticalIntent at run time, HAS now produced run files: "
+            "the run-file:llm-degraded:* groups name it. Those runs are NOT a "
+            "replacement for the V1 measurement — the API key was exhausted "
+            "mid-sprint and their parser mix differs from the baseline's (145 "
+            "LLM parses of 752, against 645), so they are published as evidence "
+            "and excluded from any before/after claim. See report section 7.1. "
+            "A full-credit remeasurement remains outstanding."),
+        "deterministicComparator": (
+            "The before/after claims in the Forecast & Composition Hardening "
+            "report rest on run-file:det_pre and run-file:det_post, produced by "
+            "nl_harness_det.py with the LLM parser off on BOTH sides. That makes "
+            "the parse a pure function of the question text and the parser mix "
+            "identical by construction (752 of 752 deterministic each side), so "
+            "a difference between the two is attributable to the code. It does "
+            "not exercise the LLM parse path."),
+        "packagedScriptsDiffer": (
+            "forecast_composition_hardening/classify_substance_guarded.py has "
+            "the same substance() rule as analytical_intent_v1/"
+            "classify_substance.py; it differs only in being import-safe and in "
+            "carrying an extra run set. nl_score.py is NOT duplicated into this "
+            "pack — the frozen control exists once and is imported."),
         "arithmeticVsSemantic": (
             "Reconciled-findings counts prove arithmetic fidelity against the "
             "population the agent EXECUTED. They do not prove that population "

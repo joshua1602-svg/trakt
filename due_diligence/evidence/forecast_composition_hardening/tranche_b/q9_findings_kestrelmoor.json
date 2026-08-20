@@ -1,0 +1,382 @@
+{
+ "answer": "Current funded balance is \u00a31.77bn as at 2026-06-30. Gross pipeline in the governed extract is \u00a376.7m as at 2026-06-29. Expected completions from the open pipeline: \u00a37.7m. This excludes 46 case(s) worth \u00a34.8m the extract already shows as completed or withdrawn. Forecast funded balance: \u00a31.78bn. Expected to land: 2026-07 \u00a33.9m; 2026-08 \u00a31.9m; 2026-09 \u00a31.8m.\n\nCalculated: Composed governed capabilities.",
+ "findings": [
+  {
+   "capability": "funded_balance_forecast",
+   "kind": "measure",
+   "label": "Current funded balance",
+   "metric": "current_outstanding_balance",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 1772471338.39,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.forecast_bridge.compute_forecast_bridge",
+    "fundedLoanCount": 12255,
+    "fundedReportingDate": "2026-06-30"
+   },
+   "population": {
+    "key": "total",
+    "label": "the whole funded book",
+    "predicate": null,
+    "rows": 12255,
+    "rowsBefore": null,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": 1772471338.39,
+    "isTotal": true,
+    "dataset": "funded"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-30",
+    "method": null,
+    "available": [
+     "2026-04-30",
+     "2026-05-31",
+     "2026-06-30"
+    ]
+   }
+  },
+  {
+   "capability": "funded_balance_forecast",
+   "kind": "measure",
+   "label": "Gross pipeline in the governed extract",
+   "metric": "pipeline_amount",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 76677094.14,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.forecast_bridge.compute_forecast_bridge",
+    "pipelineCaseCount": 732,
+    "openStageAmount": 71924889.05,
+    "excludedFromWeightingAmount": 4752205.09,
+    "excludedCaseCount": 46
+   },
+   "population": {
+    "key": "pipeline:extract",
+    "label": "the governed pipeline extract",
+    "predicate": "every case in the weekly extract",
+    "rows": 732,
+    "rowsBefore": null,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": 76677094.14,
+    "isTotal": false,
+    "dataset": "pipeline"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-29",
+    "method": null,
+    "available": []
+   }
+  },
+  {
+   "capability": "funded_balance_forecast",
+   "kind": "forecast",
+   "label": "Expected completions from the open pipeline",
+   "metric": "weighted_expected_funded_amount",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 7707250.33,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.forecast_bridge.compute_forecast_bridge",
+    "blendedWeightedConversion": 0.1072,
+    "excludedFromWeightingAmount": 4752205.09,
+    "excludedCaseCount": 46,
+    "eligibleCaseCount": 686,
+    "forecastReadiness": "ready"
+   },
+   "population": {
+    "key": "pipeline:eligible",
+    "label": "the open pipeline",
+    "predicate": "pipeline cases the governed config includes in forward funding",
+    "rows": 686,
+    "rowsBefore": 732,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": null,
+    "isTotal": false,
+    "dataset": "pipeline"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-29",
+    "method": null,
+    "available": []
+   },
+   "forecastValue": 7707250.33,
+   "probabilityBasis": "historical_observed"
+  },
+  {
+   "capability": "funded_balance_forecast",
+   "kind": "forecast",
+   "label": "Forecast funded balance",
+   "metric": "forecast_funded_balance",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 1780178588.72,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.forecast_bridge.compute_forecast_bridge",
+    "formula": "forecast_funded_balance = current_funded_balance + sum(expected_funded_amount * completion_probability)",
+    "fundedBalance": 1772471338.39,
+    "weightedExpectedFundedAmount": 7707250.33,
+    "forecastLoanCount": 12941,
+    "fundedReportingDate": "2026-06-30",
+    "pipelineAsOfDate": "2026-06-29"
+   },
+   "population": {
+    "key": "total",
+    "label": "the whole funded book",
+    "predicate": null,
+    "rows": 12255,
+    "rowsBefore": null,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": 1772471338.39,
+    "isTotal": true,
+    "dataset": "funded"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-30",
+    "method": null,
+    "available": [
+     "2026-04-30",
+     "2026-05-31",
+     "2026-06-30"
+    ]
+   },
+   "forecastValue": 1780178588.72,
+   "probabilityBasis": "historical_observed"
+  },
+  {
+   "capability": "pipeline_completion_forecast",
+   "kind": "forecast",
+   "label": "Expected completion amount from the open pipeline",
+   "metric": "weighted_expected_funded_amount",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 7707250.33,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.pipeline_contract._dimension_breakdown",
+    "grossPipelineAmount": 71924889.05,
+    "completionProbabilityBasis": "historical_observed",
+    "weeklyExtractsUsed": 12,
+    "pipelineAsOfDate": "2026-06-29",
+    "timedExpectedAmount": 7707250.33,
+    "untimedExpectedAmount": 0.0,
+    "months": 3,
+    "stages": [
+     {
+      "stage": "KFI",
+      "caseCount": 275,
+      "pipelineAmount": 29188172.49,
+      "weightedExpectedFundedAmount": 1833017.23
+     },
+     {
+      "stage": "OFFER",
+      "caseCount": 229,
+      "pipelineAmount": 23583269.4,
+      "weightedExpectedFundedAmount": 3945480.97
+     },
+     {
+      "stage": "APPLICATION",
+      "caseCount": 182,
+      "pipelineAmount": 19153447.16,
+      "weightedExpectedFundedAmount": 1928752.13
+     }
+    ]
+   },
+   "population": {
+    "key": "pipeline:active",
+    "label": "the open pipeline",
+    "predicate": "pipeline_stage in ['KFI', 'APPLICATION', 'OFFER']",
+    "rows": 686,
+    "rowsBefore": 732,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": null,
+    "isTotal": false,
+    "dataset": "pipeline"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-29",
+    "method": null,
+    "available": []
+   },
+   "forecastValue": 7707250.33,
+   "probabilityBasis": "historical_observed"
+  },
+  {
+   "capability": "pipeline_completion_forecast",
+   "kind": "timing",
+   "label": "Expected to complete in 2026-07",
+   "metric": "weighted_expected_funded_amount",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 3945480.97,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.pipeline_contract._expected_completion_breakdown",
+    "caseCount": 229,
+    "grossExpectedFundedAmount": 23583269.4
+   },
+   "population": {
+    "key": "pipeline:active",
+    "label": "the open pipeline",
+    "predicate": "pipeline_stage in ['KFI', 'APPLICATION', 'OFFER']",
+    "rows": 686,
+    "rowsBefore": 732,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": null,
+    "isTotal": false,
+    "dataset": "pipeline"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-29",
+    "method": null,
+    "available": []
+   },
+   "forecastValue": 3945480.97,
+   "forecastDate": "2026-07",
+   "probabilityBasis": "historical_observed"
+  },
+  {
+   "capability": "pipeline_completion_forecast",
+   "kind": "timing",
+   "label": "Expected to complete in 2026-08",
+   "metric": "weighted_expected_funded_amount",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 1928752.13,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.pipeline_contract._expected_completion_breakdown",
+    "caseCount": 182,
+    "grossExpectedFundedAmount": 19153447.16
+   },
+   "population": {
+    "key": "pipeline:active",
+    "label": "the open pipeline",
+    "predicate": "pipeline_stage in ['KFI', 'APPLICATION', 'OFFER']",
+    "rows": 686,
+    "rowsBefore": 732,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": null,
+    "isTotal": false,
+    "dataset": "pipeline"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-29",
+    "method": null,
+    "available": []
+   },
+   "forecastValue": 1928752.13,
+   "forecastDate": "2026-08",
+   "probabilityBasis": "historical_observed"
+  },
+  {
+   "capability": "pipeline_completion_forecast",
+   "kind": "timing",
+   "label": "Expected to complete in 2026-09",
+   "metric": "weighted_expected_funded_amount",
+   "unit": "currency",
+   "aggregation": "sum",
+   "value": 1833017.23,
+   "priorValue": null,
+   "change": null,
+   "relativeChange": null,
+   "status": "ok",
+   "note": null,
+   "evidence": {
+    "engine": "mi_agent_api.pipeline_contract._expected_completion_breakdown",
+    "caseCount": 275,
+    "grossExpectedFundedAmount": 29188172.49
+   },
+   "population": {
+    "key": "pipeline:active",
+    "label": "the open pipeline",
+    "predicate": "pipeline_stage in ['KFI', 'APPLICATION', 'OFFER']",
+    "rows": 686,
+    "rowsBefore": 732,
+    "rowsPrior": null,
+    "timeRelative": false,
+    "membershipChanged": false,
+    "exposure": null,
+    "isTotal": false,
+    "dataset": "pipeline"
+   },
+   "period": {
+    "start": null,
+    "end": "2026-06-29",
+    "method": null,
+    "available": []
+   },
+   "forecastValue": 1833017.23,
+   "forecastDate": "2026-09",
+   "probabilityBasis": "historical_observed"
+  }
+ ],
+ "execution": [
+  {
+   "capability": "funded_balance_forecast",
+   "because": "funded today, plus probability-weighted completions",
+   "findings": 4,
+   "ok": true,
+   "engine": "mi_agent_api.forecast_bridge.compute_forecast_bridge"
+  },
+  {
+   "capability": "pipeline_completion_forecast",
+   "because": "when those completions are expected to land",
+   "findings": 4,
+   "ok": true,
+   "engine": "mi_agent_api.pipeline_contract (governed completion probabilities from the pipeline preparation layer)"
+  }
+ ]
+}

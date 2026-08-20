@@ -8,7 +8,7 @@ standing provenance rule holds: every run file names the harness revision that
 produced it, and that revision is itself pinned in the manifest.
 """
 from __future__ import annotations
-import hashlib, json, sys
+import gzip, hashlib, json, sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
@@ -36,7 +36,20 @@ for a in M["artefacts"]:
     p = locate(a["path"])
     if p is None:
         failures.append(f"NOT FOUND        {a['path']}"); continue
-    got = hashlib.sha256(p.read_bytes()).hexdigest()
+    raw = p.read_bytes()
+    if a.get("gzSha256") is not None:
+        # Run files are stored gzipped. The manifest's sha256 is of the
+        # CONTENT, because gzip output is not byte-stable across
+        # implementations and a content hash is what a reader wants to check.
+        # The compressed bytes are pinned separately so the stored file is
+        # covered too.
+        got_gz = hashlib.sha256(raw).hexdigest()
+        if got_gz != a["gzSha256"]:
+            failures.append(f"GZ HASH MISMATCH {a['path']}\n"
+                            f"                 manifest {a['gzSha256'][:24]}…\n"
+                            f"                 on disk  {got_gz[:24]}…")
+        raw = gzip.decompress(raw)
+    got = hashlib.sha256(raw).hexdigest()
     checked += 1
     if got != a["sha256"]:
         failures.append(f"HASH MISMATCH    {a['path']}\n"

@@ -1,0 +1,16 @@
+alderbridge source: {'client_id': 'alderbridge', 'pipeline_as_of_date': '2026-06-29'}
+  basis            : historical_observed
+  cases            : 504
+  by source        : {"excluded_completed": {"count": 32, "amount": 5550243.24}, "historical_stage_rate": {"count": 472, "amount": 88808167.37}}
+  excluded_amount  : 5550243.24
+  excluded_count   : 32
+  active_gross_amount: 88808167.37
+  blended_weighted_conversion: 0.1084
+kestrelmoor source: {'client_id': 'kestrelmoor', 'pipeline_as_of_date': '2026-06-29'}
+  basis            : historical_observed
+  cases            : 732
+  by source        : {"excluded_completed": {"count": 46, "amount": 4752205.09}, "historical_stage_rate": {"count": 686, "amount": 71924889.05}}
+  excluded_amount  : 4752205.09
+  excluded_count   : 46
+  active_gross_amount: 71924889.05
+  blended_weighted_conversion: 0.1072
