@@ -757,7 +757,32 @@ Deterministic parse unless stated.
 | 80-question wide | 66 ok / 80; 3 false refusals became answers, 2 answers became clarifications |
 | 44-variation NL, LLM path | unsafe **0**; CORRECT 675 → **682** (90.7%); substantive 622 → **628** (83.5%) against the 82.7% floor; refusals 77 → **70** |
 | type conformance, four banks | **0** findings, from 5 |
-| `tests/` + `mi_agent/tests/` + `mi_agent_api/tests/` | **9,036 passed, 0 failed**, 26 skipped, 9 xfailed |
+| `tests/` + `mi_agent/tests/` + `mi_agent_api/tests/` (after D) | **9,036 passed, 0 failed**, 26 skipped, 9 xfailed |
+| whole repository, after Tranche E's fixtures, before the four rulings | **9,093 passed, 0 failed**, 26 skipped, 9 xfailed (32:10) |
+| whole repository, after the four rulings | 9,115 passed, **1 failed**, 26 skipped, 29 xfailed (32:14) — see below |
+| bank + governance + manifest, after the fix | **263 passed, 0 failed**, 21 xfailed |
+
+The xfail count moving 9 → 29 is the calibration bank's 21 declared open defects
+replacing its single previous gap; it is the re-pointing of §5.13, not new
+breakage.
+
+**The one failure was mine, and the test that caught it was right.**
+`test_production_capability_does_not_depend_on_the_demo_generator` forbids
+production modules referencing the demo generator — otherwise the demo pack
+becomes part of the deployed runtime. Re-pointing the bank had put a
+`demo_platform` path into `mi_agent/mi_calibration.py`.
+
+The fix was not to weaken the rule. A measurement module that knows where
+fixtures live is *how* that dependency creeps in, so `mi_calibration` no longer
+names a book at all: the caller supplies the tape or sets `MI_CALIBRATION_BOOK`,
+and the bank test and evidence script each name their own. The property that
+mattered survives untouched — there is still **no fallback to `build_fixture`**;
+`default_bank_frame` raises when no book is supplied.
+
+Worth noting for §13a.2: this is the counter-example to the two control failures
+recorded there. A control that runs on every change, and that distinguishes a
+real violation from expected movement, caught a genuine architectural regression
+within one commit of its introduction.
 
 **Two answers became clarifications, both individually justified**, as the
 anti-gaming rule requires. *"How much has the book grown this year?"* asked for
