@@ -342,20 +342,28 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     span = _period_request.requested_span(question)
     if span is not None and not (period_request.requested_start
                                  or period_request.requested_end):
-        if len(snapshots) <= span.periods:
+        if len(snapshots) > span.periods:
+            # HONOUR: open the comparison at the snapshot the span reaches back
+            # to. The resolver takes a calendar token, and a reporting date is
+            # the governed identity of a snapshot, so its year-month is that
+            # token.
+            opening_token = str(snapshots[-1 - span.periods].reporting_date or "")[:7]
+            if opening_token:
+                period_request = replace(period_request,
+                                         requested_start=opening_token,
+                                         relative_mode=None)
+        elif len(snapshots) >= 2:
+            # CLARIFY: there is history, but not as far back as the question
+            # asked. Only a SPAN problem belongs to this guard — a book with
+            # fewer than two snapshots cannot compare anything at all, and the
+            # existing controlled failure already says so with its error
+            # taxonomy attached. Firing here would replace a classified failure
+            # with an unclassified one.
             message = _period_request.clarification(span, len(snapshots))
             return chat_routing._envelope(
                 ok=False, question=question, spec=spec_dict, artifacts=[],
                 answer=message, error=message, route="period_change",
                 warnings=[message])
-        opening = snapshots[-1 - span.periods]
-        # The resolver takes a calendar token; a reporting date is the governed
-        # identity of a snapshot, and its year-month is that token.
-        opening_token = str(opening.reporting_date or "")[:7]
-        if opening_token:
-            period_request = replace(period_request,
-                                     requested_start=opening_token,
-                                     relative_mode=None)
 
     request = PeriodChangeRequest(
         question=question, mode=mode,
