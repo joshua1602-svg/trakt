@@ -992,7 +992,8 @@ def run_mi_agent_query(
             spec=spec, query_result=qres, semantics=semantics, facets=_facets,
             parser_confidence=(parse_meta or {}).get("parser_confidence"),
             period=_reporting_date_label(df))
-        verdict, message = _receipt_mod.assess(receipt, substitution=_substitution)
+        verdict, message = _receipt_mod.assess(
+            receipt, substitution=_substitution, semantics=semantics)
         result["execution_receipt"] = receipt.to_dict()
         result["semantic_guard"] = {"verdict": verdict, "message": message,
                                     "facets": [f.to_dict() for f in _facets],
@@ -1016,11 +1017,40 @@ def run_mi_agent_query(
             return result
         if verdict == _receipt_mod.VERDICT_PARTIAL and message:
             warnings.append(message)
-    except Exception as exc:  # noqa: BLE001 - the guard must never break a good answer
-        # A guard fault is itself a safety event: record it loudly rather than
-        # letting an unguarded answer through silently.
+    except Exception as exc:  # noqa: BLE001 - a guard fault must not ship a figure
+        # A guard fault used to record a warning and LET THE ANSWER STAND, on
+        # the reasoning that the guard must never break a good answer. But a
+        # guard that could not run cannot tell a good answer from a bad one, and
+        # the failure mode is not hypothetical: a one-word attribute error
+        # during this tranche turned three refusals into confident whole-book
+        # answers, marked only by a warning nobody reads. That is the same
+        # defect as the population rule above — a figure presented when the
+        # check that would have stopped it did not run.
+        #
+        # So it now fails CLOSED, consistent with the posture everywhere else in
+        # this path. Measured before changing: zero guard faults across all 231
+        # executed calibration cases, so this costs nothing on current evidence
+        # and closes a demonstrated hole. The fault is still recorded loudly,
+        # because a guard that breaks is a defect to fix, not a state to live in.
+        message = (
+            "I could not verify that the calculation answers the question as "
+            f"asked ({exc}), so I have not returned a figure. This is a fault in "
+            "the check itself, not a limitation of your question.")
         warnings.append(f"semantic completeness guard unavailable: {exc}")
+        result["ok"] = False
+        result["error"] = message
+        result["answer"] = message
+        result["controlled_refusal"] = True
+        result["guard_fault"] = True
+        result["warnings"] = _dedupe(warnings + [message])
         result["semantic_guard"] = {"verdict": "unavailable", "error": str(exc)}
+        result["metadata"] = {
+            "parse_metadata": parse_meta,
+            "parser_mode_detail": parse_meta.get("parser_mode_detail"),
+            "semantic_guard": result["semantic_guard"],
+            "llm": parse_meta.get("llm"),
+        }
+        return result
 
     # ---- chart (only where a chart type is renderable) --------------------
     chart_result: Optional[MIChartResult] = None

@@ -695,7 +695,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_035
   category: single_dim
   question: balance by product type
@@ -962,7 +961,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_047
   category: single_dim
   question: loan count by product type
@@ -1306,7 +1304,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_062
   category: single_dim
   question: average LTV by account status
@@ -1463,7 +1460,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_069
   category: single_dim
   question: weighted average interest rate by region
@@ -1578,7 +1574,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_074
   category: single_dim
   question: weighted average interest rate by age bucket
@@ -1645,7 +1640,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_077
   category: single_dim
   question: show me balance by product type
@@ -1739,7 +1733,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_081
   category: single_dim
   question: break down balance by product type
@@ -1833,7 +1826,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_085
   category: single_dim
   question: balance split by product type
@@ -1927,7 +1919,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp1_089
   category: single_dim
   question: exposure by product type
@@ -2141,7 +2132,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp2_098
   category: two_dim
   question: balance by LTV bucket by age bucket
@@ -2432,7 +2422,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp2_110
   category: two_dim
   question: count by age bucket and LTV bucket
@@ -2652,7 +2641,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp2_119
   category: two_dim
   question: balance by origination channel by region
@@ -2723,7 +2711,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: grp2_122
   category: two_dim
   question: WA interest rate by broker and product type
@@ -2904,7 +2891,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: filt_130
   category: filtered
   question: balance by region where LTV above 50%
@@ -3025,7 +3011,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: filt_135
   category: filtered
   question: WA LTV by region for joint borrowers
@@ -3051,7 +3036,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: filt_136
   category: filtered
   question: average LTV by product type for joint borrowers
@@ -3268,7 +3252,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: filt_145
   category: filtered
   question: balance by age bucket where LTV above 50%
@@ -3433,7 +3416,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: filt_152
   category: filtered
   question: balance by product type for joint borrowers
@@ -4838,7 +4820,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: risk_216
   category: risk
   question: concentration by account status
@@ -5051,7 +5032,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
-  known_gap: "OPEN PRODUCT DEFECT, caught fail-closed. borrower_type is absent from this book, and the field resolver reaches for a DIFFERENT dimension (Amortisation Type, Age Bucket) rather than reporting the field as unavailable. The envelope guard catches the substitution and refuses, so no wrong number is delivered \u2014 but the resolver should never have substituted. Same class as the D2 no-silent-substitution work; the fix belongs in field resolution, beside the categorical domain validation. Invisible until Tranche E because build_fixture fabricated the column."
 - id: dq_226
   category: data_quality
   question: data coverage by region
@@ -5594,7 +5574,6 @@ questions:
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
-  known_gap: "OPEN PRODUCT DEFECT, more serious than the substitution cases. borrower_type is absent from this book. The answer DISCLOSES that ('Not applied: joint borrower \u2014 field is unavailable in this dataset') but still emits a data artifact computed over the broader population: 'how many joint borrowers are there' returns a KPI of 11,035 loans and \u00a31.96bn, the whole book. This is disclosure without honouring \u2014 the exact pattern Tranche D ruled against for PERIODS, not yet applied to POPULATIONS. A declared element that cannot be honoured is a clarification, not a broader answer with a note attached. Invisible until Tranche E because build_fixture fabricated the column."
 - id: ambig_252
   category: ambiguous
   question: balance trend where LTV above 50%

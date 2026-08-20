@@ -151,11 +151,23 @@ class RequestedFacet:
         return {"kind": self.kind, "label": self.label, "field": self.field_key,
                 "status": self.status, "reason": self.reason}
 
-    def disclosure(self) -> str:
-        """The user-facing line for a facet that did not apply."""
+    def disclosure(self, semantics: Optional[dict] = None) -> str:
+        """The user-facing line for a facet that did not apply.
+
+        Names the FIELD as well as the wording where one is known. "joint
+        borrower — field is unavailable in this dataset" tells a reader that
+        something was refused; "joint borrower (Borrower Type) — …" tells them
+        which field their book would need to carry to get an answer. A refusal
+        that cannot be acted on is only half a refusal.
+        """
+        label = self.label
+        if self.field_key and semantics:
+            name = _business_name(self.field_key, semantics)
+            if name and name.strip().lower() != str(label).strip().lower():
+                label = f"{label} ({name})"
         if self.reason:
-            return f"{self.label} — {self.reason}"
-        return self.label
+            return f"{label} — {self.reason}"
+        return label
 
 
 # --------------------------------------------------------------------------- #
@@ -1447,8 +1459,8 @@ def _is_seasoning_population(facet) -> bool:
     return _seasoning.SEASONING_SEGMENT_FIELD in {k for k in keys if k}
 
 
-def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None
-           ) -> Tuple[str, Optional[str]]:
+def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
+           semantics: Optional[dict] = None) -> Tuple[str, Optional[str]]:
     """``(verdict, refusal_or_disclosure_message)``.
 
     * ``VERDICT_REFUSE`` — a facet that changes the number, or that IS the
@@ -1461,25 +1473,42 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None
     def _blocks(facet) -> bool:
         if facet.status == APPLIED:
             return False
-        if facet.kind == KIND_POPULATION:
-            # A population that vanished WITHOUT TRACE is the P1K harm: the route
-            # never looked, and a whole-book figure was returned for a narrowed
-            # question. That refuses.
+        if facet.kind in (KIND_POPULATION, KIND_GROUPING, KIND_RANKING):
+            # HONOUR-OR-CLARIFY, applied to POPULATIONS as well as periods.
             #
-            # A population the route demonstrably TRIED and could not express
-            # (UNAVAILABLE) or that this book does not carry (UNSUPPORTED) is
-            # honest incapacity — it narrowed nothing, so no figure is being
-            # passed off as the narrow one. That is disclosed, exactly as P1I-A
-            # reasoned about an absent column and as the executor already treats
-            # an unavailable filter. Refusing it would reject sound questions
-            # over predicates the parser invented rather than over populations
-            # the user could have meant.
-            return facet.status not in DISCLOSABLE
+            # The rule used to read: a population the route TRIED and could not
+            # express is "honest incapacity — it narrowed nothing, so no figure
+            # is being passed off as the narrow one", and was therefore
+            # disclosed rather than refused.
+            #
+            # That reasoning does not survive contact with what the reader
+            # receives. "How many joint borrowers are there" returned a KPI of
+            # 11,035 loans and £1.96bn — the whole book — with a note attached
+            # saying the borrower field was unavailable. The note is a warning;
+            # the number is the answer, and it answers a different question.
+            # Disclosure is not honouring. That was settled for PERIODS in
+            # Tranche D ("this year" answered over one month is a clarification,
+            # not a narrower answer with a note); the same reasoning applies
+            # here, and this is the more dangerous half, because a wrong
+            # population produces a plausible number that describes something
+            # else entirely.
+            #
+            # So a requested population, grouping or ranking that did not reach
+            # execution BLOCKS, whatever the reason it failed to. The user's
+            # question named it; an answer over the broader set is not that
+            # question's answer.
+            #
+            # The risk the old rule guarded — refusing sound questions over
+            # predicates the PARSER invented — is real, and is handled where it
+            # belongs: facets are derived from the question's own wording, and
+            # the ungrounded-facet guard below drops any that the question does
+            # not support.
+            return True
         return facet.kind in NUMBER_OR_SUBJECT_FACETS or _is_seasoning_population(facet)
 
     blocking = [f for f in receipt.facets if _blocks(f)]
     if blocking:
-        detail = "; ".join(f.disclosure() for f in blocking)
+        detail = "; ".join(f.disclosure(semantics) for f in blocking)
         return VERDICT_REFUSE, (
             f"I understood that you asked for {_join([f.label for f in blocking])}, "
             f"but that could not be applied to the calculation ({detail}). "
@@ -1494,7 +1523,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None
                if f.kind in SHAPE_FACETS and f.status != APPLIED]
     if partial:
         return VERDICT_PARTIAL, (
-            "Not applied: " + "; ".join(f.disclosure() for f in partial) + ".")
+            "Not applied: " + "; ".join(f.disclosure(semantics) for f in partial) + ".")
     return VERDICT_OK, None
 
 

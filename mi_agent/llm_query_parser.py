@@ -369,17 +369,31 @@ _BORROWER_DIM_PREFERENCE = ("borrower_type", "borrower_structure")
 
 def _preferred_borrower_dim(semantics: dict, available_columns=None) -> Optional[str]:
     """Pick the single-vs-joint dimension: the materialised ``borrower_type``
-    first, then ``borrower_structure``. With column context, only a field whose
-    canonical column is actually present is returned."""
+    first, then ``borrower_structure``, preferring one this book actually has.
+
+    When the book has NEITHER, this returns the first registry-known choice
+    rather than ``None``. That distinction is the whole defect it was written
+    with:
+
+    ``None`` meant the caller's ``continue`` dropped the term WITHOUT masking
+    the words it matched, so "balance by borrower type" left "type" lying in the
+    question for a shorter, weaker term to claim — and it was claimed, by
+    ``amortisation_type``. The question was silently rewritten to fit the book.
+    Thirteen calibration cases were that one line.
+
+    Returning the first choice makes a generic term behave exactly like an
+    ordinary one: "balance by broker" resolves to ``broker_channel``, the column
+    is absent, and the executor refuses NAMING the field the user asked for.
+    Preferring an available synonym stays correct — the alternatives all mean the
+    same thing — but preferring a DIFFERENT concept never was."""
     fields = _fields(semantics)
     cols = set(available_columns) if available_columns is not None else None
-    for key in _BORROWER_DIM_PREFERENCE:
-        entry = fields.get(key)
-        if not entry:
-            continue
+    known = [k for k in _BORROWER_DIM_PREFERENCE if fields.get(k)]
+    for key in known:
+        entry = fields[key]
         if cols is None or entry.get("canonical_field", key) in cols:
             return key
-    return None
+    return known[0] if known else None
 # Preference for the MI "Region" dimension: readable display field first, then
 # NUTS3 code fields. geographic_region_classification (a YEAR) is never a region.
 _REGION_PREFERENCE = ("collateral_geography", "geographic_region_collateral",
@@ -392,20 +406,25 @@ def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
     canonical column is actually present in the dataset."""
     fields = _fields(semantics)
     cols = set(available_columns) if available_columns is not None else None
+    known = [k for k in _REGION_PREFERENCE if k in fields]
     if cols is not None:
-        # Data-aware: only a region field whose column is actually present.
-        # If none is present, return None so validation fails clearly rather
-        # than substituting an absent field.
-        for key in _REGION_PREFERENCE:
-            entry = fields.get(key)
-            if entry and entry.get("canonical_field", key) in cols:
+        # Data-aware: prefer a region field whose column is actually present.
+        for key in known:
+            entry = fields.get(key) or {}
+            if entry.get("canonical_field", key) in cols:
                 return key
-        return None
+        # None present. Return the FIRST KNOWN choice, not None.
+        #
+        # The intent recorded here was always "fail clearly rather than
+        # substitute an absent field" — but returning None achieved the
+        # opposite. The caller's ``continue`` dropped the term without masking
+        # the words it matched, leaving them for a shorter, weaker term to
+        # claim. Keeping the concept is what makes the failure clear: the
+        # executor then refuses NAMING the field the user asked for, exactly as
+        # it does for any ordinary absent dimension.
+        return known[0] if known else None
     # No column context: fall back to registry presence (parse-time default).
-    for key in _REGION_PREFERENCE:
-        if key in fields:
-            return key
-    return None
+    return known[0] if known else None
 
 # Metric NL terms -> resolver. Order matters (longer/more-specific first).
 _METRIC_TERMS = (
