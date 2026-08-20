@@ -49,6 +49,15 @@ _ASK_PATTERNS = (
     (AGE,      r"\bborrower age\b|\bage of\b|\bhow old\b"),
     (CURRENCY, r"\bbalance\b|\bexposure\b|\baum\b|\bamount\b|\bvalue of\b|"
                r"\bhow much\b|\bloan size\b|£"),
+    # Pipeline and forecast measures. These live in the pipeline contract rather
+    # than the funded field registry, so they never reached the type from a
+    # declared format — and eleven bank cases were left declaring "any", a value
+    # the check can never fail. Only the unambiguous nouns are listed: a bare
+    # "pipeline by broker" or "completions by month" can mean an amount or a
+    # case count, and those keep "any" with that stated as the reason.
+    (RATE,     r"\bconversion\b|\bconversion rate\b|\bcompletion rate\b"),
+    (COUNT,    r"\bapplications\b|\bcases\b"),
+    (CURRENCY, r"\bexpected funded\b|\bweighted expected\b|\bpipeline amount\b"),
 )
 #: A milestone verb followed by an amount: the amount is the target the
 #: question asks WHEN we reach, never the measure it asks for.
@@ -83,7 +92,11 @@ def subject_side(question: str) -> str:
     follows it — so "loans with LTV above 50%" is cut while "regions with the
     highest LTV" is not.
     """
-    head = (question or "")
+    # The GROUPING clause is not the subject either. "balance by LTV bucket" is
+    # a currency question grouped by a rate band, and reading past "by" typed it
+    # as a rate — the same defect as the condition case, one clause along. The
+    # parser splits here too (``llm_query_parser._grouping_segments``).
+    head = re.split(r"\bby\b", question or "")[0]
     m = _CONDITION_RE.search(head)
     while m:
         if re.search(r"\d", head[m.end():]):

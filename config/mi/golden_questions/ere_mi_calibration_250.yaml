@@ -3874,7 +3874,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3895,7 +3895,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3979,7 +3979,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4000,7 +4000,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4021,7 +4021,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4063,7 +4063,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4084,7 +4084,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4105,7 +4105,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4126,7 +4126,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: forecast_funded_balance
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4146,7 +4146,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4209,7 +4209,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4230,7 +4230,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4251,7 +4251,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4293,7 +4293,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
-  expected_answer_type: any
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
