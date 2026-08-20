@@ -178,12 +178,14 @@ def _competing_scope_sentences(competing) -> List[str]:
                     if pop is not None and pop.rows is not None else "")
             scopes.append(f"{(pop.label if pop else 'an unnamed scope')}"
                           f"{rows}")
+        # No count of scopes here, deliberately: the scopes are named in full
+        # below, so a bare numeral would add nothing and would be the one figure
+        # in this sentence that no finding holds.
         out.append(
-            f"{label} could not be reported: it was produced over "
-            f"{len(findings)} different governed populations "
-            f"({'; '.join(scopes)}) and they do not agree. Presenting either "
-            "figure would imply a scope this answer cannot establish, so "
-            "neither is shown.")
+            f"{label} could not be reported: it was produced over more than one "
+            f"governed population ({'; '.join(scopes)}) and they do not agree. "
+            "Presenting either figure would imply a scope this answer cannot "
+            "establish, so neither is shown.")
     return out
 
 
