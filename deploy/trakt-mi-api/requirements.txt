@@ -1,0 +1,80 @@
+# trakt-mi-api — the App Service runtime dependency contract.
+#
+# This is the file Oryx builds when the API is deployed, because the deploy
+# workflow stages an artefact whose ROOT requirements.txt is this file. The repo
+# root requirements.txt is the *repository's* dependency set (Function App,
+# Streamlit, the ESMA delivery engine, mail); handing that to Oryx made the App
+# Service build install scikit-learn, scipy, streamlit and friends on every
+# deploy — none of which the MI API imports.
+#
+# Every entry below is justified by an import reachable from
+# ``mi_agent_api.app``. tests/test_mi_api_appservice_packaging.py recomputes that
+# import closure and fails if this file drifts from it, so a new runtime
+# dependency cannot be forgotten here and a stale one cannot linger unnoticed.
+#
+# Version specifiers are copied verbatim from the root requirements.txt so the
+# two cannot resolve to different versions of the same library.
+
+# --- Web server (startup.sh: gunicorn + uvicorn worker) ---
+fastapi>=0.110
+uvicorn[standard]>=0.27
+gunicorn>=21.2
+uvicorn-worker>=0.2          # gunicorn worker class (uvicorn_worker.UvicornWorker)
+# Imported directly by mi_agent_api/app.py and copilot_actions.py (BaseModel,
+# Field), so it belongs in the contract rather than being relied on as a FastAPI
+# transitive. Deliberately unpinned: that is exactly how it resolves today, so
+# declaring it changes nothing about which version the App Service installs.
+pydantic
+
+# --- Entra bearer-token validation ---
+# copilot_auth.py, agent_auth.py, react_auth.py, teams_bot.py. [crypto] pulls the
+# RS256 signature backend, without which every token check fails closed at 503.
+PyJWT[crypto]>=2.8
+
+# --- Analytical core ---
+# pandas/numpy: the MI dataset, every analytic in analytics_lib and mi_agent.
+# PyYAML: config/ — semantics registry, tenancy, organisations, principals,
+#         entitlements, buckets, portfolio registry (27 reachable modules).
+pandas>=1.5.0,<3.0.0
+numpy>=1.23
+PyYAML>=6.0
+
+# --- Dataset I/O ---
+# openpyxl: mi_agent_api/pipeline_contract.py and pipeline_history.py read the
+#           weekly pipeline .xlsx extracts through pandas.read_excel.
+# azure-storage-blob: apps/blob_trigger_app/storage.py, the blob:// data source
+#           MI_AGENT_PLATFORM_URI points at. Imported lazily, required in Azure.
+#           azure-identity is NOT needed: the client authenticates with the
+#           TRAKT_BLOB_CONNECTION connection string, never a credential object.
+openpyxl>=3.0
+azure-storage-blob>=12.19
+
+# --- Charts and decks ---
+# plotly: mi_agent/mi_chart_factory.py (chart artifacts the UI renders).
+# python-pptx + matplotlib: mi_agent_pptx, reached from the deck-generation
+#           route via apps.blob_trigger_app.pptx_stage.generate_investor_pptx.
+#           python-pptx pulls lxml transitively, which is why lxml is not listed.
+# kaleido is deliberately absent: mi_chart_factory guards its import and raises a
+#           typed error, and the root requirements never carried it either — so
+#           the deployed behaviour is unchanged.
+plotly>=5.14
+python-pptx>=0.6.21
+matplotlib>=3.5
+
+# --- LLM query parser ---
+# mi_agent/llm_query_parser.py + mi_agent_config.py. The chat runs
+# deterministically when ENABLE_LLM_MI_AGENT is off, but the module is imported
+# at app import time, so the package must be present.
+anthropic>=0.40.0
+
+# --- Deliberately NOT installed on this App Service ---
+# Each is proven unreachable from mi_agent_api.app by the import-closure test:
+#   streamlit      engine/enum_agent review UIs, apps/streamlit — never served here
+#   scikit-learn   engine/gate_1_alignment/aliases/alias_builder.py (+scipy)
+#   rapidfuzz      engine/enum_agent, gate_1_alignment matching
+#   Jinja2         engine/gate_5_delivery/xml_builder.py
+#   reportlab      trakt_mail/presentation.py
+#   lxml           engine ESMA XML providers (still arrives via python-pptx)
+#   azure-functions  the Function App host, not this App Service
+#   python-multipart FastAPI form parsing — no route here declares Form/File/
+#                    UploadFile and nothing calls Request.form()

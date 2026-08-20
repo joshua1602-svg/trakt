@@ -1,0 +1,34 @@
+# trakt-mi-api — what the App Service deployment artefact contains.
+#
+# One repo-relative path per line; blank lines and # comments ignored. The deploy
+# workflow copies exactly these into a staging directory and uploads THAT, rather
+# than the whole checkout. tests/test_mi_api_appservice_packaging.py recomputes
+# the import closure of mi_agent_api.app and fails if a package the API actually
+# imports is missing from this list — the same guard the container image gets
+# from its build-time smoke import, which is what once caught a missing
+# `snapshot`.
+#
+# Adding a path here is how a new runtime dependency ships. Removing one is how a
+# deployment breaks at startup, so remove only with the closure test to back it.
+
+# The App Service startup command is `bash startup.sh`, which resolves relative
+# to /home/site/wwwroot — so this file must land at the artefact ROOT.
+startup.sh
+
+# --- Application packages (the import closure of mi_agent_api.app) ---
+mi_agent_api          # the API itself
+mi_agent              # query parsing, workflow, chart factory
+mi_agent_pptx         # investor deck rendering (deck-generation route)
+mi_workflows          # governed business semantics resolver
+analytics_lib         # buckets, cohorts, the analytic primitives
+engine                # orchestrator/transformation/validation agents
+apps                  # apps.blob_trigger_app: storage, pptx_stage, layout
+snapshot              # snapshot.model — the dataset contract
+trakt_core            # context, tenancy, organisation, principal, entitlement
+trakt_tools           # governed tool registry (agent API surface)
+trakt_notifications   # recipients + layout, reached from teams_bot
+
+# --- Configuration data read at runtime (not code) ---
+config                # semantics registry, tenancy, organisations, principals,
+                      # entitlements, buckets, portfolio + field registries
+configs               # configs/pptx/investor_pack.yaml — the deck definition
