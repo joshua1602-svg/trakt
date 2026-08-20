@@ -23,6 +23,10 @@ workflow; if a number is not in the result, it is not in the answer.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from mi_agent import period_request as _period_request
+
 import logging
 import re
 from dataclasses import dataclass
@@ -327,9 +331,35 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
         mode = MODE_REQUESTED_METRIC
         requested_fields = (rank_intent.field,)
 
+    # HONOUR THE STATED PERIOD, OR CLARIFY. A question naming "this year" that
+    # is answered over the latest month has had a declared element replaced.
+    # Disclosing the narrower window in the prose is not honouring it: the
+    # reader asked about a year. Where the snapshots DO reach back far enough
+    # the span is honoured by opening the comparison at that snapshot; where
+    # they do not, the question is clarified and no shorter window is
+    # substituted. The same code answers once more history is loaded.
+    period_request = intent.period_request
+    span = _period_request.requested_span(question)
+    if span is not None and not (period_request.requested_start
+                                 or period_request.requested_end):
+        if len(snapshots) <= span.periods:
+            message = _period_request.clarification(span, len(snapshots))
+            return chat_routing._envelope(
+                ok=False, question=question, spec=spec_dict, artifacts=[],
+                answer=message, error=message, route="period_change",
+                warnings=[message])
+        opening = snapshots[-1 - span.periods]
+        # The resolver takes a calendar token; a reporting date is the governed
+        # identity of a snapshot, and its year-month is that token.
+        opening_token = str(opening.reporting_date or "")[:7]
+        if opening_token:
+            period_request = replace(period_request,
+                                     requested_start=opening_token,
+                                     relative_mode=None)
+
     request = PeriodChangeRequest(
         question=question, mode=mode,
-        period_request=intent.period_request,
+        period_request=period_request,
         requested_fields=requested_fields,
         requested_concepts=() if rank_intent.requested else intent.requested_concepts,
         scope=scope_ref,

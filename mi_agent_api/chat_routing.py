@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from mi_agent.mi_query_executor import _apply_filters
 from mi_agent.parsed_question import ParsedQuestion
 
+from mi_agent import period_request as _period_request
 from mi_agent import portfolio_lens as _portfolio_lens
 
 _logger = _logging.getLogger("mi_agent_api.chat_routing")
@@ -445,10 +446,23 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
                            ) -> Optional[Dict[str, Any]]:
     """Month-on-month movement across the governed metrics, with attribution."""
     lens = _resolve_lens(question, source_lens)
+    # Honour the STATED period where the data covers it. A question that names
+    # "this year" and is answered over the latest month has had a declared
+    # element replaced, and disclosing the narrower window in the prose is not
+    # the same as honouring it.
+    span = _period_request.requested_span(question)
     mv = movement_mod.period_movement(
         output_root, client_id, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label)
+        lens_filters=lens.filters or None, lens_label=lens.label,
+        span_periods=span.periods if span else 1)
     if not mv.get("available"):
+        if span is not None and mv.get("spanRequested"):
+            message = _period_request.clarification(
+                span, int(mv.get("periodsAvailable") or 0))
+            return _envelope(
+                ok=False, question=question, spec=spec_dict, artifacts=[],
+                answer=message, error=message, route="period_movement",
+                warnings=[message])
         return _envelope(
             ok=True, question=question, spec=spec_dict, artifacts=[],
             answer=f"I can't compare against the prior month yet: "

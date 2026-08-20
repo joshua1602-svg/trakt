@@ -1,0 +1,47 @@
+
+====================================================================================================
+TERM regional: 5 question(s) in the estate contain it
+  [calibration] largest regional concentration                                   metric=current_outstanding_balance agg=sum dim=geographic_region_obligor filters={} note=
+  [80-bank    ] What is the largest regional concentration?                      metric=current_outstanding_balance agg=sum dim=geographic_region_obligor filters={} note=
+  [probe      ] what is the regional average LTV                                 metric=current_loan_to_value agg=weighted_avg dim=geographic_region_obligor filters={} note=
+  [probe      ] show me regional differences in balance                          metric=current_outstanding_balance agg=sum dim=geographic_region_obligor filters={} note=
+  [probe      ] is there regional concentration risk                             metric=None agg=count dim=None filters={} note=unresolved_metric
+
+====================================================================================================
+TERM size-measure: 7 question(s) in the estate contain it
+  [calibration] average loan size                                                metric=current_outstanding_balance agg=avg dim=None filters={} note=
+  [calibration] balance by ticket size                                           metric=current_outstanding_balance agg=sum dim=ticket_bucket filters={} note=
+  [calibration] loan count by ticket size                                        metric=None agg=count dim=ticket_bucket filters={} note=
+  [calibration] balance by ticket size by region                                 metric=current_outstanding_balance agg=sum dim=None filters={} note=
+  [30-bank    ] Show balance by ticket size.                                     metric=current_outstanding_balance agg=sum dim=ticket_bucket filters={} note=
+  [80-bank    ] What is the average loan size for recent originations?           metric=current_outstanding_balance agg=avg dim=seasoning_segment filters={} note=
+  [probe      ] average size                                                     metric=current_outstanding_balance agg=avg dim=None filters={} note=
+
+====================================================================================================
+TERM best/worst: 4 question(s) in the estate contain it
+  [calibration] show best brokers                                                metric=None agg=count dim=None filters={} note=unresolved_metric
+  [probe      ] which broker has the worst arrears                               metric=arrears_balance agg=sum dim=broker_channel filters={} note=
+  [probe      ] best performing region by balance                                metric=current_outstanding_balance agg=sum dim=geographic_region_obligor filters={} note=
+  [probe      ] which region has the worst LTV                                   metric=current_loan_to_value agg=weighted_avg dim=geographic_region_obligor filters={} note=
+
+====================================================================================================
+TERM to-scope: 10 question(s) in the estate contain it
+  [calibration] exposure to London                                               metric=current_outstanding_balance agg=sum dim=None filters={'geographic_region_obligor': 'London'} note=
+  [calibration] exposure to the South East                                       metric=current_outstanding_balance agg=sum dim=None filters={'geographic_region_obligor': 'South East'} note=
+  [80-bank    ] What is the total exposure to London?                            metric=current_outstanding_balance agg=sum dim=None filters={'geographic_region_obligor': 'London'} note=
+  [80-bank    ] What is our exposure to borrowers over 85?                       metric=current_outstanding_balance agg=sum dim=None filters={'youngest_borrower_age': {'op': 'gt', 'value': 85.0}} note=
+  [44-bank    ] How has lending to direct changed compared with acquired?        metric=None agg=sum dim=None filters={} note=cohort_progression
+  [44-bank    ] How has lending to the front book changed compared with the ba   metric=None agg=count dim=None filters={} note=unresolved_metric
+  [44-bank    ] How has lending to South East changed compared with London?      metric=None agg=count dim=None filters={} note=unmapped
+  [probe      ] exposure to borrowers over 85                                    metric=current_outstanding_balance agg=sum dim=None filters={'youngest_borrower_age': {'op': 'gt', 'value': 85.0}} note=
+  [probe      ] lending to joint borrowers                                       metric=None agg=count dim=None filters={} note=unmapped
+  [probe      ] concentration to the acquired book                               metric=current_outstanding_balance agg=sum dim=geographic_region_obligor filters={} note=
+
+====================================================================================================
+BARE 'to' binding a geography filter (the misfire shape):
+  [calibration] exposure to London                                               metric=current_outstanding_balance agg=sum dim=None filters={'geographic_region_obligor': 'London'} note=
+  [calibration] exposure to the South East                                       metric=current_outstanding_balance agg=sum dim=None filters={'geographic_region_obligor': 'South East'} note=
+  [80-bank    ] What is the total exposure to London?                            metric=current_outstanding_balance agg=sum dim=None filters={'geographic_region_obligor': 'London'} note=
+  [44-bank    ] Where are we closest to our limits?                              metric=current_outstanding_balance agg=sum dim=geographic_region_obligor filters={} note=
+  [probe      ] concentration to the acquired book                               metric=current_outstanding_balance agg=sum dim=geographic_region_obligor filters={} note=
+  total: 5 of 39 questions containing 'to'

@@ -18,6 +18,8 @@ Shared by ``mi_agent/tests/test_mi_calibration_bank.py`` and
 """
 from __future__ import annotations
 
+from . import answer_type as _answer_type
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -180,6 +182,17 @@ def evaluate_case(case: Dict[str, Any], df, semantics: dict,
     em = case.get("expected_metric")
     if em is not None and spec.get("metric") != em:
         fails.append(f"metric {spec.get('metric')} != expected {em}")
+    # The ANSWER TYPE, independent of the measure. A count carries no measure,
+    # so ``expected_metric`` is legitimately null for 31 of these cases and
+    # cannot disagree with anything — which is how "how many loans have a
+    # balance above £250k" answered with a BALANCE and passed.
+    expected_type = case.get("expected_answer_type")
+    if expected_type:
+        observed_type = _answer_type.of_measure(
+            spec.get("metric"), spec.get("aggregation"), semantics)
+        if not _answer_type.satisfies(expected_type, observed_type):
+            fails.append(f"answer type {observed_type} != expected {expected_type} "
+                         f"(metric={spec.get('metric')} agg={spec.get('aggregation')})")
     for d in case.get("expected_dimensions") or []:
         if d not in (di.get("applied") or []) and canonical_of(d, semantics) not in cols:
             fails.append(f"dimension {d} not applied")

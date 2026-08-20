@@ -244,14 +244,23 @@ def portfolio_summary(output_root, client_id: str, *,
 def period_movement(output_root, client_id: str, *,
                     to_run_id: Optional[str] = None,
                     lens_filters: Optional[Dict[str, str]] = None,
-                    lens_label: str = "Total") -> Dict[str, Any]:
-    """Month-on-month movement across the governed metrics, with attribution."""
+                    lens_label: str = "Total",
+                    span_periods: int = 1) -> Dict[str, Any]:
+    """Movement across the governed metrics over ``span_periods``, with attribution.
+
+    ``span_periods`` is how far back the comparison reaches, in governed
+    reporting periods: 1 is month-on-month, 12 is "this year". A span the
+    history cannot reach returns ``available: False`` with the span it was asked
+    for and the span it has — the caller CLARIFIES rather than quietly comparing
+    a shorter window, which is the substitution this parameter exists to stop.
+    """
     frames = evolution_mod.funded_frames(output_root, client_id, to_run_id)
     scoped = []
     for f in frames:
         d = evolution_mod._scope_frame_lens(f.get("df"), lens_filters)
         if d is not None and len(d):
             scoped.append({**f, "df": d})
+    span = max(1, int(span_periods or 1))
     if len(scoped) < 2:
         return {"available": False, "lens": lens_label,
                 "reason": "at least two funded reporting periods are needed to "
@@ -263,10 +272,16 @@ def period_movement(output_root, client_id: str, *,
         return {"available": False, "lens": lens_label,
                 "reason": "at least two funded reporting periods are needed to "
                           "compare against the prior month"}
+    if len(periods) <= span:
+        return {"available": False, "lens": lens_label,
+                "spanRequested": span, "periodsAvailable": len(periods),
+                "reason": (f"the requested span of {span} reporting period(s) "
+                           f"reaches further back than this book's "
+                           f"{len(periods)} governed reporting period(s)")}
 
-    cur_p, pri_p = periods[-1], periods[-2]
+    cur_p, pri_p = periods[-1], periods[-1 - span]
     cur_m, pri_m = _metrics(cur_p), _metrics(pri_p)
-    cur_df, pri_df = scoped[-1]["df"], scoped[-2]["df"]
+    cur_df, pri_df = scoped[-1]["df"], scoped[-1 - span]["df"]
 
     deltas = {
         "funded_balance": _delta(cur_m["funded_balance"], pri_m["funded_balance"]),

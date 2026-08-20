@@ -1,0 +1,10 @@
+
+================================================================================================
+30-question simple-MI bank: 30 cases, 0 type/shape findings
+
+================================================================================================
+80-question wide bank: 80 cases, 2 type/shape findings
+  TYPE   Show the funded balance bridge.                                      asked CURRENCY, returned ANY (metric=None agg=sum)
+  TYPE   How much has the book grown this year?                               asked CURRENCY, returned COUNT (metric=None agg=count)
+
+TOTAL type/shape findings: 2

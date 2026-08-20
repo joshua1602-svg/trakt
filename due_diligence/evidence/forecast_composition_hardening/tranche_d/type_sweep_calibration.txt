@@ -1,0 +1,62 @@
+cases: 252
+
+--- CONFORMANCE findings (returned type != asked type): 0
+
+--- DECLARED-EXPECTATION mismatches (the expectation itself is the wrong type): 0
+
+--- EXPOSURE (status=answer with no expected_metric pinned): 55
+  kpi_005      how many loans are in the book                             COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  kpi_006      number of loans                                            COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  kpi_007      loan count                                                 COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  kpi_008      how many mortgages do we have                              COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  kpi_028      portfolio summary                                          no measure pinned (artifact=kpi)
+  kpi_029      portfolio overview                                         no measure pinned (artifact=kpi)
+  kpi_030      book overview                                              no measure pinned (artifact=kpi)
+  kpi_031      key metrics                                                no measure pinned (artifact=kpi)
+  grp1_045     loan count by region                                       COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_046     loan count by borrower type                                COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_047     loan count by product type                                 COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_048     loan count by LTV bucket                                   COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_049     loan count by age bucket                                   COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_050     loan count by broker                                       COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_051     loan count by account status                               COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_052     loan count by origination channel                          COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_053     loan count by rate type                                    COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_054     loan count by occupancy type                               COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_055     loan count by term bucket                                  COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp1_056     loan count by ticket size                                  COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp2_109     loan count by region and borrower type                     COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp2_110     count by age bucket and LTV bucket                         COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  grp2_111     number of loans by broker and product type                 COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_123     how many loans have LTV above 50%                          COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_124     how many loans have LTV above 40%                          COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_125     how many borrowers are over 70                             COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_126     how many loans have a balance above £250k                  COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_129     how many joint borrowers are there                         COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_134     count by borrower type where age is over 70                COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_149     how many loans have a balance above 200000                 COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  filt_150     how many loans have a balance above 300000                 COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  pipe_183     pipeline amount by stage                                   parse_only: validated at parse level, never executed
+  pipe_184     expected funded by stage                                   parse_only: validated at parse level, never executed
+  pipe_185     pipeline by broker                                         parse_only: validated at parse level, never executed
+  pipe_186     pipeline by stage                                          parse_only: validated at parse level, never executed
+  pipe_187     completions by month                                       parse_only: validated at parse level, never executed
+  pipe_188     pipeline conversion by stage                               parse_only: validated at parse level, never executed
+  pipe_189     top brokers by expected funded amount                      parse_only: validated at parse level, never executed
+  pipe_190     applications over the last four weeks                      parse_only: validated at parse level, never executed
+  pipe_191     pipeline by stage for broker Alpha                         parse_only: validated at parse level, never executed
+  pipe_192     weighted expected funded by week                           parse_only: validated at parse level, never executed
+  pipe_193     how many cases are in the pipeline                         parse_only: validated at parse level, never executed
+  pipe_194     pipeline amount by broker                                  parse_only: validated at parse level, never executed
+  fcast_196    expected funded amount by month                            parse_only: validated at parse level, never executed
+  fcast_197    show projected completions                                 parse_only: validated at parse level, never executed
+  fcast_198    forecast by completion month                               parse_only: validated at parse level, never executed
+  fcast_199    compare current funded balance to expected funded          parse_only: validated at parse level, never executed
+  fcast_200    forecast funded balance                                    parse_only: validated at parse level, never executed
+  fcast_201    what is the projected funded balance next quarter          parse_only: validated at parse level, never executed
+  fcast_202    expected completions over the next three months            parse_only: validated at parse level, never executed
+  fcast_203    run-rate forecast of funded balance                        parse_only: validated at parse level, never executed
+  risk_208     how many loans have a balance above £250k                  COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  risk_210     how many loans are over 80 years old                       COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  risk_219     how many loans are above 70% LTV                           COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE
+  risk_221     how many loans are over 75 years old                       COUNT question: a count carries no measure, so the schema has no field that can pin the ANSWER TYPE

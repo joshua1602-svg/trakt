@@ -55,8 +55,18 @@ from pathlib import Path
 
 import yaml
 
+sys.path.insert(0, "/home/user/trakt")
+from mi_agent import answer_type as _answer_type          # noqa: E402
+from mi_agent.mi_query_validator import load_mi_semantics  # noqa: E402
+
+_SEMANTICS = load_mi_semantics(
+    "/home/user/trakt/mi_agent/mi_semantics_field_registry.yaml")
+
 HERE = Path(__file__).resolve().parent
 EXPECTATIONS = HERE / "frozen_expectations.yaml"
+#: The ANSWER-TYPE companion. The frozen file above is a control and is not
+#: edited; this sits beside it and declares the one axis it does not carry.
+ANSWER_TYPES = HERE / "answer_types_44.yaml"
 
 # --------------------------------------------------------------------------- #
 # Figure extraction — shared with the A5 neutrality proof, same rules.
@@ -238,13 +248,43 @@ def required_disclosures(exp: dict) -> list:
 
 
 def load_expectations() -> dict:
-    return yaml.safe_load(EXPECTATIONS.read_text())
+    exps = yaml.safe_load(EXPECTATIONS.read_text())
+    types = yaml.safe_load(ANSWER_TYPES.read_text()) if ANSWER_TYPES.exists() else {}
+    for key, row in (types or {}).items():
+        exps.setdefault(key, {})["answer_type"] = row.get("answer_type")
+    return exps
 
 
 def key_for(entry: dict) -> str:
     tag, var, pair = entry["intent"], entry["variation"], entry.get("pair") or ""
     return f"{tag}.{var}/{pair}" if pair else f"{tag}.{var}"
 
+
+
+
+def answer_type_check(exp: dict, findings: list, refused: bool):
+    """Does the answer's TYPE match the type the question asks for?
+
+    Uses ``mi_agent.answer_type`` -- the same classifier the calibration bank's
+    evaluator uses, so the two banks cannot drift apart on what "a count
+    question" means.
+    """
+    want = (exp or {}).get("answer_type")
+    if not want or want in ("any", "none"):
+        return "NOT_APPLICABLE", None
+    if refused:
+        return "NOT_APPLICABLE", None
+    seen = set()
+    for f in findings:
+        if f.get("kind") not in ("measure", "movement", "comparison", "forecast"):
+            continue
+        seen.add(_answer_type.of_measure(f.get("metric"), f.get("aggregation"), _SEMANTICS))
+    if not seen:
+        return "NOT_APPLICABLE", "no typed finding to check"
+    if any(_answer_type.satisfies(want, got) for got in seen):
+        return "MATCH", None
+    return "DIVERGE", (f"answer type: expected {want}, the findings carry "
+                       f"{sorted(seen)}")
 
 
 def headline_check(exp: dict, findings: list):
@@ -356,8 +396,17 @@ def score_run(exp: dict, entry: dict, run: dict, prior: dict = None) -> dict:
     if head_note:
         notes.append(head_note)
 
+    # ANSWER TYPE. Declared in the companion file, derived from the question
+    # wording alone. A count question answered with a currency figure satisfies
+    # every other axis here, which is exactly how that class of defect survived
+    # in the calibration bank until it was given a field of its own.
+    type_state, type_note = answer_type_check(exp, findings, refused)
+    if type_note:
+        notes.append(type_note)
+
     semantic = ("MATCH" if (fam_ok and op_ok and outcome_ok
-                            and pop_state != "DIVERGE" and head_state != "DIVERGE")
+                            and pop_state != "DIVERGE" and head_state != "DIVERGE"
+                            and type_state != "DIVERGE")
                 else "DIVERGE")
 
     # ---------------- ARITHMETIC ----------------------------------------- #
@@ -407,7 +456,7 @@ def score_run(exp: dict, entry: dict, run: dict, prior: dict = None) -> dict:
                     else "UNHELD_NEW_FIGURE" if unheld else "COMPLETE")
 
     return {"semantic": semantic, "population": pop_state, "headline": head_state,
-            "arithmetic": arithmetic,
+            "answer_type": type_state, "arithmetic": arithmetic,
             "presentation": presentation, "unheld": unheld,
             "missing": missing_disclosure, "notes": notes, "refused": refused}
 
@@ -436,7 +485,8 @@ def main(paths, prior_dir=None):
                 if run.get("hardFailure"):
                     per_key[key].append({"semantic": "HARD_FAILURE", "population": "n/a",
                                          "arithmetic": "n/a", "presentation": "n/a",
-                                         "headline": "n/a", "unheld": [], "missing": [],
+                                         "headline": "n/a", "answer_type": "n/a",
+                                         "unheld": [], "missing": [],
                                          "notes": [], "refused": False})
                     continue
                 prior = priors.get((entry["book"], entry["arm"], key, i)) if priors else None
@@ -446,7 +496,8 @@ def main(paths, prior_dir=None):
           f"{'ARITHMETIC':11s} PRESENTATION")
     print("-" * 108)
     axes = {a: collections.Counter() for a in ("semantic", "population", "headline",
-                                               "arithmetic", "presentation")}
+                                               "answer_type", "arithmetic",
+                                               "presentation")}
     divergences = []
     for key in sorted(per_key, key=lambda k: (k.split(".")[0], k)):
         rows = per_key[key]
@@ -470,7 +521,8 @@ def main(paths, prior_dir=None):
     total = sum(axes["semantic"].values())
     print(f"runs scored: {total}   variations: {len(per_key)}"
           + (f"   (no expectation for: {sorted(unknown)})" if unknown else ""))
-    for a in ("semantic", "population", "headline", "arithmetic", "presentation"):
+    for a in ("semantic", "population", "headline", "answer_type", "arithmetic",
+              "presentation"):
         line = "  ".join(f"{k}={v}" for k, v in sorted(axes[a].items()))
         print(f"  {a.upper():13s} {line}")
     print()
@@ -479,6 +531,9 @@ def main(paths, prior_dir=None):
                 + axes["presentation"]["UNHELD_NEW_FIGURE"])
     print(f"SEMANTIC agreement with the frozen expectation : {sem_ok}/{total} "
           f"({100.0 * sem_ok / total:.1f}%)")
+    print(f"ANSWER TYPE matches the question's type        : "
+          f"{axes['answer_type']['MATCH']} match, {axes['answer_type']['DIVERGE']} diverge, "
+          f"{axes['answer_type']['NOT_APPLICABLE']} n/a")
     print(f"HEADLINE built from the expected population    : "
           f"{axes['headline']['MATCH']} match, {axes['headline']['DIVERGE']} diverge, "
           f"{axes['headline']['NOT_APPLICABLE']} n/a")

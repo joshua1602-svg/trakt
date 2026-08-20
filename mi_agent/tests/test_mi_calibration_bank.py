@@ -99,6 +99,39 @@ def test_every_category_has_zero_hard_failures(bank):
     assert not by_cat, by_cat
 
 
+def test_every_case_declares_an_answer_type():
+    """Every case pins the TYPE of answer it expects, not just the measure.
+
+    A count carries no measure, so ``expected_metric`` is legitimately null for
+    31 of these cases. Without a separate type field there was nothing for a
+    wrong-typed answer to disagree with, and "how many loans have a balance
+    above GBP 250k" answered with a balance and passed. A new case added
+    without this field would re-open the hole.
+    """
+    from mi_agent import answer_type as A
+    missing = [c["id"] for c in _CASES if not c.get("expected_answer_type")]
+    assert not missing, f"cases with no expected_answer_type: {missing}"
+    unknown = [(c["id"], c["expected_answer_type"]) for c in _CASES
+               if c["expected_answer_type"] not in A.TYPES]
+    assert not unknown, f"cases with an unknown answer type: {unknown}"
+
+
+def test_answer_type_check_has_teeth(df, semantics):
+    """The new field must be able to FAIL, not merely be present.
+
+    Asserted by running a real case against a deliberately wrong declared type:
+    a currency answer must not satisfy a declared count.
+    """
+    from mi_agent import answer_type as A
+    case = dict(next(c for c in _CASES if c["id"] == "kpi_001"))
+    assert case["expected_answer_type"] == A.CURRENCY
+    assert CAL.evaluate_case(case, df, semantics).ok
+    case["expected_answer_type"] = A.COUNT
+    result = CAL.evaluate_case(case, df, semantics)
+    assert not result.ok
+    assert any("answer type" in f for f in result.failures), result.failures
+
+
 # --------------------------------------------------------------------------- #
 # Per-case parametrised check (known_gap cases xfail with their reason).
 # --------------------------------------------------------------------------- #

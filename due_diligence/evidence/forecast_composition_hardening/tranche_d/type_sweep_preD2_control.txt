@@ -1,0 +1,13 @@
+
+================================================================================================
+30-bank PRE-D2 control: 30 cases, 1 type/shape findings
+  TYPE   Show loan count by age band.                                         asked COUNT, returned AGE (metric=youngest_borrower_age agg=avg)
+
+================================================================================================
+80-bank PRE-D2 control: 80 cases, 4 type/shape findings
+  TYPE   Show the funded balance bridge.                                      asked CURRENCY, returned ANY (metric=None agg=sum)
+  TYPE   Show loan count by vintage year.                                     asked COUNT, returned CURRENCY (metric=current_outstanding_balance agg=sum)
+  TYPE   How much has the book grown this year?                               asked CURRENCY, returned COUNT (metric=None agg=count)
+  TYPE   How many loans are in the back book?                                 asked COUNT, returned CURRENCY (metric=current_outstanding_balance agg=sum)
+
+TOTAL type/shape findings: 5
