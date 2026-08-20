@@ -64,6 +64,50 @@ def requested_span(question: str) -> Optional[SpanRequest]:
     return None
 
 
+#: A question can name a time UNIT without naming a count. "Based on the last
+#: few weeks" pins no number, so there is no span to honour or fail — but it
+#: does pin a GRANULARITY, and a series that cannot express weeks cannot answer
+#: it. The count being vague does not make the unit vague.
+_UNIT_PATTERNS = (
+    ("week", r"\bweeks?\b|\bweekly\b|\bfortnight\b"),
+    ("month", r"\bmonths?\b|\bmonthly\b"),
+    ("quarter", r"\bquarters?\b|\bquarterly\b"),
+    ("year", r"\byears?\b|\bannual\b|\bannually\b|\bytd\b"),
+)
+#: Units ordered coarsest-last, so a series' unit can be compared to a request's.
+_UNIT_ORDER = {"week": 0, "month": 1, "quarter": 2, "year": 3}
+
+
+def requested_unit(question: str) -> Optional[str]:
+    """The finest time UNIT the question names, or None."""
+    text = f" {(question or '').lower().strip()} "
+    for unit, pattern in _UNIT_PATTERNS:
+        if re.search(pattern, text):
+            return unit
+    return None
+
+
+def finer_than(requested: Optional[str], available: str) -> bool:
+    """Is the requested unit finer than the one the series can express?"""
+    if not requested:
+        return False
+    return _UNIT_ORDER.get(requested, 99) < _UNIT_ORDER.get(available, 99)
+
+
+def granularity_clarification(requested: str, available: str, basis: str) -> str:
+    """Why a window stated in one unit cannot be answered from a coarser series.
+
+    Names no substitute window. Offering the coarser one as the answer is the
+    substitution this exists to prevent — the same rule as the span
+    clarification, applied to granularity rather than to reach.
+    """
+    return (f"You asked about the last few {requested}s. This figure is measured "
+            f"from {basis}, so the finest window it can express is one "
+            f"{available}. I have not answered over a {available}ly window in "
+            f"its place — ask for a {available}ly view, or for this to be "
+            f"measured from a series that carries {requested}s.")
+
+
 def clarification(span: SpanRequest, available_periods: int) -> str:
     """Why the stated span cannot be honoured, and what would be needed.
 

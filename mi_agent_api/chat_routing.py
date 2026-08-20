@@ -1006,12 +1006,27 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
                   f"{_gbp(weighted.get('forecastFundedBalance'))}); the completion run-rate "
                   f"extrapolation projects ~{_gbp(base)}/month ({_gbp(ann)}/year) forward. {caveat}")
     else:
-        # State the OBSERVATION WINDOW. "Based on the last few weeks, what level
-        # of completions are we achieving?" names a window, and an answer giving
-        # a monthly run-rate without saying how much history it rests on leaves
-        # the reader unable to tell whether their window was honoured. The
-        # sibling milestone answer above has always disclosed it; this one did
-        # not.
+        # HONOUR THE STATED GRANULARITY, OR CLARIFY. "Based on the last few
+        # weeks" pins no COUNT, so there is no span to fail — but it does pin a
+        # UNIT, and this run-rate is measured from month-end funded snapshots.
+        # Disclosing "based on 2 month(s) of funded growth" told the reader what
+        # was used; it did not answer the question they asked, which is the same
+        # shape as answering "this year" over the latest month with a note.
+        #
+        # The weekly pipeline extracts cannot stand in: ten of the twelve carry
+        # no completion at all, so a weekly completion rate would rest on two
+        # observations in the final fortnight — the censoring artefact Tranche C
+        # documents, not a rate.
+        unit = _period_request.requested_unit(question)
+        if _period_request.finer_than(unit, "month"):
+            message = _period_request.granularity_clarification(
+                unit, "month", "month-end funded snapshots")
+            return _envelope(
+                ok=False, question=question, spec=spec_dict, artifacts=[],
+                answer=message, error=message, route="forecast_extrapolation",
+                warnings=[message])
+        # State the OBSERVATION WINDOW on the answers that do stand. The sibling
+        # milestone answer above has always disclosed it; this one did not.
         observed = rr.get("observedMonths")
         basis = (f", based on {observed} month(s) of funded growth"
                  if observed else "")

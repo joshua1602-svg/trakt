@@ -32,8 +32,8 @@ Calculated: Composed governed capabili
   deterministic resolved to     : predicates=-
                                   labels=-
                                   populationApplied=-
-  ok=True refusal=None
-  window disclosed in answer    : Current funded balance £1.96bn; base completion run-rate ~£16.3m/month (£195.5m/year), based on 2 month(s) of funded growth, projected forward with downside/base/upside bands. Downside/base/upside are indicativ
+  ok=False refusal=None
+  window disclosed in answer    : You asked about the last few weeks. This figure is measured from month-end funded snapshots, so the finest window it can express is one month. I have not answered over a monthly window in its place — ask for a 
 
 === Q6.3  Which of our limits are currently most at risk?
   frozen expectation population : the governed limit schedule
