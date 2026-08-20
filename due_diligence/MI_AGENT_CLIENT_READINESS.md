@@ -761,6 +761,7 @@ Deterministic parse unless stated.
 | whole repository, after Tranche E's fixtures, before the four rulings | **9,093 passed, 0 failed**, 26 skipped, 9 xfailed (32:10) |
 | whole repository, after the four rulings | 9,115 passed, **1 failed**, 26 skipped, 29 xfailed (32:14) — see below |
 | bank + governance + manifest, after the fix | **263 passed, 0 failed**, 21 xfailed |
+| whole repository, confirmation run after the fix | **9,116 passed, 0 failed**, 26 skipped, 29 xfailed, 6 subtests (32:31) |
 
 The xfail count moving 9 → 29 is the calibration bank's 21 declared open defects
 replacing its single previous gap; it is the re-pointing of §5.13, not new
