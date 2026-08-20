@@ -290,3 +290,75 @@ def test_requesting_clarifications_does_not_activate_anything(service, opened):
     asked = service.request_clarifications(delivered, actor=ACTOR)
     assert asked.run.state == state_before
     assert asked.case.status != "activated"
+
+
+# --------------------------------------------------------------------------- #
+# Generating a client response — answers, not files
+# --------------------------------------------------------------------------- #
+
+def test_generating_answers_clears_the_outstanding_checklist(service, opened):
+    """The defect this exists for.
+
+    At "receive client responses" an operator sees a checklist of unanswered
+    questions. The button beside it used to generate a loan TAPE — the call
+    succeeded, the checklist was untouched, and it read as a broken button.
+    """
+    sent = service.send_pack(
+        service.approve_pack(service.draft_pack(opened, actor=ACTOR),
+                             actor=ACTOR),
+        actor=ACTOR, to=["client@example.com"])
+    assert service.onboarding.client_checklist(sent.case)
+
+    answered = service.generate_synthetic_answers(sent, actor=ACTOR)
+    assert service.onboarding.client_checklist(answered.case) == []
+
+
+def test_generated_answers_go_through_the_ordinary_validated_path(service,
+                                                                  opened):
+    """No back door: the same validation a real client's answers face."""
+    sent = service.send_pack(
+        service.approve_pack(service.draft_pack(opened, actor=ACTOR),
+                             actor=ACTOR),
+        actor=ACTOR, to=["client@example.com"])
+    answered = service.generate_synthetic_answers(sent, actor=ACTOR)
+
+    contacts = answered.case.answers.get("contacts") or {}
+    assert "@" in str(contacts.get("reporting_contact_email", ""))
+    # Every value is one the form would have accepted — an enum takes a
+    # DECLARED option rather than a plausible-looking string.
+    portfolios = answered.case.answers.get("portfolios") or []
+    if portfolios:
+        cat = service.onboarding.catalogue
+        declared = {o["value"] for o
+                    in cat.field("portfolios", "portfolio_type").options}
+        assert portfolios[0].get("portfolio_type") in declared
+
+
+def test_generating_answers_is_audited_as_synthetic(service, opened):
+    sent = service.send_pack(
+        service.approve_pack(service.draft_pack(opened, actor=ACTOR),
+                             actor=ACTOR),
+        actor=ACTOR, to=["client@example.com"])
+    answered = service.generate_synthetic_answers(sent, actor=ACTOR)
+    events = service.store.list_audit(TENANT_A, answered.case_ref)
+    generated = [e for e in events
+                 if e["action"] == "synthetic_answers_generated"]
+    assert len(generated) == 1
+    assert generated[0]["execution_classification"] == "synthetically_executed"
+    assert generated[0]["detail"]["answers"] > 0
+
+
+def test_answers_and_artefacts_are_two_different_acts(service, opened):
+    """Generating answers must not register files, and vice versa."""
+    sent = service.send_pack(
+        service.approve_pack(service.draft_pack(opened, actor=ACTOR),
+                             actor=ACTOR),
+        actor=ACTOR, to=["client@example.com"])
+
+    answered = service.generate_synthetic_answers(sent, actor=ACTOR)
+    assert answered.run.received_artefacts == [], \
+        "answering questions must not invent a delivery"
+
+    delivered = service.generate_synthetic_response(answered, actor=ACTOR)
+    assert delivered.run.received_artefacts, \
+        "the artefact button still makes up files"

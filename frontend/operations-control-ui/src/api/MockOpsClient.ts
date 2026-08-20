@@ -1828,6 +1828,11 @@ export class MockOpsClient implements OpsClient {
     );
   }
 
+  async generateAgentAnswers(caseRef: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.generateAnswers(caseRef);
+  }
+
   async generateAgentResponse(caseRef: string): Promise<AgentStatus> {
     await this.wait();
     return this.agent.generateResponse(caseRef);

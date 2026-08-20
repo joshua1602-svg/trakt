@@ -213,6 +213,9 @@ export interface OpsClient {
   uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus>;
   /** Generate a client response from the delivery outcome the case implies. */
   generateAgentResponse(caseRef: string): Promise<AgentStatus>;
+  /** Answers the outstanding CLIENT QUESTIONS. Distinct from
+   *  generateAgentResponse, which makes up the data FILES. */
+  generateAgentAnswers(caseRef: string): Promise<AgentStatus>;
   loadAgentFixtureArtefacts(caseRef: string, fixtureId: string): Promise<AgentStatus>;
   runAgentScenario(fixtureId: string): Promise<AgentStatus>;
   getAgentChecklist(caseRef: string): Promise<AgentChecklist>;

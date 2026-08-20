@@ -1139,6 +1139,40 @@ export class MockAgent {
     return this.status(caseRef);
   }
 
+  /**
+   * Answer the outstanding CLIENT QUESTIONS, synthetically.
+   *
+   * Mirrors the server's `/responses/generate`: values are derived from the
+   * served form's own declared type and options, then submitted through the
+   * ordinary `submitClientForm` path so the same refusals apply.
+   *
+   * Distinct from `generateResponse`, which makes up the data FILES.
+   */
+  generateAnswers(caseRef: string): AgentStatus {
+    const form = this.clientForm(caseRef);
+    const slug =
+      (this.onboardingCase(caseRef).client_name || "practice")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "practice";
+    const answers: Record<string, unknown> = {};
+    for (const step of form.steps) {
+      for (const group of step.groups) {
+        for (const f of group.fields) {
+          const value = syntheticAnswer(f, `${slug}.example`);
+          if (value !== undefined) answers[f.key] = value;
+        }
+      }
+    }
+    if (Object.keys(answers).length === 0) {
+      throw new OpsError(
+        "There is nothing outstanding for Trakt to answer on this case.",
+        "OCC_AGENT_NOTHING_TO_ANSWER",
+      );
+    }
+    return this.submitClientForm(caseRef, answers);
+  }
+
   generateResponse(caseRef: string): AgentStatus {
     const stored = this.get(caseRef);
     const facts = this.facts(this.onboardingCase(caseRef), stored);
@@ -1922,6 +1956,40 @@ function interpret(instruction: string) {
         instruction,
       )?.[1] ?? "",
   };
+}
+
+/**
+ * One plausible, valid answer for one question, from its own declaration.
+ *
+ * `undefined` means leave it unanswered — used where nothing sensible can be
+ * made up, which is better than filling a box with noise a reviewer has to
+ * unpick. Kept in step with `fixtures._answer_for` on the server.
+ */
+function syntheticAnswer(
+  f: { key: string; label?: string; type?: string; validation?: string;
+       options?: { value?: string }[] },
+  domain: string,
+): unknown {
+  const kind = (f.type ?? "text").toLowerCase();
+  const rule = (f.validation ?? "").toLowerCase();
+  const label = f.label ?? "this";
+  const slug = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const options = (f.options ?? []).map((o) => o.value).filter(Boolean) as string[];
+
+  if (options.length > 0) return kind === "multi_enum" ? [options[0]] : options[0];
+  if (rule === "lei" || kind === "lei") return "894500SYNTHETIC00042";
+  if (rule === "email" || kind === "email") return `${slug(label) || "contact"}@${domain}`;
+  if (rule === "colour" || kind === "colour") return "#1F3B5C";
+  if (rule === "country" || kind === "country") return "GB";
+  if (rule === "currency" || kind === "currency") return "GBP";
+  if (kind === "boolean") return true;
+  if (kind === "date") return "2026-06-30";
+  if (kind === "number" || kind === "integer" || kind === "decimal") return 0;
+  if (kind === "multiline")
+    return `Practice answer for ${label.toLowerCase()}. Synthetic content for a rehearsal; no client supplied this.`;
+  if (kind === "text" || kind === "identifier") return `Practice ${label.toLowerCase()}`;
+  return undefined;
 }
 
 /** Turn `{"section.field": value}` into a `recordResponse` payload. */

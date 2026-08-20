@@ -1046,6 +1046,47 @@ class OccAgentService:
                             "sha256": artefact.sha256})
         return agent_case
 
+    def generate_synthetic_answers(self, agent_case: AgentCase, *,
+                                   actor: str) -> AgentCase:
+        """Answer THIS case's own outstanding client questions, synthetically.
+
+        The counterpart to :meth:`generate_synthetic_response`, which makes up
+        files. At "receive client responses" an operator is looking at a
+        checklist of unanswered questions, and generating a loan tape does
+        nothing for it — the two are different acts and this is the second one.
+
+        The answers are derived from the served form's own declarations and
+        then submitted through :meth:`submit_client_response`, so they take the
+        identical validated path a real client's answers take: authoritative
+        keys, checked against the form actually served, written by
+        ``OnboardingService.save_step`` exactly as submitted. Nothing here
+        writes to a case directly, and no validation is skipped.
+        """
+        from . import fixtures as _fixtures
+
+        # Deliberately NOT gated on the run's state. A client may answer at any
+        # point, so `submit_client_response` is ungated too — and this must not
+        # be harder to reach than the path it stands in for. `ACTION_ANSWER` is
+        # a different thing: answering an EXCEPTION raised during a run.
+        form = self.client_form(agent_case)
+        answers = _fixtures.generate_answers(
+            form, client_name=self.facts(agent_case).client_name)
+        if not answers:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_ANSWER",
+                "There is nothing outstanding for Trakt to answer on this "
+                "case.", http_status=409)
+        agent_case = self.submit_client_response(
+            agent_case, actor=actor, response=answers)
+        self._audit(agent_case.run, "synthetic_answers_generated",
+                    actor_type=ACTOR_AGENT, actor=actor,
+                    classification=EXEC_SYNTHETICALLY_EXECUTED,
+                    decision_basis="answers derived from the served form's own "
+                                   "declared types and options; submitted "
+                                   "through the ordinary client-response path",
+                    detail={"answers": len(answers)})
+        return agent_case
+
     def generate_synthetic_response(self, agent_case: AgentCase, *,
                                     actor: str) -> AgentCase:
         """Generate a client response for THIS case's own requirements.
