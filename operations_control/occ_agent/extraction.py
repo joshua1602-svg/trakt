@@ -232,6 +232,58 @@ def cues_for(section: Section, f: Field) -> List[str]:
 # The catalogue, flattened
 # --------------------------------------------------------------------------- #
 
+#: Prose cues that genuinely NAME something rather than saying what a sentence
+#: is ABOUT. The rest of the prose map — "client", "lender", "book" — are topic
+#: markers, and a topic marker must not bind a value that has no shape.
+_NAMING_PROSE = frozenset({"called", "named", "they are called"})
+
+
+def label_cues(section: Section, f: Field) -> set:
+    """The cues derived from this field's OWN label and key.
+
+    These always name the field, however short they are: "Logo", "Disclaimer"
+    and "Name" are one word each and perfectly unambiguous, because they ARE
+    the field's name. Only the prose map's additions need judging.
+    """
+    out = {section.label.lower() + " " + f.label.lower(), f.label.lower(),
+           f.key.replace("_", " ").lower()}
+    a = acronym(f.label)
+    if a:
+        out.add(a.lower())
+    return {c for c in out if len(c) >= 2}
+
+
+def cue_names(section: Section, f: Field, cue: str, typed: bool) -> bool:
+    """Whether ``cue`` may bind a value that has no shape of its own.
+
+    A TYPED field can be cued by anything, because its own pattern proves the
+    value: "the client LEI is 8945…" cannot bind the wrong thing. A FREE-TEXT
+    field has no such proof — whatever follows the cue becomes the value — so
+    the cue itself has to be trustworthy.
+
+    Trustworthy means: it comes from the field's own label or key; or the prose
+    map added it as a phrase ("their reporting contact"); or it is one of the
+    few single words that genuinely announce a name.
+
+    Untrustworthy means a bare noun the prose map adds so an operator's
+    sentence reads naturally — "client", "lender", "book". Those say what a
+    sentence is ABOUT.
+
+    This is the defect it removes. "The client needs weekly pipeline" carries
+    the cue ``client``, and with nothing to constrain the value the client's
+    name became "needs weekly pipeline". The same instruction also said "a
+    mortgage lender called ERM Capital", which ``called`` reads correctly — but
+    the bare cue claimed the field first.
+
+    A sentence that names a client with no cue at all ("Onboard Northstar
+    Lending") is still read: by :mod:`.interpretation`'s shape rules, which
+    require a capitalised name run and so cannot swallow a verb phrase.
+    """
+    lowered = cue.strip().lower()
+    return (typed or " " in lowered or lowered in _NAMING_PROSE
+            or lowered in label_cues(section, f))
+
+
 @dataclass(frozen=True)
 class Candidate:
     ref: FieldRef
@@ -242,6 +294,9 @@ class Candidate:
     #: question asked two ways. A cue that names the group binds to whichever
     #: sibling the VALUE fits.
     siblings: Tuple[Tuple[FieldRef, str], ...] = ()
+    #: Whether this cue may bind a free-text value. Decided once, at
+    #: construction, by :func:`cue_names`.
+    names: bool = True
 
     @property
     def typed(self) -> bool:
@@ -264,7 +319,7 @@ def _group(key: str) -> str:
 def _candidates(version: int) -> Tuple[Candidate, ...]:
     cat = catalogue()
     refs: Dict[str, Tuple[FieldRef, Section, Field]] = {}
-    pairs: List[Tuple[FieldRef, str, Optional[str]]] = []
+    pairs: List[Tuple[FieldRef, str, Optional[str], bool]] = []
     for section in cat.sections:
         for f in section.fields:
             if not f.collected:
@@ -284,8 +339,11 @@ def _candidates(version: int) -> Tuple[Candidate, ...]:
                 option_labels=tuple(l for _v, l in options),
                 repeatable=section.repeatable, product=f.product)
             refs[ref.path] = (ref, section, f)
+            pattern = _value_pattern(f)
+            typed = bool(pattern) or bool(ref.options)
             for cue in cues_for(section, f):
-                pairs.append((ref, cue, _value_pattern(f)))
+                pairs.append((ref, cue, pattern,
+                              cue_names(section, f, cue, typed)))
     by_group: Dict[Tuple[str, str], List[Tuple[FieldRef, str]]] = {}
     for ref, _section, f in refs.values():
         pattern = _value_pattern(f)
@@ -293,12 +351,12 @@ def _candidates(version: int) -> Tuple[Candidate, ...]:
             by_group.setdefault((ref.section, _group(ref.key)), []).append(
                 (ref, pattern))
 
-    out = [Candidate(ref=ref, cue=cue, pattern=pattern,
+    out = [Candidate(ref=ref, cue=cue, pattern=pattern, names=names,
                      siblings=tuple(
                          s for s in by_group.get(
                              (ref.section, _group(ref.key)), [])
                          if s[0].path != ref.path))
-           for ref, cue, pattern in pairs]
+           for ref, cue, pattern, names in pairs]
     # Longest cue first, so "reporting contact email" beats "reporting
     # contact"; then typed before free text, so a shape-constrained field
     # claims a value a text field would otherwise swallow whole.
@@ -455,6 +513,9 @@ def _read_clause(clause: str, cat: Catalogue) -> List[Extracted]:
 
     for candidate in candidates(cat):
         if candidate.ref.path in claimed:
+            continue
+        if not candidate.names:
+            # A topic marker, not a naming cue. See Candidate.names.
             continue
         for cue_start in _cue_positions(lower, candidate.cue):
             after = clause[cue_start + len(candidate.cue):]

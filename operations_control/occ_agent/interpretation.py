@@ -565,20 +565,30 @@ class DeterministicInterpreter:
 
 def _says_something(interpretation: Interpretation,
                     case: OnboardingCase) -> bool:
-    """Whether a follow-up answers anything beyond naming somebody.
+    """Whether a follow-up says anything worth proposing as a change.
 
-    A bare proper-noun run on a follow-up is almost always a false positive
-    ("send it to Northstar"), and the client is already named by then.
+    This used to refuse a follow-up whose only content was the client's NAME,
+    on the reasoning that a bare proper-noun run is usually a false positive
+    ("send it to Northstar") and the client is named by then anyway.
+
+    Both halves were wrong in the case that matters. Correcting the client's
+    name is the single most likely correction an operator makes — it is the
+    first thing the agent reads and the first thing it can get wrong — and
+    refusing it left them with a case named after a verb phrase and no way to
+    fix it. "Trakt could not tell what to do with that" was the response to the
+    one instruction it most needed to understand.
+
+    The false positive the guard existed for is now handled where it belongs:
+    :class:`~operations_control.occ_agent.extraction.Candidate.names` will not
+    bind a free-text value on a bare topic cue at all, so "send it to
+    Northstar" yields nothing to propose rather than being caught here.
     """
     if interpretation.reporting_period or interpretation.delivery:
         return True
     if interpretation.streams or interpretation.expected_artefacts:
         return True
     for step, payload in (interpretation.steps or {}).items():
-        if step == "client":
-            if set(payload) - {"client_name"}:
-                return True
-        elif step == "entities":
+        if step == "entities":
             for item in (payload.get("entities") or []):
                 if set(item) - {"legal_name", "roles"}:
                     return True
