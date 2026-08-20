@@ -849,6 +849,12 @@ class TestSecondBookAcceptance:
                     rendered.add(round(abs(float(finding[key])) * 100, 1))
             _record((finding.get("population") or {}).get("rows"))
             _record((finding.get("comparand") or {}).get("rows"))
+            # A rolling-cohort answer states the population at BOTH dates. The
+            # prior count is held on the same population block the current one
+            # is, so it is a declared figure by the same rule — the invariant
+            # here is unchanged, only the field list was incomplete.
+            _record((finding.get("population") or {}).get("rowsPrior"))
+            _record((finding.get("comparand") or {}).get("rowsPrior"))
         # A difference between two declared populations is itself declared.
         rendered |= {round(abs(a - b), 4) for a in list(rendered)
                      for b in list(rendered)}

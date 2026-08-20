@@ -78,10 +78,35 @@ class PopulationRef:
     #: predicate published into it would be a predicate on a different set of
     #: rows entirely.
     dataset: str = "funded"
+    #: Membership of this population at the START of a compared period, where a
+    #: period was compared. NOT the same as ``rows_before``, which is the count
+    #: before the predicate narrowed the CURRENT snapshot.
+    #:
+    #: This is the count the layer already computed per snapshot and discarded;
+    #: it is surfaced rather than recomputed, so nothing new is calculated.
+    rows_prior: Optional[int] = None
+    #: True when membership of this population is defined by a TIME-RELATIVE
+    #: predicate — a months-on-book window or a seasoning segment. Such a
+    #: population is a rolling cohort: a loan joins or leaves it by the passage
+    #: of time alone, so the same label denotes a different row set at each
+    #: reporting date.
+    #:
+    #: Provenance and dimension-value populations are NOT time-relative. Their
+    #: counts also move between snapshots, but only because loans are originated
+    #: or exit — which is genuine book movement, and reads correctly as such.
+    time_relative: bool = False
+
+    @property
+    def membership_changed(self) -> bool:
+        """Whether this population denotes a different row set across the period."""
+        return (self.time_relative and self.rows_prior is not None
+                and self.rows is not None and self.rows_prior != self.rows)
 
     def to_dict(self) -> Dict[str, Any]:
         return {"key": self.key, "label": self.label, "predicate": self.predicate,
                 "rows": self.rows, "rowsBefore": self.rows_before,
+                "rowsPrior": self.rows_prior, "timeRelative": self.time_relative,
+                "membershipChanged": self.membership_changed,
                 "exposure": self.exposure, "isTotal": self.is_total,
                 "dataset": self.dataset}
 

@@ -405,9 +405,19 @@ def period_movement(ctx: AnalyticalContext, *,
         predicate_text = (f"portfolio lens = {lens.label}"
                           + (f" ({', '.join(sorted(str(i) for i in ids))})"
                              if ids else ""))
+    # A3 — the membership of this population at the START of the compared
+    # period. Taken from the snapshot the governed resolution actually chose,
+    # matched by reporting date, so it describes the same two dates the movement
+    # figures do. Every one of these counts was already computed above when the
+    # snapshots were narrowed; none is recalculated here.
+    start_date = str(resolution.start_snapshot.reporting_date)
+    rows_prior = next((int(s.row_count) for s in narrowed
+                       if str(s.reporting_date) == start_date), None)
     ref = PopulationRef(key=population.key, label=population.label,
                         predicate=predicate_text or None,
                         rows=rows_after, rows_before=rows_before,
+                        rows_prior=rows_prior,
+                        time_relative=(population.kind == pops.KIND_SEASONING),
                         is_total=population.is_total)
 
     out: List[Finding] = []

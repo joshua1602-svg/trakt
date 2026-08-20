@@ -111,14 +111,93 @@ def _period_text(finding: Finding) -> str:
 # --------------------------------------------------------------------------- #
 # Composition
 # --------------------------------------------------------------------------- #
+def competing_scopes(result: AnalyticalResult) -> Dict[Tuple[str, str], List[Finding]]:
+    """Measures reported over more than one scope, with more than one value.
+
+    A2. Two findings that name the SAME measure but were computed over DIFFERENT
+    populations are not two facts — they are one question answered twice. Printed
+    side by side they read as interchangeable figures, and a reader has no way to
+    tell which one the rest of the answer used.
+
+    The test is deliberately narrow, and deliberately about VALUES rather than
+    labels: a measure is competing only when its findings disagree on the
+    population predicate AND disagree on the number. Two scopes that produce the
+    same figure are the same quantity described two ways, and there is nothing
+    unsafe about that.
+
+    This contract does not decide which scope is right. It cannot: that is a
+    governance question about the population, not a presentation question. It
+    declines to present either.
+    """
+    groups: Dict[Tuple[str, str], List[Finding]] = {}
+    for finding in result.findings:
+        if not finding.ok or finding.metric is None:
+            continue
+        value = finding.forecast_value if finding.forecast_value is not None else finding.value
+        if value is None:
+            continue
+        groups.setdefault((finding.metric, finding.kind), []).append(finding)
+    # Populations the plan deliberately set against each other. A comparison
+    # finding IS the reconciliation: it names both sides and the delta between
+    # them, so two figures over those two populations are an intended pair, not
+    # one question answered twice. "How has direct moved relative to acquired?"
+    # must keep both numbers.
+    reconciled: List[frozenset] = []
+    for finding in result.of_kind(KIND_COMPARISON):
+        left = finding.population.key if finding.population else None
+        right = finding.comparand.key if finding.comparand else None
+        if left and right:
+            reconciled.append(frozenset({left, right}))
+
+    competing: Dict[Tuple[str, str], List[Finding]] = {}
+    for key, findings in groups.items():
+        if len(findings) < 2:
+            continue
+        predicates = {(f.population.predicate if f.population else None)
+                      for f in findings}
+        values = {round(float(f.forecast_value if f.forecast_value is not None
+                              else f.value), 2) for f in findings}
+        if len(predicates) <= 1 or len(values) <= 1:
+            continue
+        keys = {f.population.key for f in findings if f.population}
+        if any(keys <= pair for pair in reconciled):
+            continue
+        competing[key] = findings
+    return competing
+
+
+def _competing_scope_sentences(competing) -> List[str]:
+    """State that a measure was not presented, and why. No figures."""
+    out: List[str] = []
+    for (metric, _kind), findings in competing.items():
+        label = findings[0].label or metric
+        scopes = []
+        for finding in findings:
+            pop = finding.population
+            rows = (f", {_count(pop.rows)} case(s)"
+                    if pop is not None and pop.rows is not None else "")
+            scopes.append(f"{(pop.label if pop else 'an unnamed scope')}"
+                          f"{rows}")
+        out.append(
+            f"{label} could not be reported: it was produced over "
+            f"{len(findings)} different governed populations "
+            f"({'; '.join(scopes)}) and they do not agree. Presenting either "
+            "figure would imply a scope this answer cannot establish, so "
+            "neither is shown.")
+    return out
+
+
 def compose(result: AnalyticalResult) -> str:
     """The answer text for one analytical result."""
+    competing = competing_scopes(result)
+    suppress = set(competing)
     parts: List[str] = []
     parts.extend(_movement_sentences(result))
     parts.extend(_comparison_sentences(result))
-    parts.extend(_forecast_sentences(result))
+    parts.extend(_forecast_sentences(result, suppress=suppress))
     parts.extend(_composition_sentences(result))
     parts.extend(_limit_sentences(result))
+    parts.extend(_competing_scope_sentences(competing))
     parts.extend(_unavailable_sentences(result))
     if not parts:
         return ("The governed analytical capabilities this question needs "
@@ -139,11 +218,32 @@ def _movement_sentences(result: AnalyticalResult) -> List[str]:
     out: List[str] = []
     for group in by_pop.values():
         head = group[0]
+        pop = head.population
+        label = pop.label if pop else "the book"
+        if pop is not None and pop.membership_changed:
+            # A3 — a ROLLING COHORT. Membership of this population is defined by
+            # a time-relative predicate, so the two dates describe different row
+            # sets. Narrating "X → Y" would imply runoff inside one standing
+            # population; for a one-month origination window the two cohorts can
+            # share no loans at all. Both populations are stated, and the result
+            # is named for what it is.
+            clauses = [f"{f.label} {value_text(f, f.prior_value)} against "
+                       f"{value_text(f)}" for f in group[:5]]
+            out.append(
+                f"{label}: {_count(pop.rows_prior)} loans at "
+                f"{head.period.start if head.period else 'the earlier date'} "
+                f"against {_count(pop.rows)} loans at "
+                f"{head.period.end if head.period else 'the later date'}. "
+                + "; ".join(clauses)
+                + ". These are rolling cohorts — membership is set by the "
+                "origination window, so a loan joins or leaves it with the "
+                "passage of time. This is a comparison of two cohorts, not "
+                "movement within one population.")
+            continue
         clauses = [f"{f.label} {value_text(f, f.prior_value)} → "
                    f"{value_text(f)} ({_delta_text(f)})" for f in group[:5]]
-        label = head.population.label if head.population else "the book"
-        rows = (f", {_count(head.population.rows)} loans"
-                if head.population and head.population.rows is not None else "")
+        rows = (f", {_count(pop.rows)} loans"
+                if pop and pop.rows is not None else "")
         out.append(f"Across {_period_text(head)}, {label}{rows}: "
                    + "; ".join(clauses) + ".")
     return out
@@ -169,10 +269,15 @@ def _comparison_sentences(result: AnalyticalResult) -> List[str]:
     return [f"{lead}{counts}: " + "; ".join(clauses) + "."]
 
 
-def _forecast_sentences(result: AnalyticalResult) -> List[str]:
+def _forecast_sentences(result: AnalyticalResult,
+                        suppress: Optional[set] = None) -> List[str]:
+    suppress = suppress or set()
     out: List[str] = []
-    forecasts = [f for f in result.of_kind(KIND_FORECAST) if f.ok]
-    measures = [f for f in result.of_kind(KIND_MEASURE) if f.ok and f.value is not None]
+    forecasts = [f for f in result.of_kind(KIND_FORECAST)
+                 if f.ok and (f.metric, f.kind) not in suppress]
+    measures = [f for f in result.of_kind(KIND_MEASURE)
+                if f.ok and f.value is not None
+                and (f.metric, f.kind) not in suppress]
     for finding in measures:
         if finding.capability in ("funded_balance_forecast", "pipeline_stock"):
             rows = (f" across {_count(finding.population.rows)} case(s)"
