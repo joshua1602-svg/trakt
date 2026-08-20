@@ -1592,6 +1592,63 @@ def _analytical_narrowed_to(evidence: Mapping[str, Any],
     return False
 
 
+def analytical_populations(envelope: Optional[Dict[str, Any]]) -> List[str]:
+    """Every row population an ANALYTICAL answer declares it computed over.
+
+    Read from the predicates the findings carry, which is the plan's own report
+    of what it narrowed to — the same standard ``_analytical_narrowed_to``
+    applies to geography, extended to any governed population.
+    """
+    if not isinstance(envelope, dict):
+        return []
+    findings = (envelope.get("metadata") or {}).get("analyticalFindings")
+    if not isinstance(findings, list):
+        return []
+    out: List[str] = []
+    for finding in findings:
+        if not isinstance(finding, Mapping):
+            continue
+        for side in ("population", "comparand"):
+            block = finding.get(side)
+            if isinstance(block, Mapping) and block.get("predicate"):
+                out.append(str(block["predicate"]))
+    return out
+
+
+def _analytical_population_satisfies(envelope: Optional[Dict[str, Any]],
+                                     facet: "RequestedFacet") -> bool:
+    """Is this facet's population the one the analytical plan already resolved?
+
+    The Q3 case: a question about the offer pipeline sometimes parsed with an
+    explicit ``pipeline_stage = Offer`` filter and sometimes without. The route
+    resolves OFFER from the INTENT either way and declares it —
+    ``population.predicate = "pipeline_stage = OFFER"``. With the filter present
+    the facet was stamped LOST, because the funded-frame narrowing layer had
+    nothing to report, and the same question answered on one run and refused on
+    the next.
+
+    A filter naming the population the plan already resolved is a NO-OP, not a
+    loss. It is accepted only on the plan's own declaration, and only when the
+    declared predicate names BOTH the same field and the value the facet asked
+    for — so a plan that narrowed to KFI cannot satisfy a request for OFFER.
+    """
+    field = str(facet.field_key or "").strip().lower()
+    if not field:
+        return False
+    wanted = str(facet.label or "").lower()
+    # The value the facet asked for is whatever follows the field in its label
+    # ("the population pipeline_stage = Offer").
+    value = wanted.split(field, 1)[-1] if field in wanted else ""
+    value = re.sub(r"^[\s=:]+", "", value).strip().strip("'\"[]")
+    for predicate in analytical_populations(envelope):
+        text = predicate.lower()
+        if field not in text:
+            continue
+        if not value or value in text:
+            return True
+    return False
+
+
 def analytical_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """What the ANALYTICAL CAPABILITY LAYER declares it actually computed.
 
@@ -1785,6 +1842,13 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.status = LOST
                 facet.reason = ("this answer does not state what proportion of "
                                 "the book the figure represents")
+
+        elif facet.kind == KIND_POPULATION:
+            # EXTEND, rather than constrain: a filter consistent with the
+            # population the plan resolved from the intent is a no-op. Anything
+            # else keeps the status the population ledger already stamped.
+            if analytical and _analytical_population_satisfies(envelope, facet):
+                facet.status, facet.reason = APPLIED, ""
 
         elif facet.kind == KIND_GEOGRAPHIC_SCOPE:
             if analytical:

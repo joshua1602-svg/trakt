@@ -231,19 +231,37 @@ def _requests_concept(concept: str, question: str) -> bool:
 
 
 #: A placeholder the model emitted instead of resolving a value —
-#: ``origination_date ge LAST_4_WEEKS``. It is not a bound; it is the name of
-#: one, and nothing downstream can evaluate it.
+#: ``origination_date ge LAST_4_WEEKS``. It is not a bound; it is the NAME of
+#: one, and nothing downstream can evaluate it. Reported separately from a
+#: fabricated bound because the cause is different: a fabricated bound is the
+#: model inventing a number, while this is a template token reaching the output
+#: unfilled.
 _SYMBOLIC_VALUE_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
-#: A number as a person writes it, with an optional magnitude suffix.
-_QUESTION_NUMBER_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(bn|b|m|k)?", re.I)
+#: A number as a person writes it: thousands separators, decimals, and an
+#: optional magnitude suffix. The separated form is matched FIRST, so
+#: "£1,500,000" is one number and not "1,500" followed by "000".
+_QUESTION_NUMBER_RE = re.compile(
+    r"(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(bn|b|m|k)?", re.I)
 _MAGNITUDE = {"bn": 1e9, "b": 1e9, "m": 1e6, "k": 1e3}
+#: How close a spec value must be to a stated one to count as the same number.
+_VALUE_TOLERANCE = 1e-6
 
 
 def _question_numbers(question: str) -> set:
-    """Every numeric quantity the QUESTION states, magnitude suffixes expanded.
+    """Every numeric quantity the QUESTION states, as the parser might hold it.
 
-    "over £500k" states 500000 as surely as "over 500000" does, and a guard that
-    only matched digits would call the resulting filter fabricated.
+    Three renderings of the same bound must all match, or a legitimate filter is
+    rejected for having been normalised:
+
+    * magnitude suffixes — "over £500k" states 500000 as surely as "over 500000"
+    * thousands separators — "£250,000" is 250000, and "£1,500,000" is 1500000
+    * percentage scale — a question saying "50%" may be held as 50 or as 0.5,
+      depending on whether the field stores points or a fraction
+
+    The percentage forms are added unconditionally rather than only for percent
+    fields: this set is the ALLOWED list, and a guard that wrongly rejects a
+    real filter is worse than one that lets an invented bound through when the
+    invented number happens to be a hundredth of a stated one.
     """
     out: set = set()
     for raw, suffix in _QUESTION_NUMBER_RE.findall(question or ""):
@@ -252,13 +270,31 @@ def _question_numbers(question: str) -> set:
         except ValueError:
             continue
         out.add(base)
+        out.add(base / 100.0)
+        out.add(base * 100.0)
         if suffix:
-            out.add(base * _MAGNITUDE[suffix.lower()])
+            scaled = base * _MAGNITUDE[suffix.lower()]
+            out.add(scaled)
+            out.add(scaled / 100.0)
     return out
 
 
-def fabricated_bounds(filters: Optional[Mapping[str, Any]], question: str) -> List[str]:
-    """Numeric or date BOUNDS the spec applies that the question never states.
+def _governed_field(field: str, semantics: Optional[Mapping[str, Any]]) -> bool:
+    """Is this a field the governed registry carries?
+
+    Asked of the registry rather than of a list here, so a field added to the
+    registry is immediately accepted without a code change.
+    """
+    if not semantics:
+        return True          # nothing to check against; the value test still applies
+    fields = semantics.get("fields") or semantics
+    return str(field) in fields
+
+
+def fabricated_bounds(filters: Optional[Mapping[str, Any]], question: str,
+                      semantics: Optional[Mapping[str, Any]] = None
+                      ) -> List[str]:
+    """Filters the spec applies that the question does not support.
 
     The sibling of :func:`fabricated_concepts`, and the mechanism behind the
     parser's self-disagreement: asked "how does recent lending compare with what
@@ -268,32 +304,46 @@ def fabricated_bounds(filters: Optional[Mapping[str, Any]], question: str) -> Li
     refused the next time — a shipped surface where asking twice gives two
     different outcomes.
 
-    Applying such a bound would be worse than refusing: it silently narrows the
-    book to a population the user never described. Rejecting it lets the
-    question fall back to the deterministic parse, which resolves "recent
-    lending" through the GOVERNED window rather than an invented date.
+    A filter is rejected when EITHER half fails:
 
-    Only scalar bounds are considered. A categorical value ("Pipeline",
-    "South East") is a name, not a bound, and is left to the concept guard and
-    to the executor's own value matching.
+    * the FIELD is not one the governed registry carries, or
+    * the VALUE is a scalar bound the question never states.
+
+    Both halves are needed. Checking the value alone lets a fabricated field
+    through whenever its invented number happens to appear in the question —
+    ``unicorn_score gt 50`` survives "balance where LTV above 50%". Checking the
+    field alone lets an invented bound through on a real field, which is the
+    common case here.
+
+    Only scalar bounds are considered for the value half. A categorical value
+    ("Pipeline", "South East") is a name, not a bound, and is left to the
+    concept guard and to the executor's own value matching.
+
+    ``fabricated_concepts`` does not cover this. It reads the same filter slots,
+    but only for the two governed population CONCEPTS it knows — seasoning and
+    provenance — so a filter on any other field is invisible to it. It is a
+    concept guard, not a field guard, and this is the field-and-bound one.
     """
     stated = _question_numbers(question)
     text = (question or "").lower()
     bad: List[str] = []
     for field, raw in (filters or {}).items():
+        if not _governed_field(field, semantics):
+            bad.append(f"{field} (not a governed field)")
+            continue
         value = raw.get("value") if isinstance(raw, Mapping) else raw
         if isinstance(value, bool) or value is None:
             continue
         if isinstance(value, str):
             if _SYMBOLIC_VALUE_RE.match(value.strip()):
-                bad.append(f"{field}={value}")
+                bad.append(f"{field}={value} (unresolved placeholder)")
                 continue
             date = re.match(r"^(\d{4})-\d{2}(?:-\d{2})?$", value.strip())
             if date and date.group(1) not in text and value.strip().lower() not in text:
                 bad.append(f"{field}={value}")
             continue
         if isinstance(value, (int, float)):
-            if not any(abs(float(value) - n) < 1e-9 for n in stated):
+            if not any(abs(float(value) - n) < _VALUE_TOLERANCE for n in stated):
                 bad.append(f"{field}={value}")
     return sorted(bad)
 

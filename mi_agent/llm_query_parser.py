@@ -4168,7 +4168,7 @@ def parse_with_repair(
             # deterministic parse resolves "recent lending" through the governed
             # window, and the safety net below is what reaches it.
             invented = _population_mod.fabricated_bounds(
-                getattr(spec, "filters", None), user_question)
+                getattr(spec, "filters", None), user_question, semantics)
             vr_ok = vr.ok and not fabricated and not invented
             if fabricated:
                 errors = errors + [
@@ -4177,7 +4177,7 @@ def parse_with_repair(
             if invented:
                 errors = errors + [
                     f"{_FABRICATED_POP_MARK}: {', '.join(invented)} "
-                    f"(the question states no such bound)"]
+                    f"(the question does not support this filter)"]
 
         if original_error_count is None:
             original_error_count = len(errors)
