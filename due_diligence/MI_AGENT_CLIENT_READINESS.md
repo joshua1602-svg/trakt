@@ -223,10 +223,119 @@ with no account of either direction is what a coin does. This is the first chang
 in the programme whose effect on the LLM path is larger than that path's own
 instability — and it is legible *because* the floor was measured first.
 
-## 5–9. Tranches E, F and G
+### 4.5 The 90.7% understates, and by a knowable amount
 
-*(Client-shaped fixtures, conversion methodology and concentration limits. Not
-started.)*
+**Four of the five reverse-direction changes are Q4.4 clarifying** — the four
+runs where "based on the last few weeks" now says the run-rate cannot express
+weeks, which §10.1 establishes is the correct behaviour. The frozen scorer grades
+them `SAFE_REFUSAL`, because it cannot distinguish *a correct clarification* from
+*a failure to answer*. Both are the absence of a figure; only one is a defect.
+
+The scorer is **not** changed. It is the control, it graded both sides of every
+comparison in this programme, and a control edited to flatter a result is not a
+control. So the headline stands as measured — but it is stated here that it
+understates, and by how much: **four runs of 752**, named, on one variation, for
+one reason.
+
+This is the mirror image of the byte-equality finding. There, a frozen baseline
+was **protecting wrong answers** — "How many loans are in the back book?" had
+been answering with a balance and passing, because the only test was that it
+matched last time. Here, a frozen scorer is **penalising a right change**. Both
+follow from the same property: a control that pins behaviour cannot also judge
+whether the behaviour is correct. Both need an independent declared expectation
+to sit beside them, which is what `expected_answer_type` and
+`answer_types_44.yaml` now provide for type, and what nothing yet provides for
+the answer/clarify boundary.
+
+## 5. Tranche E — client-shaped fixtures
+
+### 5.1 A defect in the EXISTING generator, found before building the new one
+
+The completion distribution in the current twelve weekly extracts is not a book
+converting. It is a generator that could not have produced completions any
+earlier.
+
+| extract | 04-13 … 06-15 (ten) | 06-22 | 06-29 |
+|---|---|---|---|
+| COMPLETED cases visible, Alderbridge | **0** | 10 | 32 |
+| COMPLETED cases visible, Kestrelmoor | **0** | 15 | 46 |
+
+**The mechanism, confirmed arithmetically rather than inferred.**
+`tests/analytical/pipeline_fixture.py` creates every case *inside* the published
+window: cohort 0 enters at the first extract. A case reaches COMPLETED after
+`10 + pace` weeks, `pace ∈ {0,1,2,3}`. With twelve extracts (indices 0–11), only
+cohort 0 at paces 0 and 1, and cohort 1 at pace 0, can ever reach ten weeks.
+Every other cohort is arithmetically incapable of completing. The pack has **no
+pre-history** — no population already in flight when the window opens.
+
+Two further consequences of the same cause: **no case withdraws at any point in
+the pack**, and the dwell times are compressed against the governed lags —
+KFI→COMPLETED is 70 days where `stage_days_to_fund` says 90, APPLICATION→
+COMPLETED 49 against 60, OFFER→COMPLETED 28 against 30.
+
+### 5.2 What this does and does not invalidate
+
+Stated precisely, because "the fixture was wrong" is not the same claim as "the
+figures were wrong".
+
+**Not invalidated — Tranche B.** Excluding a settled case from a *forward*
+forecast is correct whatever the data looks like; the population decision does
+not depend on the conversion pattern. The independent recomputation that agreed
+to the penny read the same extracts and checked arithmetic, and that check
+stands. What is fixture-specific is the **magnitudes**: £9,625,160.91 is an open
+book weighted by rates of 0.0635 / 0.1016 / 0.1693, and those rates will move
+materially on a fixture where cases convert throughout. They were always going
+to move on real data; what is new is knowing they came from a near-degenerate
+sample rather than a thin one.
+
+**Not invalidated — Tranche C. Strengthened.** C found this and said so: *"every
+observed completion happened at exactly the same elapsed time"*, *"every
+completion falls in the last two weekly extracts"*, *"there is not one withdrawal
+in the entire twelve-extract history"*, and *"the magnitudes above are a property
+of the generator, and no claim about a real client's conversion rate should be
+drawn from them."* C's conclusion — that the data cannot identify a completion
+rate at the horizons the forecast assumes — is exactly what this mechanism
+predicts. C described the symptom; this is the cause.
+
+**What does change: the standing of the Tranche F question.** F is built to test
+whether an empirical rate can displace a configured one where a maturity test
+passes. On the current fixture that test cannot pass at any stage, so F would be
+testing its own fallback. The client's extracts carry completions in material
+volume throughout, so the fixture is less demanding than reality **in exactly the
+dimension F exists to measure**. That is why the generation spec below changes.
+
+### 5.3 Generation specification
+
+Added to E1/E3, and binding on the new pack:
+
+* **Completions distributed across the whole fifty-two-week window**, at a pace
+  consistent with each stage's `stage_days_to_fund` — KFI 90d, APPLICATION 60d,
+  OFFER 30d — not bunched at the end.
+* **Cases enter at KFI and progress with realistic dwell times**, completing or
+  withdrawing continuously from early in the window. This requires a **warm-up
+  cohort**: cases entering before the first *published* extract, so a population
+  is already in flight when the window opens.
+* **Withdrawals occur throughout**, at a rate that makes the governed
+  `exclude_stages` contract meaningful rather than vacuous.
+* **The stationary pattern is built first.** The declining-KFI stress case only
+  means something if there is a normal conversion pattern underneath it to
+  decline from; the decline is then applied to new KFI intake in the final three
+  months on the nominated book, with the other book held stationary as a control.
+* **The completions-per-week series and the matured observation count per stage
+  are reported for both books BEFORE anything else runs on the new fixtures.**
+  If completions are still bunched, work stops: the fixture is wrong and every
+  downstream measurement inherits it.
+
+### 5.4 The V1 set is untouched
+
+The existing three funded snapshots and eleven weekly extracts, and every
+artefact hashed against them, stay byte-identical. The new pack is an additional
+set with its own manifest section and its own baseline. If a tool would rewrite
+an existing fixture, work stops.
+
+## 6–9. Tranches F and G
+
+*(Conversion methodology and concentration limits. Not started.)*
 
 ## 10. Bank results after Tranche D
 
