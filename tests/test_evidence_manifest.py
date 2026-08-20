@@ -1,0 +1,64 @@
+"""The evidence manifest is verified by the test suite, not only by hand.
+
+Why this exists
+---------------
+MANIFEST.json hashes every evidence input, so an artefact that changes after it
+was measured is detectable. Nothing ran that check automatically, and the gap
+showed: three_axis.py — a hashed instrument — was extended in place during
+Tranche D to add a fourth axis, and manifest verification failed silently for
+the rest of the tranche because nobody re-ran the verifier. The repair was to
+restore the hashed file and put the extended instrument in a new one; this test
+is the part that stops it recurring.
+
+It SKIPS rather than fails when the fixture inputs are absent. Those artefacts
+are gitignored and reproduced from their generators, so a fresh clone legitimately
+does not have them — but a tree that does have them must verify.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+_REPO = Path(__file__).resolve().parents[1]
+_VERIFIER = _REPO / "due_diligence" / "evidence" / "verify_manifest.py"
+
+#: One artefact per generated fixture family. If these are absent the tree has
+#: not materialised its fixtures and there is nothing to verify.
+_FIXTURE_PROBES = (
+    _REPO / "demo_platform" / "workspace" / "store" / "processed" / "platform"
+    / "alderbridge" / "2026-06-30" / "platform_canonical_typed.csv",
+)
+
+
+@pytest.mark.skipif(not _VERIFIER.exists(), reason="evidence pack not present")
+def test_every_evidence_input_matches_the_manifest():
+    if not all(p.exists() for p in _FIXTURE_PROBES):
+        pytest.skip("generated fixtures not materialised in this tree")
+    proc = subprocess.run([sys.executable, str(_VERIFIER)],
+                          capture_output=True, text=True, cwd=str(_REPO))
+    assert proc.returncode == 0, (
+        "evidence manifest verification failed — an artefact changed after it "
+        "was measured, or a run file names an unpinned harness:\n"
+        + proc.stdout + proc.stderr)
+
+
+@pytest.mark.skipif(not _VERIFIER.exists(), reason="evidence pack not present")
+def test_the_client_readiness_pack_reproduces_from_its_generator():
+    """The client-readiness fixture is not committed; its digest is.
+
+    Rebuilding it must give the same bytes, or every Tranche E/F/G measurement
+    was taken on a fixture nobody else can reproduce.
+    """
+    hasher = (_REPO / "due_diligence" / "evidence" / "client_readiness"
+              / "hash_fixture_pack.py")
+    if not hasher.exists():
+        pytest.skip("client-readiness pack not present")
+    proc = subprocess.run([sys.executable, str(hasher), "--check"],
+                          capture_output=True, text=True, cwd=str(_REPO))
+    assert proc.returncode == 0, (
+        "the client-readiness fixture no longer reproduces from its "
+        "generator:\n" + proc.stdout + proc.stderr)
