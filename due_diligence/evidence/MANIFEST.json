@@ -3,8 +3,8 @@
     "analytical_intent_v1",
     "forecast_composition_hardening"
   ],
-  "reportHead": "2e0a31c",
-  "generatedFromTree": "2e0a31c08ef0965ee6291b1e619884f14b4bbf7f",
+  "reportHead": "a4631fc",
+  "generatedFromTree": "a4631fc89077784e55a1cbe2c1a739afe9dbebac",
   "v1RunFilesProducedAtTree": "044d13b",
   "v1ProductionCodeAt": "9125e77",
   "manifestNotes": {
@@ -242,15 +242,15 @@
       "group": "code+config",
       "path": "mi_workflows/analytical/executors.py",
       "role": "capability adapters",
-      "bytes": 53559,
-      "sha256": "90fc5c22a7836ec9e1a218215af02ada5a6bb2f61f1e9f02871f16d6b8fb0b24"
+      "bytes": 54250,
+      "sha256": "fb945b26817be3285bdd19ba921b7a96d7a2db88773c0597252f55c8a305544d"
     },
     {
       "group": "code+config",
       "path": "mi_workflows/analytical/narrative.py",
       "role": "answer composition",
-      "bytes": 11666,
-      "sha256": "1571f4d0aec882336c88cc22a9e7c91d3ae1b07bb2c2d5e47d6b8dd3fe511373"
+      "bytes": 17105,
+      "sha256": "39c13db9b0ba1b36978b5829cf127795ca63f54f38fc4ae8eda9236b4e2ab4a9"
     },
     {
       "group": "code+config",
@@ -263,8 +263,8 @@
       "group": "code+config",
       "path": "mi_workflows/analytical/contract.py",
       "role": "finding contract",
-      "bytes": 16278,
-      "sha256": "d723013a7ab5d51928e759213ce6f5efeb48735744c7fae2563a2ceeca7d2456"
+      "bytes": 17737,
+      "sha256": "727b54b5435c1b9606be83801a72c2ebe443e538e43229d4f2928580c4ce3180"
     },
     {
       "group": "code+config",

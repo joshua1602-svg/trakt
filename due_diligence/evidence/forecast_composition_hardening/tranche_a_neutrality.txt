@@ -1,0 +1,11 @@
+questions                      : 44
+figure sets identical          : 33
+
+FAIL  value changed            : 0
+FAIL  printed but no finding   : 0
+
+OK    withheld by A2 refusal   : 6  ['£15.2m', '£9.6m']
+OK    delta not narrated (A3)  : 20  ['+0.27pp', '+0.55pp', '+£43.1m', '-0.08pp', '-0.12pp', '-£10.6m', '-£13.5m', '-£3.2m']
+OK    newly printed, held      : 18  ['1,282', '143', '367', '472', '504', '9,714']
+
+TRANCHE A NUMERICAL NEUTRALITY: PASS
