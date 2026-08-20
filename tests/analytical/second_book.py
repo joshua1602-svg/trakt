@@ -51,12 +51,16 @@ _ITL3 = {
     "North East": "TLC22", "West Midlands": "TLG31", "Wales": "TLL16",
     "East Midlands": "TLF21", "South West": "TLK14", "London": "TLI43",
     "South East": "TLJ25",
+    # Not drawn by this book's weights; present so a caller that supplies its
+    # own region weights (see client_funded) has a code for every region.
+    "East of England": "TLH12",
 }
 
 _POSTCODE_PREFIX = {
     "North West": "M", "Scotland": "EH", "Yorkshire and The Humber": "LS",
     "North East": "NE", "West Midlands": "B", "Wales": "CF",
     "East Midlands": "NG", "South West": "BS", "London": "SE", "South East": "GU",
+    "East of England": "CB",
 }
 
 
@@ -143,7 +147,9 @@ def _origination_dates(rng: np.random.Generator, spec: PortfolioSpec,
 
 
 def _build_portfolio(spec: PortfolioSpec, rng: np.random.Generator,
-                     latest: date) -> pd.DataFrame:
+                     latest: date,
+                     region_weights: Dict[str, float] = None) -> pd.DataFrame:
+    region_weights = region_weights or _REGION_WEIGHTS
     n = spec.loans
     origination = _origination_dates(rng, spec, latest)
 
@@ -162,8 +168,8 @@ def _build_portfolio(spec: PortfolioSpec, rng: np.random.Generator,
     age_at_origination = np.clip(
         np.round(rng.normal(spec.mean_age, 6.2, n)), 55, 94).astype(int)
 
-    regions = rng.choice(list(_REGION_WEIGHTS),
-                         size=n, p=list(_REGION_WEIGHTS.values()))
+    regions = rng.choice(list(region_weights),
+                         size=n, p=list(region_weights.values()))
     channel = rng.choice(["Broker", "Direct"], size=n,
                          p=([0.72, 0.28] if spec.portfolio_type == "direct"
                             else [0.88, 0.12]))
@@ -194,7 +200,8 @@ def _build_portfolio(spec: PortfolioSpec, rng: np.random.Generator,
 _HPI_ANNUAL = 0.031
 
 
-def _snapshot(base: pd.DataFrame, reporting: date) -> pd.DataFrame:
+def _snapshot(base: pd.DataFrame, reporting: date, *,
+              display_name: str = None, seller_name: str = None) -> pd.DataFrame:
     """One reporting date's canonical rows, DERIVED from each loan's economics.
 
     Balance rolls up at the loan's own rate and the valuation indexes, so LTV
@@ -220,6 +227,8 @@ def _snapshot(base: pd.DataFrame, reporting: date) -> pd.DataFrame:
     age = frame["age_at_origination"].to_numpy() + (months.to_numpy() // 12)
 
     reporting_iso = reporting.isoformat()
+    display_name = display_name or DISPLAY_NAME
+    seller_name = seller_name or SELLER_NAME
     regions = frame["region"].to_numpy()
     out = pd.DataFrame({
         "account_status": "Active",
@@ -253,7 +262,7 @@ def _snapshot(base: pd.DataFrame, reporting: date) -> pd.DataFrame:
         "origination_channel": frame["origination_channel"].to_numpy(),
         "origination_date": frame["origination_date"].to_numpy(),
         "originator_legal_entity_identifier": "SYNTHETICTEST0000000",
-        "originator_name": DISPLAY_NAME,
+        "originator_name": display_name,
         "payment_due": 0.0,
         "pool_addition_date": frame["acquisition_date"].to_numpy(),
         "prepayment_fee": 0.0,
@@ -284,7 +293,7 @@ def _snapshot(base: pd.DataFrame, reporting: date) -> pd.DataFrame:
         "acquisition_date": frame["acquisition_date"].to_numpy(),
         "seller_name": np.where(
             frame["source_portfolio_type"].to_numpy() == "acquired",
-            SELLER_NAME, ""),
+            seller_name, ""),
         "portfolio_cohort": frame["source_portfolio_id"].to_numpy(),
         "platform_loan_key": (frame["source_portfolio_id"].astype(str) + "/"
                               + frame["loan_identifier"].astype(str)).to_numpy(),
@@ -304,23 +313,43 @@ def _inject_nulls(frame: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame
     return frame
 
 
-def build(root: Path) -> Dict[str, object]:
+def build(root: Path, *, client_id: str = None, display_name: str = None,
+          seller_name: str = None, portfolios: Sequence[PortfolioSpec] = None,
+          region_weights: Dict[str, float] = None, seed: int = None,
+          reporting_dates: Sequence[str] = None) -> Dict[str, object]:
     """Write the whole second book under ``root``. Returns its truth manifest.
 
     ``root`` becomes ``TRAKT_LOCAL_BLOB_ROOT``; the platform canonical lands at
     ``processed/platform/<client>/<date>/`` exactly as the assembler writes it.
-    """
-    rng = np.random.default_rng(SEED)
-    latest = date.fromisoformat(REPORTING_DATES[-1])
-    base = pd.concat([_build_portfolio(spec, rng, latest) for spec in PORTFOLIOS],
-                     ignore_index=True)
 
-    platform_dir = Path(root) / "processed" / "platform" / CLIENT_ID
-    truth: Dict[str, object] = {"client_id": CLIENT_ID, "snapshots": {}}
+    Every keyword defaults to the module constant, so a caller that passes only
+    ``root`` gets byte-identical output to before these parameters existed —
+    which matters, because the three funded tapes this produced are hashed in
+    the V1 MANIFEST. They exist so ``client_funded`` can emit a longer monthly
+    history and a differently-shaped book without a second copy of this code.
+
+    ``reporting_dates`` must end at the same date as the default: the base book
+    is generated relative to its last reporting date, so moving the end moves
+    every origination date with it. Adding EARLIER dates is safe — a loan
+    originated after a reporting date is simply not in that snapshot.
+    """
+    client_id = client_id or CLIENT_ID
+    portfolios = tuple(portfolios or PORTFOLIOS)
+    seed = SEED if seed is None else seed
+    reporting_dates = tuple(reporting_dates or REPORTING_DATES)
+
+    rng = np.random.default_rng(seed)
+    latest = date.fromisoformat(reporting_dates[-1])
+    base = pd.concat([_build_portfolio(spec, rng, latest, region_weights)
+                      for spec in portfolios], ignore_index=True)
+
+    platform_dir = Path(root) / "processed" / "platform" / client_id
+    truth: Dict[str, object] = {"client_id": client_id, "snapshots": {}}
     latest_frame = None
-    for iso in REPORTING_DATES:
-        frame = _snapshot(base, date.fromisoformat(iso))
-        frame = _inject_nulls(frame, np.random.default_rng(SEED + int(iso[:4])))
+    for iso in reporting_dates:
+        frame = _snapshot(base, date.fromisoformat(iso),
+                          display_name=display_name, seller_name=seller_name)
+        frame = _inject_nulls(frame, np.random.default_rng(seed + int(iso[:4])))
         folder = platform_dir / iso
         folder.mkdir(parents=True, exist_ok=True)
         frame.to_csv(folder / "platform_canonical_typed.csv", index=False)
@@ -331,7 +360,7 @@ def build(root: Path) -> Dict[str, object]:
             "synthetic_notice": SYNTHETIC_NOTICE,
             "composite_key": "source_portfolio_id + loan_identifier",
             "composite_key_column": "platform_loan_key",
-            "portfolio_count": len(PORTFOLIOS),
+            "portfolio_count": len(portfolios),
             "total_rows": int(len(frame)),
             "output_total_balance": round(total, 2),
             "reporting_date": iso,
@@ -342,7 +371,7 @@ def build(root: Path) -> Dict[str, object]:
                 "snapshot_date": iso,
                 "row_count": int((frame["source_portfolio_id"]
                                   == spec.portfolio_id).sum()),
-            } for spec in PORTFOLIOS],
+            } for spec in portfolios],
         }, indent=2), encoding="utf-8")
         truth["snapshots"][iso] = {"rows": int(len(frame)),
                                    "balance": round(total, 2)}
@@ -352,40 +381,43 @@ def build(root: Path) -> Dict[str, object]:
     latest_dir.mkdir(parents=True, exist_ok=True)
     latest_frame.to_csv(latest_dir / "platform_canonical_typed.csv", index=False)
     (latest_dir / "platform_canonical_manifest.json").write_text(
-        (platform_dir / REPORTING_DATES[-1] / "platform_canonical_manifest.json")
+        (platform_dir / reporting_dates[-1] / "platform_canonical_manifest.json")
         .read_text(encoding="utf-8"), encoding="utf-8")
     (latest_dir / "latest_platform_canonical.json").write_text(json.dumps({
         "synthetic_notice": SYNTHETIC_NOTICE,
-        "client_id": CLIENT_ID,
-        "reporting_date": REPORTING_DATES[-1],
-        "period": REPORTING_DATES[-1][:7],
-        "run_id": REPORTING_DATES[-1],
+        "client_id": client_id,
+        "reporting_date": reporting_dates[-1],
+        "period": reporting_dates[-1][:7],
+        "run_id": reporting_dates[-1],
         "platform_canonical": "platform_canonical_typed.csv",
-        "source_dated_cut": f"blob://processed/platform/{CLIENT_ID}/{REPORTING_DATES[-1]}",
+        "source_dated_cut": f"blob://processed/platform/{client_id}/{reporting_dates[-1]}",
     }, indent=2), encoding="utf-8")
 
     registry = Path(root) / "portfolio_registry.yaml"
     registry.write_text(
         "portfolios:\n" + "".join(
             f"- source_portfolio_id: {spec.portfolio_id}\n"
-            f"  asset_class: equity_release\n" for spec in PORTFOLIOS),
+            f"  asset_class: equity_release\n" for spec in portfolios),
         encoding="utf-8")
     truth["registry"] = str(registry)
-    truth["platform_prefix"] = f"blob://processed/platform/{CLIENT_ID}"
+    truth["platform_prefix"] = f"blob://processed/platform/{client_id}"
     return truth
 
 
-def mi_env(root: Path) -> Dict[str, str]:
+def mi_env(root: Path, *, client_id: str = None,
+           reporting_date: str = None) -> Dict[str, str]:
     """The environment that points the MI read path at this book."""
+    client_id = client_id or CLIENT_ID
+    reporting_date = reporting_date or REPORTING_DATES[-1]
     return {
         "TRAKT_STORAGE_BACKEND": "file",
         "TRAKT_LOCAL_BLOB_ROOT": str(root),
         "MI_AGENT_PLATFORM_URI":
-            f"blob://processed/platform/{CLIENT_ID}/latest",
-        "MI_AGENT_ONBOARDING_OUTPUT_ROOT": f"blob://processed/platform/{CLIENT_ID}",
-        "MI_AGENT_CLIENT_ID": CLIENT_ID,
-        "MI_AGENT_RUN_ID": REPORTING_DATES[-1],
-        "MI_AGENT_REPORTING_DATE": REPORTING_DATES[-1],
+            f"blob://processed/platform/{client_id}/latest",
+        "MI_AGENT_ONBOARDING_OUTPUT_ROOT": f"blob://processed/platform/{client_id}",
+        "MI_AGENT_CLIENT_ID": client_id,
+        "MI_AGENT_RUN_ID": reporting_date,
+        "MI_AGENT_REPORTING_DATE": reporting_date,
         "TRAKT_PORTFOLIO_REGISTRY": str(Path(root) / "portfolio_registry.yaml"),
         "MI_AGENT_LLM_ENABLED": "0",
         "MI_AGENT_AUTH_ENABLED": "false",
