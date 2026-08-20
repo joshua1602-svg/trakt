@@ -616,10 +616,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: '''size'' is parsed as the ticket-size dimension, so this returns balance by ticket bucket
-    instead of a mean-size KPI. Use ''average loan balance''. Follow-up: metric vocabulary for ''loan
-    size''.'
-  notes: Known parser quirk.
+  known_gap: null
+  notes: "D2: 'loan size' resolves as a measure when an aggregator precedes it; the bucket reading is masked."
 - id: grp1_033
   category: single_dim
   question: balance by region
@@ -3230,10 +3228,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Bare ''balance where <filter>'' (no total/how-much/how-many cue) resolves the metric to
-    LTV and drops the filter. Use ''total balance where LTV above 50%''. Follow-up: treat ''balance where
-    ...'' as filtered balance.'
-  notes: Known parser gap on bare filtered balance.
+  known_gap: null
+  notes: "D2: the metric slot is no longer captured by the filter clause (_metric_slot)."
 - id: rank_160
   category: ranking
   question: top 10 regions by balance
@@ -4186,10 +4182,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: 'Resolves to a loan-level ranking TABLE, not a region concentration bar. Use ''which region
-    has the largest balance''. Follow-up: route ''largest <dim> concentration'' to a grouped concentration
-    bar.'
-  notes: 'Known gap: concentration phrasing -> loan-level table.'
+  known_gap: null
+  notes: "D2: 'regional' added as the adjectival form of the governed region dimension."
 - id: risk_208
   category: risk
   question: how many loans have a balance above £250k
@@ -4268,9 +4262,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'A place name (''exposure to London'') is not turned into a region filter — the whole-book
-    balance is returned. Follow-up: parse place names as region-value filters (or clarify).'
-  notes: 'Known gap: place-name exposure not filtered.'
+  known_gap: "FIXTURE gap, not a product gap. The place now resolves to the governed region filter and the answer refuses safely when nothing matches; this synthetic 400-row tape simply carries no London. Tranche E re-bases the bank onto a real book, where the value exists and the case answers."
+  notes: "D2: the place resolves to the governed region filter and refuses safely when nothing matches."
 - id: risk_212
   category: risk
   question: exposure to the South East
@@ -4289,9 +4282,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'A place name (''exposure to London'') is not turned into a region filter — the whole-book
-    balance is returned. Follow-up: parse place names as region-value filters (or clarify).'
-  notes: 'Known gap: place-name exposure not filtered.'
+  known_gap: null
+  notes: "D2: 'exposure to <place>' names a geography filter."
 - id: risk_213
   category: risk
   question: concentration by region
@@ -4390,10 +4382,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: 'The bucket field name pulls the MEASURE (WA LTV / mean age) instead of balance, so ''concentration
-    by LTV bucket'' returns WA LTV per bucket, not the balance concentration. Use ''balance by LTV bucket''.
-    Follow-up: prefer balance for ''concentration by <bucket>''.'
-  notes: Known metric-resolution quirk on bucket concentration.
+  known_gap: null
+  notes: "D2: the grouping term no longer supplies the measure; 'concentration by X' is a balance concentration."
 - id: risk_218
   category: risk
   question: concentration by age bucket
@@ -4412,10 +4402,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: 'The bucket field name pulls the MEASURE (WA LTV / mean age) instead of balance, so ''concentration
-    by LTV bucket'' returns WA LTV per bucket, not the balance concentration. Use ''balance by LTV bucket''.
-    Follow-up: prefer balance for ''concentration by <bucket>''.'
-  notes: Known metric-resolution quirk on bucket concentration.
+  known_gap: null
+  notes: "D2: the grouping term no longer supplies the measure."
 - id: risk_219
   category: risk
   question: how many loans are above 70% LTV
@@ -4494,30 +4482,27 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: '''property value band'' is mis-mapped to the age bucket (no valuation-band dimension in
-    the tape). Follow-up: add a valuation-band dimension or refuse.'
-  notes: Known dimension mis-mapping.
+  known_gap: null
+  notes: "Declared expectation; see MI_AGENT_CLIENT_READINESS.md section 3 for the dimension it names."
 - id: risk_223
   category: risk
   question: high age borrower exposure
-  expected_status: answer
+  expected_status: clarify
   execution: full
   expected_scope: risk
-  expected_metric: current_outstanding_balance
+  expected_metric: null
   expected_metrics: null
   expected_dimensions: []
-  expected_filters:
-  - youngest_borrower_age
-  expected_artifact_type: kpi
-  expected_reconciliation: true
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
   expected_dimension_invariant_ok: true
   expected_filter_invariant_ok: true
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No age threshold is parsed from ''high age'', so the whole-book balance is returned unfiltered.
-    Use ''balance for borrowers over 80''. Follow-up: qualitative-threshold handling or clarify.'
-  notes: 'Known: qualitative ''high age'' not turned into a filter.'
+  known_gap: null
+  notes: "D2: a qualitative bound with no number is a clarify - there is no defensible default for 'high'."
 - id: dq_224
   category: data_quality
   question: coverage for region
@@ -4616,10 +4601,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard - how much data is missing is not a governed analytic here."
 - id: dq_229
   category: data_quality
   question: missing borrower age count
@@ -4637,10 +4620,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard."
 - id: dq_230
   category: data_quality
   question: missing LTV count
@@ -4658,10 +4639,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard."
 - id: dq_231
   category: data_quality
   question: loans excluded from LTV analysis
@@ -4679,10 +4658,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard."
 - id: dq_232
   category: data_quality
   question: which fields are unavailable for this query
@@ -4985,10 +4962,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "D2: 'best' is no longer absorbed as ranking framing; it names a basis the question does not give."
 - id: ambig_248
   category: ambiguous
   question: show bad regions
@@ -5006,10 +4981,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "Subjective concept, clarified rather than substituted."
 - id: ambig_249
   category: ambiguous
   question: show profitability by region
@@ -5027,10 +5000,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "Subjective concept, clarified rather than substituted."
 - id: ambig_250
   category: ambiguous
   question: show me interesting regions
@@ -5048,10 +5019,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "Subjective concept, clarified rather than substituted."
 - id: ambig_251
   category: ambiguous
   question: balance by region by borrower type by LTV bucket
