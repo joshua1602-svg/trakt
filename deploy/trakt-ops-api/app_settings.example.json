@@ -29,6 +29,28 @@
   { "name": "TRAKT_PROCESSED_CONTAINER", "value": "processed-v2" },
   { "name": "TRAKT_RAW_CONTAINER", "value": "raw-v2" },
 
+  { "_comment": "Outbound onboarding email (trakt_mail). OFF unless this switch is an explicit opt-in token, and OFF if ANY of the four settings below is absent — the OCC then keeps its RecordOnlyAdapter, which states plainly that nothing was sent. Turning it on changes only the receipt: the pack workflow DRAFTED -> HUMAN_REVIEW_REQUIRED -> APPROVED_TO_SEND -> SENT and its human approval gate are unchanged, and nothing can be sent that a person has not approved.",
+    "name": "TRAKT_MAIL_OUTBOUND_ENABLED", "value": "true" },
+
+  { "_comment": "The Entra app registration 'Trakt OCC Mail'. Graph APPLICATION permissions Mail.Send (to send) and Mail.Read (to read the message back out of Sent Items for its message id), admin-consented, and scoped to this ONE mailbox with an Exchange Application Access Policy. Verify with Test-ApplicationAccessPolicy before use.",
+    "name": "TRAKT_MAIL_TENANT_ID", "value": "<entra-tenant-guid>" },
+  { "name": "TRAKT_MAIL_CLIENT_ID", "value": "<app-registration-client-id>" },
+
+  { "_comment": "Store as a Key Vault REFERENCE, never a literal, and never in source control: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/trakt-mail-client-secret/). Rotate on the app registration and update the secret; no redeploy is needed.",
+    "name": "TRAKT_MAIL_CLIENT_SECRET", "value": "<key-vault-reference>" },
+
+  { "_comment": "The mailbox every OCC communication is sent FROM. Must be the mailbox the Application Access Policy scopes the app to.",
+    "name": "TRAKT_MAIL_MAILBOX", "value": "admin@traktinfra.io" },
+
+  { "_comment": "OPTIONAL, and strongly advised for the first controlled onboarding. Comma-separated addresses or @domain suffixes this deployment may send to; EMPTY MEANS NO RESTRICTION. Set it to your own address while the capability is being proven, so a stale or mistyped contact on a case cannot reach a real client. Remove it once the first real client is onboarded.",
+    "name": "TRAKT_MAIL_RECIPIENT_ALLOWLIST", "value": "" },
+
+  { "_comment": "OPTIONAL delivery mechanics; the defaults are the supported configuration. sendMail answers 202 with no body, so Sent Items is re-read to recover the real message id; these bound that read-back. Confirmation is best-effort and never fails a send that Graph accepted.",
+    "_defaults": { "TRAKT_MAIL_TIMEOUT_SECONDS": "20", "TRAKT_MAIL_CONFIRM_ATTEMPTS": "3", "TRAKT_MAIL_CONFIRM_DELAY_SECONDS": "2" } },
+
+  { "_comment": "The OCC Agent tab itself. The mail adapter is only ever reached through it, so with this unset no route exists and nothing can be sent.",
+    "name": "OCC_AGENT_SYNTHETIC_ENABLED", "value": "true" },
+
   { "_comment": "Governed runtime mode. Leave UNSET in production: trakt_core defaults to 'production', which is what refuses fixture/synthetic source data. Listed here only so nobody adds it by accident.",
     "_do_not_set": "TRAKT_RUNTIME_MODE" }
 ]
