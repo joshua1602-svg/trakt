@@ -679,6 +679,89 @@ def executed_measure_concepts(query_result: Any) -> Set[str]:
     return concepts
 
 
+#: Words that INTRODUCE a breakdown. A dimension term is a grouping only when
+#: one of these governs it.
+_GROUPING_MARKERS = frozenset({"by", "per", "across", "each"})
+
+#: Transparent to the scan: a second axis in a list inherits the "by" that
+#: opened it ("balance by region and borrower type").
+_GROUPING_CONNECTORS = frozenset({"and", "or", "then", "also", "both", ","})
+
+
+#: Constructions where a dimension IS the axis without any "by" appearing.
+#: "which region has the largest balance", "top 10 regions by balance",
+#: "regions with the most loans" — the ranking is over the breakdown, so the
+#: dimension is a grouping. Detected structurally, not by keyword soup: the
+#: question already carries a RANKING facet in these cases.
+#: Superlative words that make a dimension the axis being ranked over.
+#: Tested DIRECTLY rather than by asking whether a KIND_RANKING facet exists,
+#: because ranking detection has holes: "which region has the largest balance"
+#: produces a ranking facet, while "smallest region by balance", "regions with
+#: the most loans", "highest average LTV regions" and "largest regional
+#: concentration" produce none. Depending on a detector with gaps would import
+#: its gaps into this decision. The gap itself is reported as a finding.
+#: NAMED distinctly from the _SUPERLATIVE_RE defined further down this module,
+#: which serves a different purpose (an extreme SINGLE ROW, not an axis) and
+#: carries a different word list. Sharing the name meant the later definition
+#: silently won, and three cases here passed only because that other pattern
+#: happens to contain "largest"/"highest"/"smallest" — a test passing for a
+#: reason unrelated to what it tests, caught by the one case ("most") the other
+#: pattern does not cover.
+_AXIS_SUPERLATIVE_RE = re.compile(
+    r"\b(?:most|least|highest|lowest|largest|smallest|biggest|top|bottom|"
+    r"best|worst|maximum|minimum|max|min)\b")
+
+
+def _ranks_over_dimensions(facets, question: str = "") -> bool:
+    if any(f.kind == KIND_RANKING for f in (facets or [])):
+        return True
+    return bool(_AXIS_SUPERLATIVE_RE.search((question or "").lower()))
+
+
+#: "coverage for region", "data quality by region" — the dimension is the axis
+#: the coverage is reported ACROSS, not a population being selected.
+_COVERAGE_RE = re.compile(r"\b(?:coverage|completeness|data quality|populated|"
+                          r"missing|null)\b")
+
+
+def _governed_by_grouping_clause(question: str, term: str,
+                                 other_terms=()) -> bool:
+    """Does a grouping clause in ``question`` actually govern ``term``?
+
+    Walks BACK from the term to the first meaningful word, stepping over the
+    connectors that chain a list of axes. "balance by region and borrower type"
+    reaches "by" and is a grouping; "balance by region for joint borrowers"
+    reaches "for" and is not; "how many joint borrowers are there" reaches the
+    start of the question and is not.
+
+    Deliberately conservative: anything it cannot justify from the text is a
+    POPULATION, which is the side that blocks. A wrong guess toward grouping
+    would put a population back on the partial path — the defect this exists to
+    close.
+    """
+    text = (question or "").lower()
+    needle = (term or "").lower().strip()
+    if not needle:
+        return False
+    # Words belonging to OTHER dimension terms are transparent too: in
+    # "average LTV by region and age bucket" the scan back from "age bucket"
+    # must step over "and" AND over "region" to reach the "by" that governs
+    # both. Without this the second axis in every list reads as a population.
+    transparent = set(_GROUPING_CONNECTORS)
+    for other in other_terms or ():
+        transparent.update(re.findall(r"[a-z]+", (other or "").lower()))
+    for match in re.finditer(r"\b" + re.escape(needle) + r"\b", text):
+        before = text[:match.start()]
+        words = re.findall(r"[a-z]+|,", before)
+        for word in reversed(words):
+            if word in transparent:
+                continue
+            if word in _GROUPING_MARKERS:
+                return True
+            break
+    return False
+
+
 def requested_dimension_terms(question: str, semantics: dict,
                               available_columns: Optional[Iterable[str]] = None
                               ) -> List[Tuple[str, str, Tuple[str, ...]]]:
@@ -830,7 +913,27 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
                     "calculated, but it is not a governed measure in this "
                     "dataset, so it was not calculated")))
     for key, term, alts in (requested_dimensions or []):
-        facets.append(RequestedFacet(kind=KIND_GROUPING, label=term,
+        # GROUPING or POPULATION — decided by the question's own words.
+        #
+        # Every requested dimension term used to become a GROUPING facet. "How
+        # many joint borrowers are there" contains no grouping clause at all —
+        # no "by", nothing — and was assigned one anyway, then reported to the
+        # reader as a "grouping dimension". A slot assigned with no textual
+        # warrant is the same family as the whole-string scans this programme
+        # has found four times.
+        #
+        # It matters beyond the label. A grouping that cannot be applied loses
+        # the CUT while the number stays true, so it is a partial answer. A
+        # population that cannot be applied changes WHICH ROWS were counted, so
+        # every number describes something else and it must block. Reading a
+        # population as a grouping put "how many joint borrowers" on the
+        # partial path, where a whole-book KPI stood as the answer.
+        others = [t for _k, t, _a in (requested_dimensions or []) if t != term]
+        is_axis = (_governed_by_grouping_clause(q, term, others)
+                   or _ranks_over_dimensions(facets, q)
+                   or bool(_COVERAGE_RE.search(q)))
+        kind = KIND_GROUPING if is_axis else KIND_POPULATION
+        facets.append(RequestedFacet(kind=kind, label=term,
                                      field_key=key, alt_keys=alts))
     return facets
 
@@ -1473,7 +1576,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     def _blocks(facet) -> bool:
         if facet.status == APPLIED:
             return False
-        if facet.kind in (KIND_POPULATION, KIND_GROUPING, KIND_RANKING):
+        if facet.kind in (KIND_POPULATION, KIND_RANKING):
             # HONOUR-OR-CLARIFY, applied to POPULATIONS as well as periods.
             #
             # The rule used to read: a population the route TRIED and could not
@@ -1493,10 +1596,25 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
             # population produces a plausible number that describes something
             # else entirely.
             #
-            # So a requested population, grouping or ranking that did not reach
-            # execution BLOCKS, whatever the reason it failed to. The user's
-            # question named it; an answer over the broader set is not that
-            # question's answer.
+            # So a requested POPULATION that did not reach execution BLOCKS,
+            # whatever the reason. The user's question named it; an answer over
+            # the broader set is not that question's answer.
+            #
+            # RANKINGS block on the same reasoning and are named here rather
+            # than left to the general rule below, because the case is even
+            # clearer: "which region has the highest balance" has no partial
+            # form. Without the grouping there is no ranking, and a total
+            # answers nothing that was asked.
+            #
+            # GROUPINGS deliberately do NOT block, and that is not a softening.
+            # A missing breakdown is a different loss from a missing population:
+            # ask for balance by region on a book with no region field and the
+            # total balance is still the correct total balance. The reader loses
+            # the CUT, not the truth of the number. Periods and populations both
+            # change the figure — five weeks presented as this year, the whole
+            # book presented as joint borrowers — which is why they block and
+            # this does not. Collapsing the two would have deleted VERDICT_PARTIAL
+            # outright, and the distinction is worth keeping.
             #
             # The risk the old rule guarded — refusing sound questions over
             # predicates the PARSER invented — is real, and is handled where it
@@ -1522,8 +1640,18 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     partial = [f for f in receipt.facets
                if f.kind in SHAPE_FACETS and f.status != APPLIED]
     if partial:
+        # LEADS with what could not be done, rather than appending it.
+        #
+        # "£2.4bn (region unavailable)" is the footnote pattern three tranches
+        # have been spent eliminating: the figure lands first and the caveat
+        # trails it, so the caveat is read as decoration. The same framing
+        # standard already applies to the period disclosures — say what you
+        # could not do, then give what you can.
+        lost = _join([f.label for f in partial])
+        detail = "; ".join(f.disclosure(semantics) for f in partial)
         return VERDICT_PARTIAL, (
-            "Not applied: " + "; ".join(f.disclosure(semantics) for f in partial) + ".")
+            f"I can't break this down by {lost} — {detail}. "
+            f"The total below is calculated over the whole population instead.")
     return VERDICT_OK, None
 
 
