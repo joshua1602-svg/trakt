@@ -326,24 +326,32 @@ def test_whole_book_questions_are_unaffected_by_p1a(frame, semantics):
 
 
 # =========================================================================== #
-# Known P1A limitations — OUT of scope, and they fail SAFE
+# A measure word inside the PREDICATE — fixed, was a known limitation
 # =========================================================================== #
-# Both phrasings below put a measure word inside the PREDICATE ("... with LTV
-# below 50%", "... is with borrowers over 85"). The parser resolves the METRIC
-# from the whole question, so the predicate's measure wins the metric slot and
-# the question is answered about the wrong measure — or no metric resolves at
-# all. That is a metric-side resolution issue, not a filter one: fixing it means
-# masking predicate spans before metric resolution, which is a change to the
-# parser's measure resolution and deliberately not attempted inside P1A.
+# This phrasing puts a measure word inside the predicate ("... with LTV below
+# 50%"). The parser used to resolve the METRIC from the whole question, so the
+# predicate's measure won the metric slot and the P0 guard refused rather than
+# answer about the wrong measure. The comment here used to say that fixing it
+# "means masking predicate spans before metric resolution, which is a change to
+# the parser's measure resolution and deliberately not attempted inside P1A".
 #
-# What matters for launch is that they fail SAFE. The P0 guard catches the
-# measure substitution and refuses; no wrong number is returned.
-def test_known_limitation_measure_inside_predicate_fails_safe(frame, semantics):
+# Tranche D made exactly that change (``_metric_slot``), so the question now
+# ANSWERS, and answers correctly. The assertion moved with it: pinning the
+# refusal would pin the defect the refusal was protecting against.
+def test_measure_inside_predicate_answers_on_the_subject_measure(frame, semantics):
     result = _ask("What is the balance for loans with LTV below 50%?",
                   frame, semantics)
-    assert result["ok"] is False
-    assert "asked about balance" in result["error"]
-    assert "not returned" in result["error"]
+    assert result["ok"] is True, result.get("error")
+    values = _kpi_values(result)
+    expected = float(frame.loc[frame[_LTV] < 50, _BALANCE].sum())
+    assert float(values[f"{_BALANCE}_sum"]) == pytest.approx(expected, rel=1e-9)
+    summary = _summary(result)
+    # The subject measure, not the predicate's, and the predicate still applied.
+    assert summary["measure"] == "Balance"
+    assert summary["aggregation"] == "sum"
+    assert summary["filtersApplied"] == ["Current LTV < 50"]
+    assert summary["population"] == int((frame[_LTV] < 50).sum())
+    assert summary["populationTotal"] == len(frame)
 
 
 def test_a_share_question_is_never_answered_as_a_whole_book_summary(frame, semantics):

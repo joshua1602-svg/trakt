@@ -2533,7 +2533,18 @@ def _deterministic_parse(question: str, semantics: dict,
     # with youngest age more than 70" answers a number.
     is_count_q = bool(re.search(r"\bhow many\b|\bnumber of\b|\bcount of\b", q))
     is_balance_q = bool(re.search(r"\bhow much\b|\btotal balance\b", q))
-    wants_balance_too = bool(re.search(r"\b(balance|exposure|outstanding)\b", q))
+    # A COUNT question also wants the balance only when the balance word sits
+    # BEFORE the counting phrase — "total balance and how many loans over 80".
+    # In "how many loans have a balance above £250k" the word names the field
+    # being filtered ON, and reading it as a second measure turned a count into
+    # a filtered BALANCE with a currency headline. Everything after "how many"
+    # is the population being counted, never the measure.
+    _balance_word = r"\b(balance|exposure|outstanding)\b"
+    if is_count_q:
+        _subject = re.split(r"\bhow many\b|\bnumber of\b|\bcount of\b", q)[0]
+        wants_balance_too = bool(re.search(_balance_word, _subject))
+    else:
+        wants_balance_too = bool(re.search(_balance_word, _metric_slot(q)))
     if is_count_q or is_balance_q:
         # Support one OR MORE filters joined by "and" (numeric thresholds and a
         # categorical region value), e.g. "youngest age more than 70 and
@@ -4148,11 +4159,25 @@ def parse_with_repair(
             # the other population roles.
             fabricated = _population_mod.fabricated_concepts(
                 getattr(spec, "filters", None), user_question)
-            vr_ok = vr.ok and not fabricated
+            # The same rule applied to BOUNDS rather than concepts. "How does
+            # recent lending compare with what we were originating earlier in
+            # the year?" names no date, and the model sometimes answered it with
+            # ``origination_date ge 2024-01-01`` — a population invented from
+            # nothing, applied silently, and emitted only on some runs, so the
+            # same question answered once and refused the next time. The
+            # deterministic parse resolves "recent lending" through the governed
+            # window, and the safety net below is what reaches it.
+            invented = _population_mod.fabricated_bounds(
+                getattr(spec, "filters", None), user_question)
+            vr_ok = vr.ok and not fabricated and not invented
             if fabricated:
                 errors = errors + [
                     f"{_FABRICATED_POP_MARK}: {', '.join(sorted(fabricated))} "
                     f"(the question does not request this population)"]
+            if invented:
+                errors = errors + [
+                    f"{_FABRICATED_POP_MARK}: {', '.join(invented)} "
+                    f"(the question states no such bound)"]
 
         if original_error_count is None:
             original_error_count = len(errors)

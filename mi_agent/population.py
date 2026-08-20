@@ -34,6 +34,7 @@ regress that ruling.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 import pandas as pd
@@ -227,6 +228,74 @@ def _requests_concept(concept: str, question: str) -> bool:
     from .portfolio_lens import resolve_lens
 
     return getattr(resolve_lens(question), "name", "") in ("direct", "acquired")
+
+
+#: A placeholder the model emitted instead of resolving a value —
+#: ``origination_date ge LAST_4_WEEKS``. It is not a bound; it is the name of
+#: one, and nothing downstream can evaluate it.
+_SYMBOLIC_VALUE_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
+#: A number as a person writes it, with an optional magnitude suffix.
+_QUESTION_NUMBER_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(bn|b|m|k)?", re.I)
+_MAGNITUDE = {"bn": 1e9, "b": 1e9, "m": 1e6, "k": 1e3}
+
+
+def _question_numbers(question: str) -> set:
+    """Every numeric quantity the QUESTION states, magnitude suffixes expanded.
+
+    "over £500k" states 500000 as surely as "over 500000" does, and a guard that
+    only matched digits would call the resulting filter fabricated.
+    """
+    out: set = set()
+    for raw, suffix in _QUESTION_NUMBER_RE.findall(question or ""):
+        try:
+            base = float(raw.replace(",", ""))
+        except ValueError:
+            continue
+        out.add(base)
+        if suffix:
+            out.add(base * _MAGNITUDE[suffix.lower()])
+    return out
+
+
+def fabricated_bounds(filters: Optional[Mapping[str, Any]], question: str) -> List[str]:
+    """Numeric or date BOUNDS the spec applies that the question never states.
+
+    The sibling of :func:`fabricated_concepts`, and the mechanism behind the
+    parser's self-disagreement: asked "how does recent lending compare with what
+    we were originating earlier in the year?", the model sometimes emitted
+    ``origination_date ge 2024-01-01``. The question names no date. Whether the
+    model invents one varies run to run, so the same question answered once and
+    refused the next time — a shipped surface where asking twice gives two
+    different outcomes.
+
+    Applying such a bound would be worse than refusing: it silently narrows the
+    book to a population the user never described. Rejecting it lets the
+    question fall back to the deterministic parse, which resolves "recent
+    lending" through the GOVERNED window rather than an invented date.
+
+    Only scalar bounds are considered. A categorical value ("Pipeline",
+    "South East") is a name, not a bound, and is left to the concept guard and
+    to the executor's own value matching.
+    """
+    stated = _question_numbers(question)
+    text = (question or "").lower()
+    bad: List[str] = []
+    for field, raw in (filters or {}).items():
+        value = raw.get("value") if isinstance(raw, Mapping) else raw
+        if isinstance(value, bool) or value is None:
+            continue
+        if isinstance(value, str):
+            if _SYMBOLIC_VALUE_RE.match(value.strip()):
+                bad.append(f"{field}={value}")
+                continue
+            date = re.match(r"^(\d{4})-\d{2}(?:-\d{2})?$", value.strip())
+            if date and date.group(1) not in text and value.strip().lower() not in text:
+                bad.append(f"{field}={value}")
+            continue
+        if isinstance(value, (int, float)):
+            if not any(abs(float(value) - n) < 1e-9 for n in stated):
+                bad.append(f"{field}={value}")
+    return sorted(bad)
 
 
 def fabricated_concepts(filters: Optional[Mapping[str, Any]], question: str) -> List[str]:
