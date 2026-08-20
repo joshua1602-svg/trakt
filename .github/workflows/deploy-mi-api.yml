@@ -33,12 +33,26 @@ on:
 permissions:
   contents: read
 
+# Two OneDeploys against one App Service is the other way to get "Deployment has
+# been stopped due to SCM container restart": the second deployment is itself the
+# management operation that interrupts the first. Queue runs instead of racing
+# them, and never cancel one mid-flight — a half-applied deployment is worse than
+# a slow one.
+concurrency:
+  group: deploy-trakt-mi-api
+  cancel-in-progress: false
+
 env:
   STAGE_DIR: .deploy-artifact/trakt-mi-api
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # A healthy remote build of this artefact is minutes, not tens of minutes.
+    # The cap exists so a wedged SCM container surfaces as a failed run instead
+    # of an hour of billed waiting — the observed stall was killed at 10m08s by
+    # the platform, and anything approaching this bound is worth looking at.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -103,6 +117,8 @@ jobs:
           "${RUNNER_TEMP}/artefact-venv/bin/python" -c "import gunicorn, uvicorn, uvicorn_worker; print('server OK')"
 
       - name: Deploy to Azure App Service
+        id: deploy
+        continue-on-error: true
         uses: azure/webapps-deploy@v3
         with:
           app-name: trakt-mi-api
@@ -110,4 +126,28 @@ jobs:
           # The staged artefact — NOT the repo checkout. Oryx builds the
           # requirements.txt at its root (deploy/trakt-mi-api/requirements.txt)
           # and runs the configured startup command, `bash startup.sh`.
+          package: ${{ env.STAGE_DIR }}
+
+      # A OneDeploy that fails with "Deployment has been stopped due to SCM
+      # container restart" activated nothing: /home/site/wwwroot is untouched, so
+      # re-running is safe and is what Azure's own message asks for ("adding a
+      # small delay can help avoid any conflicts"). The wait is what makes it a
+      # retry rather than an immediate second collision with whatever restarted
+      # the SCM container. One attempt only — a second identical failure is a real
+      # condition to investigate, not something to paper over with more retries.
+      - name: Wait out the SCM restart
+        if: steps.deploy.outcome == 'failure'
+        run: |
+          echo "First attempt failed. If the reason was 'SCM container restart',"
+          echo "check the Activity Log for an app-settings save or a restart"
+          echo "overlapping $(date -u +%H:%M) — a management operation during a"
+          echo "deployment is the documented cause. Waiting 180s before retrying."
+          sleep 180
+
+      - name: Deploy to Azure App Service (retry)
+        if: steps.deploy.outcome == 'failure'
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: trakt-mi-api
+          publish-profile: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
           package: ${{ env.STAGE_DIR }}

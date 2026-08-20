@@ -132,6 +132,14 @@ must exist (run/approve a funded pack first).
 - The platform canonical is downloaded to scratch on resolution (no TTL cache);
   for very large tapes prefer mounting the `latest/` dir and using
   `MI_AGENT_PLATFORM_DIR` instead of `MI_AGENT_PLATFORM_URI`.
+- **Do not save app settings, change the startup command, or restart the app
+  while a deployment is running.** Each of those is a management operation that
+  recycles the SCM container, and Azure kills the in-flight build with
+  *"Deployment has been stopped due to SCM container restart"* — the deployment
+  fails after ~10 minutes with nothing applied. Settings first, then deploy, or
+  wait for the run to go green. The workflow queues its own runs
+  (`concurrency: deploy-trakt-mi-api`) so two deploys cannot collide, and retries
+  once after 3 minutes, but it cannot see a portal edit.
 - Code deploys go through `.github/workflows/deploy-mi-api.yml`, which stages the
   artefact described above. `provision.sh` still `az webapp up`s the repo root —
   fine for first-time provisioning, but re-run the workflow afterwards so the App
