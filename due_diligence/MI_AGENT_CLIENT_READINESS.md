@@ -751,9 +751,110 @@ That the recovered rates are unchanged even at one-week retention is also an
 independent check on the union-across-snapshots correction of §5.7: a terminal
 state observed in a single snapshot is enough, exactly as the method claims.
 
-## 6–9. Tranches F and G
+## 6. Population honour-or-clarify — what shipped, and what did not
 
-*(Conversion methodology and concentration limits. Not started.)*
+Taken as the next piece of work after Tranche E, ahead of F and G, because it
+was the tranche's most consequential finding: a question naming something the
+book does not report, answered over the broader population with a disclosure
+attached.
+
+### 6.1 The scope, as one class
+
+**21 = 13 + 8.** Not two findings. All 21 arise from a single absent field,
+`borrower_type`, and all 21 are the same mechanism — a question naming something
+the book does not carry, resolved to something else rather than refused. The
+split is by severity of outcome, not by defect: thirteen where the substitution
+is caught, eight where it is not.
+
+### 6.2 The root cause was one layer above where Tranche E placed it
+
+The E report said the field resolver reached for a different dimension when the
+named one was absent. Tracing it first, the substitution happens in the
+**parser**, before execution and before any guard: `balance by borrower type`
+parsed to `dimension=amortisation_type`.
+
+Generic terms ("borrower type", "region") resolve through an availability-aware
+preference — prefer whichever synonym this book carries. With **none** available
+it returned `None`, and the caller's `continue` dropped the term **without
+masking the words it had matched**, leaving "type" in the question for a
+shorter, weaker term to claim.
+
+Ordinary terms never did this. `balance by broker` resolves to `broker_channel`,
+the column is absent, and the executor refuses **naming the field**. That
+asymmetry was the whole defect. The region function's own comment said it
+returned `None` "so validation fails clearly rather than substituting an absent
+field" — the intent was right and returning `None` achieved the exact opposite.
+
+Both preference functions now return their first registry-known choice when
+nothing is available, which makes a generic term behave like an ordinary one.
+Preferring an available *synonym* stays correct; preferring a different
+*concept* never was.
+
+| | bank, real book |
+|---|---|
+| before | 231 / 252 |
+| after the parser fix alone | **249 / 252** |
+| after the population rule | **252 / 252** |
+
+### 6.3 Disclosure is not honouring, applied to populations
+
+`assess` recorded the opposite: a population the route tried and could not
+express is "honest incapacity — it narrowed nothing, so no figure is being
+passed off as the narrow one", and was disclosed. That does not survive contact
+with what the reader receives. *"How many joint borrowers are there"* returned a
+KPI of 11,035 loans and £1.96bn with a note attached. The note is a warning; the
+number is the answer, and it answers a different question.
+
+Refusals also name the **field**, not only the wording — "joint borrower
+(Borrower Type)" tells a reader which field their book would need. A refusal
+that cannot be acted on is only half a refusal.
+
+### 6.4 The semantic guard now fails closed
+
+Found by a typo of mine: referencing `facet.field` instead of `field_key` turned
+three refusals into confident whole-book answers, because the guard's
+`except` recorded a warning and let the answer stand. That is the same defect
+being fixed here — a figure presented when the check that would have stopped it
+did not run. Measured before changing: **zero guard faults across all 231
+executed cases**, so failing closed costs nothing on current evidence.
+
+This was a decision taken, not one set. It is reversible in one place.
+
+### 6.5 What did NOT ship: the classification ruling
+
+Implemented in `32c263a`, reverted in `b88286d`. It is described in full in the
+backlog (B1) with a diagnostic hypothesis for whoever picks it up.
+
+| | `28ece25` (shipped) | `32c263a` (reverted) |
+|---|---|---|
+| calibration bank, real book | 252/252 | 252/252 |
+| 752-run A/B vs pre-work | **0 differences** | 160 CORRECT → SAFE_REFUSAL |
+| correct/disclosed | 91.0% | 69.7% |
+| controlled refusals | 9.0% | 30.3% |
+| scoped suites | green | 35 failed |
+| unsafe outcomes | 0 | 0 |
+
+The classification was correct in principle and wrong in effect, and the effect
+is what ships. "New lending", "front book", "back book" and "older vintages" are
+governed seasoning populations the route CAN express; they were answered
+correctly and began blocking.
+
+Two defects were found while attempting it and are recorded in the backlog
+rather than fixed: **ranking detection has holes** (four phrasings of the same
+intent produce no ranking facet where a fifth does), and **`_SUPERLATIVE_RE` was
+defined twice** at module level for two different concepts, the later silently
+winning — three cases passed only because the surviving pattern shared three
+words with the shadowed one.
+
+### 6.6 A coverage gap in the instrument
+
+**The calibration bank showed 252/252 at both commits and could not see a
+160-run, 30-point regression; the 44-variation bank caught it.** Recorded as a
+one-line finding about instrument coverage, not as a work item.
+
+## 7–9. Tranches F and G
+
+*(Conversion methodology and concentration limits. **Not started**, and deliberately not started: the next work is driven by a real client's data and questions, not by further synthetic measurement.)*
 
 ## 10. Bank results after Tranche D
 
@@ -887,6 +988,71 @@ assumed, and there is no real M2L extract in this repository to measure against.
 **A second `value_domain` will test whether the seam is real.** Region is the
 first. The claim that adding a domain is "a registry entry and a resolver, not a
 change to the query path" is unproven until a second one exists.
+
+## 12b. Backlog — NONE OF THIS IS STARTED
+
+Recorded so the next person does not begin from scratch. Every item below is
+**not started**, and none is a condition of shipping the release candidate.
+
+### B1. Facet classification: axis vs value — ATTEMPTED AND REVERTED
+
+A dimension term is classified as a grouping with no check that the question's
+words make it one. "How many joint borrowers are there" contains no grouping
+clause — no "by", no "per", nothing — and is assigned a grouping facet anyway,
+then shown to the reader as a "grouping dimension". A slot filled with no
+textual warrant is the same family as the four whole-string scans.
+
+**This was implemented in `32c263a` and reverted in `b88286d`.** It reached
+252/252 on the calibration bank and regressed the 44-variation bank by 160 runs
+and 30 points. Do not retry the same shape.
+
+*Diagnostic hypothesis, not a conclusion.* The seasoning populations that began
+blocking — "new lending", "front book", "back book", "older vintages" — are
+resolved by the route **by intent rather than by an applied facet**, so the
+facet reads as unapplied and a rule that blocks unapplied populations catches
+them. That is the same shape as the redundant `pipeline_stage = Offer` case in
+D4, which was solved with an acceptance check treating a facet consistent with
+the intent-resolved population as a no-op. Extending that check to governed
+seasoning populations is the likely starting point. It is a starting point, not
+an answer.
+
+*Related, and part of why the term scan cannot tell an axis from a selector:*
+the registry lists `"borrower type"` (which NAMES the dimension) beside
+`"joint borrower"` (which names a VALUE of it) as equal synonyms on
+`borrower_type`.
+
+### B2. Registry axis-vs-value synonyms
+A sweep of the registry separating synonyms that name a dimension from those
+that name one of its values. B1 depends on it or must work around it.
+
+### B3. Ranking detection holes
+"Which region has the largest balance" produces a ranking facet. "Smallest
+region by balance", "regions with the most loans", "highest average LTV
+regions" and "largest regional concentration" produce none. Four phrasings,
+same intent, no ranking facet.
+
+### B4. Duplicate module-level definition lint
+`_SUPERLATIVE_RE` was defined twice in `execution_receipt.py` for two different
+concepts, and the later definition silently won. Three cases passed only because
+the surviving pattern happened to share three words with the shadowed one.
+
+### B5. Clause splitter
+The standing work these findings accumulate against. B1 and B3 are evidence for
+it.
+
+### B6. Guard convergence
+`fabricated_concepts`, `fabricated_bounds` and categorical domain validation are
+three partial guards of convergent form. One validation pass.
+
+### B7. Categorical domain validation
+Sited in field resolution rather than as an envelope guard.
+
+### B8. Real extract retention
+The 26-week terminal retention window is a modelling assumption. §5.14 shows no
+Tranche E figure depends on it, and that the only property that matters —
+bounded rather than unbounded — holds across the whole plausible range. There is
+no real M2L extract in this repository to measure against; measure it against
+the client's actual feed at onboarding.
 
 ## 13. A standing rule the tranche produced
 
