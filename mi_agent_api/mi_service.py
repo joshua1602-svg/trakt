@@ -552,6 +552,23 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         receipt_mod.reconcile_population(
             population, (routed.get("metadata") or {}).get("populationApplied"),
             dataset_columns=(set(frame.columns) if frame is not None else None))
+        # A filter naming the population the ANALYTICAL PLAN already resolved
+        # from the intent is a no-op, not a loss. "Of the current offer pipeline,
+        # how much should convert?" sometimes parsed with an explicit
+        # pipeline_stage = Offer filter and sometimes without; the plan resolves
+        # OFFER either way and declares it on its findings, but the funded-frame
+        # narrowing ledger has nothing to report for a pipeline predicate, so
+        # the facet was stamped LOST and the same question answered on one run
+        # and refused on the next.
+        #
+        # Accepted only on the plan's own declaration, and only when that
+        # declaration names BOTH the same field and the value asked for — a plan
+        # that narrowed to KFI cannot satisfy a request for OFFER, and
+        # account_status = offer (right value, wrong field) stays lost.
+        for _facet in population:
+            if (_facet.status != receipt_mod.APPLIED
+                    and receipt_mod._analytical_population_satisfies(routed, _facet)):
+                _facet.status, _facet.reason = receipt_mod.APPLIED, ""
         facets = list(facets) + population
         if not facets and not substitution and granularity is None:
             # Nothing to adjudicate, but the answer still states what governed
