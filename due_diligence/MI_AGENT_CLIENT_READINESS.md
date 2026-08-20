@@ -621,40 +621,126 @@ Repaired additively, the same way as everything else in this sprint:
 The general point is the one the byte-equality finding already made from the
 other side: **a control that nothing runs is not a control.**
 
-### 5.13 Decisions this tranche puts to approval, rather than taking
+### 5.13 The four decisions, as ruled and implemented
 
-Four, all with blast radius across measurements already reported. None is
-implemented.
+All four were put up, ruled on, and implemented. The rulings, and what each
+turned out to mean once built:
 
-**1. What "a few months" resolves to** (§5.10). Recommendation: **clarify**,
-consistent with the honour-or-clarify rule already in force. Alternatives are to
-pin it to three months, or to keep the current widest-span behaviour but disclose
-that the stated period was imprecise. Changes answers across the 44-variation
-bank.
+**1. Vague recency resolves to the governed window — not a clarification.**
+The silent widening goes regardless of what replaces it. What replaces it is the
+seasoning configuration's own `lending_windows.recent_max_months`, because that
+convention exists precisely to settle this and declining to apply our own
+governed configuration is hard to defend on a phrase this common. Every vague
+phrasing resolves identically, since handling near-identical wordings
+differently is worse than either choice. Clarification stays reserved for spans
+with no governed convention — "the last few weeks" keeps the granularity path.
+The window is read from config, not pinned in code, and disclosed in the answer.
+Q1 now answers 2026-03-31 → 2026-06-30; Q8, which names no period, correctly
+keeps the widest window.
 
-**2. Whether the calibration bank re-points onto a real book permanently**
-(§5.11). Doing so moves its headline from 251/252 to 125/252 and makes every
-prior bank figure incomparable with every later one. Not doing so leaves the bank
-grading against a frame carrying five columns no real book has. Recommendation:
-re-point, and treat the 125/252 as the new baseline with the old figure retired
-rather than restated.
+**2. The bank is permanently on a real book; the old figure is withdrawn.**
+`run_bank` defaults to a real funded tape and `default_bank_frame` **raises**
+rather than falling back — a silent fallback is how the bank came to measure
+something other than what it claimed. 251/252 and 245/13 are withdrawn from the
+V1 report and this one rather than caveated. The number is **231/252 passed, 21
+xfailed**.
 
-**3. Which field "region" resolves to** (§5.11, §5.11a). `collateral_geography`
-holds region names; `geographic_region_obligor` holds ITL3 codes and is what the
-governed filter currently targets. This is one ruling that closes 50 regression
-cases and the remaining `xfail`. It is a semantic decision about the registry,
-not a parser fix.
+**3. Region resolves through the mapping the transformation already builds.**
+The correction to the framing was the substance: raw tapes do not generally
+carry ITL codes at all, so this was never a choice between two representations.
+A field declares `value_domain: uk_region` in business semantics and the
+executor asks the semantics what a value means — postcode district, postcode
+area, ITL3 code, ITL3/ITL2/ITL1 name and common aliases all reach the same rows.
+The check that matters: on a book stripped of its readable region column,
+"London" resolves to 1,380 rows, exactly the count the name column gives.
 
-**4. The three refusal expectations fitted to the fixture** (§5.11).
-`unsup_233`, `unsup_234`, `unsup_239` expect refusal on defaulted/arrears
-questions because `build_fixture` lacks those columns. Real books carry them,
-all-zero. Recommendation: re-declare as answerable, since refusing to report a
-field the book does report is the wrong behaviour.
+But the measurement that followed changed what this decision was *for*. On a
+real book the product **already** resolved "region" correctly — "balance by
+region" groups by `collateral_geography`, "exposure to London" filters it to
+1,380 rows. All 50 region regressions were the bank's expectation pinning the
+NUTS3 field because `build_fixture` had no readable one. So the resolver is not
+what fixed those 50 cases; re-pointing the expectation was. The resolver earns
+its place for the case a real client will actually present — a book whose tape
+carries a postcode and nothing else — and for the terms no client would ever
+type a code for.
 
-One item is added to the backlog rather than to this list, because it needs no
-ruling: **the 13 dimension substitutions** (§5.11) are the same defect class as
-the D2 no-silent-substitution work and should simply be fixed in the field
-resolver, alongside the categorical-domain validation already queued there.
+**4. The three refusal expectations are re-declared, with the reason per case.**
+Against the test asked for — answerable on *any* real book, or only on this one?
+`default_amount` and `arrears_balance` are canonical Annex-2 fields on every book
+onboarded through the transformation; `build_fixture` simply omits them. On the
+demonstration book they correctly return 0.00 across 11,035 loans. Refusing to
+report a field the book does report is the wrong behaviour, and zero is an
+answer. They use the same `requires_fields` mechanism as the other 76, so a book
+that genuinely lacks the field still refuses — no special case.
+
+**The mechanism the first three decisions produced.** 76 cases now declare
+`requires_fields`. That is a **prerequisite, not a re-declared expectation** —
+the distinction the fourth decision insisted on, generalised. "Balance by broker"
+is answerable on any book reporting a broker; no real book here does. Where the
+field is absent the evaluator demands a controlled refusal that **names** it,
+which is stricter than the original expectation rather than weaker.
+
+**What re-pointing then exposed.** The 21 remaining failures are one defect
+class at two severities, and the more serious one was invisible before:
+
+* **13 cases** — the resolver reaches for a *different* dimension (Amortisation
+  Type, Age Bucket) when `borrower_type` is absent. Fail-closed catches the
+  substitution and refuses, so no wrong number ships.
+* **8 cases** — the answer **discloses** that the field is unavailable and still
+  emits a data artifact computed over the broader population. *"How many joint
+  borrowers are there"* returns a KPI of 11,035 loans and £1.96bn: the whole
+  book. This is **disclosure without honouring** — the exact pattern Tranche D
+  ruled against for periods, never applied to populations. A declared element
+  that cannot be honoured is a clarification, not a broader answer with a note
+  attached.
+
+Both were invisible for as long as the only book the bank saw fabricated the
+column. The second is the most consequential finding of the tranche and is
+recorded in the backlog as the population half of the honour-or-clarify rule.
+
+### 5.14 The retention window, verified rather than assumed
+
+The 26-week retention window was a modelling assumption about a feed nobody had
+looked at. Checking it produced a finding worth more than the assumption.
+
+**There is no real M2L extract anywhere in this repository.** Both multi-week
+packs in the tree are synthetic — `tests/fixtures/client_001_mi_pack` is written
+by "Synthetic Lender Ltd" — and they contradict each other:
+
+| pack | what happens to a terminated case |
+|---|---|
+| `client_001_mi_pack` (3 monthly extracts) | dropped at the **very next** extract — withdrawn and completed cases present in October are gone in November |
+| `hist_api_qvyl2kad` (3 monthly extracts) | **never** dropped; all 16 cases persist across all three |
+
+Neither is 26 weeks, neither is evidence about the client's feed, and both are
+too small (8–16 cases) to be authoritative about anything. So the assumption
+cannot be verified from this tree, and saying so is the honest position.
+
+**What was done instead: measure whether it matters.** The pack was built at
+three settings spanning the whole plausible range and every property Tranche E
+rests on was recomputed at each.
+
+| retention | rows wk1 → wk52 | live wk1 → wk52 | completions/wk | KFI | APP | OFFER |
+|---|---|---|---|---|---|---|
+| 1 week | 286 → 295 | 234 → 250 | 8.12 | 0.199 | 0.438 | 0.777 |
+| 26 weeks | 1,347 → 1,342 | 234 → 250 | 8.12 | 0.199 | 0.438 | 0.777 |
+| never drop | 1,722 → **3,864** | 234 → 250 | 8.12 | 0.199 | 0.438 | 0.777 |
+
+Every recovered rate, the live pipeline and the completion flow are **identical
+across the entire range**. The only thing retention changes is the extract's
+size, and only the unbounded extreme misbehaves — the monotone drift this
+window was introduced to remove.
+
+So the fixture-realism gap was closed without opening another: no Tranche E
+figure depends on the assumption, and the only property that does — "not
+unbounded" — holds at every setting a real feed could plausibly have. The window
+remains a parameter to be **measured against the client's actual feed at
+onboarding**, and it is recorded in the backlog as such rather than defended
+here.
+
+That the recovered rates are unchanged even at one-week retention is also an
+independent check on the union-across-snapshots correction of §5.7: a terminal
+state observed in a single snapshot is enough, exactly as the method claims.
 
 ## 6–9. Tranches F and G
 
@@ -746,6 +832,29 @@ changed nothing about that.)*
   wrong. This is the same fragmentation pattern as the whole-string scans in
   §13, and should be fixed the same way.
 
+### 12a. Added by Tranche E
+
+**Honour-or-clarify for POPULATIONS (highest priority).** The rule is
+implemented for periods and not for populations. Eight calibration cases pin it:
+a question naming a field the book does not report is answered over the broader
+population with a disclosure attached, rather than clarified. `borrower_type` is
+the field that exposes it; the defect is general. Fix beside the field resolver.
+
+**Field resolution must not substitute a dimension the question did not name.**
+Thirteen cases, caught fail-closed today. Same class as the D2 no-silent-
+substitution work, and the same site as the categorical domain validation
+already queued.
+
+**Measure the client's actual extract retention at onboarding.** §5.14 shows no
+Tranche E figure depends on the 26-week assumption, and that the only property
+that matters — bounded rather than unbounded — holds across the whole plausible
+range. It is still a parameter to be measured against the real feed rather than
+assumed, and there is no real M2L extract in this repository to measure against.
+
+**A second `value_domain` will test whether the seam is real.** Region is the
+first. The claim that adding a domain is "a registry entry and a resolver, not a
+change to the query path" is unproven until a second one exists.
+
 ## 13. A standing rule the tranche produced
 
 The same defect appeared **four times, in four independent places**:
@@ -778,6 +887,78 @@ vocabulary scan over the whole question that decides one slot:
 `_risk_limit_category`, `detect_measure_set`. None is asserted defective; they
 are the population a systematic audit should cover, and that audit is in the
 backlog rather than done here.
+
+## 13a. Two patterns this programme keeps producing, and the rules that follow
+
+Both are recorded as patterns rather than incidents because each has now
+happened enough times to be predictable, and a predictable failure that is not
+guarded is a choice.
+
+### 13a.1 An instrument reproduces the exact defect it was built to find
+
+**Five occurrences.** Not five variations on a theme — five instances of the
+same mechanism, each found only because something independent disagreed with the
+instrument.
+
+| # | instrument | the defect it was built to find | the defect it contained |
+|---|---|---|---|
+| 1 | `answer_type.asked` | a metric slot filled from the wrong part of the question | scanned the WHOLE question, typing "balance by region where borrower age is over 70" as an AGE question |
+| 2 | `answer_type.asked`, after the first fix | the same | read PAST `by`, typing "balance by LTV bucket" as a RATE question |
+| 3 | `three_axis.py` figure check | figures printed that no finding holds | flagged bucket labels ("30-40%") and rounded renderings ("£2.3m") — it measured the extractor, not the product |
+| 4 | the P1A test | a population computed over the wrong rows | asserted the defect in its own comment: "deliberately not attempted inside P1A" |
+| 5 | `matured.py` (Tranche E) | conversion rates read off censored data | read outcomes off the FINAL extract, scoring every dropped case as a non-conversion and halving every rate |
+
+The mechanism is the same each time: **the instrument and its subject share an
+assumption, so the instrument cannot see the defect it is looking for.** Number 5
+is the clearest — a script written specifically to avoid the maturity trap fell
+into a neighbouring one, and only the retention window introduced in the same
+commit exposed it.
+
+> **STANDING RULE — every measurement instrument ships with a test proving it can
+> fail.** Not a test that it runs, and not a test that it passes on good input: a
+> test that feeds it the defect it exists to detect and requires it to report
+> that defect. An instrument that has never been observed failing is not evidence
+> that its subject is clean; it is an untested claim about the instrument.
+
+Applied in this tranche: the answer-type check ships with a case run against a
+deliberately wrong declared type; the pre-D2 control run proves the type sweep
+finds the three defects D2 fixed; the manifest verifier now has a test that
+corrupts an evidence hash and requires a non-zero exit; the region resolver has a
+test that an unmatched term yields no rows rather than broadening.
+
+### 13a.2 Controls need controls
+
+**Two occurrences.** Both silent, both found by accident, both a control that
+had stopped controlling while continuing to look like one.
+
+**The stale manifest.** Tranche D edited a hashed instrument in place. Manifest
+verification failed from `c9ac20b` onward and nobody noticed for the rest of the
+tranche, because nothing ran the verifier. Repaired in §5.12, and
+`tests/test_evidence_manifest.py` now runs it in the suite.
+
+**The verifier that cried wolf.** Adding it to the suite immediately failed on
+two production files this sprint legitimately changed — and investigating rather
+than regenerating found the deeper defect. The manifest's `code+config` group
+records which production code the manifest was generated against; all fifteen
+entries hash to tree `34611f0`. Production code is precisely what this programme
+exists to change, so **the verifier failed on every legitimate code change**.
+
+That is not a separate problem from the first one. It is its cause. A control
+that fails on ordinary work is a control that gets ignored, and an ignored
+control is where a real failure hides — which is exactly what happened: the one
+genuine alarm was indistinguishable from the noise it had been emitting all
+along.
+
+Repaired in the verifier rather than the manifest, which stays immutable:
+`code+config` entries are verified against the tree they were recorded at, and
+working-tree divergence is reported as classified INFO naming each file;
+evidence drift stays fatal.
+
+> **STANDING RULE — a control is not finished until something runs it on every
+> change, and until it distinguishes the failures that matter from the movement
+> it should expect.** A control nobody runs is documentation. A control that
+> fires on routine work trains its readers to ignore it, which is worse than
+> having none, because it also supplies false assurance.
 
 ## 14. Evidence
 
