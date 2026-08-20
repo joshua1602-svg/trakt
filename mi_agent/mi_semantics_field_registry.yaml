@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-08-19T09:18:43.966146+00:00'
+  generated_at: '2026-08-20T16:44:28.343180+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -566,6 +566,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
   collateral_type:
     canonical_field: collateral_type
     mi_tier: core
@@ -1570,6 +1571,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
   geographic_region_collateral_itl3:
     canonical_field: geographic_region_collateral_itl3
     mi_tier: extended
@@ -1600,6 +1602,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
     derived: true
     derived_from: geographic_region_collateral
   geographic_region_obligor:
@@ -1632,6 +1635,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
   geographic_region_obligor_itl3:
     canonical_field: geographic_region_obligor_itl3
     mi_tier: extended
@@ -1661,6 +1665,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
     derived: true
     derived_from: geographic_region_obligor
   ifrs9_stage:

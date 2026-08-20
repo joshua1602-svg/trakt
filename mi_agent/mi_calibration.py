@@ -119,6 +119,56 @@ def _run(q: str, df, semantics: dict, live_llm: bool):
     return run_mi_agent_query(q, df, semantics)
 
 
+def _absent_required_fields(case: Dict[str, Any], df, semantics: dict) -> List[str]:
+    """Which of the case's declared prerequisite fields this book does not report.
+
+    Why a case declares prerequisites at all
+    ----------------------------------------
+    The bank was graded for its whole life against ``build_fixture``, a synthetic
+    frame carrying every column any case might name. Re-pointed onto a real book,
+    60 cases "failed" — every one of them by refusing correctly, because no real
+    book in this repository reports broker, product type, term bucket or borrower
+    type.
+
+    Re-declaring those cases as "expect a refusal" would be fitting the
+    expectation to the observed behaviour, which is the thing this programme
+    guards against. Declaring the PREREQUISITE is different: "balance by broker"
+    is answerable on any book that reports a broker, and the case says so. On a
+    book that does not, the correct behaviour is a controlled refusal that NAMES
+    the missing field — which this then asserts, so the case is stricter here
+    than it was against the fixture, not weaker.
+    """
+    missing: List[str] = []
+    for key in (case.get("requires_fields") or []):
+        canonical = key
+        entry = (semantics.get("fields", {}) or {}).get(key) or {}
+        canonical = entry.get("canonical_field", key)
+        if canonical not in getattr(df, "columns", []):
+            missing.append(key)
+    return missing
+
+
+def _refusal_names_the_missing_fields(res, adapted, missing: List[str],
+                                      semantics: dict) -> Optional[str]:
+    """A refusal must say WHICH field is missing, or it is just a shrug."""
+    parts = [str(res.get("error") or "")]
+    parts.extend(str(w) for w in (adapted.get("warnings") or []))
+    parts.extend(str(w) for w in (res.get("warnings") or []))
+    text = " ".join(parts).lower()
+    unnamed = []
+    for key in missing:
+        entry = (semantics.get("fields", {}) or {}).get(key) or {}
+        names = {key.lower(), key.replace("_", " ").lower(),
+                 str(entry.get("business_name") or "").lower(),
+                 str(entry.get("display_name") or "").lower()}
+        if not any(n and n in text for n in names):
+            unnamed.append(key)
+    if unnamed:
+        return ("refusal did not name the missing field(s): "
+                + ", ".join(unnamed))
+    return None
+
+
 def evaluate_case(case: Dict[str, Any], df, semantics: dict,
                   live_llm: bool = False) -> CalibrationResult:
     q = case["question"]
@@ -145,6 +195,7 @@ def evaluate_case(case: Dict[str, Any], df, semantics: dict,
         return r
 
     res = _run(q, df, semantics, live_llm)
+    missing_required = _absent_required_fields(case, df, semantics)
     spec = res.get("spec") or {}
     di = res.get("dimension_invariant") or {}
     fi = res.get("filter_invariant") or {}
@@ -157,6 +208,37 @@ def evaluate_case(case: Dict[str, Any], df, semantics: dict,
     r.observed_dims = list(di.get("applied") or [])
     r.observed_filters = list(fi.get("applied_filters") or [])
     r.observed_artifacts = tokens
+
+    if missing_required:
+        # The book under test does not report a field this question needs. The
+        # expected outcome is not the declared one: it is a controlled refusal
+        # that names the field and fabricates nothing.
+        r.status = "refuse_missing_field"
+        if bool(res.get("ok")) and qr is not None:
+            fails.append("answered with data despite missing required field(s): "
+                         + ", ".join(missing_required))
+        if {"kpi", "table"} & set(tokens) or any(t.startswith("chart:") for t in tokens):
+            fails.append(f"emitted a data artifact while a required field is "
+                         f"absent: {tokens}")
+        unnamed = _refusal_names_the_missing_fields(res, ad, missing_required,
+                                                    semantics)
+        if unnamed:
+            fails.append(unnamed)
+        # A refusal is correct; a refusal AFTER substituting a different field
+        # is not. The fail-closed guard catching the substitution at the
+        # envelope is what stopped a wrong number shipping, but the resolver
+        # should never have reached for a field the question did not name. These
+        # cases stay failing until that is fixed upstream, so the defect cannot
+        # go quiet behind a well-worded refusal.
+        blob = " ".join([str(res.get("error") or "")]
+                        + [str(w) for w in (ad.get("warnings") or [])]).lower()
+        if "in place of" in blob or "which you did not ask" in blob:
+            fails.append("a different field was substituted before the refusal; "
+                         "the resolver must not reach for a field the question "
+                         "did not name")
+        r.failures = fails
+        r.ok = not fails
+        return r
 
     if status in ("refuse", "clarify"):
         answered = bool(res.get("ok")) and qr is not None

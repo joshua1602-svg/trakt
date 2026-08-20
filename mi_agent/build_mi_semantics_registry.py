@@ -409,6 +409,7 @@ CURATION: Dict[str, dict] = {
     # fallback. geographic_region_classification (a YEAR) is never a region.
     "collateral_geography": {
         "tier": "core", "business_name": "Region",
+        "value_domain": "uk_region",
         "business_description": "Readable geographic region label for the "
                                 "collateral / property location (analytics display).",
         "synonyms": ["region", "geography", "area", "property region",
@@ -421,6 +422,7 @@ CURATION: Dict[str, dict] = {
         "tier": "extended", "derived": True,
         "derived_from": "geographic_region_collateral",
         "business_name": "Collateral ITL3",
+        "value_domain": "uk_region",
         "business_description": "Granular UK ITL3 code for the collateral / "
                                 "property location (FCA/UK + MI drilldown).",
         "synonyms": ["collateral itl3", "collateral region code",
@@ -431,6 +433,7 @@ CURATION: Dict[str, dict] = {
         "tier": "extended", "derived": True,
         "derived_from": "geographic_region_obligor",
         "business_name": "Obligor ITL3",
+        "value_domain": "uk_region",
         "business_description": "Granular UK ITL3 code for the obligor / borrower "
                                 "(FCA/UK + MI drilldown).",
         "synonyms": ["obligor itl3", "obligor region code", "borrower itl3"],
@@ -438,6 +441,7 @@ CURATION: Dict[str, dict] = {
     },
     "geographic_region_obligor": {
         "tier": "core", "business_name": "Obligor Region (NUTS3)",
+        "value_domain": "uk_region",
         "business_description": "NUTS3 geographic region code for the obligor / borrower.",
         "synonyms": ["obligor region", "borrower region", "obligor nuts",
                      "obligor geography"],
@@ -636,6 +640,7 @@ CURATION: Dict[str, dict] = {
     },
     "geographic_region_collateral": {
         "tier": "extended", "business_name": "Collateral Region (NUTS3)",
+        "value_domain": "uk_region",
         "business_description": "NUTS3 geographic region code for the collateral.",
         "synonyms": ["collateral region", "asset region", "collateral nuts"],
     },
@@ -1465,6 +1470,13 @@ def build_entry(name: str, meta: dict, curated: dict,
         "bucket_field": overrides.get("bucket_field", inf_bucket_field),
         "notes": "",
     }
+
+    # A field may declare the DOMAIN its values are drawn from. The executor
+    # asks the semantics what a filter value means rather than knowing about
+    # any particular domain itself: "London" reaching a column that stores
+    # TLI43 is a property of the uk_region domain, not of the query engine.
+    if curated.get("value_domain"):
+        entry["value_domain"] = curated["value_domain"]
 
     if curated.get("derived"):
         entry["derived"] = True

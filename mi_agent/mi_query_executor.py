@@ -466,6 +466,32 @@ def _apply_numeric_op(col: pd.Series, op: str, value: Any) -> pd.Series:
         "applied")
 
 
+#: Filter-value resolvers by declared ``value_domain``. A field says which
+#: domain its values are drawn from; the domain says what a user term means.
+#: Nothing here knows about any particular domain's contents.
+def _resolve_domain_value(domain: Optional[str], value: str, col) -> List:
+    """The values present in ``col`` that ``value`` denotes under ``domain``."""
+    if domain == "uk_region":
+        from .region_resolution import resolve
+        try:
+            return resolve(value, col.dropna().unique().tolist())
+        except Exception:                        # pragma: no cover - never fatal
+            return []
+    return []
+
+
+def _describe_domain_value(domain: Optional[str], value: str, resolved: List) -> str:
+    """Receipt text for a resolution. A resolution the reader cannot see is a
+    substitution, so this is not optional."""
+    if domain == "uk_region":
+        from .region_resolution import describe
+        try:
+            return describe(value, resolved)
+        except Exception:                        # pragma: no cover
+            pass
+    return f"{value} → {resolved!r}"
+
+
 def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
                    warnings: List[str]) -> pd.DataFrame:
     if not spec.filters:
@@ -528,7 +554,32 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
             # Case-/whitespace-insensitive categorical match so a normalised
             # value ("South West") matches the prepared dimension value robustly.
             target = value.strip().casefold()
-            work = work[col.astype(str).str.strip().str.casefold() == target]
+            mask = col.astype(str).str.strip().str.casefold() == target
+            if not mask.any():
+                # VALUE RESOLUTION. The exact match reached nothing, which is
+                # not the same as there being nothing to reach: "London" matches
+                # no row on a book whose region column holds TLI43. A raw loan
+                # tape does not generally carry ITL codes at all — it carries a
+                # partial postcode, a county, or the lender's own grouping — and
+                # the code is DERIVED by the canonical transformation. So the
+                # value is resolved through the same governed mapping that
+                # transformation used, against the values this column actually
+                # holds.
+                #
+                # The executor does not know what a region is. It asks the
+                # semantics what domain the field's values are drawn from, and
+                # the domain resolves the term. Adding a second domain is a
+                # registry entry and a resolver, not a change here.
+                resolved = _resolve_domain_value(
+                    entry.get("value_domain"), value, col)
+                if resolved:
+                    wanted = {str(v).strip().casefold() for v in resolved}
+                    mask = col.astype(str).str.strip().str.casefold().isin(wanted)
+                    warnings.append(
+                        f"filter {field_key}: "
+                        + _describe_domain_value(entry.get("value_domain"),
+                                                 value, resolved))
+            work = work[mask]
             warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
         else:
             work = work[col == value]

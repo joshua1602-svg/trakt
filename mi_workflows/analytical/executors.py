@@ -331,6 +331,7 @@ def period_movement(ctx: AnalyticalContext, *,
     from mi_agent.period_change.workflow import (
         PeriodChangeRequest, run_period_change_analysis,
     )
+    from mi_agent import period_request as _period_request
     from mi_agent import population as _population
     from mi_agent_api import chat_routing as _routing
 
@@ -370,11 +371,47 @@ def period_movement(ctx: AnalyticalContext, *,
                   f"needs ({'; '.join(sorted(set(unavailable)))}), so no "
                   "narrowed movement was calculated."))]
 
+    # THE SPAN THE QUESTION ASKED FOR, ahead of the plan's default window.
+    #
+    # WINDOW_RETAINED opens at the EARLIEST retained snapshot. That is the right
+    # default for a question that names no period, and silent widening for one
+    # that does: "in the last few months" was answered over twelve months on a
+    # thirteen-snapshot book. It read as correct on three snapshots only because
+    # the widest window there happened to be two months.
+    #
+    # Two cases, and they are not the same:
+    #   * A span the question COUNTED ("this year", "the last 6 months") is
+    #     honoured where the history reaches, and clarified where it does not —
+    #     a shorter window is a different number, and the D rule already governs
+    #     that.
+    #   * A span a GOVERNED CONVENTION settled ("recent", "lately", "a few
+    #     months") is honoured where the history reaches, and where it does not
+    #     the whole retained window is used and BOTH are disclosed. "Recent" is
+    #     satisfied by any window inside the recent window, so a book with less
+    #     history than the convention still answers the question that was asked;
+    #     "this year" answered over one month does not.
+    span = _period_request.requested_span(ctx.question)
+    span_start = None
+    if window == WINDOW_RETAINED:
+        if span is not None and len(narrowed) > span.periods:
+            span_start = str(narrowed[-1 - span.periods].reporting_date)
+        else:
+            span_start = str(narrowed[0].reporting_date)
+            if span is not None and span.governed:
+                ctx.warn(
+                    f"The governed recent window is {span.periods} months; this "
+                    f"book retains {len(narrowed) - 1}, so the comparison opens "
+                    f"at the earliest retained snapshot "
+                    f"({narrowed[0].reporting_date}).")
+    if span is not None and span.governed and span_start is not None:
+        ctx.warn(f"'{ctx.question.strip()}' names no countable period, so it is "
+                 f"answered {span.disclosure()}.")
+
     request = PeriodChangeRequest(
         question=ctx.question,
         mode=MODE_REQUESTED_METRIC if measures else MODE_PORTFOLIO_OVERVIEW,
         period_request=(PeriodRequest(
-            requested_start=str(narrowed[0].reporting_date),
+            requested_start=span_start,
             requested_end=str(narrowed[-1].reporting_date))
             if window == WINDOW_RETAINED else PeriodRequest()),
         requested_fields=tuple(measures),

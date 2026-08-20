@@ -23,13 +23,29 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class SpanRequest:
-    """A period span the question named."""
+    """A period span the question named, or that a governed convention settles."""
 
     #: How the question said it, for the clarification text.
     label: str
     #: How many governed reporting periods back the span reaches. A month-on-
     #: month comparison is 1; "this year" is 12.
     periods: int
+    #: True when the question named a VAGUE recency ("recent", "lately", "the
+    #: last few months") and a governed convention resolved it, rather than the
+    #: question naming a countable span itself.
+    governed: bool = False
+
+    def disclosure(self) -> Optional[str]:
+        """What the answer must say about how this span was chosen.
+
+        A governed resolution is not silent. The reader asked something
+        imprecise and got a precise window; which window, and on whose
+        authority, belongs in the answer.
+        """
+        if not self.governed:
+            return None
+        return (f"over the last {self.periods} months (governed recent "
+                f"window: seasoning.lending_windows.recent_max_months)")
 
 
 #: Phrases that NAME a span, longest first so "last twelve months" is not read
@@ -49,9 +65,59 @@ _SPANS = (
 #: "the last N months", written numerically.
 _N_MONTHS_RE = re.compile(r"\b(?:last|past|previous|prior)\s+(\d{1,2})\s+months?\b")
 
+#: VAGUE RECENCY. Phrases that mean "not long ago" without naming a count.
+#:
+#: These used to resolve to nothing, and the routes then fell through to the
+#: widest window they had — earliest snapshot to latest. On three snapshots that
+#: silently gave two months, which reads as "a few"; on thirteen it gave twelve,
+#: which does not. The fallback is the defect, and it is wrong in both
+#: directions: a vague span must never take the widest window by default.
+#:
+#: They are not clarified either. The governed seasoning configuration already
+#: defines RECENT lending as ``lending_windows.recent_max_months``; that
+#: convention exists precisely to settle this, and declining to apply our own
+#: governed configuration would be hard to defend on a phrase this common.
+#: Every phrase here resolves to that one window, so near-identical wordings
+#: cannot be handled differently from one another.
+#:
+#: Only MONTH-scale vagueness appears here. "the last few weeks" names a unit
+#: the monthly series cannot express and no governed window covers, so it stays
+#: with the granularity clarification — clarification is reserved for spans with
+#: no governed convention.
+_VAGUE_RECENCY_RE = re.compile(
+    r"\b(?:recent|recently|lately|of late)\b"
+    r"|\brecent months\b"
+    r"|\b(?:a |the )?(?:last |past )?few months\b"
+    r"|\ba few months ago\b"
+    r"|\bcouple of months\b"
+    r"|\bthese days\b"
+    r"|\bnowadays\b"
+)
 
-def requested_span(question: str) -> Optional[SpanRequest]:
-    """The reporting span the question names, or None when it names none."""
+
+def governed_recent_months(config=None) -> int:
+    """The governed RECENT lending window, in months.
+
+    Read from the seasoning configuration rather than pinned here, for the same
+    reason the front/back boundary is: a client re-cuts "recent" by editing
+    config, never by changing code.
+    """
+    if config is None:
+        try:
+            from .seasoning import load_seasoning_config
+            config = load_seasoning_config()
+        except Exception:                       # pragma: no cover - config absent
+            return 3
+    return int(getattr(config, "recent_max_months", 3) or 3)
+
+
+def requested_span(question: str, config=None) -> Optional[SpanRequest]:
+    """The reporting span the question names, or a governed convention settles.
+
+    Returns None only when the question names no period at all. A question that
+    names an imprecise recency resolves to the governed recent window with
+    ``governed=True``, so the caller can disclose how the window was chosen.
+    """
     text = f" {(question or '').lower().strip()} "
     m = _N_MONTHS_RE.search(text)
     if m:
@@ -61,6 +127,11 @@ def requested_span(question: str) -> Optional[SpanRequest]:
     for pattern, label, periods in _SPANS:
         if re.search(pattern, text):
             return SpanRequest(label, periods)
+    # Vague recency is checked LAST, so "the last three months" is read as the
+    # countable span it is rather than as vague recency.
+    if _VAGUE_RECENCY_RE.search(text):
+        months = governed_recent_months(config)
+        return SpanRequest(f"the last {months} months", months, governed=True)
     return None
 
 
