@@ -256,6 +256,11 @@ EXPLICIT_DIMENSION_TERMS = {
     "geography": "geographic_region_obligor",
     "geographic": "geographic_region_obligor",
     "regions": "geographic_region_obligor",
+    # The adjectival form. "largest regional concentration" named the governed
+    # region dimension and matched nothing, so it fell through to a loan-level
+    # ranking table — a list of individual loans in answer to a question about
+    # regions.
+    "regional": "geographic_region_obligor",
     "region": "geographic_region_obligor",
     "account status": "account_status",
     "status": "account_status",
@@ -349,8 +354,8 @@ def _registry_dimension_terms(semantics: dict) -> Dict[str, str]:
 
 
 # Generic region terms resolved by data-aware preference (see _preferred_region).
-_REGION_GENERIC_TERMS = {"region", "regions", "geography", "geographic",
-                         "geographic region"}
+_REGION_GENERIC_TERMS = {"region", "regions", "regional", "geography",
+                         "geographic", "geographic region"}
 # Borrower-type terms resolved by data-aware preference (see
 # _preferred_borrower_dim). borrower_type is the dimension the funded prep
 # actually materialises; borrower_structure is a legacy band kept for datasets
@@ -410,6 +415,15 @@ _METRIC_TERMS = (
     ("outstanding balance", "balance"),
     ("balance", "balance"),
     ("exposure", "balance"),
+    # "size" is a MEASURE noun when it is what is being averaged and a bucket
+    # DIMENSION when it is what the answer is grouped by. The dimension reading
+    # is masked upstream when an aggregator precedes it (see
+    # ``_explicit_dimensions``); these entries supply the measure reading, so
+    # "average loan size" is the mean balance rather than an unmapped question.
+    ("loan size", "balance"),
+    ("ticket size", "balance"),
+    ("deal size", "balance"),
+    ("average size", "balance"),
     ("redemptions", "redemptions"),
     ("redemption", "redemptions"),
     ("recoveries", "recoveries"),
@@ -469,6 +483,20 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
     # ``mask_scope_phrases`` preserves offsets, so every index below is equally
     # valid against ``remaining``, which stays faithful to what the user wrote.
     search = mask_scope_phrases(q)
+    # An aggregation qualifier standing in front of a BUCKET synonym names a
+    # measure, not a grouping — you cannot take the average of a band. Before
+    # this, "average loan size" matched the ticket_bucket synonym "loan size",
+    # attached the dimension, found no metric and defaulted to balance, so a
+    # question asking for ONE number answered with a breakdown across ten. The
+    # span is blanked in the SEARCH copy only, so metric detection downstream
+    # still sees every word the user wrote. A grouped phrasing keeps its
+    # dimension because "by" precedes the term rather than an aggregator.
+    for _term in sorted((t for t, k in terms_map.items() if _is_bucket_dim(k)),
+                        key=len, reverse=True):
+        search = re.sub(
+            r"\b(average|avg|mean|median|typical|total|sum of)\s+(?:the\s+)?"
+            + re.escape(_term) + r"\b",
+            lambda m: " " * len(m.group(0)), search)
     found: List[Tuple[int, str, str]] = []  # (position, key, term)
     for term in sorted(terms_map, key=len, reverse=True):
         if term in _REGION_GENERIC_TERMS:
@@ -649,7 +677,14 @@ _ANALYTICAL_FRAMING_WORDS = frozenset({
     "concentration", "concentrations", "concentrated", "concentrate",
     "coverage", "covered", "data", "quality", "completeness", "missing",
     "most", "least", "largest", "biggest", "smallest", "highest", "lowest",
-    "top", "bottom", "rank", "ranked", "ranking", "leading", "worst", "best",
+    "top", "bottom", "rank", "ranked", "ranking", "leading",
+    # "best" and "worst" are NOT in this set. "largest"/"highest"/"top" name a
+    # DIRECTION on a measure the question still has to supply; "best" names a
+    # value judgement whose basis the question does not give, and absorbing it
+    # as framing is what let "show best brokers" answer with balance by broker.
+    # Left out of the set they survive as residue, which triggers the existing
+    # unresolved-metric clarify — but only when nothing else resolved, so
+    # "which broker has the worst arrears" still answers on arrears.
     "mix", "composition", "profile", "position", "snapshot", "spread",
     "exposure", "exposures", "book", "portfolio", "portfolios",
 })
@@ -1644,6 +1679,47 @@ def _scatter_axes(q: str, semantics: dict, available_columns=None
     return None
 
 
+#: Clause openers that introduce a CONDITION rather than a measure. A measure
+#: word appearing after one of these names the field being filtered ON, never
+#: the field being reported: in "balance where LTV above 50%" the subject is
+#: balance and LTV is the condition.
+_FILTER_CLAUSE_OPENERS = (
+    "where", "with", "for", "above", "below", "over", "under",
+    "greater than", "less than", "at least", "at most", "more than", "fewer than",
+)
+_FILTER_OPENER_RE = re.compile(
+    r"\b(" + "|".join(re.escape(t) for t in
+                      sorted(_FILTER_CLAUSE_OPENERS, key=len, reverse=True)) + r")\b")
+
+
+def _metric_slot(text: str) -> str:
+    """The span of a question that may legitimately NAME the metric.
+
+    ``_detect_metric`` walks a fixed-priority vocabulary and returns the highest
+    -priority entry appearing ANYWHERE in the text it is given. It has no notion
+    of sentence position or of grammatical role, so a field named inside a
+    condition captures the metric slot: "balance where LTV above 50%" resolved to
+    weighted-average LTV because ``ltv`` precedes ``balance`` in ``_METRIC_TERMS``.
+
+    The fix is precedence, not vocabulary: give the detector only the subject
+    side of the sentence. This truncates at the first FILTER clause, which is
+    recognised conservatively — an opener counts only when a numeric bound
+    follows it. Without that guard "regions with the highest LTV" would be cut at
+    "with" and lose its measure, while "loans with LTV above 50%" must be cut.
+
+    Grouping clauses are already handled upstream by ``_grouping_segments``;
+    this composes with that split rather than repeating it.
+    """
+    head = (text or "")
+    match = _FILTER_OPENER_RE.search(head)
+    while match:
+        tail = head[match.end():]
+        if re.search(r"\d", tail):
+            return head[: match.start()].strip() or head.strip()
+        match = _FILTER_OPENER_RE.search(head, match.end())
+    return head.strip()
+
+
 def _grouping_segments(q: str) -> Tuple[str, List[str]]:
     """Split ``<metric part> by <dim> [by/and <dim> ...]`` into the metric part
     (before the first ``by``) and the ordered list of grouping segments after it.
@@ -1723,7 +1799,13 @@ def _grouped_metric(metric_part: str, q: str, semantics: dict) -> Tuple[Optional
 #: failed while "in london" succeeded — the shapes a person actually types were
 #: exactly the ones that missed.
 _CATEGORICAL_FILTER_RE = re.compile(
-    r"(?:geographic\s+region|geographic|geography|region|in|for|across|within|from)\s+"
+    # "to" is NOT a general scope preposition. Admitting it outright made
+    # "when is it expected to complete?" bind a geography called "Complete",
+    # which selected nothing and turned a pipeline question into a refusal. It
+    # is admitted only in the idiom that actually names a place —
+    # "exposure to the South East", "lending to Scotland".
+    r"(?:geographic\s+region|geographic|geography|region|in|for|across|within|from"
+    r"|(?:exposure|exposures|lending|concentration|allocation)\s+to)\s+"
     r"(?:the\s+)?"
     r"([a-z][a-z]*(?:\s+[a-z]+){0,3}?)"
     r"(?:\s+(?:region|regions|area|areas|loans|loan|book|portfolio))?"
@@ -1753,6 +1835,16 @@ _NON_PLACE_TERMS = {
     # resolved to a geography called "Funded", which matches nothing, and the
     # question was refused for an empty population.
     "funded", "unfunded", "pipeline", "drawn", "undrawn",
+    # Time, not a place. The scope prepositions include "to" so that "exposure
+    # to the South East" is read as a geography (it used to return the whole
+    # book at low confidence, with no filter at all). "to" also appears in
+    # comparison and horizon phrasings — "compared to last month", "relative to
+    # the prior quarter" — where the trailing noun phrase is a period. Binding
+    # one of those to the geography field would select nothing and turn a
+    # comparison into a refusal.
+    "month", "months", "quarter", "quarters", "year", "years", "week", "weeks",
+    "day", "days", "date", "dates", "period", "periods", "today", "now",
+    "yesterday", "prior", "previous", "last", "next", "ago", "date-range",
 }
 
 
@@ -2308,6 +2400,57 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
                            note="multi_measure")
 
 
+#: Bare qualitative magnitudes. The COMPARATIVE and SUPERLATIVE forms are
+#: deliberately absent: "highest LTV" is a ranking direction and is answerable,
+#: while "high LTV" states a threshold the question never gives.
+_QUALITATIVE_MAGNITUDES = ("high", "low", "large", "small", "big", "tiny",
+                           "heavy", "light", "elevated", "significant",
+                           "material", "modest", "poor", "strong", "weak")
+#: The numeric subjects such a word can qualify, as the user says them.
+_QUALITATIVE_SUBJECTS = ("age", "ltv", "loan to value", "balance", "balances",
+                         "loan", "loans", "exposure", "rate", "rates", "value",
+                         "size", "amount", "amounts", "arrears")
+_QUALITATIVE_RE = re.compile(
+    r"\b(" + "|".join(_QUALITATIVE_MAGNITUDES) + r")\s+"
+    r"(?:" + "|".join(_QUALITATIVE_SUBJECTS) + r")\b")
+#: Any parseable bound anywhere in the question disqualifies the guard.
+_NUMERIC_BOUND_RE = re.compile(r"\d")
+
+
+#: A question about how much data is MISSING, rather than about the data.
+#: "missing region count" asks for the size of the excluded population; the
+#: estate reports coverage on the reconciliation block of a normal answer and
+#: has no intent that answers it directly. It used to answer the adjacent
+#: question instead — "missing region count" returned balance by region — which
+#: is a confident answer to something nobody asked.
+_MISSING_COUNT_RE = re.compile(
+    r"\b(?:missing|excluded|blank|null|unknown|incomplete)\s+[a-z_ ]{0,24}?\b(?:count|counts)\b|"
+    r"\b(?:count|number)\s+of\s+(?:the\s+)?(?:missing|excluded|blank|null|incomplete)\b|"
+    r"\b(?:loans|cases|accounts|records|rows)\s+(?:excluded|missing|omitted)\s+from\b|"
+    r"\bhow\s+many\s+(?:loans|cases|accounts|records|rows)?\s*(?:are\s+)?"
+    r"(?:missing|excluded|blank|null|incomplete)\b")
+
+
+def _missing_data_request(q: str) -> bool:
+    """True when the question asks for the SIZE of the excluded population."""
+    return bool(_MISSING_COUNT_RE.search(q))
+
+
+def _qualitative_threshold(q: str) -> Optional[str]:
+    """The unparseable qualitative bound a question states, if any.
+
+    "balance for borrowers over 80" states a threshold. "high age borrower
+    exposure" states one too — it just never says what "high" is. The second
+    used to return the WHOLE-BOOK balance with no filter at all, which answers a
+    different question with confidence. There is no defensible default for
+    "high", so the governed response is to ask.
+    """
+    if _NUMERIC_BOUND_RE.search(q):
+        return None
+    m = _QUALITATIVE_RE.search(q)
+    return m.group(0) if m else None
+
+
 def _deterministic_parse(question: str, semantics: dict,
                          available_columns=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
@@ -2319,6 +2462,32 @@ def _deterministic_parse(question: str, semantics: dict,
     q = question.lower().strip()
     title = question.strip()
     top_n = _detect_top_n(q)
+
+    # "How much is missing?" is a data-quality question, and the estate has no
+    # governed intent that answers it. Answering the adjacent question instead
+    # is the failure mode this guards.
+    if _missing_data_request(q):
+        return (MIQuerySpec(
+            intent="summary", chart_type="none", aggregation="count", title=title,
+            explanation="This asks how much data is missing or excluded, which "
+                        "is not a governed analytic here — coverage is reported "
+                        "on the reconciliation of a normal answer, not as a "
+                        "standalone count. Ask for the measure you want and the "
+                        "coverage will be stated with it.",
+            output_format="text"),
+            _det_meta("low", False, [], note="unresolved_metric"))
+
+    # A qualitative bound with no number is a declared element that cannot be
+    # honoured. Asking is the only safe response; answering unfiltered is not.
+    qual = _qualitative_threshold(q)
+    if qual is not None:
+        return (MIQuerySpec(
+            intent="summary", chart_type="none", aggregation="count", title=title,
+            explanation=f"'{qual}' does not state a threshold I can apply. Give a "
+                        "bound (for example 'over 80') and I will filter on it; "
+                        "no unfiltered figure has been substituted.",
+            output_format="text"),
+            _det_meta("low", False, [], note="unresolved_metric"))
 
     # ---- ERE analytical intents (checked first; emit governed plans) --------
     # A scale-up / run-rate forecast, a cross-period comparison, or a risk-limit
@@ -2622,9 +2791,15 @@ def _deterministic_parse(question: str, semantics: dict,
     # so "<metric> by <dimension>" never picks the grouping term as the metric
     # (e.g. "balance by ltv" -> metric=balance, not LTV). Fall back to the dim-
     # blanked remaining text when the metric side names nothing.
-    metric, agg, _matched = _detect_metric(metric_part, semantics)
+    # ``_metric_slot`` truncates a FILTER clause off the subject side, so a field
+    # named as a condition cannot capture the metric: "balance where LTV above
+    # 50%" is a balance question with an LTV condition, and used to resolve to
+    # weighted-average LTV purely because ``ltv`` precedes ``balance`` in
+    # ``_METRIC_TERMS``. Grouping clauses are already excluded — ``metric_part``
+    # is the pre-"by" text and ``remaining`` is dimension-blanked.
+    metric, agg, _matched = _detect_metric(_metric_slot(metric_part), semantics)
     if metric is None and not _matched:
-        metric, agg, _ = _detect_metric(remaining, semantics)
+        metric, agg, _ = _detect_metric(_metric_slot(remaining), semantics)
     if is_line:
         x = ("origination_date" if "origination_date" in _fields(semantics)
              else None)
@@ -2674,8 +2849,14 @@ def _deterministic_parse(question: str, semantics: dict,
                 dimension = _dimension(semantics, keywords=right_tokens)
 
     if metric is None and dimension is not None:
-        # "<dimension> by <metric>" or count-by-dimension
-        metric, agg, _ = _detect_metric(q, semantics)
+        # "<dimension> by <metric>" or count-by-dimension.
+        # Read from the DIMENSION-BLANKED text, not the raw question: scanning
+        # ``q`` here let the grouping term supply the measure, so "concentration
+        # by LTV bucket" answered weighted-average LTV per bucket instead of the
+        # balance concentration it asks for. ``remaining`` still carries a
+        # measure named on the far side of "by" ("region by balance"), which is
+        # the phrasing this branch exists to serve.
+        metric, agg, _ = _detect_metric(_metric_slot(remaining), semantics)
 
     # Generic concentration questions may pick a sensible default dimension.
     generic = False
@@ -2800,7 +2981,16 @@ def _deterministic_parse(question: str, semantics: dict,
                                 "condition (filtered population over total).",
                     output_format="table"),
                     _det_meta("medium", explicit, dim_terms))
-        metric, agg = _balance_metric(semantics, available_columns), "sum"
+        # An explicit COUNT is a measure the user NAMED, not the absence of one.
+        # Falling straight through to the balance default answered "show loan
+        # count by age band" with total balance per bucket — and before the
+        # metric-slot fix it answered with average borrower age, the grouping
+        # field. Neither is a count. The line path already makes this
+        # distinction; the bar path did not.
+        if _wants_count(q):
+            metric, agg = None, "count"
+        else:
+            metric, agg = _balance_metric(semantics, available_columns), "sum"
     weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
     conf = "high" if explicit else ("medium" if not generic else "low")
     # A value filter expressed alongside the grouping ("balance by region where

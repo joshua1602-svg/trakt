@@ -889,8 +889,14 @@ class ExecutionReceipt:
             as at 30 June 2026.
         """
         parts: List[str] = []
-        head = " ".join(p for p in (_AGGREGATION_LABELS.get(self.aggregation or "", ""),
-                                    self.measure or "") if p).strip()
+        # A count with no measure is a ROW count. "Count of" expects a measure
+        # to follow it, so a metric-less count rendered as a dangling "Count of
+        # ·" — the receipt named an aggregation and then named nothing.
+        if (self.aggregation or "") == "count" and not (self.measure or ""):
+            head = f"Count of {self.population_label}"
+        else:
+            head = " ".join(p for p in (_AGGREGATION_LABELS.get(self.aggregation or "", ""),
+                                        self.measure or "") if p).strip()
         if head:
             parts.append(head[0].upper() + head[1:])
         if self.filters:
