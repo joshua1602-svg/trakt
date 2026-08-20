@@ -1006,8 +1006,18 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
                   f"{_gbp(weighted.get('forecastFundedBalance'))}); the completion run-rate "
                   f"extrapolation projects ~{_gbp(base)}/month ({_gbp(ann)}/year) forward. {caveat}")
     else:
+        # State the OBSERVATION WINDOW. "Based on the last few weeks, what level
+        # of completions are we achieving?" names a window, and an answer giving
+        # a monthly run-rate without saying how much history it rests on leaves
+        # the reader unable to tell whether their window was honoured. The
+        # sibling milestone answer above has always disclosed it; this one did
+        # not.
+        observed = rr.get("observedMonths")
+        basis = (f", based on {observed} month(s) of funded growth"
+                 if observed else "")
         answer = (f"Current funded balance {_gbp(cur)}; base completion run-rate ~{_gbp(base)}/month "
-                  f"({_gbp(ann)}/year), projected forward with downside/base/upside bands. {caveat}")
+                  f"({_gbp(ann)}/year){basis}, projected forward with "
+                  f"downside/base/upside bands. {caveat}")
 
     artifacts: List[Dict[str, Any]] = []
     proj = rr.get("projectedBalances", [])
