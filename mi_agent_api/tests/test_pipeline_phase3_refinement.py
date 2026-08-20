@@ -188,12 +188,26 @@ class TestHistoricalModel(unittest.TestCase):
         prep, rep = prepare_pipeline_mi_dataset(df, as_of_date="2025-11-01",
                                                 historical_model=m)
         srcs = set(prep["completion_probability_source"])
+        # The invariant this test protects: an empirical rate beats the
+        # configured one wherever history is sufficient.
         self.assertIn("historical_stage_rate", srcs)   # OFFER cases
-        self.assertIn("configured_stage_rate", srcs)   # COMPLETED via config 1.0
-        self.assertEqual(rep["completion_probability_basis"], "mixed_historical_and_config")
         # OFFER rows carry the empirical rate, not the configured 0.75.
         offer = prep[prep["pipeline_stage"] == "OFFER"]
         self.assertTrue((offer["completion_probability"].round(4) == round(10 / 14, 4)).all())
+        # This assertion used to read `assertIn("configured_stage_rate", srcs)`
+        # with the comment "COMPLETED via config 1.0" — i.e. it asserted the
+        # defect: a settled case weighted at certainty and added to the forward
+        # forecast. The governed config lists COMPLETED under exclude_stages, so
+        # such a row is now excluded from weighting and names the stage that
+        # excluded it. The config-fallback tier itself is still covered, by
+        # test_pipeline_prep_vectorisation.
+        self.assertIn("excluded_completed", srcs)
+        self.assertTrue(prep.loc[prep["pipeline_stage"] == "COMPLETED",
+                                 "completion_probability"].isna().all())
+        # Every remaining weighted row in this fixture has sufficient history,
+        # so the basis is purely empirical rather than mixed. The old "mixed"
+        # was mixed only BECAUSE of the settled rows.
+        self.assertEqual(rep["completion_probability_basis"], "historical_observed")
 
 
 # --------------------------------------------------------------------------- #
@@ -216,9 +230,12 @@ class TestForecastDisclosure(unittest.TestCase):
 
     def test_discloses_gross_excluded_and_basis(self):
         self.assertEqual(self.b["grossPipelineAmount"], self.prep["total_pipeline_amount"])
-        # One withdrawn case (£80k) is excluded from weighting.
-        self.assertEqual(self.b["excludedFromWeightingAmount"], 80000.0)
-        self.assertEqual(self.b["excludedCaseCount"], 1)
+        # The governed config excludes WITHDRAWN and COMPLETED from forward
+        # funding. This fixture carries one of each: £80k withdrawn and £90k
+        # already completed. Previously only the withdrawn case was excluded and
+        # the completed one was weighted at the configured probability of 1.00.
+        self.assertEqual(self.b["excludedFromWeightingAmount"], 170000.0)
+        self.assertEqual(self.b["excludedCaseCount"], 2)
         self.assertEqual(self.b["completionProbabilityBasis"], "stage_config")
 
     def test_blended_conversion_present(self):

@@ -91,9 +91,16 @@ class TestForecastBridgeCalc(unittest.TestCase):
         self.assertEqual(self.b["fundedLoanCount"], 73)
         self.assertAlmostEqual(self.b["fundedBalance"], 73 * 120000.0, places=2)
 
-    def test_forecast_loan_count_is_funded_plus_pipeline(self):
+    def test_forecast_loan_count_is_funded_plus_eligible_pipeline(self):
+        """The forward COUNT must describe the same population as the forward
+        AMOUNT. Cases the governed config excludes contribute nothing to the
+        expected amount, so counting them here would say the book grows by cases
+        whose balance was deliberately left out. The composition identity is
+        unchanged; the pipeline term is now the eligible set."""
         self.assertEqual(self.b["forecastLoanCount"],
-                         self.b["fundedLoanCount"] + self.b["pipelineCaseCount"])
+                         self.b["fundedLoanCount"] + self.b["eligibleCaseCount"])
+        self.assertEqual(self.b["eligibleCaseCount"],
+                         self.b["pipelineCaseCount"] - self.b["excludedCaseCount"])
 
 
 # --------------------------------------------------------------------------- #
