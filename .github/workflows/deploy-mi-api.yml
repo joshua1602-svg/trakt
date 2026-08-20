@@ -3,15 +3,38 @@ name: Deploy trakt-mi-api (App Service)
 # Deploys the FastAPI MI Agent API to the Azure App Service `trakt-mi-api`.
 # Requires repo secret AZURE_MI_API_PUBLISH_PROFILE (Get publish profile from the
 # App Service). Manual by default; enable the push trigger if you want CI deploys.
+#
+# What gets uploaded, and why it is not the repo
+# ----------------------------------------------
+# This workflow used to hand the WHOLE checkout to azure/webapps-deploy (the
+# action's default package is "."), so Oryx found the repo-root requirements.txt
+# and treated the repository's dependency set as the App Service runtime
+# contract: scikit-learn, scipy, streamlit, rapidfuzz, reportlab, lxml and the
+# rest, none of which mi_agent_api imports. That is what left the build sitting
+# on `Running uv pip install...` for 20+ minutes, and a build that never finishes
+# leaves antenv without gunicorn — which is how `bash startup.sh` exits 127.
+#
+# So we stage an artefact instead: exactly the paths in
+# deploy/trakt-mi-api/package_contents.txt, plus
+# deploy/trakt-mi-api/requirements.txt as the artefact's ROOT requirements.txt.
+# Oryx then builds the API's own contract and nothing else.
+#
+# The remote build is deliberately kept (SCM_DO_BUILD_DURING_DEPLOYMENT=true, see
+# deploy/trakt-mi-api/README.md): App Service builds its own antenv, and the
+# startup contract — `bash startup.sh` → gunicorn mi_agent_api.app:app — is
+# unchanged. Rollback is reverting this workflow file.
 
 on:
   workflow_dispatch: {}
   # push:
   #   branches: [ main ]
-  #   paths: [ 'mi_agent_api/**', 'mi_agent/**', 'requirements.txt', 'startup.sh' ]
+  #   paths: [ 'mi_agent_api/**', 'mi_agent/**', 'deploy/trakt-mi-api/**', 'startup.sh' ]
 
 permissions:
   contents: read
+
+env:
+  STAGE_DIR: .deploy-artifact/trakt-mi-api
 
 jobs:
   deploy:
@@ -23,15 +46,68 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Smoke-check the app imports
+      - name: Stage the deployment artefact
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -c "from mi_agent_api.app import app; print('import OK:', app.title)"
+          set -euo pipefail
+          rm -rf "${STAGE_DIR}"
+          mkdir -p "${STAGE_DIR}"
+
+          # One repo-relative path per line; inline # comments and blanks ignored.
+          # A path that has been renamed or deleted fails the deploy here rather
+          # than at container start.
+          while IFS= read -r raw; do
+            path="${raw%%#*}"
+            path="$(echo "${path}" | xargs || true)"
+            [ -z "${path}" ] && continue
+            if [ ! -e "${path}" ]; then
+              echo "::error::package_contents.txt lists a path that does not exist: ${path}"
+              exit 1
+            fi
+            cp -R --parents "${path}" "${STAGE_DIR}/"
+          done < deploy/trakt-mi-api/package_contents.txt
+
+          # The API's own dependency contract becomes the artefact's root
+          # requirements.txt — the file Oryx detects and builds.
+          cp deploy/trakt-mi-api/requirements.txt "${STAGE_DIR}/requirements.txt"
+
+          # Test suites and caches are not runtime code; they only slow the
+          # upload. Nothing under the packages above imports from a tests/ dir.
+          find "${STAGE_DIR}" -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find "${STAGE_DIR}" -type d -name 'tests' -prune -exec rm -rf {} +
+          find "${STAGE_DIR}" -type d -name '.pytest_cache' -prune -exec rm -rf {} +
+
+          test -f "${STAGE_DIR}/startup.sh" \
+            || { echo "::error::startup.sh is missing from the artefact root"; exit 1; }
+          test -f "${STAGE_DIR}/requirements.txt" \
+            || { echo "::error::requirements.txt is missing from the artefact root"; exit 1; }
+
+          echo "Artefact size: $(du -sh "${STAGE_DIR}" | cut -f1)"
+          echo "Artefact root:"; ls -1 "${STAGE_DIR}"
+
+      - name: Smoke-check the artefact against its own requirements
+        run: |
+          set -euo pipefail
+          # A clean venv holding ONLY the artefact's contract, so a dependency
+          # that is missing from deploy/trakt-mi-api/requirements.txt fails here
+          # instead of on the App Service. Run from inside the artefact so an
+          # import that silently relied on a repo path we did not stage cannot
+          # resolve.
+          python -m venv "${RUNNER_TEMP}/artefact-venv"
+          "${RUNNER_TEMP}/artefact-venv/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/artefact-venv/bin/pip" install -r "${STAGE_DIR}/requirements.txt"
+          cd "${STAGE_DIR}"
+          "${RUNNER_TEMP}/artefact-venv/bin/python" -c \
+            "import mi_agent_api.app as a; import snapshot.model; print('packaging OK:', a.app.title)"
+          # The startup command's two binaries must exist in an environment built
+          # from this contract — their absence is the 127 the App Service reported.
+          "${RUNNER_TEMP}/artefact-venv/bin/python" -c "import gunicorn, uvicorn, uvicorn_worker; print('server OK')"
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
           app-name: trakt-mi-api
           publish-profile: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
-          # Oryx builds requirements.txt and runs the configured startup command.
+          # The staged artefact — NOT the repo checkout. Oryx builds the
+          # requirements.txt at its root (deploy/trakt-mi-api/requirements.txt)
+          # and runs the configured startup command, `bash startup.sh`.
+          package: ${{ env.STAGE_DIR }}

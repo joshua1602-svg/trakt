@@ -65,6 +65,12 @@ az webapp config appsettings set -g "$RESOURCE_GROUP" -n "$APP_NAME" --settings 
   -o none
 
 echo ">> Deploy code from the repo root (Oryx builds requirements.txt)"
+# NOTE: this one-shot path zips the repo root, so Oryx builds the REPOSITORY's
+# requirements.txt (88 packages, incl. scikit-learn/scipy/streamlit) rather than
+# the API's own 60. That is slow and is what starves antenv of gunicorn when the
+# build times out. It is kept as-is because `az webapp up` also creates the plan
+# and app; for CODE deploys use .github/workflows/deploy-mi-api.yml, which stages
+# deploy/trakt-mi-api/package_contents.txt + requirements.txt instead.
 # Run from the REPO ROOT so the whole package tree (mi_agent_api, mi_agent,
 # apps/blob_trigger_app, engine, config) ships. az webapp up zips cwd + deploys.
 az webapp up -g "$RESOURCE_GROUP" -n "$APP_NAME" --plan "$APP_PLAN" \
