@@ -24,6 +24,10 @@ Environment configuration:
                               the existing test suite.
   ``MI_AGENT_CLIENT_ROLE``    Entra app-role name for client users (default "client")
   ``MI_AGENT_OPERATOR_ROLE``  Entra app-role name for operators (default "operator")
+  ``TRAKT_MI_REACT_AUTH_MODE`` Which dashboard credential is accepted: ``swa``
+                              (default, header only), ``both`` (header or Entra
+                              bearer token) or ``bearer`` (token only). See
+                              :mod:`mi_agent_api.react_auth`.
   ``MI_AGENT_CLIENT_ID``      The single tenant this deployment serves (already
                               consumed by app.py); used only for logging/labelling
                               here — data isolation is achieved by loading exactly
@@ -44,6 +48,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import HTTPException, Request, status
+
+from . import react_auth
 
 logger = logging.getLogger("mi_agent_api.auth")
 
@@ -213,11 +219,25 @@ def principal_from_request(request: Request) -> Optional[Principal]:
 
 
 async def auth_guard(request: Request) -> None:
-    """Global dependency: enforce authentication + MI role on protected routes.
+    """Global dependency: enforce authentication on protected routes.
 
-    Open (probe/index/docs) paths pass through. On protected paths a missing
-    principal is 401 and a principal without an MI role is 403. The resolved
-    principal is stashed on ``request.state.principal`` for handlers/logging.
+    Open (probe/index/docs) paths pass through. Two credentials can authenticate
+    a dashboard request, and which are accepted is ``TRAKT_MI_REACT_AUTH_MODE``
+    (see :mod:`mi_agent_api.react_auth`):
+
+    * **Static Web Apps principal header** — the historical path. A missing
+      principal is 401 and a principal without an MI role is 403. The resolved
+      principal is stashed on ``request.state.principal``.
+    * **Entra bearer token** — the multitenant path. Validated by
+      ``react_auth``, which raises its own 401/403, and stashed on
+      ``request.state.react_principal``. No SWA role is consulted: a bearer
+      caller is authorised by the delegated scope the token carries and then by
+      the Trakt organisation/principal registries in
+      :mod:`mi_agent_api.identity`, which is the whole point of the move —
+      access stops depending on an invitation into the Trakt directory.
+
+    In ``bearer`` mode the header is not read at all, so a caller that can reach
+    this API directly can no longer authenticate by presenting one.
     """
     path = request.url.path.rstrip("/") or "/"
     if path in OPEN_PATHS or request.method == "OPTIONS":
@@ -243,6 +263,31 @@ async def auth_guard(request: Request) -> None:
         request.state.principal = Principal(
             user_details="local-dev", roles={_operator_role()}, synthetic=True)
         return
+
+    mode = react_auth.auth_mode()
+    if mode not in react_auth.KNOWN_MODES:
+        # Fail closed on a mode nobody chose. Falling back to `swa` would leave a
+        # deployment an operator believed was bearer-only still accepting the
+        # header, which is the one outcome this switch exists to prevent.
+        logger.error("unknown %s=%r; refusing to serve", react_auth.MODE_ENV, mode)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Dashboard authentication is misconfigured for this deployment.")
+
+    if react_auth.bearer_enabled(mode) and react_auth.bearer_offered(request):
+        # A presented bearer token is always the credential that decides the
+        # request: falling back to the header when a token fails to validate
+        # would turn a rejected token into an anonymous-but-header-authenticated
+        # call, and validate_request raises rather than returning None.
+        request.state.react_principal = react_auth.validate_request(request)
+        return
+
+    if mode == react_auth.MODE_BEARER:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="A bearer token is required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     principal = principal_from_request(request)
     if principal is None:
