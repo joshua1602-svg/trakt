@@ -161,6 +161,145 @@ changed number unattributable to one tranche.
 | analytical layer, intent boundary, P1J-1, P1L, fabricated-population, golden bank, P1I, P1M, P1N, 252-question calibration, all mi_agent_api tests | **1,989 passed, 13 xfailed, 0 failed** |
 | 30-question simple-MI bank | **0 of 30 changed** |
 
-## 5–17
+## 5. Tranche B — one authoritative pipeline population
 
-*(Tranche B, its measurement, Tranche C and the launch recommendation follow.)*
+### 5.1 The defect, stated as a defect
+
+`config/client/pipeline_expected_funding.yaml` has always carried:
+
+```yaml
+include_stages: [KFI, APPLICATION, OFFER]
+exclude_stages: [WITHDRAWN, COMPLETED]
+stage_probabilities: {KFI: 0.20, APPLICATION: 0.45, OFFER: 0.75, COMPLETED: 1.00}
+```
+
+The serving path honoured half of the exclusion. `pipeline_prep.py` excluded
+WITHDRAWN by a hard-coded literal test; COMPLETED matched no exclusion, fell
+through to the configured-probability tier, and was weighted at **1.00** — full
+value, certainty — into the **forward** expectation. The same module classifies a
+COMPLETED case as `pipeline_status = "funded"`. The forecast of what is still to
+come was therefore adding, at certainty, cases the system already knew were on
+the book. The current funded balance already contains them.
+
+This is a product defect, not a documentation defect: no wording could make the
+number right.
+
+### 5.2 What changed
+
+| # | change | file |
+|---|---|---|
+| B1 | exclusion set read from the config that declares it, replacing the hard-coded WITHDRAWN literal; the row-level source names **which** stage excluded the row (`excluded_withdrawn`, `excluded_completed`) so a receipt can say why | `mi_agent_api/pipeline_prep.py` |
+| B1 | `completion_probability_summary` matches excluded rows on the `excluded_` prefix, so adding a stage to `exclude_stages` needs no code change | `mi_agent_api/pipeline_prep.py` |
+| B2 | forward **count** now describes the same population as the forward **amount**: `forecastLoanCount = fundedLoanCount + eligibleCaseCount`, with `eligibleCaseCount = pipelineCaseCount − excludedCaseCount` published on the bridge | `mi_agent_api/forecast_bridge.py` |
+| B3 | the forward finding carries a `PopulationRef` labelled "the open pipeline", and the answer states the exclusion instead of the stale warning that claimed the excluded cases were *inside* the expectation | `mi_workflows/analytical/executors.py` |
+
+Historical calibration is untouched. `pipeline_history` reads the raw weekly
+extracts directly and needs COMPLETED observations to estimate a rate at all;
+the exclusion governs the forward population only. This is stated in the
+docstring of `_excluded_stages` so the next reader does not "fix" it.
+
+**B2 goes one clause beyond the brief's literal wording, and that is flagged
+rather than absorbed.** The brief named the amount. Leaving the count alone would
+have shipped a forecast whose two halves described different populations — the
+book grows by 32 cases whose balance was deliberately excluded. Both halves were
+moved; if the intent was amount-only, B2 is the line to revert.
+
+### 5.3 What was deliberately not consolidated
+
+There are still two forward findings carrying the same number under two labels
+("Expected completions from the open pipeline", "Expected completion amount from
+the open pipeline"). Before Tranche B they carried **different** numbers, which
+is what made them competing scopes. They now agree, so A2's contract — which
+tests values, not labels — correctly stops refusing without being touched, and
+the narrator's dedup prints the figure once. Collapsing the two findings into one
+is a structural change to the forecast capability with no effect on any delivered
+figure, so it was left for a maintenance pass rather than smuggled into a
+correctness tranche.
+
+## 6. What Tranche B changed numerically
+
+### 6.1 Prep layer, both books, as-of extract 2026-06-29
+
+RECORDED. "Before" is the pre-Tranche-B tier reproduced in-process by restricting
+the exclusion set to WITHDRAWN — the one thing B1 changed — with no production
+file edited (`tb_prep_before.py`).
+
+| | Alderbridge before | Alderbridge after | Kestrelmoor before | Kestrelmoor after |
+|---|---|---|---|---|
+| probability basis | `mixed_historical_and_config` | `historical_observed` | `mixed_historical_and_config` | `historical_observed` |
+| rows on `configured_stage_rate` | 32 (£5,550,243.24) | **0** | 46 (£4,752,205.09) | **0** |
+| rows on `excluded_completed` | 0 | **32 (£5,550,243.24)** | 0 | **46 (£4,752,205.09)** |
+| gross weighted over | £94,358,410.61 | £88,808,167.37 | £76,677,094.14 | £71,924,889.05 |
+| blended conversion | 0.1608 | **0.1084** | 0.1625 | **0.1072** |
+
+Neither book's latest extract carries a WITHDRAWN case, so on this data the
+entire effect of B1 is the COMPLETED exclusion.
+
+### 6.2 Delivered figures, Q9 on both books
+
+RECORDED from the answer and its findings.
+
+| | Alderbridge before | Alderbridge after | Kestrelmoor before | Kestrelmoor after |
+|---|---|---|---|---|
+| expected completions | £15,175,404.15 | **£9,625,160.91** | £12,459,455.42 | **£7,707,250.33** |
+| forecast funded balance | £1,980,061,662.36 | **£1,974,511,419.12** | £1,784,930,793.81 | **£1,780,178,588.72** |
+| forecast loan count | 11,539 | **11,507** | 12,987 | **12,941** |
+| competing forward figures in one answer | 2 (£15.2m and £9.6m) | **1** | 2 | **1** |
+
+### 6.3 The independent check
+
+TRUTH. `evidence/forecast_composition_hardening/truth_pipeline.py` recomputes the
+whole forecast from the twelve raw weekly M2L extracts. It imports nothing from
+`pipeline_prep`, `pipeline_history` or `forecast_bridge`; every assumption is an
+explicit constant naming the config key or source line it came from. **It was
+written during the V1 audit, before Tranche B existed, and has not been edited
+since** — so it cannot have been moved toward the delivered figure.
+
+| | independent truth | delivered | agree |
+|---|---|---|---|
+| Alderbridge open-pipeline expectation | 9,625,160.91 | 9,625,160.91 | ✔ |
+| Alderbridge excluded component | 5,550,243.24 (32 cases) | 5,550,243.24 (32 cases) | ✔ |
+| Alderbridge forecast balance | 1,964,886,258.21 + 9,625,160.91 = 1,974,511,419.12 | 1,974,511,419.12 | ✔ |
+| Kestrelmoor open-pipeline expectation | 7,707,250.33 | 7,707,250.33 | ✔ |
+| Kestrelmoor excluded component | 4,752,205.09 (46 cases) | 4,752,205.09 (46 cases) | ✔ |
+| Kestrelmoor forecast balance | 1,772,471,338.39 + 7,707,250.33 = 1,780,178,588.72 | 1,780,178,588.72 | ✔ |
+| landing months (OFFER→07, APPLICATION→08, KFI→09), both books | 4,978,690.61 / 2,332,075.32 / 2,314,394.98 and 3,945,480.97 / 1,928,752.13 / 1,833,017.23 | identical | ✔ |
+
+Kestrelmoor's £7,707,250.33 is the figure the **frozen expectation file predicted
+for Q9.3 before any code in this sprint was written**. The file was hashed into
+the manifest at `49e00b5`; the number arrived at `eaa1f5e`.
+
+### 6.4 The answer, before and after
+
+Alderbridge Q9 — "Based on the current pipeline, what is the forecast funded
+balance?"
+
+> **Before.** Current funded balance is £1.96bn as at 2026-06-30. Gross pipeline
+> in the governed extract is £94.4m as at 2026-06-29. Expected completions from
+> the pipeline: **£15.2m**. Forecast funded balance: £1.98bn. Expected completion
+> amount from the open pipeline: **£9.6m**. Expected to land: …
+
+> **After.** Current funded balance is £1.96bn as at 2026-06-30. Gross pipeline in
+> the governed extract is £94.4m as at 2026-06-29. Expected completions from the
+> open pipeline: **£9.6m**. This excludes **32 case(s) worth £5.6m** the extract
+> already shows as completed or withdrawn. Forecast funded balance: £1.97bn.
+> Expected to land: …
+
+One forward figure, the population it covers named, and what it leaves out
+disclosed with its size.
+
+### 6.5 A governance observation, recorded not acted on
+
+After B1 the `by_source` breakdown on both books is **zero rows on
+`configured_stage_rate`**. Every weighted row takes an empirical rate, so the
+configured `stage_probabilities` block — 0.20 / 0.45 / 0.75 — is now entirely
+inert for these two books' forward forecast. It survives only as the fallback for
+a stage with insufficient history. That is the correct precedence, but it means
+the shipped config values are no longer load-bearing anywhere a reader can see,
+and it is exactly the calibration question Tranche C investigates. Nothing was
+changed for it.
+
+## 7–17
+
+*(Tranche B measurement, semantic assurance, Tranche C and the launch
+recommendation follow.)*
