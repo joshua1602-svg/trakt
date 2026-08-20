@@ -275,6 +275,7 @@ def _forecast_sentences(result: AnalyticalResult,
                         suppress: Optional[set] = None) -> List[str]:
     suppress = suppress or set()
     out: List[str] = []
+    emitted_forward: set = set()
     forecasts = [f for f in result.of_kind(KIND_FORECAST)
                  if f.ok and (f.metric, f.kind) not in suppress]
     measures = [f for f in result.of_kind(KIND_MEASURE)
@@ -296,10 +297,33 @@ def _forecast_sentences(result: AnalyticalResult,
                        + (f" ({money(annual)} annualised)" if annual else "")
                        + (f", from {months} observed month(s)." if months else "."))
             continue
+        # Two capabilities can legitimately produce the SAME forward figure over
+        # the same population — the bridge and the stage breakdown both report
+        # the open-pipeline expectation once the governed exclusion applies.
+        # A2 does not refuse them, correctly, because they agree; but printing
+        # one number twice under two labels is noise, so the second is dropped.
+        seen_key = (finding.metric,
+                    round(float(finding.forecast_value), 2)
+                    if finding.forecast_value is not None else None)
+        if seen_key[1] is not None and seen_key in emitted_forward:
+            continue
+        emitted_forward.add(seen_key)
+        excluded_cases = (finding.evidence or {}).get("excludedCaseCount") or 0
+        excluded_amount = (finding.evidence or {}).get("excludedFromWeightingAmount")
+        # B5 — the governed exclusion belongs in the answer, not only on the
+        # envelope. A reader who cannot see which cases were left out cannot
+        # tell whether the figure is a forward expectation or a restatement of
+        # what has already happened.
+        exclusion = ""
+        if excluded_cases and excluded_amount:
+            exclusion = (f" This excludes {_count(excluded_cases)} case(s) worth "
+                         f"{money(excluded_amount)} the extract already shows as "
+                         "completed or withdrawn.")
         out.append(f"{finding.label}: "
                    f"{value_text(finding, finding.forecast_value)}"
                    + (f", expected {finding.forecast_date}."
-                      if finding.forecast_date else "."))
+                      if finding.forecast_date else ".")
+                   + exclusion)
     timing = [f for f in result.of_kind(KIND_TIMING)
               if f.ok and f.forecast_value is not None]
     if timing:

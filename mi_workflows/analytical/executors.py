@@ -886,31 +886,42 @@ def funded_balance_forecast(ctx: AnalyticalContext) -> List[Finding]:
                   "openStageAmount": _open_stage_amount(frame),
                   "excludedFromWeightingAmount": bridge.get("excludedFromWeightingAmount"),
                   "excludedCaseCount": bridge.get("excludedCaseCount")}))
-    settled = _settled_stage_component(frame)
-    if settled:
-        # The governed bridge weights EVERY case the extract carries, including
-        # those the extract already shows at COMPLETED stage. Whether those have
-        # reached the funded cut-off is a property of the two dates, not of this
-        # layer — so the component is disclosed rather than removed, and the
-        # open-pipeline expectation beside it is labelled with its own scope.
+    # B5 — the governed exclusion, stated as a fact about the forecast rather
+    # than as a diagnostic. This used to warn that the expected completions
+    # INCLUDED settled cases, which was true and was the defect; now they are
+    # excluded, and what a reader needs to know is which population the forward
+    # figure covers and what it leaves out.
+    excluded_amount = bridge.get("excludedFromWeightingAmount") or 0.0
+    excluded_cases = bridge.get("excludedCaseCount") or 0
+    if excluded_cases:
         ctx.warn(
-            f"{money(settled)} of the expected completions sits on cases the "
-            "pipeline extract already shows as completed. Whether those have "
-            "reached the funded reporting date depends on the gap between the "
-            f"funded cut-off ({bridge.get('fundedReportingDate')}) and the "
-            f"pipeline extract ({bridge.get('pipelineAsOfDate')}).")
+            "The forward forecast covers the open pipeline only. "
+            f"{excluded_cases} case(s) worth {money(excluded_amount)} are "
+            "excluded because the extract already shows them as completed or "
+            "withdrawn, so they are not future completions.")
+    # The forward expectation covers the ELIGIBLE population, not every case the
+    # extract carries, so it must not be labelled with the whole-extract
+    # population reference used for the gross figure above.
+    eligible_ref = PopulationRef(
+        key="pipeline:eligible", label="the open pipeline",
+        predicate="pipeline cases the governed config includes in forward funding",
+        rows=bridge.get("eligibleCaseCount"),
+        rows_before=bridge.get("pipelineCaseCount"),
+        dataset=DATASET_PIPELINE)
     findings.append(Finding(
         capability="funded_balance_forecast", kind=KIND_FORECAST,
-        label="Expected completions from the pipeline",
+        label="Expected completions from the open pipeline",
         metric="weighted_expected_funded_amount",
-        population=pipeline_ref, period=PeriodRef(end=bridge.get("pipelineAsOfDate")),
+        population=eligible_ref, period=PeriodRef(end=bridge.get("pipelineAsOfDate")),
         unit=engine.UNIT_CURRENCY, aggregation=engine.AGG_SUM,
         forecast_value=bridge.get("weightedExpectedFundedAmount"),
         value=bridge.get("weightedExpectedFundedAmount"),
         probability_basis=bridge.get("completionProbabilityBasis"),
         evidence={"engine": "mi_agent_api.forecast_bridge.compute_forecast_bridge",
                   "blendedWeightedConversion": bridge.get("blendedWeightedConversion"),
-                  "settledStageComponent": settled,
+                  "excludedFromWeightingAmount": excluded_amount,
+                  "excludedCaseCount": excluded_cases,
+                  "eligibleCaseCount": bridge.get("eligibleCaseCount"),
                   "forecastReadiness": (bridge.get("forecastReadiness") or {}).get("status")}))
     findings.append(Finding(
         capability="funded_balance_forecast", kind=KIND_FORECAST,

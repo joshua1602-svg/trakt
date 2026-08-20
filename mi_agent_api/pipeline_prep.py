@@ -101,6 +101,25 @@ def _stage_probabilities() -> Dict[str, float]:
     return out
 
 
+def _excluded_stages() -> frozenset:
+    """Stages the governed config excludes from FORWARD expected funding.
+
+    ``exclude_stages`` in config/client/pipeline_expected_funding.yaml. The rule
+    belongs to the config, not to this module: a client that treats a stage
+    differently changes the config, never the code. The default matches the
+    shipped config so a missing block cannot silently start weighting settled
+    cases.
+
+    This governs the FORWARD population only. Historical conversion calibration
+    reads the raw weekly extracts directly (``pipeline_history._read``) and is
+    unaffected — it needs COMPLETED observations to estimate a rate at all.
+    """
+    raw = _forecast_config().get("exclude_stages")
+    if raw is None:
+        raw = ["WITHDRAWN", "COMPLETED"]
+    return frozenset(str(s).strip().upper() for s in raw if str(s).strip())
+
+
 def _stage_days_to_fund() -> Dict[str, int]:
     raw = (_forecast_config().get("stage_days_to_fund") or {})
     out: Dict[str, int] = {}
@@ -472,7 +491,7 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
       1. row-level explicit probability (a real source value)  -> ``row_level``
       2. empirical historical stage rate (sufficient history)  -> ``historical_stage_rate``
       3. configured stage probability                          -> ``configured_stage_rate``
-      4. WITHDRAWN / inactive  -> excluded from weighting       -> ``excluded_withdrawn``
+      4. a stage the governed config EXCLUDES  -> not weighted   -> ``excluded_<stage>``
       5. UNKNOWN / unmapped stage -> no probability             -> ``missing_stage``
       6. otherwise no probability                               -> ``unavailable``
     """
@@ -497,9 +516,16 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
     source[tier_row_level] = "row_level"
     remaining &= ~tier_row_level
 
-    tier_withdrawn = remaining & (stage == "WITHDRAWN")
-    source[tier_withdrawn] = "excluded_withdrawn"           # NaN -> not weighted
-    remaining &= ~tier_withdrawn
+    # The governed exclusion contract. Previously only WITHDRAWN was excluded,
+    # hard-coded here, while the config also listed COMPLETED — so cases the
+    # extract already showed as funded were weighted at the configured COMPLETED
+    # probability of 1.00 and added to the forward forecast. The stage set now
+    # comes from the config that declares it, and the source label names WHICH
+    # stage excluded the row so a receipt can say why.
+    excluded = _excluded_stages()
+    tier_excluded = remaining & stage.isin(excluded)
+    source[tier_excluded] = ("excluded_" + stage[tier_excluded].str.lower())
+    remaining &= ~tier_excluded
 
     tier_historical = remaining & stage.isin(list(historical_rates))
     if tier_historical.any():
@@ -683,8 +709,11 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
         mask = src == s
         by_source[s] = {"count": int(mask.sum()),
                         "amount": round(float(amount[mask].sum()), 2)}
-    excluded_sources = {"excluded_withdrawn", "missing_stage", "unavailable"}
-    excluded_mask = src.isin(excluded_sources)
+    # Any governed exclusion, whichever stage produced it, plus the two
+    # no-probability outcomes. Matching on the prefix keeps this in step with
+    # the config: adding a stage to exclude_stages needs no change here.
+    excluded_mask = (src.str.startswith("excluded_")
+                     | src.isin({"missing_stage", "unavailable"}))
     gross = float(amount.sum())
     excluded_amount = float(amount[excluded_mask].sum())
     active_gross = gross - excluded_amount
