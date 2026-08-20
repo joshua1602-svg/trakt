@@ -3,13 +3,14 @@
     "analytical_intent_v1",
     "forecast_composition_hardening"
   ],
-  "reportHead": "6f61365",
-  "generatedFromTree": "6f61365b54c7272fbbbaa0eb476309c5f31c30b3",
+  "reportHead": "34611f0",
+  "generatedFromTree": "34611f02d440ece85359846663f1fdcda0b8c7f9",
   "v1RunFilesProducedAtTree": "044d13b",
   "v1ProductionCodeAt": "9125e77",
   "manifestNotes": {
     "standingRule": "Harness hash and run-file hash move together. A manifest that hashes a harness revision beside run files produced by a different revision is a provenance error. Where they diverge the divergence is recorded with its reason, as below.",
-    "harnessDivergence": "RESOLVED IN PART. The four V1 run files and the four baseline run files were ALL produced by harness sha256 de059ef3fd073570\u2026 (6,285 bytes), pinned at evidence/analytical_intent_v1/baseline/nl_harness_that_produced_runs.py. The revision under evidence/analytical_intent_v1/nl_harness.py, which records metadata.analyticalIntent at run time, HAS now produced run files: the run-file:llm-degraded:* groups name it. Those runs are NOT a replacement for the V1 measurement \u2014 the API key was exhausted mid-sprint and their parser mix differs from the baseline's (145 LLM parses of 752, against 645), so they are published as evidence and excluded from any before/after claim. See report section 7.1. A full-credit remeasurement remains outstanding.",
+    "harnessDivergence": "RESOLVED. The four V1 run files and the four baseline run files were ALL produced by harness sha256 de059ef3fd073570\u2026 (6,285 bytes), pinned at evidence/analytical_intent_v1/baseline/nl_harness_that_produced_runs.py. The revision under evidence/analytical_intent_v1/nl_harness.py, which records metadata.analyticalIntent at run time, HAS now produced run files: the run-file:llm-degraded:* groups name it. Those runs are NOT a replacement for the V1 measurement \u2014 the API key was exhausted mid-sprint and their parser mix differs from the baseline's (145 LLM parses of 752, against 645), so they are published as evidence and excluded from any before/after claim (report section 7.1). The key was then topped up and the measurement redone at full credit: run-file:llm_pre and run-file:llm_post, parser mix within two runs of the baseline's, produced by the same pinned revision. Harness hash and run-file hash now move together for every group.",
+    "noiseFloor": "The LLM parser disagrees with ITSELF on 6-10% of bank cells - same question, same commit, different grade - on five variations where it sometimes emits a spec filter the analytical route cannot apply and P1L correctly refuses. Measured on five independent run sets in tranche_b/repeat_variance.txt; zero on both deterministic sets. Before/after claims therefore rest on run-file:det_pre and run-file:det_post, with the LLM pair corroborating.",
     "deterministicComparator": "The before/after claims in the Forecast & Composition Hardening report rest on run-file:det_pre and run-file:det_post, produced by nl_harness_det.py with the LLM parser off on BOTH sides. That makes the parse a pure function of the question text and the parser mix identical by construction (752 of 752 deterministic each side), so a difference between the two is attributable to the code. It does not exercise the LLM parse path.",
     "packagedScriptsDiffer": "forecast_composition_hardening/classify_substance_guarded.py has the same substance() rule as analytical_intent_v1/classify_substance.py; it differs only in being import-safe and in carrying an extra run set. nl_score.py is NOT duplicated into this pack \u2014 the frozen control exists once and is imported.",
     "arithmeticVsSemantic": "Reconciled-findings counts prove arithmetic fidelity against the population the agent EXECUTED. They do not prove that population was the semantically correct one. The frozen expectation file is the separate control for that.",
@@ -531,6 +532,13 @@
     },
     {
       "group": "measurement:fch",
+      "path": "forecast_composition_hardening/repeat_variance.py",
+      "role": "the measurement's own noise floor \u2014 do repeats of one variation, in one run file, on one commit, agree with each other?",
+      "bytes": 1795,
+      "sha256": "a738379cd3b6061b79733915e245ad5051afdb38fcbaa3868d75134fd866f602"
+    },
+    {
+      "group": "measurement:fch",
       "path": "forecast_composition_hardening/neutrality2.py",
       "role": "A5 numerical-neutrality proof for Tranche A",
       "bytes": 4290,
@@ -639,6 +647,94 @@
       "producedAtTree": "6f61365"
     },
     {
+      "group": "run-file:llm_pre",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_pre/nl_alderbridge_production.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, pre-sprint 49e00b5 (uncompressed sha256)",
+      "bytes": 105886,
+      "uncompressedBytes": 2702095,
+      "sha256": "f52c395fbd525ce4fa72baf139836115c8ddf7dff460e73b2cdf3b99980e8843",
+      "gzSha256": "91334773b7a9ea5a7c1414e94e57c9b8e524ed1c643282cbee53e11317290c7e",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "49e00b5"
+    },
+    {
+      "group": "run-file:llm_pre",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_pre/nl_alderbridge_forced_llm.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, pre-sprint 49e00b5 (uncompressed sha256)",
+      "bytes": 105336,
+      "uncompressedBytes": 2700995,
+      "sha256": "65931d67f62879e4143950af62d0e7e05f9cae544b110b99568d29d12521d247",
+      "gzSha256": "0210af9ce78b591c9bc87b2b3a95c6d69a456d0f6b247348b7ea31c21b4c258d",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "49e00b5"
+    },
+    {
+      "group": "run-file:llm_pre",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_pre/nl_kestrelmoor_production.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, pre-sprint 49e00b5 (uncompressed sha256)",
+      "bytes": 107149,
+      "uncompressedBytes": 2715244,
+      "sha256": "c0ab06fee024592435dbd03b594453e51e7ed7c2cfb1bf4ee82c7f15549fd526",
+      "gzSha256": "31c82c3df16ed9a1e7d8e31856b7248249ced71d7051522e3141d4313e6aabfa",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "49e00b5"
+    },
+    {
+      "group": "run-file:llm_pre",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_pre/nl_kestrelmoor_forced_llm.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, pre-sprint 49e00b5 (uncompressed sha256)",
+      "bytes": 107430,
+      "uncompressedBytes": 2719248,
+      "sha256": "204cdcd84d88fdfb1d74050592a3e159207849009a1516099e2e5f2db0497596",
+      "gzSha256": "d238638409b0328adf611b47603916f3bc3607fc9cde3ec9dd380d9a6178164d",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "49e00b5"
+    },
+    {
+      "group": "run-file:llm_post",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_post/nl_alderbridge_production.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, post-Tranche-B (uncompressed sha256)",
+      "bytes": 109097,
+      "uncompressedBytes": 2841128,
+      "sha256": "09d6e9206e7454d07b5728403567a84ab1657206215d3e16645c7297852de59c",
+      "gzSha256": "54191d3f250fdba6c89d016b65dafc896002bb0a484e37c7acb1f90f4ccc7cca",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "34611f0"
+    },
+    {
+      "group": "run-file:llm_post",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_post/nl_alderbridge_forced_llm.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, post-Tranche-B (uncompressed sha256)",
+      "bytes": 108073,
+      "uncompressedBytes": 2838800,
+      "sha256": "c29dedf028f358bf2dd7d2a539d14479154fb77f989f82e467d692b40a49be07",
+      "gzSha256": "efd4d60e7c52a65e94c6922888e2f74988d2d55d65b31b4e3bd7ab76c2a8f13f",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "34611f0"
+    },
+    {
+      "group": "run-file:llm_post",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_post/nl_kestrelmoor_production.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, post-Tranche-B (uncompressed sha256)",
+      "bytes": 112319,
+      "uncompressedBytes": 2856502,
+      "sha256": "b812dc8db6eb02af19cd78b18328632484473a5d3b955eab14c0be9c5918b8aa",
+      "gzSha256": "eec53adda29d2105a6af2eecd857f7e1ae386c4290ea53a404a51d033acf9864",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "34611f0"
+    },
+    {
+      "group": "run-file:llm_post",
+      "path": "forecast_composition_hardening/tranche_b/llm_full_credit/llm_post/nl_kestrelmoor_forced_llm.json.gz",
+      "role": "752-run bank, production LLM parser at full credit, post-Tranche-B (uncompressed sha256)",
+      "bytes": 110307,
+      "uncompressedBytes": 2857000,
+      "sha256": "72a753efd28c499621abef1061475f96b87d00da54577e402f6dbfec4ee7c209",
+      "gzSha256": "499723d32d3260988feaf527ebd1a487268dcc6cc24f7cdba3612d8663e96350",
+      "producedByHarnessSha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b",
+      "producedAtTree": "34611f0"
+    },
+    {
       "group": "run-file:llm-degraded:tb_pre",
       "path": "forecast_composition_hardening/tranche_b/llm_arm_degraded/tb_pre/nl_alderbridge_production.json.gz",
       "role": "752-run bank, LLM arm on an EXHAUSTED key, pre-sprint 49e00b5 (uncompressed sha256). See report \u00a77.1 \u2014 not comparable to the V1 baseline.",
@@ -739,6 +835,55 @@
       "role": "the degraded LLM arm, with every differing run",
       "bytes": 6172,
       "sha256": "9bf2163f047ea1f9d30b6ed75fd6548ec4d5b5dc0a3f58bdaed6cd142b753f6e"
+    },
+    {
+      "group": "output:fch",
+      "path": "forecast_composition_hardening/tranche_b/ab_llm_full_credit.txt",
+      "role": "the LLM A/B at full credit, with every differing run",
+      "bytes": 19113,
+      "sha256": "70257478d445dcfce71fe492f03c7560c97b7c4f8743815e2d7006c16316909e"
+    },
+    {
+      "group": "output:fch",
+      "path": "forecast_composition_hardening/tranche_b/three_axis_llm_pre.txt",
+      "role": "three-axis score, pre-sprint, LLM path",
+      "bytes": 6459,
+      "sha256": "796e4cb98d934076f63a87aa169b0346e2cd88f5890fbc809b8ded44105a8a6e"
+    },
+    {
+      "group": "output:fch",
+      "path": "forecast_composition_hardening/tranche_b/three_axis_llm_post.txt",
+      "role": "three-axis score, post-Tranche-B, LLM path",
+      "bytes": 4946,
+      "sha256": "8a64477f32d6a4c826811e450ff542251bc7b834dbd5309410b3b71b3928e0ce"
+    },
+    {
+      "group": "output:fch",
+      "path": "forecast_composition_hardening/tranche_b/reconcile_llm_pre.txt",
+      "role": "independent reconciliation, pre-sprint, LLM path",
+      "bytes": 254,
+      "sha256": "339fc2780bebb207406919c5d8a48a61fb39a5482556f3883c297f53749142d6"
+    },
+    {
+      "group": "output:fch",
+      "path": "forecast_composition_hardening/tranche_b/reconcile_llm_post.txt",
+      "role": "independent reconciliation, post-Tranche-B, LLM path",
+      "bytes": 254,
+      "sha256": "339fc2780bebb207406919c5d8a48a61fb39a5482556f3883c297f53749142d6"
+    },
+    {
+      "group": "output:fch",
+      "path": "forecast_composition_hardening/tranche_b/repeat_variance.txt",
+      "role": "the noise floor, across five independent run sets",
+      "bytes": 3108,
+      "sha256": "020cd7e095eb3a75e9dff17972e290d742e69b761c9536f9792ee96a0fa95b70"
+    },
+    {
+      "group": "output:fch",
+      "path": "forecast_composition_hardening/tranche_b/fullsuite.log",
+      "role": "full repository suite, post-Tranche-B",
+      "bytes": 13814,
+      "sha256": "c1d8e3e9007974b7da99af38c49a87b48c95023eb4dbb8c457ce4701e8ed421c"
     },
     {
       "group": "output:fch",
@@ -849,8 +994,8 @@
       "group": "output:fch",
       "path": "due_diligence/MI_AGENT_FORECAST_COMPOSITION_HARDENING.md",
       "role": "the report",
-      "bytes": 43261,
-      "sha256": "e489eb7db78733f9bb5b4486019aabb3895354c76b4c94eadf7186874dd2dac6"
+      "bytes": 48193,
+      "sha256": "34e6d466da32621933b30374b7f411e7254d087d31e3486f1d2a0921bd598375"
     }
   ]
 }

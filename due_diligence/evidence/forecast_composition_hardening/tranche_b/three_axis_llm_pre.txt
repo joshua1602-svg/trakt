@@ -1,0 +1,72 @@
+variation              SEMANTIC   population       headline         ARITHMETIC  PRESENTATION
+------------------------------------------------------------------------------------------------------------
+Q1.1                   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q1.2                   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q1.3                   MATCH      MATCH/NOT_APPLICABLE NOT_APPLICABLE   DELEGATED   COMPLETE
+Q1.4                   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q2.1                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q2.2                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q2.3                   DIVERGE    NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+                         ! family expected ['FORECAST_PROJECTION'] got none
+                         ! operation expected ['HORIZON', 'MILESTONE'] got none
+                         ! population axis n/a: the answer is a refusal, so no population was executed
+Q2.4                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q3.1                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   DELEGATED   COMPLETE
+Q3.2                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   DELEGATED   COMPLETE
+Q3.3                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   DELEGATED   COMPLETE
+Q3.4                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   DELEGATED   COMPLETE
+Q4.1                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q4.2                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q4.3                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q4.4                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q5.1                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q5.2                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q5.3                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q5.4                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q6.1                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q6.2                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q6.3                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q6.4                   MATCH      NOT_APPLICABLE   NOT_APPLICABLE   NO_FINDINGS COMPLETE
+Q7.1                   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q7.2                   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q7.3                   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q7.4                   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.1/dimension_value   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.1/provenance        MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.1/seasoning         MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.2/dimension_value   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.2/provenance        MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.2/seasoning         MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.3/dimension_value   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.3/provenance        MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.3/seasoning         MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.4/dimension_value   MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.4/provenance        MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q8.4/seasoning         MATCH      MATCH            NOT_APPLICABLE   DELEGATED   COMPLETE
+Q9.1                   DIVERGE    NOT_APPLICABLE   DIVERGE          DELEGATED   COMPLETE
+                         ! population axis n/a: the answer is a refusal, so no population was executed
+                         ! headline addend 15,175,404.15 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+                         ! headline addend 12,459,455.42 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+Q9.2                   DIVERGE    MATCH            DIVERGE          DELEGATED   COMPLETE
+                         ! headline addend 15,175,404.15 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+                         ! headline addend 12,459,455.42 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+Q9.3                   DIVERGE    MATCH            DIVERGE          DELEGATED   COMPLETE
+                         ! headline addend 15,175,404.15 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+                         ! headline addend 12,459,455.42 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+Q9.4                   DIVERGE    MATCH            DIVERGE          DELEGATED   COMPLETE
+                         ! headline addend 15,175,404.15 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+                         ! headline addend 12,459,455.42 came from 'the governed pipeline extract' (pipeline:extract), expected pipeline_stage in [KFI, APPLICATION, OFFER]
+
+runs scored: 752   variations: 44
+  SEMANTIC      DIVERGE=60  MATCH=692
+  POPULATION    MATCH=429  NOT_APPLICABLE=323
+  HEADLINE      DIVERGE=48  NOT_APPLICABLE=704
+  ARITHMETIC    DELEGATED=528  NO_FINDINGS=224
+  PRESENTATION  COMPLETE=752
+
+SEMANTIC agreement with the frozen expectation : 692/752 (92.0%)
+HEADLINE built from the expected population    : 0 match, 48 diverge, 704 n/a
+ARITHMETIC                                      : delegated to nl_reconcile.py
+PRESENTATION defects (missing disclosure / unheld new figure) : 0
+
+DIVERGING VARIATIONS (5): ['Q2.3', 'Q9.1', 'Q9.2', 'Q9.3', 'Q9.4']

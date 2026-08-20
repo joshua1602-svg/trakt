@@ -4,8 +4,8 @@ Closing the product defects found by the Analytical Intent V1 audit, without
 widening MI capability. Three tranches, worked strictly in order so that every
 changed answer is attributable to exactly one of them.
 
-**Status: Tranche A and Tranche B complete, measured and recorded. Tranche C
-investigated; nothing implemented and no approval assumed.**
+**Status: Tranche A and Tranche B complete, measured on both parser paths and
+recorded. Tranche C investigated; nothing implemented and no approval assumed.**
 
 ---
 
@@ -15,27 +15,38 @@ Both forecast defects the Analytical Intent V1 audit found are closed, and the
 measurement that shows it separates three things the previous evidence pack
 collapsed into one.
 
+Measured on both parser paths — the deterministic comparator and the production
+LLM path at full credit — 752 runs each, four run sets.
+
 | | pre-sprint `49e00b5` | post-Tranche-B |
 |---|---|---|
 | unsafe outcomes over 752 runs | 0 | **0** |
 | numeric findings reconciled independently | 6,856 / 6,856 | **6,856 / 6,856** |
 | semantic agreement with the frozen expectation | 92.0% | **98.4%** |
 | **headline forecast built from the population the question named** | **0 of 48** | **48 of 48** |
-| controlled refusals | 56 | **56** |
-| substantive calculated answers | 85.4% | **85.4%** |
-| grade changes across 752 like-for-like runs | — | **0** |
+| controlled refusals — LLM path / deterministic | 80 / 56 | **77 / 56** |
+| substantive calculated answers — LLM path / deterministic | 82.3% / 85.4% | **82.7% / 85.4%** |
+| grade changes across 752 like-for-like deterministic runs | — | **0** |
+| full repository suite | 9,061 passed (V1, same production code) | **9,061 passed, 0 failed** |
 
 Alderbridge's expected completions fall from £15,175,404.15 to £9,625,160.91 and
 Kestrelmoor's from £12,459,455.42 to £7,707,250.33, both reconciling to the penny
 against an independent recomputation that predates the change.
 
-Two qualifications carry equal weight with the result. The production LLM parser
-could not be remeasured — the supplied API key ran out of credit mid-sprint, so
-the comparator is a deterministic-parse A/B (§7.1). And Tranche B made the
+One qualification carries equal weight with the result. Tranche B made the
 empirical conversion rates the *sole* basis of the forward forecast, at which
 point §11 becomes load-bearing: those rates rest on a 77-day observation window
 against funding lags of 30 to 90 days, and not one stage on either book has a
-matured sample at its own configured lag.
+matured sample at its own configured lag. The forecast is now composed over the
+right population; whether it is weighted by a defensible rate is open, and more
+open after Tranche B than before it.
+
+A second qualification is measured rather than merely stated. The LLM parser
+disagrees with itself on 6–10% of bank cells — the same question, the same
+commit, a different answer — while the whole before/after difference on that path
+is 0.4%. §7.2 quantifies this on five independent run sets, and it is why the
+attribution claims rest on the deterministic comparator, where that noise is zero
+by construction.
 
 ### The qualification that governs how every reconciliation number in this pack should be read
 
@@ -85,11 +96,10 @@ that were in fact produced by the 6,285-byte / `de059ef3…` revision — the au
 had modified the harness and the manifest hashed the current file. Both the
 baseline and the V1 run files were produced by `de059ef3…`, which is now pinned
 at `evidence/analytical_intent_v1/baseline/nl_harness_that_produced_runs.py`.
-The newer revision has since produced run files — the `run-file:llm-degraded:*`
-groups — so the divergence is closed as a provenance matter. It is **not** closed
-as a measurement matter: those runs are excluded from every before/after claim in
-this report because the API key was exhausted while they ran (§7.1). The
-comparable remeasurement is still owed.
+**The divergence is now closed.** That harness revision has produced the
+`run-file:llm_pre` and `run-file:llm_post` groups at full credit, and they carry
+the before/after claims on the production parser path. The degraded runs made
+while the key was exhausted are pinned separately and used for nothing (§7.1).
 
 **Standing rule adopted:** harness hash and run-file hash move together. Every
 run file in the manifest names its producing harness, and
@@ -326,71 +336,101 @@ the shipped config values are no longer load-bearing anywhere a reader can see,
 and it is exactly the calibration question Tranche C investigates. Nothing was
 changed for it.
 
-## 7. How Tranche B was measured, and one comparator that had to be replaced
+## 7. How Tranche B was measured
 
-### 7.1 The LLM arm ran out of credit mid-sprint
+The bank was run **five times over**, twice on each tree, because the first
+attempt exposed something that had to be measured before any before/after claim
+could be trusted.
 
-RECORDED. The V1 evidence was produced with a live LLM parser: 645 of its 752
-runs parsed by LLM. The remeasurement had to run on the same bank. It did not
-get the same parser.
+| run set | tree | parser | why it exists |
+|---|---|---|---|
+| `det_pre` / `det_post` | `49e00b5` / `34611f0` | deterministic, LLM off | the controlled comparator — parser mix identical by construction |
+| `llm_pre` / `llm_post` | same | LLM live, full credit | the production path, same session, same conditions |
+| `llm_arm_degraded/*` | same | LLM on an exhausted key | published as a record; excluded from every claim |
+
+### 7.1 The degraded arm, and why it is published but not used
+
+RECORDED, and disclosed because deleting it would be the dishonest option.
 
 The first remeasurement of all four arms completed and was **lost to an operator
 error of mine** — the harness `chdir`s to the repository root before writing, and
 I passed a relative output path, so four completed 752-run arms failed at the
-final write. Relaunching consumed the remaining balance on the supplied API key,
-which is now exhausted:
+final write. Relaunching spent the remaining balance on the supplied API key.
+The relaunched arms ran with the LLM parser mostly failing over to the
+deterministic one — **145 LLM parses of 752**, against the baseline's 645 — which
+makes them incomparable to anything. They are pinned in the manifest under
+`run-file:llm-degraded:*` and used for nothing.
 
-> `{"type":"invalid_request_error","message":"Your credit balance is too low to
-> access the Anthropic API."}`
+The key was subsequently topped up and the measurement redone at full credit.
+Both LLM run sets below have a parser mix within two runs of the baseline's.
 
-The relaunched arms therefore ran with the LLM parser mostly failing over to the
-deterministic parser: 145 LLM parses out of 752, against the baseline's 645.
-That run is kept and published — it is real measurement — but **it cannot be
-compared to the V1 baseline**, because a difference in the parser mix moves the
-result more than the code does.
+### 7.2 The measurement's own noise floor, measured
 
-Demonstrated, not asserted. Running the *pre-sprint* tree on the same exhausted
-key gives 92.6% correct against the post-sprint tree's 91.5% — the *later* tree
-scoring lower. The two runs did not share a parser mix either (60 LLM parses
-against 145), which is exactly the problem. All eight differing runs are the same
-variation, Q1.3, and in every one of the eight the parser differed between the
-two runs: LLM after, deterministic-fallback before. The LLM parse
-produced the spec population `origination_date ge 2024-01-01`, which the
-analytical route cannot apply, so P1L's population-propagation guard refused. A
-pre-existing V1 guard, fired by parser variation, in a run where neither tree's
-code was responsible. Full detail: `tranche_b/ab_llm_arm_degraded.txt`.
+The bank runs each variation several times. Within a single run *file* — one
+book, one arm, one commit — those repeats should agree. Counting the cells where
+they do not gives the noise floor directly, and any before/after difference
+smaller than it means nothing. `tranche_b/repeat_variance.txt`.
 
-### 7.2 The comparator that replaced it
+| run set | cells whose repeats disagree with each other |
+|---|---|
+| V1 baseline (LLM, pinned) | **11 / 176 (6.2%)** |
+| pre-sprint (LLM, this session) | **17 / 176 (9.7%)** |
+| post-sprint (LLM, this session) | **10 / 176 (5.7%)** |
+| pre-sprint (deterministic) | **0 / 176** |
+| post-sprint (deterministic) | **0 / 176** |
 
-A run whose parser mix is not reproducible cannot answer "what did the code
-change?". So the A/B was rerun with the LLM parser **off on both sides**, which
-makes the parse a pure function of the question text and the parser mix identical
-by construction — 752 of 752 deterministic on each side.
+The mechanism is one thing, on five variations (Q1.3, Q3.3, Q3.4, Q4.4, Q6.3):
+the LLM parser sometimes emits a spec filter the analytical route cannot apply —
+`origination_date ge 2024-01-01`, `account_status = offer`,
+`origination_date ge LAST_4_WEEKS`, `arrears_balance gt 0` — and P1L's
+population-propagation guard correctly refuses rather than computing over the
+wrong rows. Whether the LLM emits it on a given call is stochastic. The guard is
+behaving exactly as designed; it is the input that varies.
 
-`nl_harness_det.py` is a **separate instrument**, not an edit: `nl_harness.py` is
-pinned in the manifest and was not touched, so the run files it produced still
-verify against the harness the manifest names. Apart from its own docstring, the
-deterministic harness differs in three environment lines — `MI_AGENT_LLM_PARSER`
-off, `MI_AGENT_LLM_ENABLED` 0, and the API key removed from the environment. The
-bank, the repeat counts, the request payload and the capture are the same code.
+**The LLM arm disagrees with itself on 6–10% of cells. The entire before/after
+difference is 3 runs of 752, or 0.4%.** That is why the deterministic comparator
+carries the attribution claims, and it is now a measured statement rather than a
+judgement call.
 
-What it does not do: exercise the LLM parse path. It is the controlled
-comparator, not a replacement for the LLM arm. **A full-credit LLM remeasurement
-is still outstanding** and is listed as such in §13.
+### 7.3 The production path, at full credit
 
-### 7.3 The like-for-like result
+Against the pinned V1 baseline, and against a pre-sprint run made in this same
+session. `tranche_b/ab_llm_full_credit.txt`.
 
-Both revisions, same 752 runs, same bank, same parser. `tranche_b/ab_deterministic.txt`.
+| | V1 baseline (pinned) | pre-sprint, this session | post-sprint |
+|---|---|---|---|
+| unsafe outcomes | 0 | **0** | **0** |
+| CORRECT / disclosed | 672 (89.4%) | 672 (89.4%) | **675 (89.8%)** |
+| SUBSTANTIVE_CALCULATED | 618 (82.2%) | 619 (82.3%) | **622 (82.7%)** |
+| CONTROLLED_REFUSAL | 80 | 80 | **77** |
+| findings reconciled independently | 6,856 / 6,856 | 6,856 / 6,856 | **6,856 / 6,856** |
+| parser mix (LLM / det / fallback) | 645 / 20 / 87 | 644 / 19 / 89 | 643 / 18 / 91 |
+
+Two things worth stating separately.
+
+**The pinned baseline reproduced.** A fresh run of the pre-sprint tree lands on
+672 CORRECT and 80 refusals — the pinned V1 figures exactly — with substantive
+answers one run apart (619 against 618). The V1 baseline was measured on another
+day by an earlier harness revision; that it reproduces here is an independent
+check on the comparator, not a restatement of it.
+
+**The 31 grade differences run both ways** — 17 refusal→correct, 14
+correct→refusal — and every one of them falls in the five variations §7.2 names.
+Bidirectional differences inside the noise floor are noise.
+
+### 7.4 The like-for-like result
+
+Both revisions, same 752 runs, same bank, parser mix identical by construction.
+`tranche_b/ab_deterministic.txt`.
 
 | | pre-sprint `49e00b5` | post-Tranche-B | |
 |---|---|---|---|
-| unsafe outcomes (INCORRECT_SUCCESSFUL / SILENT_SEMANTIC_ERROR / HARD_FAILURE) | **0** | **0** | ✔ |
+| unsafe outcomes | **0** | **0** | ✔ |
 | CORRECT / disclosed | 696 (92.6%) | 696 (92.6%) | unchanged |
 | SUBSTANTIVE_CALCULATED | 642 (85.4%) | 642 (85.4%) | unchanged |
 | CONTROLLED_REFUSAL | 56 (7.4%) | 56 (7.4%) | **did not rise** |
 | grade differences across 752 matched runs | — | **0** | |
 | answer-text differences | — | 196 | all attributable |
-| parser mix | 752 deterministic | 752 deterministic | identical |
 
 The 196 changed answers fall in exactly the variations the two tranches touched
 and nowhere else:
@@ -401,9 +441,11 @@ and nowhere else:
 | Q8.1–Q8.4 `/seasoning` | 80 | A3 | rolling-cohort disclosure on front/back book |
 | Q9.2–Q9.4 | 36 | B | one forward figure over the open pipeline, exclusion disclosed |
 
-No other variation moved a character.
+No other variation moved a character. The LLM pair shows the same 195 changed
+answers plus 28 in the five noisy variations — the intended change is identical
+on both parser paths; only the noise is added.
 
-Two things the table does not show, both checked directly. **A2's
+Two things the tables do not show, both checked directly. **A2's
 competing-scopes refusal fires on zero runs after Tranche B** — it withheld six
 figures during Tranche A and stops of its own accord once the two forward figures
 agree, which is the end state it was built for and not a special case added for
@@ -458,21 +500,34 @@ Q9.3   DIVERGE    MATCH    DIVERGE
 
 ### 8.3 Result
 
-Both revisions, 752 runs each. `tranche_b/three_axis_det_pre.txt`,
-`tranche_b/three_axis_det_post.txt`.
+Scored on **both parser paths**, 752 runs each, four run sets in total.
+`tranche_b/three_axis_det_pre.txt`, `..._det_post.txt`, `..._llm_pre.txt`,
+`..._llm_post.txt`.
 
-| axis | pre-sprint `49e00b5` | post-Tranche-B |
-|---|---|---|
-| SEMANTIC agreement with the frozen expectation | 692 / 752 (**92.0%**) | 740 / 752 (**98.4%**) |
-| headline built from the expected population | **0 match, 48 diverge** | **48 match, 0 diverge** |
-| population resolved as expected (where checkable) | 436 match, **0 diverge** | 436 match, **0 diverge** |
-| ARITHMETIC — findings reconciled independently | **6,856 / 6,856** | **6,856 / 6,856** |
-| PRESENTATION — missing disclosures | 0 | 0 |
+| axis | pre `49e00b5` (det) | post (det) | pre `49e00b5` (LLM) | post (LLM) |
+|---|---|---|---|---|
+| SEMANTIC agreement with the frozen expectation | 692 / 752 (**92.0%**) | 740 / 752 (**98.4%**) | 692 / 752 (**92.0%**) | 740 / 752 (**98.4%**) |
+| headline built from the expected population | **0 match, 48 diverge** | **48 match, 0 diverge** | **0 match, 48 diverge** | **48 match, 0 diverge** |
+| population resolved as expected (where checkable) | 436, **0 diverge** | 436, **0 diverge** | 429, **0 diverge** | 433, **0 diverge** |
+| ARITHMETIC — findings reconciled independently | **6,856 / 6,856** | **6,856 / 6,856** | **6,856 / 6,856** | **6,856 / 6,856** |
+| PRESENTATION — missing disclosures | 0 | 0 | 0 | 0 |
 | PRESENTATION — figures this revision prints that the other does not, and no finding holds | 0 | **0** |
 
 The last row was measured **in both directions** — each revision scored against
 the other as comparator — so neither "the new answers invented a figure" nor "the
 old answers did" is left untested.
+
+The two parser paths agree to the run on every axis. The small movement in the
+population row is the five noisy variations of §7.2 changing how many cells carry
+a checkable population; the number that *diverge* is zero on all four sets.
+
+**One thing this axis cannot be scored on: the pinned V1 baseline itself.** Those
+run files were produced by the earlier harness revision, which did not record
+`metadata.analyticalIntent`, so family and operation are absent from every run
+and the scorer returns 0 / 752 — an artefact of the instrument, not a finding
+about the tree. The headline axis *does* work on them, because it reads findings
+rather than the intent block, and it returns the same 0-of-48 as `llm_pre`. The
+semantic column above therefore uses the fresh pre-sprint runs, and says so.
 
 The arithmetic axis is identical on both sides and always was. That is the point
 of separating the axes: **the sprint moved the semantic axis by 6.4 points and
@@ -536,7 +591,8 @@ underneath them.
 | 752-run NL bank, unsafe outcomes | 0 | **0** before and after |
 | 752-run NL bank, grade differences pre vs post (like-for-like) | attributable | **0** |
 | numeric findings reconciled independently | all | **6,856 / 6,856**, 0 mismatches |
-| full repository suite | green | *running at the time of this commit — filled in below* |
+| 752-run NL bank, LLM path, full credit | substantive rate held | **82.7%** against the baseline's 82.2%; refusals 80 → 77 |
+| full repository suite | green | **9,061 passed, 0 failed**, 26 skipped, 21 xfailed, 6 subtests passed (44m 03s) |
 
 ### 9.1 The three tests that changed, and why each was not simply re-pinned
 
@@ -571,22 +627,28 @@ The brief set a floor to stop the result being improved by refusing more.
 
 | rule | measured |
 |---|---|
-| substantive calculated-answer rate must not fall below **82.2%** | **85.4%** (642 / 752), unchanged from the pre-sprint tree measured the same way |
-| controlled-refusal count must not rise | **56 → 56**, unchanged |
+| substantive calculated-answer rate must not fall below **82.2%** | **82.7%** on the LLM path — the same basis the floor was set on — and **85.4%** on the deterministic path, unchanged from the pre-sprint tree measured the same way |
+| controlled-refusal count must not rise | **80 → 77** on the LLM path, **56 → 56** on the deterministic path |
 | the 752-run bank must not be edited to improve the result | `nl_bank.py` untouched — sha256 `f37729113df3a673…`, identical to the copy pinned in the manifest since V1 |
 | the frozen baseline scorer must not be modified | `nl_score.py` untouched — sha256 `aade14173ab36231…`, identical to the manifest's; it graded both sides of every comparison in this report |
 | the frozen expectation file must not be edited | untouched since `49e00b5`; the two rules corrected in §8.5 are in the *scorer*, and both are disclosed |
 
-**No refusal needs individual justification, because no refusal was added.** The
-eight extra refusals visible in the degraded LLM arm are not in this column: they
-are parser-mix artefacts, demonstrated in §7.1, and they appear on the
-post-sprint side of a comparison whose two sides did not run the same parser.
-Under the like-for-like comparator the refusal count is identical.
+**No refusal needs individual justification, because refusals fell on both
+paths.** The rule guards against buying accuracy with silence; the count went
+down, not up, and the substantive rate went up at the same time — which is the
+combination the rule exists to require.
 
-The one honest qualification on the floor: 85.4% is measured with the LLM parser
-off. The V1 82.2% was measured with it on. The two are not the same measurement,
-and the floor is therefore satisfied on a deterministic-parse basis, not on the
-basis it was originally set. §13 lists the outstanding LLM remeasurement.
+The refusals that *move between individual runs* on the LLM path are the five
+variations of §7.2, and they move in both directions: 17 refusals became answers
+and 14 answers became refusals, all inside a noise floor of 6–10% of cells
+measured on five independent run sets. None of them is attributable to this
+sprint's code, and the deterministic pair — where that noise is zero by
+construction — shows the refusal count unchanged at 56.
+
+The earlier draft of this report satisfied the floor only on a deterministic
+basis, because the API key was exhausted. That qualification is now withdrawn:
+the floor is met at 82.7% on the LLM path, measured against a same-session
+pre-sprint run at 82.3% and the pinned baseline at 82.2%.
 
 ## 11. Tranche C — investigation only, nothing implemented
 
@@ -729,8 +791,11 @@ and each is named so it can be reversed.
    the delta is the most misleading figure in the sentence. The finding still
    holds it. It remains a withdrawal of a previously printed figure.
 
-4. **The LLM arm is unmeasured at full credit.** §7.1. The like-for-like
-   comparison is sound; the production parser path is not remeasured since V1.
+4. **The attribution claims rest on the deterministic path, not the LLM one.**
+   Both were measured and both agree, but the LLM path carries a 6–10%
+   self-disagreement rate (§7.2) that exceeds the effect being measured, so it
+   corroborates rather than establishes. Anyone who prefers the LLM numbers will
+   find them in §7.3; they point the same way.
 
 5. **Three scorer rules were corrected mid-measurement** (§8.5) and a fourth was
    thrown away. Each correction was to my instrument, never to the frozen
@@ -744,8 +809,9 @@ and each is named so it can be reversed.
 
 | item | status |
 |---|---|
-| full-credit LLM remeasurement of the 752-run bank | **outstanding** — the supplied API key is exhausted; the deterministic comparator stands in |
-| manifest divergence between `nl_harness.py` and its run files | **resolved** — that revision has now produced the `run-file:llm-degraded:*` groups, which name it; but those runs are excluded from every before/after claim (§7.1), so the *comparable* remeasurement is still outstanding |
+| full-credit LLM remeasurement of the 752-run bank | **done** — §7.3; the pinned baseline reproduced to the run |
+| manifest divergence between `nl_harness.py` and its run files | **resolved** — that revision produced the `run-file:llm_pre` / `llm_post` groups, which name it |
+| the five variations whose LLM parse is unstable (Q1.3, Q3.3, Q3.4, Q4.4, Q6.3) | **open, out of scope** — the guard behaves correctly; the parser's spec varies. Quantified in §7.2, not fixed |
 | Q2.3 phrasing (*"When are we forecast to cross £100m…"*) | **open, out of scope** — an NL-coverage change, refused honestly today |
 | Tranche C implementation | **not started, awaiting a decision on §11.5** |
 | entries/exits decomposition for rolling cohorts | **out of scope** — would be a new cohort engine |
@@ -770,12 +836,25 @@ The measurement that matters is the separation of axes. Arithmetic was
 wrong with the arithmetic. Semantic agreement with the frozen expectation moved
 from 92.0% to 98.4%, and the headline-population check — did the forecast get
 built from the rows the question asked about — moved from **0 of 48** to
-**48 of 48**. A single blended grade would have shown neither.
+**48 of 48**. A single blended grade would have shown neither. Both parser paths
+give the same four numbers, to the run.
 
-Nothing was traded for it: zero unsafe outcomes on both sides, zero grade
-changes across 752 like-for-like runs, refusals unchanged at 56, substantive
-answers unchanged at 85.4%, and 196 changed answers confined to the eleven
-variations the two tranches touched.
+Nothing was traded for it: zero unsafe outcomes on every run set, zero grade
+changes across 752 like-for-like deterministic runs, refusals down on the LLM
+path (80 → 77) and unchanged on the deterministic one, substantive answers up on
+the LLM path (82.3% → 82.7%, against a floor of 82.2%) and unchanged at 85.4%
+deterministically, 196 changed answers confined to the eleven variations the two
+tranches touched, and a full repository suite of 9,061 passing tests with none
+failing.
+
+The measurement also produced something the sprint did not set out to find: the
+LLM parser's own instability, at 6–10% of bank cells against a before/after
+effect of 0.4%. It is not a defect introduced here — the pinned V1 baseline
+carries it too, at 11 cells of 176 — and the guard it trips is behaving as
+designed. It is recorded because it sets a floor on what that path can resolve.
+V1's own headline — 56.5% to 89.4% — clears it by two orders of magnitude and is
+unaffected. A sprint-sized change like this one does not, which is why the
+deterministic comparator was built.
 
 The qualification that belongs in the same breath is §11. Tranche B made the
 empirical conversion rates the sole basis of the forward forecast, and those

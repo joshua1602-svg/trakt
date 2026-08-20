@@ -146,6 +146,9 @@ for name, role in (
     ("tb_prep_before.py",
      "prep-layer report with the PRE-Tranche-B exclusion tier reproduced "
      "in-process; no production file edited"),
+    ("repeat_variance.py",
+     "the measurement's own noise floor — do repeats of one variation, in one "
+     "run file, on one commit, agree with each other?"),
     ("neutrality2.py", "A5 numerical-neutrality proof for Tranche A"),
     ("neutrality_probe.py", "A5 support"),
 ):
@@ -181,6 +184,29 @@ for tree, label in (("det_pre", "pre-sprint 49e00b5"), ("det_post", "post-Tranch
             "producedByHarnessSha256": HARNESS_DET,
             "producedAtTree": "49e00b5" if tree == "det_pre" else "6f61365"})
 
+#: The production LLM path at FULL credit. These carry the before/after claims
+#: on the LLM path; the deterministic pair carries the attribution claims.
+for tree, label in (("llm_pre", "pre-sprint 49e00b5"), ("llm_post", "post-Tranche-B")):
+    for name in ("nl_alderbridge_production.json", "nl_alderbridge_forced_llm.json",
+                 "nl_kestrelmoor_production.json", "nl_kestrelmoor_forced_llm.json"):
+        gz = FCH / "tranche_b" / "llm_full_credit" / tree / (name + ".gz")
+        if not gz.exists():
+            entries.append({"group": f"run-file:{tree}", "path": name,
+                            "role": "MISSING", "status": "MISSING"})
+            continue
+        raw = gzip.decompress(gz.read_bytes())
+        entries.append({
+            "group": f"run-file:{tree}",
+            "path": str(gz.relative_to(EV)),
+            "role": (f"752-run bank, production LLM parser at full credit, "
+                     f"{label} (uncompressed sha256)"),
+            "bytes": gz.stat().st_size,
+            "uncompressedBytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "gzSha256": sha(gz),
+            "producedByHarnessSha256": HARNESS_CURRENT,
+            "producedAtTree": "49e00b5" if tree == "llm_pre" else "34611f0"})
+
 #: The LLM arm, run on an exhausted API key. Published because it is real
 #: measurement; NOT comparable to the V1 baseline, because its parser mix differs.
 for tree, label in (("tb_pre", "pre-sprint 49e00b5"), ("tb", "post-Tranche-B")):
@@ -206,6 +232,13 @@ for tree, label in (("tb_pre", "pre-sprint 49e00b5"), ("tb", "post-Tranche-B")):
 for rel, role in (
     ("tranche_b/ab_deterministic.txt", "the like-for-like A/B result"),
     ("tranche_b/ab_llm_arm_degraded.txt", "the degraded LLM arm, with every differing run"),
+    ("tranche_b/ab_llm_full_credit.txt", "the LLM A/B at full credit, with every differing run"),
+    ("tranche_b/three_axis_llm_pre.txt", "three-axis score, pre-sprint, LLM path"),
+    ("tranche_b/three_axis_llm_post.txt", "three-axis score, post-Tranche-B, LLM path"),
+    ("tranche_b/reconcile_llm_pre.txt", "independent reconciliation, pre-sprint, LLM path"),
+    ("tranche_b/reconcile_llm_post.txt", "independent reconciliation, post-Tranche-B, LLM path"),
+    ("tranche_b/repeat_variance.txt", "the noise floor, across five independent run sets"),
+    ("tranche_b/fullsuite.log", "full repository suite, post-Tranche-B"),
     ("tranche_b/three_axis_det_pre.txt", "three-axis score, pre-sprint"),
     ("tranche_b/three_axis_det_post.txt", "three-axis score, post-Tranche-B"),
     ("tranche_b/reconcile_det_pre.txt", "independent reconciliation, pre-sprint"),
@@ -239,7 +272,7 @@ manifest = {
             "revision is a provenance error. Where they diverge the divergence "
             "is recorded with its reason, as below."),
         "harnessDivergence": (
-            "RESOLVED IN PART. The four V1 run files and the four baseline run "
+            "RESOLVED. The four V1 run files and the four baseline run "
             "files were ALL produced by harness sha256 "
             + HARNESS_THAT_PRODUCED_RUNS[:16] + "… (6,285 bytes), pinned at "
             "evidence/analytical_intent_v1/baseline/"
@@ -250,8 +283,19 @@ manifest = {
             "replacement for the V1 measurement — the API key was exhausted "
             "mid-sprint and their parser mix differs from the baseline's (145 "
             "LLM parses of 752, against 645), so they are published as evidence "
-            "and excluded from any before/after claim. See report section 7.1. "
-            "A full-credit remeasurement remains outstanding."),
+            "and excluded from any before/after claim (report section 7.1). The "
+            "key was then topped up and the measurement redone at full credit: "
+            "run-file:llm_pre and run-file:llm_post, parser mix within two runs "
+            "of the baseline's, produced by the same pinned revision. Harness "
+            "hash and run-file hash now move together for every group."),
+        "noiseFloor": (
+            "The LLM parser disagrees with ITSELF on 6-10% of bank cells - same "
+            "question, same commit, different grade - on five variations where "
+            "it sometimes emits a spec filter the analytical route cannot apply "
+            "and P1L correctly refuses. Measured on five independent run sets "
+            "in tranche_b/repeat_variance.txt; zero on both deterministic sets. "
+            "Before/after claims therefore rest on run-file:det_pre and "
+            "run-file:det_post, with the LLM pair corroborating."),
         "deterministicComparator": (
             "The before/after claims in the Forecast & Composition Hardening "
             "report rest on run-file:det_pre and run-file:det_post, produced by "

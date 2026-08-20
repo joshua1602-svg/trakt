@@ -1,0 +1,48 @@
+V1 BASELINE (LLM, pinned)          cells whose repeats DISAGREE:  11/176  (6.2%)
+      Q1.3       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.3       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q1.3       alderbridge  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q1.3       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q1.3       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.3       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+
+PRE-SPRINT (LLM, this session)     cells whose repeats DISAGREE:  17/176  (9.7%)
+      Q1.3       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.3       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q6.3       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q1.3       alderbridge  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.3       alderbridge  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       alderbridge  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q6.3       alderbridge  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q1.3       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q1.3       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.3       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q6.3       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+
+POST-SPRINT (LLM, this session)    cells whose repeats DISAGREE:  10/176  (5.7%)
+      Q1.3       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       alderbridge  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       alderbridge  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q6.3       alderbridge  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q1.3       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.3       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q6.3       kestrelmoor  production   ['CORRECT', 'SAFE_REFUSAL']
+      Q3.4       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+      Q4.4       kestrelmoor  forced_llm   ['CORRECT', 'SAFE_REFUSAL']
+
+PRE-SPRINT (deterministic)         cells whose repeats DISAGREE:   0/176  (0.0%)
+
+POST-SPRINT (deterministic)        cells whose repeats DISAGREE:   0/176  (0.0%)
+
