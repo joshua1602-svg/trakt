@@ -32,7 +32,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from mi_agent.mi_query_validator import load_mi_semantics
 from mi_agent import mi_calibration as CAL
-from mi_agent.mi_query_harness import build_fixture
+from mi_agent.mi_query_harness import build_fixture  # noqa: F401  (see df fixture)
 
 _SEMANTICS = _REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml"
 _CASES = CAL.load_bank()
@@ -45,7 +45,19 @@ def semantics():
 
 @pytest.fixture(scope="module")
 def df():
-    return build_fixture()
+    """A REAL funded tape, not build_fixture.
+
+    The bank was graded against build_fixture for its whole life and reported
+    251/252. On a real book it scored 125/252, because build_fixture fabricates
+    five columns no real book in this repository carries and puts English region
+    names in a NUTS3 code field. Grading here against the synthetic shape again
+    would re-open the gap Tranche E found, so this fixture skips rather than
+    falls back when the tape is absent.
+    """
+    try:
+        return CAL.default_bank_frame()
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture(scope="module")

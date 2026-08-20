@@ -46,6 +46,54 @@ def test_every_evidence_input_matches_the_manifest():
         + proc.stdout + proc.stderr)
 
 
+def _run_verifier(manifest=None):
+    env = dict(**__import__("os").environ)
+    if manifest is not None:
+        env["TRAKT_EVIDENCE_MANIFEST"] = str(manifest)
+    return subprocess.run([sys.executable, str(_VERIFIER)],
+                          capture_output=True, text=True, cwd=str(_REPO), env=env)
+
+
+@pytest.mark.skipif(not _VERIFIER.exists(), reason="evidence pack not present")
+def test_the_verifier_fails_when_an_evidence_artefact_drifts(tmp_path):
+    """The control must be provably able to fail.
+
+    Tranche D edited a hashed instrument in place and manifest verification
+    failed silently for a whole tranche, because nothing ran it. Adding it to
+    the suite closes that. This closes the other half: a verifier nobody has
+    ever seen fail is not evidence that nothing has drifted.
+    """
+    import json
+    if not all(p.exists() for p in _FIXTURE_PROBES):
+        pytest.skip("generated fixtures not materialised in this tree")
+    manifest = json.loads(
+        (_REPO / "due_diligence" / "evidence" / "MANIFEST.json").read_text())
+    victim = next(a for a in manifest["artefacts"] if a["group"] != "code+config")
+    victim["sha256"] = "0" * 64
+    corrupted = tmp_path / "MANIFEST.json"
+    corrupted.write_text(json.dumps(manifest))
+    proc = _run_verifier(corrupted)
+    assert proc.returncode != 0, "a drifted EVIDENCE artefact must be fatal"
+    assert victim["path"] in proc.stdout
+
+
+@pytest.mark.skipif(not _VERIFIER.exists(), reason="evidence pack not present")
+def test_production_code_moving_on_is_reported_but_not_fatal():
+    """Code drift is provenance, not corruption.
+
+    The code+config group records which production code the V1 measurement ran
+    against. Production code is what this programme exists to change, so failing
+    on it made the verifier cry wolf on ordinary work — which is precisely how
+    its one real alarm was lost.
+    """
+    if not all(p.exists() for p in _FIXTURE_PROBES):
+        pytest.skip("generated fixtures not materialised in this tree")
+    proc = _run_verifier()
+    assert proc.returncode == 0
+    if "code moved on since" in proc.stdout:
+        assert "not a\nfailure" in proc.stdout or "not a failure" in proc.stdout
+
+
 @pytest.mark.skipif(not _VERIFIER.exists(), reason="evidence pack not present")
 def test_the_client_readiness_pack_reproduces_from_its_generator():
     """The client-readiness fixture is not committed; its digest is.

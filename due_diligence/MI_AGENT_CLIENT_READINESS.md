@@ -24,7 +24,8 @@ is *no unsafe answers and no silent substitution*, and Tranche D moved it:
 | | before D | after D |
 |---|---|---|
 | unsafe outcomes over 752 runs | 0 | **0** |
-| calibration bank | 245 passed / 13 xfailed | **259 passed / 1 xfailed** |
+| calibration bank (against `build_fixture`) | 245 passed / 13 xfailed | 259 passed / 1 xfailed — **both figures withdrawn, §5.11** |
+| calibration bank (against a real funded tape) | — | **231 passed / 21 xfailed** |
 | silent substitutions found by an independent type sweep | 5 | **0** |
 | parser self-disagreement (176 cells) | 10 (5.7%) | **2 (1.1%)** |
 
@@ -665,7 +666,7 @@ Deterministic parse unless stated.
 
 | bank | result |
 |---|---|
-| 252-case calibration | **259 passed, 1 xfailed** (from 245 / 13) |
+| 252-case calibration, real book | **231 passed, 21 xfailed** (the `build_fixture` figures are withdrawn, §5.11) |
 | 30-question simple-MI | 28 ok / 30; 1 answer changed, a count question that had been answering with a balance |
 | 80-question wide | 66 ok / 80; 3 false refusals became answers, 2 answers became clarifications |
 | 44-variation NL, LLM path | unsafe **0**; CORRECT 675 → **682** (90.7%); substantive 622 → **628** (83.5%) against the 82.7% floor; refusals 77 → **70** |

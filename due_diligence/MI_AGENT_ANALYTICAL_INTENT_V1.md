@@ -442,7 +442,7 @@ that already worked. Four independent checks, all run on the final tree.
 | `tests/test_p1m_statistic_identity.py` | passed |
 | `tests/test_p1n_statistic_breadth.py` | passed |
 | `tests/test_p1e_golden_bank.py` | passed |
-| `mi_agent/tests/test_mi_calibration_bank.py` (252-question bank) | 245 passed, 13 xfailed |
+| `mi_agent/tests/test_mi_calibration_bank.py` (252-question bank) | **WITHDRAWN — see MI_AGENT_CLIENT_READINESS.md §5.11.** This figure was measured against `build_fixture`, a 400-row synthetic frame that fabricates five columns no real book carries. It is not evidence about client data and is withdrawn rather than caveated. The bank now grades against a real funded tape: **231 / 252 passed, 21 xfailed**, the 21 being one open defect class recorded case by case. |
 | `tests/test_analytical_intent_boundary.py` (**new**) | 113 passed |
 | `mi_agent_api/tests/` (all, incl. routing e2e) | passed |
 | **Combined focused run** | **1,989 passed, 13 xfailed** |
@@ -1534,7 +1534,7 @@ window is one half of the front/back binary. This is deliberate — synthesising
 | numeric findings reconciled | all | **6,856 / 6,856**, 0 mismatches |
 | nine canonical CFO questions, both books | all green | **18 / 18 `ok=True`**; 16 byte-identical, Q7 changed orientation to follow the question (§11.3) |
 | 30-question simple-MI bank | no change | **0 of 30 changed** |
-| 252-question calibration bank | green | **245 passed, 13 xfailed** |
+| 252-question calibration bank | withdrawn | **WITHDRAWN — see MI_AGENT_CLIENT_READINESS.md §5.11.** This figure was measured against `build_fixture`, a 400-row synthetic frame that fabricates five columns no real book carries. It is not evidence about client data and is withdrawn rather than caveated. The bank now grades against a real funded tape: **231 / 252 passed, 21 xfailed**, the 21 being one open defect class recorded case by case. |
 | named baseline suites (P1I, P1J-1, P1L, P1M, P1N, P1E, fabricated-population, analytical layer) | green | **green** |
 | full test suite | green | **9,061 passed, 0 failed** |
 | regressions into an unsafe class | none | **none** |
