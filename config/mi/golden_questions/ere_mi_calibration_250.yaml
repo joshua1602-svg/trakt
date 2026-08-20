@@ -4473,7 +4473,7 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: "FIXTURE gap, not a product gap. The place now resolves to the governed region filter and the answer refuses safely when nothing matches; this synthetic 400-row tape simply carries no London. Tranche E re-bases the bank onto a real book, where the value exists and the case answers."
+  known_gap: "The place resolves to the governed region filter and the answer refuses safely when nothing matches, so no value is fabricated. The EARLIER DIAGNOSIS RECORDED HERE WAS WRONG and is corrected rather than reworded: it said the synthetic tape simply carries no London and the case would answer on a real book. Tranche E tested that and it does not. A real book carries 1,380 London loans in collateral_geography, but the governed region filter targets geographic_region_obligor, which on every real book in this repository holds ITL3 codes (TLI43), not region names. build_fixture puts region NAMES in that field, which is why the case looked like a data gap. Same root cause as the 50 region cases in the E4 comparison; the ruling on which field region resolves to is open."
   notes: "D2: the place resolves to the governed region filter and refuses safely when nothing matches."
 - id: risk_212
   category: risk

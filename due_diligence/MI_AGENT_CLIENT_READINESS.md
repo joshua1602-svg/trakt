@@ -6,7 +6,7 @@ fields into bespoke views; and reasonable answering of the nine multi-layered
 intents. Forecasting is not in the shipped scope — it is measured so the
 decision to enable it later is evidenced, and it ships gated.
 
-**Status: Tranche D complete. Tranches E, F and G not started.**
+**Status: Tranches D and E complete. Tranches F and G not started.**
 
 ---
 
@@ -28,10 +28,13 @@ is *no unsafe answers and no silent substitution*, and Tranche D moved it:
 | silent substitutions found by an independent type sweep | 5 | **0** |
 | parser self-disagreement (176 cells) | 10 (5.7%) | **2 (1.1%)** |
 
-The single remaining `xfail` is a fixture gap, not a product gap, and says so in
-its own reason field: `exposure to London` resolves the governed region filter
-and refuses safely when nothing matches, but the synthetic 400-row tape carries
-no London. Tranche E re-bases the bank onto a real book, where the value exists.
+The single remaining `xfail` refuses safely and fabricates nothing. **The
+reason recorded against it was wrong, and Tranche E proved it wrong** — see
+§5.11a. It said `exposure to London` would answer once the bank ran on a real
+book, because the synthetic tape carries no London. A real book carries 1,380
+London loans and the case still fails: the governed region filter targets
+`geographic_region_obligor`, which holds ITL3 codes on every real book here.
+The reason field is corrected in place; the `xfail` stands.
 
 ### CFO-ready — the question surface
 
@@ -333,6 +336,325 @@ artefact hashed against them, stay byte-identical. The new pack is an additional
 set with its own manifest section and its own baseline. If a tool would rewrite
 an existing fixture, work stops.
 
+### 5.5 The stop-gate: the new pack, before anything else ran on it
+
+Both books, stationary, `decline=None`. The gate was mandated before any
+downstream measurement, and the condition for stopping was "completions still
+bunched".
+
+| | week-1 stock inherited from warm-up | flow, weeks 2–52 | zero-weeks | expected steady state |
+|---|---|---|---|---|
+| alderbridge | 211 completed, 902 withdrawn | mean **8.12**/wk, sd 2.68, range 4–13 | **0** | 42 × 0.20 = 8.4 |
+| kestrelmoor | 341 completed, 1,264 withdrawn | mean **12.41**/wk, sd 3.49, range 3–20 | **0** | 61 × 0.20 = 12.2 |
+
+Drift across the window is −0.08/wk and −0.76/wk: noise, not trend. Withdrawals
+occur in **every** week (34/wk and 49/wk) where the V1 pack had none anywhere,
+and intake balances — 42 = 34 withdrawn + 8 completed.
+
+One point of interpretation, because it would otherwise be misread as the old
+defect: **week 1 is stock, not flow.** At the first published extract there is
+no prior snapshot, so every case the warm-up already carried to a terminal state
+is indistinguishable from one that completed that week. That is what a real first
+extract looks like. The bunching defect was its mirror image — an *empty* start
+and a spike at the *end*.
+
+**Matured observations per stage.** A case observed at stage S in week *w* is
+matured only if *w* + `stage_days_to_fund[S]` lands on or before the last
+extract.
+
+| book | stage | matured | immature | converted | observed rate | target | delta |
+|---|---|---|---|---|---|---|---|
+| alderbridge | KFI | 1,734 | 546 | 345 | 0.199 | 0.20 | −0.001 |
+| | APPLICATION | 851 | 167 | 373 | 0.438 | 0.45 | −0.012 |
+| | OFFER | 524 | 52 | 407 | 0.777 | 0.75 | +0.027 |
+| kestrelmoor | KFI | 2,527 | 793 | 521 | 0.206 | 0.20 | +0.006 |
+| | APPLICATION | 1,260 | 228 | 568 | 0.451 | 0.45 | +0.001 |
+| | OFFER | 810 | 79 | 624 | 0.770 | 0.75 | +0.020 |
+
+This is the property the V1 pack could not supply and Tranche F requires: the
+generating rates are **recoverable from the data**, so an empirical estimator can
+be judged against ground truth rather than against itself. The immature column is
+the maturity trap made concrete — 546 KFI observations on alderbridge whose
+outcome the window cannot yet know.
+
+**Gate passed.** Nothing was stopped.
+
+### 5.6 Two fixture properties that needed deciding, and were not in the spec
+
+**A retention window on terminal cases.** The first build carried every
+terminated case forever. The live pipeline was stationary — 250 cases in week 1,
+249 in week 52 — but the extract grew 882 → 3,024 rows and the live share fell
+28.3% → 8.2%, purely from stock accumulation. A time-series question over the
+pipeline dataset would read that monotone drift as a real trend. Terminal cases
+are now carried 26 weeks and then dropped, which is what an operational feed
+does. This is safe for the historical model, which unions case timelines across
+all snapshots rather than reading the last one.
+
+**A warm-up long enough to cover the retention window.** 20 weeks was enough to
+put a funnel in flight but not enough to open with a fully accumulated terminal
+stock, so composition still drifted to a plateau *inside* the observation window
+— a smaller version of the defect being corrected. `WARMUP_WEEKS` is 40: the
+longest KFI-to-completion dwell (~13 weeks) plus the 26-week retention.
+
+After both, the extract is stationary in **size and composition**, not just in
+flow:
+
+| week | rows | live | completed | withdrawn | live % |
+|---|---|---|---|---|---|
+| 2025-07-04 | 1,347 | 234 | 211 | 902 | 17.4% |
+| 2025-11-21 | 1,341 | 253 | 205 | 883 | 18.9% |
+| 2026-04-10 | 1,361 | 260 | 212 | 889 | 19.1% |
+| 2026-06-26 | 1,342 | 250 | 210 | 882 | 18.6% |
+
+### 5.7 The retention window immediately caught a defect — in the measurement, not the fixture
+
+The first matured-observation run after retention showed every rate roughly
+halved: OFFER 0.387 against a target of 0.75. The fixture was not wrong. **The
+measurement script was**: it read each case's outcome off the *final* extract, so
+any case the feed had already dropped counted as a non-conversion.
+
+That is precisely the trap Tranche F exists to avoid, reproduced inside the
+instrument built to measure it — the same shape as the answer-type classifier
+that carried the subject-side defect it was written to find. Correcting it to
+union outcomes across snapshots, as `pipeline_history` does, recovers the rates
+in the table above. The naive figure is kept in the evidence because the gap
+between the two columns is the finding:
+
+| book | stage | correct rate (union across snapshots) | naive rate (final extract only) |
+|---|---|---|---|
+| alderbridge | OFFER | 0.777 | 0.387 |
+| kestrelmoor | OFFER | 0.770 | 0.375 |
+
+### 5.8 What was built
+
+Three additive modules, none of which touches a V1 generator:
+
+| module | what it produces |
+|---|---|
+| `tests/analytical/client_fixture.py` | 52 weekly pipeline extracts per book, warm-up, governed dwell times, ground-truth stage rates, withdrawals, retention |
+| `tests/analytical/client_funded.py` | 13 monthly funded snapshots per book, 2025-06-30 → 2026-06-30 |
+| `tests/analytical/client_pack.py` | the single entry point every E/F/G measurement runs against |
+
+`second_book.build()` gained keyword parameters for the client, portfolio set,
+region weights, seed and reporting dates. Every one defaults to the module
+constant it replaced, and that was **verified rather than assumed**: building
+with the pre-change module and the current one produced ten artefacts identical
+by SHA-256.
+
+Two properties worth stating because they bound what a later measurement can be
+blamed on:
+
+* **Deterministic.** Two independent builds produce the same pack digest,
+  `4ee0282d…`. 163 artefacts, 219,353,539 bytes.
+* **Strict superset.** The thirteen-month kestrelmoor history reproduces the V1
+  three cuts **byte-for-byte**. Any measurement that moves between the two
+  fixtures is therefore attributable to the added history, not to a regenerated
+  book.
+
+The pack is **not committed**. That follows the repository's own convention
+rather than departing from it — the V1 funded tapes under
+`demo_platform/workspace/` are gitignored and reproduced from a committed
+generator, with only their hashes in the manifest. At 211 MB raw (~30 MB
+gzipped) a committed copy would prove strictly less than the digest does: a
+digest fails when the generator drifts, a copy silently diverges from it.
+`due_diligence/evidence/client_readiness/hash_fixture_pack.py --check` rebuilds
+and verifies; `tests/test_evidence_manifest.py` runs it in the suite.
+
+### 5.9 The nominated stress book
+
+**kestrelmoor** carries the declining-KFI profile; **alderbridge** is the
+stationary control. Two reasons, both about measurability: kestrelmoor has the
+larger pipeline (61 new cases/week against 42), so a 65% fall in intake still
+leaves a usable sample in the final weeks; and alderbridge is the book the V1
+evidence and the demonstration platform are anchored to, so leaving it stationary
+keeps a control comparable with every existing measurement.
+
+The decline runs over the final thirteen weeks and applies to **new KFI intake
+only** — a lender's existing pipeline does not evaporate when origination slows.
+The resulting shape is the point of the stress case:
+
+| | week 39 | week 52 |
+|---|---|---|
+| new KFI intake | 61/wk | **21/wk** |
+| live pipeline | 368 | 203 |
+| KFI stock | 218 | **87** |
+| OFFER stock | 59 | 50 |
+| completions | 11/wk | 13/wk |
+
+The fall is **top-weighted** and completions **lag rather than collapse**. A
+forecast extrapolating an older run-rate over-states; a maturity treatment that
+reads the thin recent KFI cohort as a wave of non-conversions under-states.
+
+### 5.10 E3 baseline: the nine acceptance questions on the new fixtures
+
+Deterministic parse, both books, recorded in
+`evidence/client_readiness/baseline_e3.json`. **5 of 9 carry structured findings
+on each book.** Q2 and Q4 answer through the run-rate route, which emits no typed
+finding — the specialist-route gap already logged in Tranche D. Q5 and Q6 return
+the controlled "no Schedule 8 limits available" refusal, which is Tranche G's
+subject.
+
+The longer history did what it was built to do. **Q8** now answers across
+2025-06-30 → 2026-06-30 where it previously had two months to work with, and
+**Q4** reports a run-rate "based on 12 month(s) of funded growth". The Tranche D
+prediction — *"written that way it needs no revision when twelve months of
+history arrive: the same code answers instead of clarifying"* — holds.
+
+**One new defect, and the longer fixture is the only reason it is visible.**
+
+Q1 asks *"How has the profile of new originations changed in the last few
+months?"* On the new fixture it is answered over **2025-06-30 → 2026-06-30**:
+twelve months, `method: explicit_dates`. The cause is direct — `requested_span`
+returns `None` for a vague span:
+
+```
+'in the last few months'   -> None
+'a few months ago'         -> None
+'this year'                -> SpanRequest(label='this year', periods=12)
+'over the last three months'-> SpanRequest(label='the quarter', periods=3)
+```
+
+so the route falls through to the widest available pair. **On the V1
+three-snapshot fixture that fallback gave two months, which reads as "a few".**
+The defect was always there; a fixture whose history happened to match the
+stated span was concealing it.
+
+It is the exact mirror of the "this year" defect Tranche D fixed. There, a
+*shorter* window was substituted for the one asked. Here, a *longer* one is —
+and it is the more dangerous direction, because a twelve-month comparison of a
+rolling front-book cohort is a materially different question from a three-month
+one, and nothing in the answer says the span was chosen rather than asked for.
+
+**Not fixed here, and deliberately so.** The repair needs a semantic ruling this
+report should not make unilaterally: what "a few months" resolves to. The three
+options are to pin it to a number (3 is the natural reading), to clarify rather
+than answer, or to honour the widest span while disclosing that the stated period
+was imprecise. The first two are consistent with the honour-or-clarify rule
+already in force; the third is the current behaviour minus the silence.
+**Recommendation: clarify.** "A few" is genuinely imprecise, the codebase already
+has the clarification path from D, and pinning a number invents a precision the
+question does not carry. This is flagged for approval rather than implemented
+because it changes answers across the 44-variation bank.
+
+### 5.11 E4: the calibration bank on a real book
+
+The 252-case bank has been graded, for its whole life, against
+`mi_agent.mi_query_harness.build_fixture` — 400 rows with every column drawn
+independently from a uniform distribution over its range. No nulls, no
+correlation between any two fields, no skew, no relationship between LTV and
+valuation. It is a *shape*, not a book: the right instrument for "does this query
+parse and execute", the wrong one for "is the answer right on client data".
+
+Re-pointed onto a real funded tape, unchanged:
+
+| fixture | cases passed |
+|---|---|
+| `build_fixture` (400 synthetic rows) | **251 / 252** |
+| a real book (11,035 loans) | **125 / 252** |
+
+**126 regressions.** The identical 126 cases regress on the committed V1 demo
+book *and* on the newly generated one, so none of this is attributable to the new
+fixture. Decomposed, because "126 defects" would be a false headline:
+
+| n | class | is it a product defect? |
+|---|---|---|
+| 60 | Field absent from any real book — `erm_product_type` (32), `broker_channel` (25), `borrower_type` (22), `term_bucket` (3). Refused cleanly, nothing fabricated. | **No.** The system is correct; the bank's expectation is unachievable on a real book. |
+| 50 | `geographic_region_obligor` not applied. The field exists but holds **ITL3 codes** (`TLH12`); region *names* live in `collateral_geography`. | **Partly.** The bank pins the wrong canonical field. Which field "region" should mean is a real, open question. |
+| 13 | Absent field, and a **different dimension substituted** — Amortisation Type ×12, Age Bucket ×1. | **Yes.** Same class as the D2 no-silent-substitution work. Fail-closed caught every one, so no wrong number shipped. |
+| 3 | Answered where the bank expects a refusal — `default_amount` / `arrears_balance` exist on a real book (all zero) but not in the fixture. | **No.** The expectation was fitted to the fixture. |
+
+Confirmed against the committed demo book: `build_fixture` carries five columns
+— `borrower_type`, `borrower_structure`, `broker_channel`, `erm_product_type`,
+`term_bucket` — that **no real book in this repository has**, and puts English
+region names in a field that on every real book holds NUTS3 codes.
+
+**What this does not mean.** It is not a claim that 126 answers are wrong. In
+123 of the 126 the system either refused correctly or was caught by the
+fail-closed guard; nothing fabricated a figure. What it means is narrower and
+worse: **the bank's 251/252 was never evidence about client data**, and the four
+classes above were invisible for as long as the only book it ran against was one
+that carried every column it asked for.
+
+**Not repaired here.** Re-pointing the bank permanently, deciding what "region"
+resolves to, and re-declaring the three refusal expectations are all changes to
+a control file with blast radius across every prior measurement. They are put to
+approval, not taken.
+
+### 5.11a A prediction this report made, and Tranche E falsified
+
+§1 said of the single remaining `xfail`: *"Tranche E re-bases the bank onto a
+real book, where the value exists."* It was tested and it is false.
+
+`risk_211` — *exposure to London* — still fails on a real book. Not because
+London is absent: the demonstration book carries **1,380 London loans** in
+`collateral_geography`. It fails because the governed region filter is applied
+to `geographic_region_obligor`, which holds `TLI43`, not `London`.
+`build_fixture` put region *names* in that field, which is precisely why the
+case read as a data gap rather than a field-resolution question.
+
+The `known_gap` reason in the bank is corrected in place, and it now records
+that the earlier diagnosis was wrong rather than quietly replacing it. The
+`xfail` itself is unchanged — the diagnosis moved, the result did not. That
+distinction is the point: this is a documentation defect repaired as one, not a
+number reworded to fit.
+
+### 5.12 A manifest failure of mine, found by this tranche
+
+Running the new pack's manifest surfaced a failure in the V1 one:
+`forecast_composition_hardening/three_axis.py` no longer hashed to its recorded
+value. **Tranche D extended that file in place** to add the answer-type axis and
+did not update the manifest, so V1 verification failed from commit `c9ac20b`
+onward — through the rest of the tranche — and nothing caught it, because no test
+ran the verifier. The manifest did its job; the process around it did not.
+
+Repaired additively, the same way as everything else in this sprint:
+
+* `three_axis.py` restored to its hashed content. The V1 manifest is untouched
+  and verifies: **124 of 124** artefacts.
+* The extended instrument moved to `tranche_d/three_axis_typed.py`. It
+  reproduces the recorded `det_post` figures exactly — 176 answer-type matches,
+  0 diverge, 740/752 semantic, diverging variation Q2.3 — so the Tranche D typed
+  numbers stand on an instrument that is now itself hashed.
+* `tests/test_evidence_manifest.py` runs both verifications in the suite.
+
+The general point is the one the byte-equality finding already made from the
+other side: **a control that nothing runs is not a control.**
+
+### 5.13 Decisions this tranche puts to approval, rather than taking
+
+Four, all with blast radius across measurements already reported. None is
+implemented.
+
+**1. What "a few months" resolves to** (§5.10). Recommendation: **clarify**,
+consistent with the honour-or-clarify rule already in force. Alternatives are to
+pin it to three months, or to keep the current widest-span behaviour but disclose
+that the stated period was imprecise. Changes answers across the 44-variation
+bank.
+
+**2. Whether the calibration bank re-points onto a real book permanently**
+(§5.11). Doing so moves its headline from 251/252 to 125/252 and makes every
+prior bank figure incomparable with every later one. Not doing so leaves the bank
+grading against a frame carrying five columns no real book has. Recommendation:
+re-point, and treat the 125/252 as the new baseline with the old figure retired
+rather than restated.
+
+**3. Which field "region" resolves to** (§5.11, §5.11a). `collateral_geography`
+holds region names; `geographic_region_obligor` holds ITL3 codes and is what the
+governed filter currently targets. This is one ruling that closes 50 regression
+cases and the remaining `xfail`. It is a semantic decision about the registry,
+not a parser fix.
+
+**4. The three refusal expectations fitted to the fixture** (§5.11).
+`unsup_233`, `unsup_234`, `unsup_239` expect refusal on defaulted/arrears
+questions because `build_fixture` lacks those columns. Real books carry them,
+all-zero. Recommendation: re-declare as answerable, since refusing to report a
+field the book does report is the wrong behaviour.
+
+One item is added to the backlog rather than to this list, because it needs no
+ruling: **the 13 dimension substitutions** (§5.11) are the same defect class as
+the D2 no-silent-substitution work and should simply be fixed in the field
+resolver, alongside the categorical-domain validation already queued there.
+
 ## 6–9. Tranches F and G
 
 *(Conversion methodology and concentration limits. Not started.)*
@@ -348,6 +670,7 @@ Deterministic parse unless stated.
 | 80-question wide | 66 ok / 80; 3 false refusals became answers, 2 answers became clarifications |
 | 44-variation NL, LLM path | unsafe **0**; CORRECT 675 → **682** (90.7%); substantive 622 → **628** (83.5%) against the 82.7% floor; refusals 77 → **70** |
 | type conformance, four banks | **0** findings, from 5 |
+| `tests/` + `mi_agent/tests/` + `mi_agent_api/tests/` | **9,036 passed, 0 failed**, 26 skipped, 9 xfailed |
 
 **Two answers became clarifications, both individually justified**, as the
 anti-gaming rule requires. *"How much has the book grown this year?"* asked for
