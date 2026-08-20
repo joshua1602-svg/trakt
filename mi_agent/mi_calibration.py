@@ -306,22 +306,23 @@ def evaluate_case(case: Dict[str, Any], df, semantics: dict,
     return r
 
 
-#: The book the bank grades against, unless a caller supplies one.
+#: Where the bank's book comes from.
 #:
-#: This used to be ``build_fixture()`` — 400 rows with every column drawn
-#: independently from a uniform distribution over its range. No nulls, no
-#: correlation between any two fields, no skew, no relationship between LTV and
-#: valuation. It is the right instrument for "does this query parse and
-#: execute" and the wrong one for "is the answer right on client data", and the
-#: difference was not academic: the bank scored 251/252 against it and 125/252
-#: against a real book, because it fabricated five columns no real book in this
-#: repository has and put English region names in a NUTS3 code field.
+#: The default used to be ``build_fixture()``: 400 rows with every column drawn
+#: independently from a uniform range, no nulls, no correlation, no skew. It is
+#: the right instrument for "does this parse and execute" and the wrong one for
+#: "is this right on client data", and the gap was not academic — 251/252
+#: against it, 125/252 against a real book, because it fabricates five columns
+#: no real book in this repository carries and puts English region names in a
+#: NUTS3 code field.
 #:
-#: The bank is now a REAL-BOOK bank. Grading it against a synthetic shape again
-#: would re-open exactly the gap Tranche E found.
-DEFAULT_BOOK = (Path(__file__).resolve().parent.parent / "demo_platform"
-                / "workspace" / "store" / "processed" / "platform" / "alderbridge"
-                / "2026-06-30" / "platform_canonical_typed.csv")
+#: The bank is now a REAL-BOOK bank. This module deliberately does NOT name a
+#: book: production capability must not depend on the demo generator (see
+#: tests/test_governance_source_policy.py), and a measurement module that knows
+#: where fixtures live is how that dependency creeps in. The caller supplies the
+#: tape — the test fixture and the evidence script each name their own — or sets
+#: MI_CALIBRATION_BOOK.
+BOOK_ENV_VAR = "MI_CALIBRATION_BOOK"
 
 
 def default_bank_frame(path: Optional[Path] = None):
@@ -330,17 +331,22 @@ def default_bank_frame(path: Optional[Path] = None):
     Raises rather than falling back to a synthetic frame: a silent fallback is
     how the bank came to be measuring something other than what it claimed.
     """
+    import os
+
     import pandas as pd
     from mi_agent_api.funded_prep import prepare_funded_mi_dataset
 
-    tape = Path(path or DEFAULT_BOOK)
-    if not tape.exists():
+    chosen = path or os.environ.get(BOOK_ENV_VAR)
+    if not chosen:
         raise FileNotFoundError(
-            f"The calibration bank grades against a real funded tape and none is "
-            f"present at {tape}. Reproduce it with the demo platform generator, or "
-            f"pass df= explicitly. It deliberately does NOT fall back to "
-            f"build_fixture: that fallback is what let the bank report 251/252 "
-            f"while scoring 125/252 on a real book.")
+            f"The calibration bank grades against a real funded tape. Pass one to "
+            f"run_bank(df=…) / default_bank_frame(path=…), or set {BOOK_ENV_VAR}. "
+            f"It deliberately does NOT fall back to build_fixture: that fallback "
+            f"is what let the bank report 251/252 while scoring 125/252 on a real "
+            f"book.")
+    tape = Path(chosen)
+    if not tape.exists():
+        raise FileNotFoundError(f"calibration book not found: {tape}")
     prepared, _report = prepare_funded_mi_dataset(pd.read_csv(tape, low_memory=False))
     return prepared
 

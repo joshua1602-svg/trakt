@@ -54,8 +54,11 @@ def df():
     would re-open the gap Tranche E found, so this fixture skips rather than
     falls back when the tape is absent.
     """
+    tape = (_REPO_ROOT / "demo_platform" / "workspace" / "store" / "processed"
+            / "platform" / "alderbridge" / "2026-06-30"
+            / "platform_canonical_typed.csv")
     try:
-        return CAL.default_bank_frame()
+        return CAL.default_bank_frame(tape)
     except FileNotFoundError as exc:
         pytest.skip(str(exc))
 

@@ -64,7 +64,8 @@ def _run(df, semantics) -> Dict[str, Any]:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", required=True)
+    parser.add_argument("--root", required=True,
+                        help="a store root holding processed/platform/<client>/<date>/")
     parser.add_argument("--client", default="alderbridge")
     parser.add_argument("--reporting-date", default="2026-06-30")
     parser.add_argument("--out", default=str(_HERE / "calibration_real_book.json"))
