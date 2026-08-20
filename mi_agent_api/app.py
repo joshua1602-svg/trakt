@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from .auth import auth_guard, principal_from_request
 from . import gateway
+from . import react_auth
 
 from mi_agent.mi_agent_config import get_llm_config
 from mi_agent.mi_agent_workflow import run_mi_agent_query
@@ -141,7 +142,21 @@ def _execution_context(request: "Request", *, channel: str):
     ``X-Correlation-Id`` so a caller can correlate its own trace with the audit
     event. Raises :class:`~trakt_core.errors.TraktError` when identity cannot be
     established — the caller maps that to its status code.
+
+    Which builder runs is decided by what ``auth_guard`` validated, never by what
+    the request claims: a dashboard user who arrived with an Entra bearer token
+    carries a verified directory, so their context resolves an organisation and a
+    named individual; one who arrived through the Static Web Apps header does not.
     """
+    react_principal = getattr(request.state, "react_principal", None)
+    if react_principal is not None:
+        return identity_mod.context_from_react_principal(
+            react_principal,
+            tenant_id=default_tenant_id(),
+            channel=channel,
+            request_id=request.headers.get("x-request-id") or None,
+            correlation_id=request.headers.get("x-correlation-id") or None,
+        )
     principal = (getattr(request.state, "principal", None)
                  or principal_from_request(request))
     return identity_mod.context_from_principal(
@@ -329,6 +344,16 @@ def health() -> Dict[str, Any]:
             "runtimeMode": runtime_mode(),
             "tenantId": default_tenant_id(),
             "platformAuth": identity_mod.platform_auth_status(),
+            # Which dashboard credential this deployment accepts, and whether the
+            # bearer path is actually configured. Stated so the migration can be
+            # verified with one request instead of by attempting a login: a
+            # deployment in `both` mode with no audience set answers 503 to every
+            # token, and that is otherwise indistinguishable from a bad token.
+            "dashboardAuth": {
+                "mode": react_auth.auth_mode(),
+                "bearerConfigured": bool(react_auth.bearer_configured()),
+                "requiresRegisteredPrincipal": identity_mod.requires_registered_principal(),
+            },
         },
         # How this deployment is reachable. Surfaced so a 404 can be diagnosed
         # with one request: it states the gateway prefix the API accepts and the
@@ -345,10 +370,25 @@ def health() -> Dict[str, Any]:
 
 @app.get("/me")
 def me(request: Request) -> Dict[str, Any]:
-    """The authenticated caller as the API resolved them (identity + MI roles).
+    """The authenticated caller as the API resolved them.
 
     Useful for the UI to show who is signed in and whether they hold the
-    operator role. Requires authentication (via the global guard)."""
+    operator role. Requires authentication (via the global guard).
+
+    On the bearer path it also echoes the caller's own ``tid``/``oid``. Those are
+    the caller's identifiers, present in the token they just presented, so this
+    discloses nothing to them — and it is how an administrator obtains the exact
+    pair a ``config/principals.yaml`` registration is written against, without
+    reading logs or decoding a token by hand.
+
+    Deliberately does NOT resolve the organisation or entitlements: this route
+    answers "who does Microsoft say you are", so it keeps working for a validated
+    user who is not yet registered — which is precisely the person an operator is
+    trying to register."""
+    react_principal = getattr(request.state, "react_principal", None)
+    if react_principal is not None:
+        return {"authenticated": True, "credential": "bearer",
+                **react_principal.to_public()}
     principal = getattr(request.state, "principal", None) or principal_from_request(request)
     if principal is None:
         return {"authenticated": False}
