@@ -156,7 +156,7 @@ migration. Turn it on in Phase 8, once every dashboard user is registered.
 | `src/auth/AuthBoundary.tsx` | sign-in gate; renders children untouched when the flag is off |
 | `src/main.tsx` | renders after bootstrap when the flag is on, immediately when off |
 | `src/api/HttpAgentClient.ts` | `authHeaders()` on every fetch, plus a credentialed deck download |
-| `scripts/check-bundle-secrets.mjs` | run by `npm run build`; fails on credential material in `dist/` |
+| `scripts/check-bundle-leaks.mjs` | run by `npm run build`; fails on credential material in `dist/` |
 
 **Two things worth knowing.**
 

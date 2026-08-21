@@ -6,7 +6,7 @@
  * These read the auth SOURCE, through Vite's raw glob rather than node:fs, so
  * the file stays browser-safe and needs no @types/node in the app's typecheck.
  * A secret would have to pass through here to reach a bundle. The compiled
- * output is scanned separately by `scripts/check-bundle-secrets.mjs`, which the
+ * output is scanned separately by `scripts/check-bundle-leaks.mjs`, which the
  * deployment workflow runs against `dist/`.
  */
 
