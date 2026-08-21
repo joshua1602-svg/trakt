@@ -580,6 +580,13 @@ sections:
         type: enum
         required: true
         options_from: dataset
+        # Each MENTION of a book is its own answer, not a competing value for
+        # one slot: "a funded book and a pipeline" declares TWO source
+        # registrations. Every other enum in the catalogue answers one question
+        # once, so a reader that stops at the first match is right for them and
+        # wrong only for this — which is why it is declared here rather than
+        # assumed in code.
+        repeated_mentions: true
         consumers: [Source registration, intake routing]
         writes_to: source_registry:dataset
         amendable: false

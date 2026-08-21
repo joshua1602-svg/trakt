@@ -55,6 +55,9 @@ class FieldRef:
     option_labels: Tuple[str, ...]
     repeatable: bool
     product: str = ""
+    #: Each mention is its own answer rather than a competing value for one
+    #: slot. The catalogue declares it; see ``sources.dataset``.
+    repeated_mentions: bool = False
 
     @property
     def path(self) -> str:
@@ -337,7 +340,8 @@ def _candidates(version: int) -> Tuple[Candidate, ...]:
                 label=f.label, type=f.type, validation=f.validation,
                 options=tuple(v for v, _l in options),
                 option_labels=tuple(l for _v, l in options),
-                repeatable=section.repeatable, product=f.product)
+                repeatable=section.repeatable, product=f.product,
+                repeated_mentions=bool(getattr(f, "repeated_mentions", False)))
             refs[ref.path] = (ref, section, f)
             pattern = _value_pattern(f)
             typed = bool(pattern) or bool(ref.options)
@@ -530,7 +534,14 @@ def _read_clause(clause: str, cat: Catalogue) -> List[Extracted]:
             if _overlaps(taken, (start, end)):
                 continue
             taken.append((start, end))
-            claimed.add(ref.path)
+            if not ref.repeated_mentions:
+                # A field whose every mention is its own answer is NOT finished
+                # once one cue has read it. "They send a funded book and a
+                # pipeline" has the cue "book" claim `pipeline`, and claiming
+                # the path here dropped `funded` entirely — one registration
+                # instead of two. The option pass below picks up the rest, and
+                # the span just taken keeps it from re-reading this one.
+                claimed.add(ref.path)
             out.append(Extracted(ref=ref, value=value, confidence=CUED,
                                  cue=candidate.cue, span=(start, end)))
             break
@@ -633,7 +644,9 @@ def _by_option(clause: str, cat: Catalogue, taken: List[Tuple[int, int]],
                claimed: set) -> List[Extracted]:
     out: List[Extracted] = []
     for ref in collected_fields(cat):
-        if not ref.options or ref.path in claimed:
+        if not ref.options:
+            continue
+        if ref.path in claimed and not ref.repeated_mentions:
             continue
         picked: List[str] = []
         spans: List[Tuple[int, int]] = []
@@ -648,12 +661,21 @@ def _by_option(clause: str, cat: Catalogue, taken: List[Tuple[int, int]],
                 continue
             picked.append(value)
             spans.append((m.start(), m.end()))
-            if ref.type not in MULTI_VALUED:
+            if ref.type not in MULTI_VALUED and not ref.repeated_mentions:
                 break
         if not picked:
             continue
         taken.extend(spans)
         claimed.add(ref.path)
+        if ref.repeated_mentions and ref.type not in MULTI_VALUED:
+            # One reading per mention, each keeping its own span. A list would
+            # say "this field holds several values"; these are several separate
+            # answers that happen to share a field, and the interpretation
+            # turns each into its own source registration.
+            out.extend(Extracted(ref=ref, value=one, confidence=CUED,
+                                 cue="", span=span)
+                       for one, span in zip(picked, spans))
+            continue
         value: Any = picked if ref.type in MULTI_VALUED else picked[0]
         out.append(Extracted(ref=ref, value=value, confidence=CUED,
                              cue="", span=spans[0]))

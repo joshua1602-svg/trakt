@@ -81,6 +81,10 @@ class Field:
     evidence_required: bool = False
     sensitive: bool = False
     amendable: bool = True
+    #: Each mention of this field in one sentence is a separate answer rather
+    #: than a competing value for one slot. Only ``sources.dataset`` declares
+    #: it today: a book named twice is two source registrations.
+    repeated_mentions: bool = False
     regime_code: str = ""
     product: str = ""            # set for regime fields
 
