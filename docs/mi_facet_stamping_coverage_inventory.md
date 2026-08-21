@@ -400,3 +400,75 @@ Both carry can-fail tests, per standing rule 4.
   one stage per process because the app binds its book and its routing at import
   time. `--stage routing-off` monkeypatches `try_route` in-process only.
 * `question_interpretation/tests/test_stamp_coverage_instrument.py` — 8 tests.
+
+---
+
+## 9. Closed — and two corrections to §5 and to the brief
+
+The fix in §5 was applied in the commit that carries this section. The matrix
+now reads **17 holes, all designed, zero live**.
+
+### 9.1 The regression was wider than §3 measured
+
+§3 found three questions. The test sweep found **eleven** tests repaired by the
+fix, in five modules:
+
+```
+tests/test_p1j1_vintage_seasoning.py              5
+mi_agent/tests/test_mi_query_invariants.py        3   including the full generated suite
+tests/test_p1n_statistic_breadth.py               3   extremes over a requested population
+```
+
+`test_full_generated_suite_holds_the_invariant` is the one that should have
+caught this at `e35a01b`, and it was already failing there. Three of the eleven
+were unknown until the sweep. The blast radius reported at §3 — "three ordinary
+questions" — was the part reachable through the entry points this programme's
+instruments use. It was a floor, not a measurement, and should have been
+labelled as one.
+
+### 9.2 "Same shape twice" is the wrong lesson, and it was mine
+
+I wrote that 32c263a and e35a01b were "the same defect in different clothes",
+and the brief adopted it. They are not, and the difference decides the fix:
+
+* **32c263a** — the facet reached a branch that **read it wrongly**: a field name
+  compared against governed predicate text. A comparison defect, fixed by
+  comparing governed definitions.
+* **e35a01b** — the facet reached **no branch at all**. An absence. The default
+  status stood whatever execution had done.
+
+A better comparison could not have prevented an absent branch. Had the lesson
+been taken as "same shape", the fix would have been more comparison logic and the
+hole would still be open. What they share is the **consequence** — a correct
+classification producing a refusal — and a **precondition**: a facet
+reclassified after detection onto a path that cannot confirm it. The consequence
+is not actionable; the precondition is, and §9.3 closes it.
+
+### 9.3 The class, closed structurally
+
+`RECLASSIFICATION_TARGETS` in `execution_receipt.py` names every kind a facet
+can be moved into after detection.
+`question_interpretation/tests/test_reclassification_targets.py`:
+
+* **discovers** the moves the code actually performs, by running the
+  reclassifier under every variant and both spec shapes — not by reading a list,
+  because a registry checked against a hand-kept list passes while the code does
+  something else;
+* requires every discovered move to be **registered**;
+* requires every registered target to have a **receiving branch** on the path
+  that can produce it, or a stated reason why none is needed;
+* proves it can fail three ways — deregistering a target, registering one with
+  no receiver, and a discovery that finds nothing.
+
+Verified by construction: with the reconciler branch removed and everything else
+in place, `test_every_registered_target_has_a_receiver_or_a_stated_reason` fails
+with `['row_population']`. This is the test `e35a01b` would not have passed.
+
+### 9.4 The recurrence guarantee, stated correctly
+
+Recorded here because it is quoted elsewhere and the earlier phrasing was wrong.
+The guarantee against 32c263a recurring on the 14 governed lending windows is
+**not routing**. It is that the point-in-time path cannot resolve a measure from
+that wording at all — six of the seven questions fail at measure resolution when
+routing is forced off, before any facet is raised. **Routing is a second lock,
+not the first.** Both were measured (§4); neither is an argument.

@@ -2,7 +2,7 @@ meta:
   name: ERE MI Agent curated calibration bank
   description: 250+ realistic business-user MI questions with expected semantic behaviour + output checks.
     Additional to the generated registry harness (mi_agent/mi_query_harness.py).
-  count: 252
+  count: 255
   fixture: mi_agent.mi_query_harness.build_fixture (funded tape)
   enforced_by: mi_agent/tests/test_mi_calibration_bank.py
 questions:
@@ -5596,3 +5596,86 @@ questions:
   known_gap: null
   notes: 'Filtered time-series: LTV filter applied before the trend is built; reconciliation shows fewer
     records. Never a silently unfiltered trend.'
+- id: pop_253
+  category: governed_population
+  question: What is the balance of the front book?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Governed population as the WHOLE subject of a simple question, on the
+    point-in-time path. Added as the regression test for the defect e35a01b
+    introduced and 3a428bc diagnosed: the role split rewrote this grouping facet
+    as a population, and reconcile_facets had no branch for a population, so it
+    kept the default LOST status and the answer refused. Answered correctly
+    before the split; refused after it; answers again with the reconciler
+    branch. Not a re-declared expectation and not a regenerated bank -- the
+    expectation here is what the product did at 43f264a.'
+  coverage_note: These three cases exist because BOTH standing measurement
+    surfaces were clean throughout that regression. The calibration bank has
+    only three questions whose field is both filtered and raised as a dimension
+    and all three are borrower_type, which no real book carries; the robustness
+    bank holds the seasoning vocabulary only in composite phrasings, which
+    analytical_composition claims before the point-in-time path is reached. The
+    simple form -- the form a user actually asks -- was in neither.
+- id: pop_254
+  category: governed_population
+  question: What is the balance of newly originated loans?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'The same population under a DIFFERENT governed name. "New lending" is
+    defined by configuration as a months-on-book bound while the term resolves
+    to seasoning_segment, so this case fails if acceptance ever depends on the
+    field name coinciding with the predicate text -- the coincidence that let
+    front book pass 32c263a while new lending did not.'
+- id: pop_255
+  category: governed_population
+  question: What is the average LTV of the back book?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_answer_type: rate
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: The other side of the same governed pair, with a weighted-average
+    measure rather than a sum, so a population applied only for sums would fail
+    here.

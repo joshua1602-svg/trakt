@@ -186,9 +186,20 @@ def _pit_bundles(R) -> Dict[str, Dict[str, Any]]:
         R.KIND_GROUPING: dict(result=_Result(metadata={"group_field_keys": [_FIELD]})),
         R.KIND_RANKING: dict(result=_Result(metadata={"group_field_keys": [_FIELD]})),
         R.KIND_PROJECTION: dict(),
-        # KIND_POPULATION and KIND_UNRESOLVED_MEASURE deliberately absent:
-        # no branch reads any evidence, so no bundle can be written. That
-        # absence IS the finding, and it is asserted in --self-test.
+        # A bundle exists here only because the branch does. Until the
+        # reconciler gained a KIND_POPULATION case there was no evidence to
+        # construct, and the absence of this entry WAS the finding.
+        #
+        # `applied_filter_fields` is what the executor publishes after
+        # `_require_column` confirms the book carries the column and the mask
+        # has run. Note what is NOT here: `spec.filters`. A filter the executor
+        # dropped sits in the spec exactly as one it ran, and accepting spec
+        # presence as proof is how the P1K silent errors passed.
+        R.KIND_POPULATION: dict(
+            result=_Result(metadata={"applied_filter_fields": [_FIELD]})),
+        # KIND_UNRESOLVED_MEASURE deliberately absent: it is raised LOST with
+        # its own reason at construction and no branch reads evidence for it,
+        # by design. See DESIGNED_HOLES.
     }
 
 
@@ -331,17 +342,31 @@ def self_test() -> int:
     result = scan()
     pit = result["matrix"]["(point-in-time)"]
     failures: List[str] = []
-    if pit[R.KIND_POPULATION]["cell"] != "no-branch":
-        failures.append("KIND_POPULATION on the point-in-time path did not read "
-                        "as a hole; the instrument cannot see the defect it was "
-                        "built to find")
+
+    # Every cell value must be PRODUCIBLE, and none of these probes may depend
+    # on a defect being present. The first draft of this self-test asserted
+    # KIND_POPULATION on the point-in-time path read as a hole — true at the
+    # time, and it started failing the moment that hole was closed, which is
+    # the correct outcome but the wrong assertion: an instrument must not be
+    # anchored to the bug it was built to find.
+    if pit[R.KIND_UNRESOLVED_MEASURE]["cell"] != "no-branch":
+        failures.append("KIND_UNRESOLVED_MEASURE on the point-in-time path did "
+                        "not read as a hole; the instrument cannot see a hole "
+                        "at all")
     if pit[R.KIND_GROUPING]["cell"] != "stamped":
         failures.append("KIND_GROUPING on the point-in-time path did not read as "
                         "stamped; the instrument reports holes indiscriminately")
+    if pit[R.KIND_POPULATION]["cell"] != "stamped":
+        failures.append("KIND_POPULATION on the point-in-time path did not read "
+                        "as stamped; the reconciler branch that closed the "
+                        "e35a01b hole is missing or unreachable")
     routed = result["matrix"]["analytical_composition"]
     if routed[R.KIND_POPULATION]["cell"] != "stamped":
         failures.append("KIND_POPULATION on a routed answer did not read as "
-                        "stamped; the instrument cannot tell the two paths apart")
+                        "stamped; the population ledger path is broken")
+    if routed[R.KIND_UNRESOLVED_ROLE]["cell"] != "unreachable":
+        failures.append("KIND_UNRESOLVED_ROLE read as raisable on a routed "
+                        "answer; the instrument cannot tell the two paths apart")
     # The fourth cell must also be producible, or "route-bound" and "no-branch"
     # would be indistinguishable and every route-specific facet would read as a
     # defect. A comparison period on a risk-limit schedule is the canonical one.

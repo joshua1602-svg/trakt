@@ -27,11 +27,25 @@ def test_the_instrument_self_test_passes():
 # --------------------------------------------------------------------------- #
 # All four cell values must be producible
 # --------------------------------------------------------------------------- #
-def test_it_finds_the_hole_it_was_built_to_find(result):
-    """KIND_POPULATION on the point-in-time path — the e35a01b defect."""
-    cell = result["matrix"]["(point-in-time)"][R.KIND_POPULATION]
+def test_it_can_still_find_a_hole(result):
+    """The instrument must be able to report a hole without one being a defect.
+
+    This asserted KIND_POPULATION on the point-in-time path until that hole was
+    closed. Re-anchoring it on a DESIGNED hole is the correction: an instrument
+    tied to the bug it was built to find stops asserting anything the moment the
+    bug is fixed, and silently becomes a test of nothing.
+    """
+    cell = result["matrix"]["(point-in-time)"][R.KIND_UNRESOLVED_MEASURE]
     assert cell["cell"] == "no-branch"
-    assert not cell.get("designed")
+    assert cell.get("designed")
+
+
+def test_the_e35a01b_hole_is_closed(result):
+    """The fix, asserted where the hole was measured."""
+    cell = result["matrix"]["(point-in-time)"][R.KIND_POPULATION]
+    assert cell["cell"] == "stamped", (
+        "reconcile_facets can no longer confirm a population on the "
+        "point-in-time path; e35a01b has regressed")
 
 
 def test_it_can_see_a_stamped_cell(result):
@@ -61,8 +75,14 @@ def test_it_marks_a_kind_that_cannot_be_raised_on_a_route(result):
 # --------------------------------------------------------------------------- #
 # The designed/live split is derived, not asserted in prose
 # --------------------------------------------------------------------------- #
-def test_exactly_one_hole_is_live(result):
-    assert result["live_holes"] == ["(point-in-time)/row_population"]
+def test_no_hole_is_live(result):
+    """Every remaining hole is designed, with a stated reason.
+
+    Was `exactly one hole is live` — (point-in-time)/row_population — until the
+    reconciler branch closed it. A new live hole appearing here means a facet
+    kind can now be raised somewhere that cannot confirm it.
+    """
+    assert result["live_holes"] == []
 
 
 def test_a_designed_hole_carries_its_reason(result):

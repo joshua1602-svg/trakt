@@ -255,6 +255,21 @@ a false hole on the very cell that distinguishes the two reconcilers. The rule
 they add: **an instrument that classifies must be able to produce every class it
 reports.** A hole-finder that can only produce holes has not found any.
 
+**Companion rule, from instances 10 and 11: an instrument that CLASSIFIES must
+be able to produce every class it reports.** A hole-finder that can only produce
+holes has found none. The coverage matrix reports four cell values and its
+`--self-test` asserts each is producible, including the one it must not confuse
+with a defect: a route that correctly did not do the thing asked of it.
+
+**And its converse, from closing the hole: an instrument must not be anchored to
+the defect it was built to find.** The first self-test asserted
+`(point-in-time)/row_population` reads as a hole. That was true when written and
+started failing the moment the hole was closed — the right outcome from the
+wrong assertion, because a test tied to a bug stops asserting anything once the
+bug is fixed and silently becomes a test of nothing. Re-anchored on a DESIGNED
+hole, which will still be there, plus a separate assertion that the fixed one
+stays fixed.
+
 Instance 12 is of a different and worse kind, from the same inventory: the two
 standing measurement surfaces were BOTH clean throughout a live shipped
 regression — three ordinary questions about the front and back book refusing on

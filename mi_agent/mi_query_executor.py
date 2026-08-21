@@ -493,7 +493,17 @@ def _describe_domain_value(domain: Optional[str], value: str, resolved: List) ->
 
 
 def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
-                   warnings: List[str]) -> pd.DataFrame:
+                   warnings: List[str],
+                   applied: Optional[List[str]] = None) -> pd.DataFrame:
+    """Narrow the frame, and record WHICH fields actually narrowed it.
+
+    ``applied`` collects the semantic field key of every filter this function
+    ran. It is execution evidence, not spec echo: a key reaches the list only
+    after ``_require_column`` has confirmed the book carries the column and the
+    mask has been applied. `reconcile_facets` reads it to stamp a population
+    facet on the point-in-time path, which before this had no evidence source at
+    all and therefore refused every population that reached it.
+    """
     if not spec.filters:
         return work
     from .mi_dataset_profile import PERCENT_FRACTION, percent_storage_scale
@@ -514,6 +524,14 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
         _require_column(work, canonical, field_key)
         before = len(work)
         col = work[canonical]
+        # Recorded HERE, after the column is confirmed and before the branch
+        # split, so every filter shape counts once and none is missed by a
+        # branch added later. `_require_column` raises for an absent column, so
+        # reaching this line means the predicate ran against a real column.
+        if applied is not None:
+            applied.append(field_key)
+            if canonical != field_key:
+                applied.append(canonical)
         if isinstance(value, dict) and ("op" in value or "value" in value
                                         or "min" in value or "max" in value):
             # Structured numeric comparison filter: {"op": ">", "value": 70}.
@@ -1417,7 +1435,8 @@ def execute_mi_query(
     # Duplicate column names make a single-name selection return a DataFrame
     # (crashing numeric coercion). Fail fast with a controlled, explained error.
     _guard_duplicate_columns(spec, work, semantics)
-    work = _apply_filters(work, spec, semantics, warnings)
+    applied_filter_fields: List[str] = []
+    work = _apply_filters(work, spec, semantics, warnings, applied_filter_fields)
 
     balance_col = resolve_default_balance_field(semantics, work.columns)
     scale, scale_median = _detect_percent_scale(df, semantics)
@@ -1617,6 +1636,9 @@ def execute_mi_query(
     metadata["reconciliation"] = _build_reconciliation(
         df, work, balance_col, spec, coverage, result_type, metadata,
         measure_cols=measure_cols)
+    # EVIDENCE, distinct from `reconciliation.filters`, which echoes the spec.
+    # These are the fields a predicate actually ran against, in this book.
+    metadata["applied_filter_fields"] = list(dict.fromkeys(applied_filter_fields))
 
     # Surface the governed derived-metric definition (e.g. "average loan balance"
     # = sum(current_outstanding_balance)/count(loans)) so the computed figure is

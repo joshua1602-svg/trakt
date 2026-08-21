@@ -1115,6 +1115,44 @@ UNRESOLVED_ROLE_VARIANTS = ("grouping", "population", "clarify", "population_bar
 #: disclosed and must not refuse: it asks.
 KIND_UNRESOLVED_ROLE = "unresolved_role"
 
+# --------------------------------------------------------------------------- #
+# The closed class: every kind a facet can be MOVED into must have a receiver
+# --------------------------------------------------------------------------- #
+# Two regressions came from the same precondition, though not from the same
+# cause. A facet was RECLASSIFIED after detection into a kind, and on the path
+# where that happened nothing could confirm the request had been honoured.
+#
+#   32c263a  the facet reached a branch that READ IT WRONGLY — a field name
+#            compared against governed predicate text. A comparison defect,
+#            fixed by comparing governed definitions.
+#   e35a01b  the facet reached NO BRANCH AT ALL. `reconcile_facets` had no
+#            KIND_POPULATION case, so the facet kept the default LOST status
+#            whatever execution had done, and a lost population blocks.
+#
+# The consequence was the same both times — a correct classification producing
+# a refusal — and the cause was not. A better comparison could not have
+# prevented an absent branch. What generalises is the precondition, and it is
+# narrow enough to close by assertion rather than by vigilance:
+#
+#     any move into a kind whose target reconciler has no branch to receive it.
+#
+# This registry names every such target. `test_reclassification_targets.py`
+# discovers the moves the code actually performs, requires each to be
+# registered, and requires each registered target to be dispatched by the
+# reconciler on the path that can produce it — or to carry a reason here for
+# why dispatch is not needed. Adding a new reclassification without a receiver
+# fails that test rather than a user's question.
+#
+#: kind -> "" when the reconciler on its producing path MUST dispatch it, or a
+#: stated reason why no branch is required.
+RECLASSIFICATION_TARGETS: Dict[str, str] = {
+    KIND_POPULATION: "",
+    KIND_UNRESOLVED_ROLE: (
+        "`assess` reads this kind directly, BEFORE the blocking test, and returns "
+        "a clarification without ever consulting the facet's status. A reconciler "
+        "branch would have nothing to contribute and nothing would read it."),
+}
+
 
 def _applied_filter_phrases(spec, semantics: dict, narrowed: bool) -> List[str]:
     """Human phrases for the filters that actually ran, in spec order."""
@@ -1474,6 +1512,40 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                 facet.status = UNSUPPORTED
                 facet.reason = ("a single aggregate was calculated, which cannot "
                                 "express one measure relative to another")
+
+        elif facet.kind == KIND_POPULATION:
+            # THE GAP THAT COST TWO REGRESSIONS.
+            #
+            # Until this branch existed, `reconcile_facets` had nothing to say
+            # about a population at all. A KIND_POPULATION facet arriving on the
+            # point-in-time path fell through every branch, kept the default
+            # status — LOST — and a lost population blocks. Both the 160-run
+            # regression and the "newly originated loans" refusal are that same
+            # shape: a facet correctly reclassified into a kind the answering
+            # route could not confirm it had applied.
+            #
+            # The bar is `reconcile_population`'s, deliberately: APPLIED only
+            # when the EXECUTOR reports having run a predicate against that
+            # field. Spec presence is not evidence — a filter the executor
+            # dropped is in `spec.filters` exactly as one it ran, and accepting
+            # spec presence is how the P1K silent errors passed.
+            applied_fields = set(meta.get("applied_filter_fields") or ())
+            candidates = facet.satisfied_by()
+            canonicals = [(fields.get(k, {}) or {}).get("canonical_field", k)
+                          for k in candidates]
+            if any(k in applied_fields for k in candidates) or \
+                    any(c in applied_fields for c in canonicals):
+                facet.status, facet.reason = APPLIED, ""
+            elif canonicals and columns and \
+                    not any(c in columns for c in canonicals):
+                # The BOOK cannot express this predicate, so it narrowed nothing
+                # and no figure is being passed off as the narrow one — the same
+                # reading `reconcile_population` gives an absent column.
+                facet.status = UNAVAILABLE
+                facet.reason = "field is unavailable in this dataset"
+            else:
+                facet.status = LOST
+                facet.reason = "the population was not applied to the calculation"
 
         elif facet.kind in (KIND_GROUPING, KIND_RANKING):
             candidates = facet.satisfied_by()
