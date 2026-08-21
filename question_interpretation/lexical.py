@@ -228,3 +228,79 @@ def finer_than(requested: Optional[str], available: str) -> bool:
     if not requested:
         return False
     return UNIT_ORDER.get(requested, 99) < UNIT_ORDER.get(available, 99)
+
+
+# --------------------------------------------------------------------------- #
+# Clause splitting.
+#
+# "<age> 70+ with LTV above 50" is two independent thresholds, and a threshold
+# must only ever be resolved against its own clause.
+#
+# The connective list carries one exception that is easy to lose: "and" does NOT
+# split when a comparator follows it, because "borrowers 85 and over" is one
+# phrase. Splitting it tore the bound off and the filter vanished entirely. The
+# splitter decides what a clause IS, so the threshold matcher never has to know
+# about the exception.
+#
+# `consumed` is how a span already claimed by another matcher is excluded
+# without destroying the string. A `between A and B` match contains an "and"
+# that is not a clause boundary; marking its span consumed is what stops the
+# split, and — unlike excising the text — it leaves every offset recoverable.
+# --------------------------------------------------------------------------- #
+
+CLAUSE_CONNECTIVES: Tuple[str, ...] = ("and", "with", "where", "whose", "having")
+
+#: Comparators after which an "and" is part of the phrase, not a boundary.
+CLAUSE_AND_EXCEPTIONS: Tuple[str, ...] = (
+    "over", "above", "older", "under", "below", "younger", "more", "less")
+
+_CLAUSE_SPLIT_RE = re.compile(
+    r"\band\b(?!\s+(?:" + "|".join(CLAUSE_AND_EXCEPTIONS) + r")\b)"
+    r"|" + "|".join(r"\b%s\b" % c for c in CLAUSE_CONNECTIVES if c != "and"))
+
+
+def _overlaps_any(start: int, end: int,
+                  ranges: "Tuple[Tuple[int, int], ...]") -> bool:
+    return any(not (end <= a or start >= b) for a, b in ranges)
+
+
+def blank_consumed(text: str, start: int, end: int,
+                   consumed: "Tuple[Tuple[int, int], ...]" = ()) -> str:
+    """``text[start:end]`` with any consumed sub-range replaced by one space.
+
+    One space, not nothing: it is what keeps the words either side of a claimed
+    span from running together into a token neither of them is.
+    """
+    out = []
+    cursor = start
+    for a, b in sorted(consumed):
+        a, b = max(a, start), min(b, end)
+        if a >= b:
+            continue
+        out.append(text[cursor:a])
+        out.append(" ")
+        cursor = b
+    out.append(text[cursor:end])
+    return "".join(out)
+
+
+def clause_spans(text: str,
+                 consumed: "Tuple[Tuple[int, int], ...]" = ()
+                 ) -> "list":
+    """``[(start, end)]`` of each clause, over the ORIGINAL text.
+
+    Splits on the connectives, ignoring any that falls inside a consumed span.
+    Returns spans rather than strings so a caller can say WHERE a filter came
+    from — which is the parser half of the filter join.
+    """
+    text = text or ""
+    consumed = tuple(consumed or ())
+    spans = []
+    cursor = 0
+    for match in _CLAUSE_SPLIT_RE.finditer(text):
+        if _overlaps_any(match.start(), match.end(), consumed):
+            continue
+        spans.append((cursor, match.start()))
+        cursor = match.end()
+    spans.append((cursor, len(text)))
+    return spans

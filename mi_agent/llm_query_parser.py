@@ -2061,24 +2061,21 @@ _POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
 ]
 
 
-#: Clause boundaries for predicate parsing. ``where`` / ``whose`` / ``having``
-#: were missing, so "balance by region WHERE flurb is above 3" was ONE clause
-#: containing the word "balance" — and the threshold bound to the balance column,
-#: silently filtering the answer by a predicate the user never asked for. A
-#: threshold must be resolved against its own clause, or not at all.
-# "and" joins two predicates ("age over 70 AND ltv above 50") — except when it
-# is part of ONE postfix bound ("85 and over", "40 and above"). Splitting there
-# tore the phrase in half and the bound was silently lost, which is why
-# "borrowers 85 and over" resolved to no filter at all. A negative lookahead is
-# the right layer for this: the splitter decides what a clause IS, so the
-# threshold matcher never has to know about the exception.
-_CLAUSE_SPLIT_RE = re.compile(
-    r"\band\b(?!\s+(?:over|above|older|under|below|younger|more|less)\b)"
-    r"|\bwith\b|\bwhere\b|\bwhose\b|\bhaving\b")
+#: Clause boundaries for predicate parsing now live in
+#: ``question_interpretation.lexical.clause_spans``, which owns the connectives
+#: and the "85 and over" exception, and returns SPANS rather than strings.
+#:
+#: Why they had to move: a threshold must be resolved against its own clause or
+#: not at all — "balance by region WHERE flurb is above 3" was once one clause
+#: containing the word "balance", and the threshold bound to the balance column,
+#: silently filtering by a predicate nobody asked for. That reasoning, and the
+#: exception that keeps "85 and over" whole, are recorded with the code.
 
 
 def _parse_filters(q: str, semantics: dict, available_columns=None,
-                   unresolved: Optional[List[str]] = None) -> Dict[str, Any]:
+                   unresolved: Optional[List[str]] = None,
+                   spans: Optional[Dict[str, Tuple[int, int]]] = None
+                   ) -> Dict[str, Any]:
     """Parse one or more filters joined by ``and`` / ``with`` / ``where`` (numeric
     thresholds — prefix OR postfix — and a categorical value).
     ``{field_key: condition}``.
@@ -2087,21 +2084,42 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
     a numeric threshold whose FIELD could not be resolved. Such a predicate is
     never guessed onto another column and never silently dropped: the caller
     surfaces it so the operator learns the filter was not applied.
+
+    ``spans`` — when supplied — collects ``{field_key: (start, end)}``, the
+    offsets of the CLAUSE each filter was resolved from. This is the parser half
+    of the filter join: the facet layer supplies a clause's wording and its
+    offsets but no field, and this supplies the field and the bound. Neither
+    could be linked to the other while this function rewrote the question as it
+    consumed clauses.
     """
+    from question_interpretation.lexical import blank_consumed, clause_spans
+
     filters: Dict[str, Any] = {}
-    work_q = q
     # Parse a 'between A and B' first so its 'and' is not used as a clause split.
-    bm = re.search(_FILTER_COMPARATORS[0][0], work_q)
+    #
+    # It used to be excised from the string — ``work_q = work_q[:start] + " " +
+    # work_q[end:]`` — and everything after parsed the rewritten text. That threw
+    # away every offset, which is why the parser could supply a filter's FIELD
+    # and BOUND but never say WHICH WORDS it came from, and why the two halves of
+    # a filter clause could not be joined.
+    #
+    # Now the span is MARKED CONSUMED instead. The string is never mutated, the
+    # clause splitter skips connectives inside a consumed span, and each clause
+    # keeps its offsets into the original question.
+    consumed: List[Tuple[int, int]] = []
+    bm = re.search(_FILTER_COMPARATORS[0][0], q)
     if bm:
-        field = _filter_field_of(work_q[max(0, bm.start() - 40):bm.end()], semantics)
+        field = _filter_field_of(q[max(0, bm.start() - 40):bm.end()], semantics)
         if field:
             filters[field] = {"op": "between", "value": _amount_from_match(bm, "between")}
-        work_q = work_q[:bm.start()] + " " + work_q[bm.end():]
+            if spans is not None:
+                spans[field] = (bm.start(), bm.end())
+        consumed.append((bm.start(), bm.end()))
 
     # Split into clauses so "<age> 70+ with LTV above 50" yields two independent
     # thresholds, and a threshold is only ever resolved against its own clause.
-    for clause in _CLAUSE_SPLIT_RE.split(work_q):
-        clause = clause.strip()
+    for clause_start, clause_end in clause_spans(q, tuple(consumed)):
+        clause = blank_consumed(q, clause_start, clause_end, tuple(consumed)).strip()
         if not clause:
             continue
         field = _filter_field_of(clause, semantics)
@@ -2111,6 +2129,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
             m = re.search(pattern, clause)
             if m and field:
                 filters[field] = {"op": op, "value": float(m.group(1))}
+                if spans is not None:
+                    spans[field] = (clause_start, clause_end)
                 matched = True
                 break
         if matched:
@@ -2125,6 +2145,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
                                      anchor=m.start()) or field
             if field:
                 filters[field] = {"op": op, "value": _amount_from_match(m, op)}
+                if spans is not None:
+                    spans[field] = (clause_start, clause_end)
                 matched = True
             elif unresolved is not None:
                 # A threshold was stated but its field is not a governed field in
@@ -2142,10 +2164,14 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
             age_val = _age_equality_value(clause)
             if age_val is not None:
                 filters[age_field] = {"op": "eq", "value": age_val}
+                if spans is not None:
+                    spans[age_field] = (clause_start, clause_end)
                 continue
         cat = _parse_categorical_filter(clause, semantics, available_columns)
         if cat:
             filters[cat[0]] = cat[1]
+            if spans is not None:
+                spans[cat[0]] = (clause_start, clause_end)
     return filters
 
 
