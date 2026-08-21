@@ -44,6 +44,9 @@ concurrency:
 
 env:
   STAGE_DIR: .deploy-artifact/trakt-mi-api
+  # The archive handed to azure/webapps-deploy. Built by this workflow so the
+  # layout inside it is ours, not a side effect of how the action zips a folder.
+  ARTIFACT_ZIP: .deploy-artifact/trakt-mi-api.zip
 
 jobs:
   deploy:
@@ -98,6 +101,46 @@ jobs:
           echo "Artefact size: $(du -sh "${STAGE_DIR}" | cut -f1)"
           echo "Artefact root:"; ls -1 "${STAGE_DIR}"
 
+      - name: Zip the artefact with startup.sh at the ZIP ROOT
+        run: |
+          set -euo pipefail
+          # Why we build the zip instead of handing the action a folder.
+          #
+          # `package: <folder>` leaves the archive layout to the action, and the
+          # deployed site showed the one symptom that layout explains: a
+          # deployment that "succeeded" with no /home/site/wwwroot/startup.sh, no
+          # antenv and no oryx-manifest.toml. Oryx looks for requirements.txt at
+          # the root of what it is given, so if the tree lands one level deep it
+          # detects nothing to build (no manifest, no venv) AND `bash startup.sh`
+          # has nothing to open — one cause, all four messages.
+          #
+          # A zip we build ourselves cannot be ambiguous: `zip -r ../x.zip .`
+          # from INSIDE the staging directory puts its CONTENTS at the archive
+          # root. The assertions below then hold the layout in place, so a future
+          # edit that reintroduces a wrapper directory fails here rather than at
+          # container start.
+          rm -f "${ARTIFACT_ZIP}"
+          (cd "${STAGE_DIR}" && zip -qr "${GITHUB_WORKSPACE}/${ARTIFACT_ZIP}" . -x '*.pyc')
+
+          # Entries with no "/" are root-level files; these two are the contract.
+          roots="$(unzip -Z1 "${ARTIFACT_ZIP}" | grep -v '/' || true)"
+          echo "Root-level files in the artefact:"; echo "${roots}" | sed 's/^/  /'
+          echo "${roots}" | grep -qx 'startup.sh' \
+            || { echo "::error::startup.sh is not at the ZIP ROOT — /home/site/wwwroot/startup.sh would not exist"; exit 1; }
+          echo "${roots}" | grep -qx 'requirements.txt' \
+            || { echo "::error::requirements.txt is not at the ZIP ROOT — Oryx would build nothing and antenv would never be created"; exit 1; }
+          unzip -Z1 "${ARTIFACT_ZIP}" | grep -q '^mi_agent_api/app.py$' \
+            || { echo "::error::mi_agent_api/app.py is not at mi_agent_api/ in the artefact — the code is nested"; exit 1; }
+          # No wrapper: nothing may sit under a top-level directory that merely
+          # repeats the staging folder's name. Written as an `if` rather than
+          # `grep … && { exit 1; }` because under `set -e` that form leaves the
+          # step's exit status riding on whatever line happens to follow it.
+          if unzip -Z1 "${ARTIFACT_ZIP}" | grep -q '^trakt-mi-api/'; then
+            echo "::error::the artefact is wrapped in a trakt-mi-api/ directory"
+            exit 1
+          fi
+          echo "Zip layout OK: contents are at the archive root."
+
       - name: Smoke-check the artefact against its own requirements
         run: |
           set -euo pipefail
@@ -123,10 +166,11 @@ jobs:
         with:
           app-name: trakt-mi-api
           publish-profile: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
-          # The staged artefact — NOT the repo checkout. Oryx builds the
-          # requirements.txt at its root (deploy/trakt-mi-api/requirements.txt)
-          # and runs the configured startup command, `bash startup.sh`.
-          package: ${{ env.STAGE_DIR }}
+          # The staged artefact as a zip whose ROOT is the artefact's contents —
+          # NOT the repo checkout, and NOT a folder whose wrapping is left to the
+          # action. Oryx builds the requirements.txt at that root and App Service
+          # runs the unchanged startup command, `bash startup.sh`.
+          package: ${{ env.ARTIFACT_ZIP }}
 
       # A OneDeploy that fails with "Deployment has been stopped due to SCM
       # container restart" activated nothing: /home/site/wwwroot is untouched, so
@@ -150,4 +194,4 @@ jobs:
         with:
           app-name: trakt-mi-api
           publish-profile: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
-          package: ${{ env.STAGE_DIR }}
+          package: ${{ env.ARTIFACT_ZIP }}
