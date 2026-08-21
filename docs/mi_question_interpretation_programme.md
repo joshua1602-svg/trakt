@@ -188,6 +188,37 @@ number.
 Fuller analysis, including what tape normalisation would additionally require:
 `docs/mi_value_domain_prerequisite.md`.
 
+### B0 — wire the parser's filter spans onto the spec, completing the join
+
+**Ready, not started.** `_parse_filters` now returns `{field_key: (start, end)}`
+through an optional `spans` sink, but nothing carries it onto `MIQuerySpec`, so
+the object still reports the join as half-built.
+
+The obstacle I expected is not there. `_mask_spans` — the other place the parser
+appears to rewrite the question — **blanks characters in place rather than
+deleting them**, and its docstring says so: *"Blanking rather than deleting keeps
+every other offset valid"*. So offsets taken from the masked remainder are valid
+offsets into the original question, and all four `_parse_filters` call sites can
+supply sound spans.
+
+What remains is mechanical rather than risky: an additive `filter_spans` field
+on `MIQuerySpec`, excluded from `referenced_fields()` and validation as the
+other non-semantic fields are, and a sink threaded at four call sites. It is its
+own commit with its own before/after.
+
+### B4 — `mi_agent/interpreter/deterministic.interpret` duplicates a serving concern
+
+**Recorded, not now.** The package is a development smoke tool — imported only
+by `scripts/mi_nlq_dev_smoke.py`, `scripts/phase8e_live_anthropic_smoke.py` and
+its own modules — but it carries a second whole parser for a concern the serving
+path also implements.
+
+Dev-only code that duplicates a serving-path concern will drift, and the drift
+is invisible because nothing measures it. A future reader finding two parsers
+has no way to know which one ships. Either it consumes the same owner as the
+serving path, or it is deleted, or it carries a header saying plainly that it is
+not the parser and must not be read as one.
+
 ### B2 — `answer_type.asked` disagrees with the parser on 46 questions
 
 **Recorded, not to be fixed in Stage 2.** No user-visible difference: `asked()`
