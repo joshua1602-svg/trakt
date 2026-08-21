@@ -86,9 +86,17 @@ def scan() -> Dict[str, Any]:
         except AttributeError:
             pass
         dims = R.requested_dimension_terms(q, semantics, columns)
-        built.extend(f for f in R.detect_requested_facets(
-            q, semantics, frame=df, requested_dimensions=dims)
-            if f.kind == R.KIND_POPULATION)
+        detected = R.detect_requested_facets(q, semantics, frame=df,
+                                             requested_dimensions=dims)
+        built.extend(f for f in detected if f.kind == R.KIND_POPULATION)
+
+        # Facets the ROLE SPLIT produces at reconcile. Detection-time facets
+        # alone would miss exactly the ones this assertion exists to guard:
+        # the split is what changes which facets are populations and how they
+        # are labelled.
+        if hasattr(R, "_split_named_dimension_roles"):
+            built.extend(f for f in R._split_named_dimension_roles(detected, spec)
+                         if f.kind == R.KIND_POPULATION)
 
         for facet in built:
             if facet.kind != R.KIND_POPULATION:

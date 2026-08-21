@@ -1125,6 +1125,64 @@ def executed_statistics(query_result: Any) -> List[str]:
     return [str(published)] if published else []
 
 
+def _split_named_dimension_roles(facets: Sequence[RequestedFacet],
+                                 spec) -> List[RequestedFacet]:
+    """Give a named dimension the ROLE the sentence gave it.
+
+    ``KIND_GROUPING`` has meant "a dimension the question named", with no
+    grouping-versus-filter distinction. "balance by region for joint borrowers"
+    raises it for the axis and for the filter alike, and the reader is told
+    borrower type was a breakdown when it was a selector.
+
+    The role comes from the parser's own slot assignment — a field in
+    ``spec.filters`` was read as a filter, a field in ``spec.dimension(s)`` as
+    an axis. Only a POSITIVELY identified filter moves.
+
+    Where this differs from 32c263a, deliberately
+    ---------------------------------------------
+    That commit assigned GROUPING only where the words justified it and let
+    everything else fall to POPULATION — "the side that blocks" — and the
+    over-assignment cost 160 runs. Here a dimension no source assigned a role to
+    stays exactly as it is. 32c263a fell to the blocking side when unsure; this
+    stays put when unsure.
+
+    Labels are rebuilt in the population form
+    -----------------------------------------
+    A population facet's label MUST contain its field name. The literal arm of
+    ``_analytical_population_satisfies`` derives the value it wants by splitting
+    the label on the field name, and an empty value there accepts any predicate
+    naming that field — including the wrong population (B5). Reclassifying
+    without relabelling is what would make that latent defect live, so the label
+    is rebuilt through the same ``Predicate.describe`` the population facets
+    already use.
+    """
+    from .population import Predicate
+
+    filters = dict((getattr(spec, "filters", None) or {}) if not isinstance(spec, dict)
+                   else (spec.get("filters") or {}))
+    if not filters:
+        return list(facets)
+
+    out: List[RequestedFacet] = []
+    for facet in facets:
+        field = getattr(facet, "field_key", None)
+        if facet.kind != KIND_GROUPING or not field or field not in filters:
+            out.append(facet)
+            continue
+        condition = filters[field]
+        if isinstance(condition, Mapping):
+            predicate = Predicate(field, str(condition.get("op") or "eq"),
+                                  condition.get("value"))
+        else:
+            predicate = Predicate(field, "eq", condition)
+        out.append(RequestedFacet(
+            kind=KIND_POPULATION,
+            label="the population %s" % predicate.describe(),
+            field_key=field, alt_keys=facet.alt_keys, concepts=facet.concepts,
+            status=facet.status, reason=facet.reason, span=facet.span))
+    return out
+
+
 def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                      semantics: dict, available_columns: Optional[Iterable[str]] = None,
                      route: Optional[str] = None,
@@ -1135,6 +1193,8 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     actually narrowed the frame; a grouping counts as applied only when its
     column is in the executor's group keys or the result columns.
     """
+    facets = _split_named_dimension_roles(facets, spec)
+
     meta = getattr(query_result, "metadata", None) or {}
     recon = meta.get("reconciliation") or {}
     total = recon.get("total_records")
