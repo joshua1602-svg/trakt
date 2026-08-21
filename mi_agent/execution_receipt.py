@@ -141,6 +141,20 @@ class RequestedFacet:
     concepts: Tuple[str, ...] = ()
     status: str = LOST
     reason: str = ""
+    #: Character offsets of the wording in the ORIGINAL question, where the
+    #: detector matched on the question itself.
+    #:
+    #: Recorded because the facet layer and the parser each read one HALF of a
+    #: filter clause — the facet supplies the wording and no field, the parser
+    #: supplies the field and bound and no wording — and on 76 corpus questions
+    #: there is nothing linking the two. Value matching cannot link them: the
+    #: label is built from the raw digit group, so "£250k" renders as 250 while
+    #: the parser holds 250000.0. Offsets can, and the detectors already
+    #: computed them and threw them away.
+    #:
+    #: None wherever the facet was not produced by matching the question text.
+    #: ADDITIVE and read by nothing today.
+    span: Optional[Tuple[int, int]] = None
 
     def satisfied_by(self) -> Tuple[str, ...]:
         """Every field key that counts as honouring this facet."""
@@ -148,6 +162,11 @@ class RequestedFacet:
         return tuple(dict.fromkeys(keys))
 
     def to_dict(self) -> Dict[str, Any]:
+        # `span` is deliberately NOT serialised. It exists for the in-process
+        # filter join, and the executionSummary carrying facets is user-visible
+        # payload: adding a key to it moved 32 of 340 answers on the answer-text
+        # diff while the calibration bank passed all 260. Stage 2's acceptance
+        # is byte-identical answers, so the span stays in memory.
         return {"kind": self.kind, "label": self.label, "field": self.field_key,
                 "status": self.status, "reason": self.reason}
 
@@ -305,13 +324,15 @@ def _detect_geographic_scope(q: str, geo_values: Dict[str, str]) -> List[Request
     for value in sorted(geo_values, key=len, reverse=True):
         if value in seen:
             continue
-        if re.search(r"\b" + re.escape(value) + r"\b", q):
+        match = re.search(r"\b" + re.escape(value) + r"\b", q)
+        if match:
             if any(value in other for other in seen):
                 continue
             seen.add(value)
             found.append(RequestedFacet(
                 kind=KIND_GEOGRAPHIC_SCOPE, label=value.title(),
-                field_key=geo_values[value]))
+                field_key=geo_values[value],
+                span=(match.start(), match.end())))
     return found
 
 
@@ -324,7 +345,8 @@ def _detect_thresholds(q: str) -> List[RequestedFacet]:
             subject = _threshold_subject(span)
             label = (f"{subject} {word} {number}" if subject
                      else f"{word} {number}").strip()
-            found.append(RequestedFacet(kind=KIND_THRESHOLD, label=label))
+            found.append(RequestedFacet(kind=KIND_THRESHOLD, label=label,
+                                        span=(match.start(), match.end())))
     numbers_seen = {re.sub(r"[^\d.]", "", f.label.split()[-1]) for f in found}
     for match in _PCT_BOUND_RE.finditer(q):
         # "above 60% LTV" already produced a comparator threshold for 60; the
@@ -334,7 +356,8 @@ def _detect_thresholds(q: str) -> List[RequestedFacet]:
             continue
         found.append(RequestedFacet(
             kind=KIND_THRESHOLD, label=f"LTV bound of {match.group(1)}%",
-            field_key="current_loan_to_value"))
+            field_key="current_loan_to_value",
+            span=(match.start(), match.end())))
     # De-duplicate by label, preserving order.
     unique: List[RequestedFacet] = []
     labels: Set[str] = set()
