@@ -306,6 +306,23 @@ Anyone citing this work should cite it as: correct, shipped, and not yet
 observable on any available book. Not as an improvement measured on the
 surfaces.
 
+## The three measurement surfaces, and what each is blind to
+
+Recorded together because the recurring failure of this programme has not been a
+wrong surface. It has been an undocumented blindness, discovered by a defect
+walking through it.
+
+| surface | entry point | sees | blind to |
+|---|---|---|---|
+| calibration bank | `run_mi_agent_query` | numeric correctness, the parse, 255 questions | **routing — it is always point-in-time** (B7). Four of six Stage 5 questions behave differently in production. |
+| robustness bank | `/mi/query` | routing, two books, a frozen grader | *which* route answered, and what the receipt claimed. Grades one outcome label. |
+| routed surface | `execute_governed_mi_query` | the routing decision, the verdict, the facet kinds and statuses | numbers, the LLM arm, kestrelmoor, answer text, and anything a route declines to declare |
+| answer diff | both banks | every answer, byte for byte | anything not in either bank — which is where three stages' worth of change has landed |
+
+The rule that follows: **a clean surface is evidence about that surface's
+coverage before it is evidence about the product.** Quote none of them without
+its blind column.
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist

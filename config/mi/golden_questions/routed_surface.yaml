@@ -1,0 +1,201 @@
+meta:
+  name: Routed surface — the governed service path, routing as shipped
+  description: >-
+    The third measurement surface. Drives execute_governed_mi_query, so a
+    question is claimed by whichever route claims it in production, and the
+    answer is adjudicated by the guard that actually adjudicates it.
+  count: 13
+  entry_point: mi_agent_api.mi_service.execute_governed_mi_query
+  enforced_by: question_interpretation/routed_surface.py
+
+  # WHAT THIS SURFACE CAN SEE, and what it cannot. Stated here so nobody quotes
+  # it later as covering more than it does — the failure of the other two banks
+  # was never that they were wrong, but that their blindness was undocumented
+  # until a defect walked through it.
+  sees:
+    - >-
+      The routing decision itself. Which route claims a question is the thing
+      neither other bank can observe — the calibration bank calls
+      run_mi_agent_query directly and is always point-in-time, and the
+      robustness bank exercises routing but grades only an outcome label.
+    - >-
+      The verdict and the facet kinds and statuses the guard produced, so a
+      false APPLIED is visible as data rather than only as a wrong sentence.
+    - >-
+      Behaviour that differs between the routed and point-in-time paths. Four of
+      the six Stage 5 trace questions behave differently on the two.
+  cannot_see:
+    - >-
+      Numeric correctness. Nothing here checks that a figure is right; it checks
+      which capability answered and what the receipt claimed. The calibration
+      bank remains the only surface that grades numbers.
+    - >-
+      The LLM parser arm. Deterministic only, like every surface in this
+      programme, for the reason standing condition 1 records.
+    - >-
+      Any book but alderbridge. The robustness bank is the only two-book
+      surface, so a defect appearing on kestrelmoor alone is invisible here.
+    - >-
+      Answer TEXT. answer_diff owns that, byte for byte. This asserts structure,
+      so a reworded refusal does not fail it and a changed verdict does.
+    - >-
+      Anything a route declines to declare. The residual tier of the routed
+      grouping check is unprovable from the payload, so a facet applied on that
+      tier reads the same here as one proven by name.
+
+questions:
+  # --- Stage 5: the time axis ------------------------------------------------
+  - id: rt_001
+    question: balance by month over the last 12 months
+    note: >-
+      A coverage limit. Twelve months asked, three governed snapshots carried.
+      Refuses rather than answering over a shorter window, because offering the
+      narrower window as the answer is itself a substitution.
+    expect_route: evolution
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, applied]
+      - [comparison_period, unsupported]
+
+  - id: rt_002
+    question: funded balance by month
+    note: The grain the series does publish. The facet records a request honoured.
+    expect_route: evolution
+    expect_verdict: ok
+    expect_facets:
+      - [granularity, applied]
+
+  - id: rt_003
+    question: balance by week over the last 6 months
+    note: >-
+      Both defects in one sentence, owed different sentences. A weekly series
+      cannot be expressed by month-end snapshots, and six months is not three.
+    expect_route: evolution
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, unsupported]
+      - [comparison_period, unsupported]
+
+  - id: rt_004
+    question: funded balance by quarter
+    note: >-
+      Reaches no route and fails parser validation — "bar chart requires a
+      dimension (or x)" — before any facet is built. A time grain is not a
+      registry field and has nowhere to live on the spec. Pinned as it is, so
+      the respecified change 4 has a before.
+    expect_route: null
+    expect_verdict: null
+    expect_ok: false
+    expect_answer_contains: requires a dimension
+
+  - id: rt_005
+    question: how many loans each month
+    note: >-
+      Declared expected-to-fail on B9 grounds when this bank was written, and
+      that was wrong on two counts, both caught by the surface's first run. It
+      does not ship a figure — it refuses — so it was never in the B9 class,
+      which is questions that SHIP a point. And the expectations stated the
+      current behaviour, so the case passed while claiming a defect: an
+      expected-to-fail case must state the CORRECT outcome, or it can never
+      fail and never be fixed. Re-declared as the ordinary passing case it is.
+    expect_route: null
+    expect_verdict: refuse
+    expect_facets:
+      - [period_comparison, unavailable]
+
+  - id: rt_005b
+    question: Show regional concentration evolution over time.
+    expected_to_fail: >-
+      B9, the actual member — the one question of 90 that asks for a series and
+      SHIPS a point. `geo_exposure` answers with a current concentration
+      snapshot and says nothing about the series that was asked for. The
+      expectation below is the CORRECT outcome, so this case fails until B9 is
+      ruled on and closed, and passes the moment it is.
+    expect_route: geo_exposure
+    expect_verdict: refuse
+
+  - id: rt_006
+    question: balance by month by region
+    note: >-
+      Was the false APPLIED — the whole-book series with the receipt vouching
+      for a regional breakdown that was never computed. Now refuses, which is
+      correct while `evolution` cannot segment.
+    will_change_when: >-
+      The segmented series lands. A refusal is right today because the answer
+      would be the whole book; once the route can cut a series by a dimension
+      this must become an answer, and this case failing is how the estate finds
+      out. Not declared expected-to-fail: the CURRENT behaviour is correct, and
+      marking correct behaviour as a known defect is how a surface stops meaning
+      anything.
+    expect_route: evolution
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, applied]
+      - [grouping_dimension, lost]
+
+  # --- The granularity contract, both directions -----------------------------
+  - id: rt_007
+    question: show geographic exposure by postcode
+    note: A grain the route cannot express. Refuses, naming the level it used.
+    expect_route: geo_exposure
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, unsupported]
+      - [grouping_dimension, applied]
+      - [grouping_dimension, applied]
+
+  - id: rt_008
+    question: geographic exposure by ITL3 area
+    note: >-
+      The half that did not exist before Stage 5 — a grain request recorded as
+      HONOURED. Without it no rule can be enforced on a correct request.
+    expect_route: geo_exposure
+    expect_verdict: ok
+    expect_facets:
+      - [granularity, applied]
+      - [grouping_dimension, applied]
+      - [grouping_dimension, applied]
+
+  # --- The governed populations, on the path that answers them ---------------
+  - id: rt_009
+    question: What is the balance of the front book?
+    note: >-
+      Not composite, so no route claims it and it falls to point-in-time. The
+      e35a01b regression; pop_255's routed sibling.
+    expect_route: null
+    expect_verdict: ok
+    expect_facets:
+      - [row_population, applied]
+
+  - id: rt_010
+    question: How does the front book compare with our older lending from a risk perspective?
+    note: >-
+      Composite, so analytical_composition claims it. The same vocabulary as
+      rt_009 on a different path — which is the whole reason this surface exists.
+    expect_route: analytical_composition
+    expect_verdict: ok
+
+  # --- What a receipt must never do ------------------------------------------
+  - id: rt_011
+    question: What is the run rate of new lending and is it accelerating?
+    note: >-
+      Answered the WHOLE BOOK's run rate — first projection point £1.96bn — for
+      a question about new lending, with the facet stamped APPLIED. The receipt
+      did not merely miss it; it vouched for it.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [grouping_dimension, lost]
+
+  - id: rt_012
+    question: What is the completion run rate?
+    note: >-
+      Can-fail for rt_011. A change that refused every run-rate question would
+      satisfy rt_011 and fail here.
+
+      Asserts `ok`, not a verdict. `mi_service` returns before `assess` when a
+      routed answer raises no facet and no substitution, so the guard leaves no
+      verdict at all — an absence this bank must not mistake for a failure. The
+      first draft asserted `verdict: ok` and failed for that reason.
+    expect_route: forecast_extrapolation
+    expect_ok: true
