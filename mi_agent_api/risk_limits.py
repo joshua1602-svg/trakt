@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 import yaml
@@ -293,6 +293,45 @@ def _headroom(actual: Optional[float], limit: Optional[float], direction: str
     if actual is None or limit is None:
         return None
     return round((limit - actual) if direction == "max" else (actual - limit), 2)
+
+
+#: The funded-tape field each governed limit CATEGORY is tested against.
+#:
+#: D7 (B12). A receipt certifying "broken down by region" over a limit-test table
+#: was doing so because an axis existed that the reader could not identify, not
+#: because anything here said so. This is the route saying so — one map, derived
+#: from the branches of `_build_tests` rather than asserted beside them, and
+#: `test_declared_axes_match_what_the_route_publishes` checks it against a real
+#: envelope.
+#:
+#: Geography carries all three candidate columns because `_region_shares` picks
+#: whichever the book has, in the preference order `_REGION_COLUMNS` declares.
+#: A category absent here is tested against no dimension of the book — the
+#: single-loan and large-loan tests measure balances, not a breakdown — and a
+#: facet naming one of those fields is therefore not certified.
+_CATEGORY_FIELDS: Dict[str, Tuple[str, ...]] = {
+    "geographic_concentration": _REGION_COLUMNS,
+    "broker_concentration": (_BROKER,),
+    "ltv_limit": (_LTV,),
+    "age_limit": (_AGE,),
+}
+
+
+def tested_fields(tests: Sequence[Dict[str, Any]]) -> List[str]:
+    """The book fields the executed limit tests are written against.
+
+    Only tests that actually COMPUTED count. A test reported `unavailable`
+    because the field is missing from the tape did not measure that dimension,
+    and certifying a breakdown from it would restate the defect this closes.
+    """
+    out: List[str] = []
+    for test in tests or ():
+        if test.get("status") not in ("green", "amber", "red"):
+            continue
+        for field in _CATEGORY_FIELDS.get(test.get("category") or "", ()):
+            if field not in out:
+                out.append(field)
+    return out
 
 
 def _test(limit: Dict[str, Any], *, actual: Optional[float],

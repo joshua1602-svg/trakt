@@ -164,6 +164,48 @@ def _robustness_via_subprocess(book: str) -> List[Dict[str, Any]]:
     return data["records"]
 
 
+# --------------------------------------------------------------------------- #
+# Surface 3 — the governed service path, routing as shipped.
+# --------------------------------------------------------------------------- #
+# ADDED IN D7, because that commit found the gap the hard way. The calibration
+# half of this differ calls `run_mi_agent_query` directly and is therefore always
+# POINT-IN-TIME (B7); the robustness half does route, but covers 44 sentences.
+# So a change confined to the routed path can move a real answer on the shipped
+# path and this differ reads 343 of 343 identical — which is exactly what
+# happened: five answers moved and none of them was visible here.
+#
+# `ere_mi_questions` is the 350-question corpus that exercises the routes, driven
+# through `execute_governed_mi_query` — the same entry point the routed surface
+# uses, over every question rather than eighteen chosen ones.
+def _service_records() -> List[Dict[str, Any]]:
+    import os
+
+    from demo_platform import config as cfg
+
+    os.environ.update(cfg.mi_env(period_role="current"))
+    os.environ["MI_AGENT_LLM_PARSER"] = "off"
+    os.environ["MI_AGENT_LLM_ENABLED"] = "0"
+    from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+    from trakt_core.context import ExecutionContext
+    from question_interpretation.lexical_decisions import corpus
+
+    ctx = ExecutionContext.for_internal(cfg.CLIENT_ID)
+    out: List[Dict[str, Any]] = []
+    for case in corpus():
+        if case.get("surface") != "ere_mi_questions":
+            continue
+        try:
+            payload = execute_governed_mi_query(
+                MiQueryRequest(question=case["question"]), ctx).result or {}
+        except Exception as exc:                            # noqa: BLE001
+            payload = {"ok": False, "error": "raised: %r" % (exc,)}
+        record = _user_visible(payload)
+        out.append({"surface": "service_path", "id": case["id"],
+                    "question": case["question"], "digest": _digest(record),
+                    "record": record})
+    return out
+
+
 def collect(only_book: Optional[str] = None) -> List[Dict[str, Any]]:
     logging.disable(logging.WARNING)
     if only_book:
@@ -171,6 +213,7 @@ def collect(only_book: Optional[str] = None) -> List[Dict[str, Any]]:
     records = _calibration_records()
     for book in ("alderbridge", "kestrelmoor"):
         records.extend(_robustness_via_subprocess(book))
+    records.extend(_service_records())
     return records
 
 

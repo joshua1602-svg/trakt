@@ -1239,6 +1239,166 @@ RECLASSIFICATION_TARGETS: Dict[str, str] = {
 }
 
 
+# --------------------------------------------------------------------------- #
+# D7 (B12) — THE ONE OWNER OF "was the requested grouping actually applied"
+# --------------------------------------------------------------------------- #
+# Two owners with two bars. The point-in-time reader required the EXECUTOR to
+# name the field it grouped by. The routed reader had a three-rung ladder whose
+# last rung read:
+#
+#     "where the answer is cut by SOME axis this cannot identify, the facet
+#      stays applied, and which axis it was remains unproven."
+#
+# That is the exact inverse of the bar `reconcile_population` holds on the same
+# receipt — a facet is APPLIED only when execution reports having applied that
+# field — and measured across 593 corpus questions it was not a residue at all.
+# EVERY routed grouping claim that stood, stood on it: nineteen of them, because
+# routes label their columns for a reader (`area`, `code`, `category`) and never
+# by canonical field, so the name-match rung above it fired zero times.
+#
+# Eleven of the nineteen were true and eight were false, in two different ways:
+#
+#   concentration_analysis  a breakdown existed and it was the WRONG one. "Show
+#                           NNEG exposure by borrower age bucket" returns seven
+#                           concentration tables, none of them by age bucket, and
+#                           the receipt certified the age-bucket breakdown.
+#   risk_limits             there was no dimension axis at all — a limit-test
+#                           table with columns test/actual/limit/headroom.
+#
+# The rung is REMOVED rather than narrowed. A rung that stamps APPLIED on what it
+# cannot disprove does not become sound by disproving more; the inversion is the
+# defect.
+#
+# What replaces it is what was already there and unread: `concentration_analysis`
+# publishes `workflow.dimension_results` carrying the exact canonical field keys
+# it grouped by. The reader ignored it and guessed from a display column called
+# `category`.
+
+
+#: Routes whose grouping axis is fixed by the CAPABILITY rather than chosen per
+#: answer, and which publish no per-answer declaration of it. Every entry is a
+#: statement about what the route always does, and
+#: `test_declared_axes_match_what_the_route_publishes` checks each against a real
+#: envelope rather than leaving it as an assertion in a comment.
+#:
+#: A route absent from here and publishing no declaration proves nothing, and its
+#: grouping facets are LOST. That is the intended default.
+ROUTE_DECLARED_AXES: Dict[str, Tuple[str, ...]] = {
+    # Publishes "Funded exposure by ITL3 area": a geography breakdown, at ITL3
+    # grain. Both keys, because the ITL3 areas ARE the geography axis and the
+    # LEVEL is a separate decision that `granularity_facets` owns — rt_007 and
+    # rt_008 pin exactly that pair.
+    "geo_exposure": ("collateral_geography",
+                     "geographic_region_collateral_itl3"),
+}
+
+
+def declared_group_fields(envelope: Optional[Dict[str, Any]],
+                          route: Optional[str] = None) -> Set[str]:
+    """The field keys the ANSWER DECLARES it was cut by. Never inferred.
+
+    Read in this order, and every source is a declaration the route made about
+    itself rather than a reading of what it displayed:
+
+      1. the concentration workflow's own `dimension_results` — already on the
+         envelope before this existed, and never read;
+      2. `metadata.groupedBy`, for routes that state their axis directly;
+      3. `rankedMovement.canonicalField`, the declaration this receipt has always
+         trusted for rankings;
+      4. `ROUTE_DECLARED_AXES`, for capabilities whose axis is fixed.
+
+    An empty set means the answer proves no breakdown. That is not the same as
+    proving there was none, and the difference is exactly what the removed rung
+    used to elide: a route that declares nothing gets no certification, the way
+    a route that reports no narrowing gets no population.
+    """
+    out: Set[str] = set()
+    if not isinstance(envelope, dict):
+        return out
+    workflow = envelope.get("workflow")
+    if isinstance(workflow, dict):
+        for entry in (workflow.get("dimension_results") or ()):
+            if isinstance(entry, Mapping) and entry.get("field"):
+                out.add(str(entry["field"]))
+        for key in (workflow.get("dimensions_selected") or ()):
+            if key:
+                out.add(str(key))
+    meta = envelope.get("metadata") or {}
+    if isinstance(meta, dict):
+        for key in (meta.get("groupedBy") or ()):
+            if key:
+                out.add(str(key))
+    ranked = ranking_evidence(envelope)
+    if ranked.get("canonicalField"):
+        out.add(str(ranked["canonicalField"]))
+    out.update(_two_or_more_populations(analytical_evidence(envelope)))
+    out.update(ROUTE_DECLARED_AXES.get(route or "", ()))
+    # And the answer's own axis keys, which are a declaration in a weak channel:
+    # a result column named by REGISTRY FIELD is execution naming the field, and
+    # it is the same evidence the point-in-time path accepts through
+    # `result_cols`. Keeping it is what makes the two paths' evidence alike
+    # rather than merely similarly strict.
+    #
+    # Safe to add raw, because `grouping_proven` intersects against the keys the
+    # facet resolves to: `area`, `code` and `category` match no registry field
+    # and prove nothing, which is precisely why this rung fired zero times across
+    # 593 corpus questions and every live certification stood on the rung below
+    # it instead.
+    out.update(str(k) for k in answer_axis_keys(envelope))
+    return out
+
+
+def _two_or_more_populations(plan: Optional[Mapping[str, Any]]) -> Set[str]:
+    """Fields an analytical plan cut the answer by, from the populations it declares.
+
+    A plan that measured TWO OR MORE governed populations of the same field has
+    cut the answer by that field. "How does the front book compare with our
+    older lending" declares
+
+        narrowedTo: [seasoning_segment = Front Book (1,177 rows),
+                     seasoning_segment = Back Book (9,858 rows)]
+
+    and that comparison IS the breakdown, with two groups.
+
+    Two or more, never one, and the threshold is the whole rule: narrowing to a
+    SINGLE population is a filter — it is what `row_population` records — and
+    counting it here would certify a breakdown of an answer reporting one group.
+    That is the axis-or-filter distinction D2 owns, honoured at the evidence
+    boundary rather than re-decided.
+    """
+    per_field: Dict[str, Set[str]] = {}
+    for entry in ((plan or {}).get("narrowedTo") or ()):
+        if isinstance(entry, Mapping) and entry.get("field"):
+            per_field.setdefault(str(entry["field"]), set()).add(
+                str(entry.get("value")))
+    return {field for field, values in per_field.items() if len(values) > 1}
+
+
+def grouping_proven(facet: RequestedFacet, declared: Optional[Iterable[str]],
+                    fields: Optional[Mapping[str, Any]] = None) -> bool:
+    """True only where execution NAMED a field this facet resolves to.
+
+    THE decision, for both paths. The two callers differ in what they supply as
+    `declared` — the executor's `group_field_keys` on one, the route's
+    declaration on the other — and in what they do afterwards with a facet this
+    returns False for, because whether the BOOK could express the field is D6's
+    decision and is deliberately not taken here.
+
+    Every key the facet resolves to is considered, and every key's canonical
+    field: a generic term resolves to different concrete fields depending on the
+    book, and execution may legitimately name any of them.
+    """
+    declared_keys = {str(k) for k in (declared or ()) if k}
+    if not declared_keys:
+        return False
+    registry = fields or {}
+    candidates = list(facet.satisfied_by())
+    canonicals = [(registry.get(k, {}) or {}).get("canonical_field", k)
+                  for k in candidates]
+    return bool(declared_keys & set(candidates)) or \
+        bool(declared_keys & {c for c in canonicals if c})
+
+
 def _applied_filter_phrases(spec, semantics: dict, narrowed: bool) -> List[str]:
     """Human phrases for the filters that actually ran, in spec order."""
     filters = getattr(spec, "filters", None) or {}
@@ -1785,8 +1945,11 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                           for k in candidates]
             key = facet.field_key
             canonical = canonicals[0] if canonicals else None
-            if any(k in group_keys for k in candidates) or \
-                    any(c in result_cols for c in canonicals):
+            # D7: the same owner both paths consult. This path's evidence is the
+            # executor's DECLARED group keys, plus the canonical field appearing
+            # as a result column — the bar this path has always held, now stated
+            # once instead of twice.
+            if grouping_proven(facet, set(group_keys) | set(result_cols), fields):
                 facet.status, facet.reason = APPLIED, ""
             elif any(k in (getattr(spec, "filters", None) or {})
                      for k in candidates if k):
@@ -2415,6 +2578,7 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
     analytical = analytical_evidence(envelope)
     fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
     listing = route in LISTING_ROUTES
+    declared_axes = declared_group_fields(envelope, route)
 
     def _canonical(key: Optional[str]) -> Optional[str]:
         if not key:
@@ -2631,9 +2795,11 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
         elif facet.kind in (KIND_GROUPING, KIND_RANKING):
             canonicals = [_canonical(k) for k in facet.satisfied_by()]
             canonical = canonicals[0] if canonicals else None
-            if ranked and _canonical(ranked.get("canonicalField")) in canonicals:
-                # The route ranked the dimension this facet asked for, and said
-                # so with the field it used. Proven, not assumed.
+            # D7: the same owner, this path's evidence being what the ROUTE
+            # declared it grouped or ranked by. A route that declares nothing
+            # proves nothing — the bar `reconcile_population` holds two branches
+            # above, now held here too.
+            if grouping_proven(facet, declared_axes, fields):
                 facet.status, facet.reason = APPLIED, ""
             elif ranked and facet.kind == KIND_RANKING:
                 facet.status = LOST
@@ -2651,56 +2817,39 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.status = LOST
                 facet.reason = ("this answer does not rank that dimension")
             else:
-                # THE FALSE APPLIED.
+                # THE FALSE APPLIED, both halves of it, now closed.
                 #
-                # This used to read: "the route grouped by something it
-                # declared; without a result frame we cannot disprove it, and
-                # refusing on an unprovable facet would disable working governed
-                # analytics." It stamped APPLIED on anything it could not
-                # DISPROVE — the exact inverse of the bar every other guard here
-                # holds. `reconcile_population`: "a facet is APPLIED only when
-                # the route reports having applied that field. A route that
-                # reports nothing leaves every population facet LOST."
+                # The first half read: "the route grouped by something it
+                # declared; without a result frame we cannot disprove it." It
+                # stamped APPLIED on anything it could not DISPROVE, and the
+                # premise was false — `evolution` publishes a frame whose rows
+                # carry `period` and `value` and nothing else, so "balance by
+                # month BY REGION" returned the whole-book series with the
+                # receipt vouching for a regional breakdown never computed.
                 #
-                # And the premise was false. `evolution` publishes a result
-                # frame, and its rows carry `period` and `value` and nothing
-                # else — so "balance by month BY REGION" returned the whole-book
-                # series, byte-identical to the ungrouped one, and the receipt
-                # vouched for a regional breakdown that was never computed. A
-                # receipt that misses an error is a gap; one that affirms it is
-                # worse than no receipt.
+                # The second half survived that fix as a stated residue: where
+                # the answer was cut by SOME axis the reader could not identify,
+                # the facet stayed applied. Measured, it was not a residue —
+                # NINETEEN of nineteen live certifications stood on it, because
+                # routes label columns for a reader (`area`, `code`, `category`)
+                # and never by canonical field, so the name-match rung above it
+                # fired zero times across 593 questions. Eight of the nineteen
+                # were false: four certified a breakdown by a dimension the
+                # route had not used, and four certified one over an answer with
+                # no dimension axis at all.
                 #
-                # The frame is now read. Routed artifacts name their columns for
-                # display — `area`, `category`, `region` — never by canonical
-                # field, so a name match proves a breakdown happened but its
-                # ABSENCE is what proves one did not. Hence two tiers, and the
-                # residue is stated rather than hidden: where the answer is cut
-                # by SOME axis this cannot identify, the facet stays applied,
-                # and which axis it was remains unproven.
-                axes = answer_axis_keys(envelope)
-                named = {str(k).strip().lower() for k in facet.satisfied_by()}
-                named |= {str(c).strip().lower() for c in canonicals if c}
-                if axes & named:
-                    facet.status, facet.reason = APPLIED, ""
-                elif not axes:
-                    # Worded for BOTH readings. The facet kind is GROUPING, but
-                    # the term is often a population — "new lending", "the front
-                    # book" — because the role split runs only on the
-                    # point-in-time path. Saying "not broken down by new
-                    # lending" would assert a breakdown claim the reader never
-                    # made. What is true either way is that the answer covers
-                    # everything.
-                    facet.status = LOST
-                    facet.reason = (
-                        "this answer covers the whole population; it is neither "
-                        f"narrowed to nor broken down by {facet.label}")
-                else:
-                    # An axis exists and cannot be matched to this facet by
-                    # name. Left applied: refusing here would disable routes
-                    # that genuinely grouped and merely label their columns for
-                    # a reader. Recorded as the remaining half of this defect —
-                    # THAT a breakdown happened is proven, WHICH one is not.
-                    facet.status, facet.reason = APPLIED, ""
+                # Both are gone. Evidence is now a DECLARATION and nothing else
+                # — see `declared_group_fields`, which reads the
+                # `dimension_results` the concentration workflow was already
+                # publishing and nobody read. What is left here is the honest
+                # negative, worded for BOTH readings of the facet: the kind is
+                # GROUPING but the term is often a population — "new lending",
+                # "the front book" — so "not broken down by new lending" would
+                # assert a breakdown claim the reader never made.
+                facet.status = LOST
+                facet.reason = (
+                    "this answer covers the whole population; it is neither "
+                    f"narrowed to nor broken down by {facet.label}")
     return facets
 
 

@@ -412,7 +412,76 @@ consolidations specifically: **a consolidation whose surfaces do not move must
 say which construct they could not reach, and carry constructed coverage for
 it.** Otherwise "nothing moved" reads later as "it was already right".
 
+## Standing rule — a branch that fires zero times is unmeasured, not unused
+
+Earned twice in one commit, in opposite directions.
+
+**The FILTER branch.** D2 reported the role owner's population branch as
+*"unreachable through a well-formed question on this arm"* and carried it on a
+test asserting that unreachability. It is reachable: `MiQueryRequest.filters` —
+the drill-through API a UI uses to drill from a breakdown into one of its groups
+— merges caller-supplied filters into `spec.filters` on both paths before the
+guard runs. `"balance by region"` with `{"collateral_geography": "South East"}`
+stamps `row_population applied`. The measurement had looked only at question
+TEXT.
+
+**The name-match rung.** D7 measured that the routed grouping ladder's
+name-match rung fired **zero times across 593 questions**, and the first cut
+removed it along with the residual rung below it. Two tests failed, correctly: a
+result column named by registry field is execution naming the field, and it is
+the same evidence the point-in-time path has always accepted. The corpus said one
+rung; the tests said two; the tests were right.
+
+**So: a zero count is a fact about the corpus, not about the code.** Before
+removing a branch because nothing reaches it, find the caller that does — another
+API, another arm, another entry point — and either exercise it or state plainly
+which paths were searched. And never carry a branch on a test asserting its own
+unreachability: that is the position that produced `e35a01b`, where a facet
+reached a reconciler with no case to receive it and nobody could say whether that
+mattered.
+
+## Standing rule — a declared expected-to-fail is only as good as its stated correct outcome
+
+`rt_013` was added in D2 as a declared expected-to-fail against *"Are any
+regional limits breached?"*, on the belief that `risk_limits` has no dimension
+axis at all. Reading the limit-test rows showed the tests ARE per region, so the
+geography certification was TRUE and the declared correct outcome — no facet —
+was wrong.
+
+Had D7 not re-read those rows, the fix would have been reported as leaving a
+known defect open, or worse, the case would have been "satisfied" by breaking a
+correct claim. **A wrong expectation turns a real fix into a reported regression,
+and a real regression into a reported fix.** Before declaring one, read what the
+route actually publishes; state the correct outcome from evidence, not from the
+diagnosis that prompted the case.
+
 ## Backlog
+
+### B18 — "limit status" resolves to the registry field `account_status`
+
+**A TERM RESOLUTION defect. Not a role defect and not an evidence defect.**
+
+*"Show concentration limit status."* names no dimension. `requested_dimension_terms`
+matches the word *status* to `account_status`, no source gives it a role, and
+`risk_limits` runs no test covering it — so after D7 the unproven grouping blocks
+and a correct answer (*"8 passed, 0 warnings, 1 breach"*) refuses.
+
+Fail-closed, wrong reason, no wrong number — the posture recorded for B1. Pinned
+as `rt_013`, a declared expected-to-fail stating the correct outcome: the answer
+standing, with no breakdown claim attached.
+
+### B17 — a drill-through on a routed question always refuses
+
+**Belongs to D8.** `material_predicates` is computed from `parsed.spec.filters`
+**before** `try_route` calls `parsed.merge_filters(extra_filters)`, so a
+caller-supplied drill-through narrowing never reaches the frame but IS on the
+spec by the time the guard reads it. The population is stamped LOST and the
+answer refuses.
+
+Fail-closed and correct in outcome — no whole-book figure is passed off as the
+narrow one — and wrong in cause. The same API works on the point-in-time path,
+which is how it was found: proving D2's FILTER branch reachable. Pinned as
+`rt_016`.
 
 ### B16 — the sentence marks a selector and nobody reads the mark
 
@@ -437,6 +506,33 @@ So *"balance by region where account status is active"* has its narrowing
 asserted as a **breakdown** on the routed path and asked about — *"did you want
 the book split by it, or narrowed to one value of it?"* — on the point-in-time
 one, for a sentence that marked the role unambiguously.
+
+**Measured on the shipped service path in D7, it is a WRONG NUMBER, not a wrong
+receipt:**
+
+```
+"What is the balance where account status is active?"
+  -> ok.  "Total Balance · grouped by Account Status · 2 groups · 11,035 loans"
+          facets: grouping_dimension account_status APPLIED
+```
+
+The reader asked for the balance of ACTIVE loans and was given the whole book
+split by status, certified. That is **B13's class**, and B13 was treated as the
+defect it is.
+
+**Order: immediately after D7, ahead of D6, D8, D10, D9 and D14** — it is the
+only remaining item producing a wrong number rather than a wrong receipt, and
+its landing zone is already built and tested. It splits:
+
+* **B16a — the facet layer, no parser change.** A narrowing the sentence marked
+  and execution did not apply is recorded as a request that was lost;
+  honour-or-clarify then refuses instead of answering over the whole book. Needs
+  no predicate value, so it invents nothing. **This is the step that removes the
+  wrong number, and it is safe ahead of D6.** Pinned as `rt_015`.
+* **B16b — the parser resolves the filter**, turning the refusal into an answer.
+  **B1 is a hard prerequisite**, and **D6 is too**: D6 governs whether a field is
+  judged available in the book being asked about, and resolving more filters
+  before that is fixed would multiply B14's wrong message.
 
 **The fix is in the parser**: resolve the categorical filter the sentence marks,
 and the role owner's existing source 1 answers correctly on both paths with no

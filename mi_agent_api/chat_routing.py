@@ -1447,9 +1447,19 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
         warnings.append(f"{summ['unavailable']} test(s) unavailable (missing fields).")
     if summ.get("needsReview"):
         warnings.append(f"{summ['needsReview']} limit(s) need manual review.")
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=artifacts, reconciliation=recon, source_notes=notes,
-                     warnings=warnings, route="risk_limits")
+    envelope = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                         artifacts=artifacts, reconciliation=recon, source_notes=notes,
+                         warnings=warnings, route="risk_limits")
+    # D7 (B12): the route states which book dimensions its EXECUTED tests are
+    # written against. Without it the receipt certified "broken down by region"
+    # — and "broken down by account status" — over a table whose columns are
+    # test/actual/limit/headroom, because an axis existed that the reader could
+    # not identify. Derived from the tests that actually computed, so a limit
+    # reported unavailable certifies nothing.
+    fields_tested = risk_mod.tested_fields(tests)
+    if fields_tested:
+        envelope.setdefault("metadata", {})["groupedBy"] = fields_tested
+    return envelope
 
 
 # --------------------------------------------------------------------------- #

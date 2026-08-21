@@ -40,7 +40,7 @@ blind spot.
 | D4 | what time grain the question requested | 1 | derived | — |
 | D5 | what reporting window the question requested | 1 | single | — |
 | D6 | whether a field is available in the book being asked about | 4 | **disagreeing** | **B14** |
-| D7 | whether a requested grouping was actually applied | 2 | **disagreeing** | **B12** |
+| D7 | whether a requested grouping was actually applied | 2 | ~~disagreeing~~ **one owner** | B12 closed by `grouping_proven`; **B18** left open |
 | D8 | whether a requested population was actually applied | 3 | **agree-by-maintenance** | — |
 | D9 | what measure the question named, and whether it resolved | 3 | **agree-by-maintenance** | — |
 | D10 | whether the question compares two things or reports one | 3 | **disagreeing** | **new** |
@@ -91,6 +91,22 @@ artifact frame on the routed one. Reachable: yes, by construction —
 *"geographic exposure by ltv bucket"* is certified by tier three. What a user
 sees: a receipt certifying a breakdown by LTV bucket over an answer broken down
 by ITL3 area.
+
+> **MEASURED WHEN D7 WAS WORKED, and the entry understated it.** The last tier
+> was not a tier of last resort: **nineteen of nineteen** live routed grouping
+> certifications stood on it, because the name-match tier above fires **zero**
+> times — routes label columns for a reader (`area`, `code`, `category`) and
+> never by canonical field. Eight were false, in two different ways: four
+> certified a breakdown by a dimension the route had not used (*"Show NNEG
+> exposure by borrower age bucket"* → seven concentration tables, none of them
+> by age bucket), and four certified one over an answer with no dimension axis
+> at all. A ninth, `postcode` over an ITL3 answer, was being PINNED by the
+> routed surface's own `rt_007`.
+>
+> And `concentration_analysis` was already publishing
+> `workflow.dimension_results` — the exact field keys it grouped by — on the
+> envelope. Nothing read it. Full workings in
+> `mi_d7_grouping_evidence_prediction.md`.
 
 **D10 — is this a comparison? (new).** Owners: `lending_windows_named` (two
 windows named means compare — it gates whether a population is selected at all),
@@ -161,7 +177,9 @@ failure mode was to inflate.
 | finding | status |
 |---|---|
 | D2's path-dependence | the mechanism behind the false APPLIED, but not previously stated as one decision with three owners. **Consolidated; the false APPLIED turned out to be D7's, and a new one — B16 — turned up underneath it** |
-| B16 — `lexical.is_filter_subject` is read by nobody, and the deterministic parser resolves no categorical filter at all | **new**, found while working D2; a parser change, not a facet change |
+| B16 — `lexical.is_filter_subject` is read by nobody | **new**, found while working D2; measured in D7 as a WRONG NUMBER — "the balance where account status is active" answers over 11,035 loans. Placed next, ahead of D6 |
+| B17 — a drill-through on a routed question always refuses | **new**, found while working D7 proving D2's FILTER branch reachable. Belongs to D8 |
+| B18 — "limit status" resolves to `account_status` | **new**, found while working D7. A term-resolution defect; why `risk_limits_013` now refuses a correct answer |
 | D10 | **new**, no identifier |
 | D8, D9, D14 as debt | new as *classified debt*; none previously recorded |
 

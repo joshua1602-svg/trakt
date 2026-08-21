@@ -4,7 +4,7 @@ meta:
     The third measurement surface. Drives execute_governed_mi_query, so a
     question is claimed by whichever route claims it in production, and the
     answer is adjudicated by the guard that actually adjudicates it.
-  count: 14
+  count: 18
   entry_point: mi_agent_api.mi_service.execute_governed_mi_query
   enforced_by: question_interpretation/routed_surface.py
 
@@ -144,13 +144,22 @@ questions:
   # --- The granularity contract, both directions -----------------------------
   - id: rt_007
     question: show geographic exposure by postcode
-    note: A grain the route cannot express. Refuses, naming the level it used.
+    note: >-
+      A grain the route cannot express. Refuses, naming the level it used.
+
+      CORRECTED IN D7. This expected BOTH grouping facets applied, and the
+      second is `postcode` — a dimension the route does not publish and cannot
+      break down by. It was applied only because the routed evidence ladder
+      stamped APPLIED on any facet it could not disprove, so this expectation
+      was pinning a false certification. It is now `lost`, which is what the
+      granularity facet beside it has always said in words: the answer is
+      reported at ITL3 level, not by postcode.
     expect_route: geo_exposure
     expect_verdict: refuse
     expect_facets:
       - [granularity, unsupported]
       - [grouping_dimension, applied]
-      - [grouping_dimension, applied]
+      - [grouping_dimension, lost]
 
   - id: rt_008
     question: geographic exposure by ITL3 area
@@ -214,28 +223,128 @@ questions:
     expect_route: forecast_extrapolation
     expect_ok: true
 
-  # --- D2: a role no source settled must not become a certified breakdown ----
+  # --- D7: a breakdown is certified only where execution declared it ---------
   - id: rt_013
-    question: Are any regional limits breached?
+    question: Show concentration limit status.
     expected_to_fail: >-
-      The one demonstrably false member of the routed grouping check's residual
-      tier. `risk_limits` publishes `actual · headroom · limit · source · status
-      · test` — a limit-test table with NO dimension axis whatever — and the
-      receipt certifies a breakdown by region regardless, because an axis exists
-      that cannot be matched by name and the tier stamps APPLIED rather than
-      leave it unproven.
+      RE-POINTED IN D7, and the reason is a correction to this case rather than
+      to the code. It was written against "Are any regional limits breached?" on
+      the belief that `risk_limits` has no dimension axis at all. Reading the
+      limit-test rows shows otherwise: the tests ARE per region — London 21.1%
+      against 25.0%, South East 26.3% against 30.0%, Scotland 3.3% against 8.0%
+      — so certifying a geography breakdown there is TRUE, and the declared
+      "correct outcome" of no facet was wrong. rt_013b now carries that case as
+      an ordinary passing one.
 
-      Three siblings share it: risk_limits_005, risk_limits_006 and
-      risk_limits_013, the last certifying an ACCOUNT STATUS breakdown of an
-      answer reading "8 passed, 1 breach" because the word "status" in "limit
-      status" resolved to a registry field.
+      The genuinely false member is this question. The word "status" in "limit
+      status" resolves to the registry field `account_status`, no source gives
+      it a role, and the limit tests do not cover it. The ANSWER is right — "8
+      passed, 0 warnings, 1 breach" — and only the receipt was wrong.
 
-      The expectation below is the CORRECT outcome — the ANSWER is right and
-      only the receipt is wrong, so the verdict stays ok and the false claim
-      goes. That is D7's fix (B12), not D2's: the role decision did not make
-      this claim, the evidence rule did. This case fails until D7 lands and
-      passes the moment it does.
+      After D7 it is wrong differently: the claim is no longer certified, so the
+      unproven grouping blocks and a correct answer refuses. Fail-closed, wrong
+      reason, no wrong number — the posture recorded for B1. The correct outcome
+      below is the answer standing with no breakdown claim attached, and it
+      needs the TERM RESOLUTION fixed (B18), not the evidence rule. This case
+      fails until B18 lands.
     expect_route: risk_limits
     expect_ok: true
     expect_verdict: ok
     expect_facets: []
+
+  - id: rt_013b
+    question: Are any regional limits breached?
+    note: >-
+      The can-fail for rt_013 and for D7's declaration. The geography claim here
+      is TRUE — the Schedule 8 tests are written per region — and after D7 it is
+      also PROVEN, from the fields the route states its executed tests cover
+      rather than from the existence of an axis nobody could name.
+
+      A change that removed the declaration, or that refused every risk_limits
+      question to satisfy rt_013, would fail here.
+    expect_route: risk_limits
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
+
+  # --- Declared before their fixes, per the rt_013 pattern -------------------
+  - id: rt_014
+    question: What is the forecast run rate for the front book?
+    expected_to_fail: >-
+      D6 / B14 — whether a field is available in the BOOK being asked about.
+
+      Today: "I understood that you asked for front book, but that could not be
+      applied to the calculation (front book — field is unavailable in this
+      dataset)." That sentence is true of the PIPELINE FRAME the forecast route
+      loaded and false of the book, which carries `seasoning_segment` and 1,177
+      Front Book loans. The frame was chosen from a routing guess made before
+      the question was answered, and four owners read whichever frame was
+      loaded.
+
+      The correct outcome is a receipt whose reason is true. The seasoning owner
+      takes "the front book" as a governed POPULATION when the book can express
+      it, so the facet is `row_population`, and the forecast route did not apply
+      it, so it is LOST — a refusal naming the real obstacle rather than a
+      wrong claim about the dataset.
+
+      Fails twice today, on the kind and on the status.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [projection, applied]
+      - [row_population, lost]
+
+  - id: rt_015
+    question: What is the balance where account status is active?
+    expected_to_fail: >-
+      B16a — the sentence marks a selector and nothing reads the mark.
+
+      Today this answers `ok`: "Total Balance · grouped by Account Status · 2
+      groups · 11,035 loans", with `grouping_dimension account_status APPLIED`.
+      The reader asked for the balance of ACTIVE loans and was given the whole
+      book split by status, certified.
+
+      That is B13's class — a narrowed question answered over 11,035 loans — and
+      it is a wrong NUMBER, not a wrong receipt. `lexical.is_filter_subject`
+      already owns the mark; no reader consults it, and the deterministic parser
+      resolves no filter for it, so no source can say "filter".
+
+      The correct outcome is honour-or-clarify doing its job: a narrowing was
+      requested and not applied, so the answer must not be the whole book.
+      Recording the loss needs no predicate value and therefore no parser
+      change — that is B16a, and it is the step that removes the wrong number.
+    expect_route: null
+    expect_ok: false
+    expect_verdict: refuse
+
+  - id: rt_016
+    question: Show geographic exposure by ITL3 area.
+    filters:
+      collateral_geography: South East
+    note: >-
+      The DRILL-THROUGH API — a UI drill from a breakdown into one of its
+      groups. No question text can reach this path, which is why the case
+      supplies filters rather than words.
+    expected_to_fail: >-
+      D8 / B17 — a drill-through on a question that ROUTES always refuses.
+
+      `material_predicates` is computed from `parsed.spec.filters` BEFORE
+      `try_route` calls `parsed.merge_filters(extra_filters)`, so the drill-
+      through narrowing never reaches the frame but is on the spec by the time
+      the guard reads it. The population is stamped LOST and the answer refuses:
+      "the population collateral_geography = South East … could not be applied".
+
+      Fail-closed and correct in outcome, wrong in cause — no whole-book figure
+      is passed off as the narrow one. The correct outcome is the narrowed
+      answer the drill asked for, with the population applied.
+
+      Found while proving that D2's role owner has a live FILTER branch: the
+      same API reaches it on the point-in-time path, where it works.
+    expect_route: geo_exposure
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
+      - [granularity, applied]
+      - [row_population, applied]

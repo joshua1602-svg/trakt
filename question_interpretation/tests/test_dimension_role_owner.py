@@ -200,10 +200,17 @@ def test_no_corpus_question_slots_a_named_dimension_as_a_filter(semantics, frame
     "how many loans are in the South East by region" — binds the fabricated
     value "South East By", which is B1.
 
-    So the owner's FILTER answer is unreachable through a well-formed question
-    on this arm, and this asserts that fact so the day it changes, the
-    constructed coverage in `test_d2_routed_role_carriage.py` can be replaced by
-    a real routed-surface case.
+    This is a statement about the CORPUS, not about the code. The FILTER branch
+    is live and reachable through the drill-through API — see
+    `test_the_filter_branch_is_reachable_through_the_drill_through_api`, which
+    exercises it rather than asserting anything about it. The D2 report said
+    "unreachable through a well-formed question on this arm" and did not check
+    the other way in; that was wrong, and a branch carried on an assertion of
+    its own unreachability is the position that produced e35a01b.
+
+    Kept because it says why the routed-surface coverage is constructed: the day
+    a question's TEXT reaches the branch, this fails and the construction can be
+    replaced by a real case.
     """
     from mi_agent.llm_query_parser import _deterministic_parse
 
@@ -221,3 +228,47 @@ def test_no_corpus_question_slots_a_named_dimension_as_a_filter(semantics, frame
         assert not (set(filters) & named), (
             f"{question!r} now slots a named dimension as a filter: "
             f"{sorted(set(filters) & named)}")
+
+
+# --------------------------------------------------------------------------- #
+# The FILTER branch is reachable. Exercised, not asserted about.
+# --------------------------------------------------------------------------- #
+def test_the_filter_branch_is_reachable_through_the_drill_through_api():
+    """`MiQueryRequest.filters` — a UI drill from a breakdown into one group.
+
+    Caller-supplied filters merge into `spec.filters` on both paths before the
+    guard runs, so a drill from a "balance by region" table into South East is
+    exactly the shape the role owner's FILTER branch exists for: the question
+    NAMES region and the spec now SLOTS it as a filter.
+
+    Three cases, because one would not distinguish the branch from the
+    drill-through: two fields, and the same question without a drill.
+    """
+    if not _TAPE.exists():
+        pytest.skip("calibration book not built")
+    import os
+
+    from demo_platform import config as cfg
+
+    os.environ.update(cfg.mi_env(period_role="current"))
+    os.environ["MI_AGENT_LLM_PARSER"] = "off"
+    os.environ["MI_AGENT_LLM_ENABLED"] = "0"
+    from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+    from trakt_core.context import ExecutionContext
+
+    ctx = ExecutionContext.for_internal(cfg.CLIENT_ID)
+
+    def kinds(question, filters=None):
+        res = execute_governed_mi_query(
+            MiQueryRequest(question=question, filters=filters), ctx).result or {}
+        return [(f.get("kind"), f.get("field"), f.get("status"))
+                for f in ((res.get("executionSummary") or {}).get("facets") or [])]
+
+    assert ("row_population", "collateral_geography", "applied") in kinds(
+        "balance by region", {"collateral_geography": "South East"})
+    assert ("row_population", "vintage_year", "applied") in kinds(
+        "balance by vintage", {"vintage_year": 2024})
+    # The can-fail: without the drill the SAME question keeps its axis role, so
+    # the assertions above are about the branch and not about the API.
+    assert ("grouping_dimension", "collateral_geography", "applied") in kinds(
+        "balance by region")

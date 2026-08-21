@@ -72,12 +72,16 @@ def _client():
     from trakt_core.context import ExecutionContext
 
     ctx = ExecutionContext.for_internal(cfg.CLIENT_ID)
-    return lambda q: (execute_governed_mi_query(
-        MiQueryRequest(question=q), ctx).result or {})
+    return lambda q, filters=None: (execute_governed_mi_query(
+        MiQueryRequest(question=q, filters=filters or None), ctx).result or {})
 
 
-def observe(ask, question: str) -> Dict[str, Any]:
-    res = ask(question)
+def observe(ask, question: str,
+            filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Drive one case. ``filters`` is the DRILL-THROUGH API — a UI drill from a
+    breakdown into one of its groups — and a case that supplies them is
+    exercising a path no question text can reach."""
+    res = ask(question, filters)
     meta = res.get("metadata") or {}
     guard = meta.get("semantic_guard") or res.get("semanticGuard") or {}
     return {
@@ -120,7 +124,7 @@ def run() -> Dict[str, Any]:
     ask = _client()
     rows: List[Dict[str, Any]] = []
     for case in doc["questions"]:
-        seen = observe(ask, case["question"])
+        seen = observe(ask, case["question"], case.get("filters"))
         fails = check(case, seen)
         rows.append({
             "id": case["id"], "question": case["question"],

@@ -339,3 +339,159 @@ is no wrong outcome to state, so the right instrument is a case that fails when
 the owners diverge, not an expected-to-fail. D10's probe question does not route,
 so a case pinning it needs a routed question this measurement has not yet found.
 Both are owed before their fixes, not before this one.
+
+---
+
+# Result, measured against §6
+
+## Against the prediction
+
+| predicted | measured |
+|---|---|
+| five answers move, all `ok` → refuse, all routed | **five moved, exactly the five named** |
+| the eleven `geo_exposure` claims stay APPLIED | **all eleven**, now proven from the declaration |
+| `rt_007`/`rt_008` keep both grouping facets | **`rt_008` yes; `rt_007` NO — and the expectation was wrong.** See below |
+| no point-in-time answer moves | **none** |
+| lexical 693 of 693 | **693 of 693** |
+| seasoning by name, both books | **Q1 4, Q7 4, Q8 12 all CORRECT, both books** |
+| robustness `32/10/2` both books | **`32/10/2` both books; 44 of 44 same verdict** |
+| stamping matrix 0 live holes | **17 holes, 17 designed, 0 live** |
+| `rt_013` flips to passing | **NO — and the case itself was wrong.** See below |
+
+```
+answer diff      693 compared, 689 identical, 4 MOVED   (a FOURTH surface, added here)
+routed surface   18 of 18            (5 declared expected-to-fail)
+robustness       32/10/2 both books
+calibration      249/249 generated; 255/255 curated held, 0 hard fails, 0 gaps
+lexical          693 of 693
+qi tests         316 passed
+```
+
+## The five, by name
+
+| id | before | after |
+|---|---|---|
+| `nneg_er_005` — Show NNEG exposure by borrower age bucket. | `age_bucket: applied`, seven concentration tables, none by age bucket | `age_bucket: lost`, refuses |
+| `nneg_er_006` — Show NNEG exposure by vintage. | `vintage_year: applied` | `vintage_year: lost`, refuses |
+| `vintage_cohort_018` — Show 2025 vintage concentration. | `vintage_year: applied` | `vintage_year: lost`, refuses |
+| `risk_216` — concentration by account status | `account_status: applied` | `account_status: lost`, refuses |
+| `risk_limits_013` — Show concentration limit status. | `account_status: applied` | `account_status: lost`, refuses |
+
+Four of the five are unambiguous: a reader asking for a vintage breakdown was
+being shown amortisation types and told it was vintages. The fifth is the
+predicted fail-closed case and is filed as **B18**, below.
+
+## Four corrections, all of them to my own work
+
+### 1. The answer differ could not see this commit, and has been extended
+
+It reported **343 of 343 identical** while five answers moved on the shipped
+path. Not a bug — a corpus gap, and a serious one:
+
+* its calibration half calls `run_mi_agent_query` directly and is therefore
+  always **point-in-time** (B7), so a routed-only change is structurally
+  invisible there;
+* its robustness half does route, but is 44 sentences.
+
+So **every one of the three standing surfaces was blind to a change that moved
+five real answers.** The routed surface saw the mechanism (18 hand-picked cases)
+and no instrument saw the answers.
+
+Fixed here: `answer_diff` gains a fourth surface, `service_path` — the 350-question
+`ere_mi_questions` corpus driven through `execute_governed_mi_query`, the same
+entry point the routed surface uses, over every question rather than eighteen.
+Recorded at 693 and demonstrated to fail: run against the pre-D7 baseline it
+reports **689 identical, 4 moved**, all on the new surface.
+
+**A residual blind spot remains and is stated rather than closed.** `risk_216`
+lives in the calibration corpus, whose questions are never driven through the
+service, so its movement was measured directly and is still invisible to every
+standing instrument. The fifth answer is real and no surface reports it.
+
+### 2. The prediction missed `analytical_composition`, and the surface caught it
+
+`rt_010` — *"How does the front book compare with our older lending from a risk
+perspective?"* — went from `ok` to refuse: `seasoning_segment` was certified on
+the removed rung.
+
+My tier survey covered the answer corpus and the calibration corpus. **Q7 and Q8
+live in the robustness bank, which it did not cover** — so the seasoning
+comparison family, the family `32c263a` broke, was outside the measurement that
+scoped the change. The routed surface is what caught it.
+
+The plan does declare, and the reader was not reading it:
+
+```
+analytical_evidence.narrowedTo
+  [{field: seasoning_segment, value: Front Book, rows: 1177},
+   {field: seasoning_segment, value: Back Book,  rows: 9858}]
+```
+
+**Two or more governed populations of one field IS a breakdown by that field**,
+with two groups; one is a filter, which is what `row_population` records. That
+threshold is `_two_or_more_populations`, and both halves of it are pinned.
+
+### 3. `rt_013`'s declared correct outcome was itself wrong
+
+Written in D2 against *"Are any regional limits breached?"*, believing
+`risk_limits` has no dimension axis at all. Reading the limit-test rows shows
+otherwise — the tests ARE per region: London 21.1% against 25.0%, South East
+26.3% against 30.0%, Scotland 3.3% against 8.0%. **Certifying a geography
+breakdown there is true**, and the declared correct outcome of *no facet* was
+wrong.
+
+Re-pointed at the genuinely false member, *"Show concentration limit status."*,
+and the true case is now `rt_013b` as an ordinary passing one. **A declared
+expected-to-fail states a correct outcome, and mine was not correct** — which is
+the failure mode that instrument has to be watched for, since a wrong
+expectation flips a real fix into a reported regression.
+
+### 4. `rt_007` was pinning a false certification, and I removed one rung too many
+
+Two separate things, found together.
+
+`rt_007` — *"show geographic exposure by postcode"* — expected **both** grouping
+facets applied, and the second is `postcode`: a dimension `geo_exposure` does not
+publish and cannot break down by. It was applied only on the removed rung. **A
+ninth false certification, not in my count of eight**, because the survey did not
+cover the routed surface's own questions. Expectation corrected to `lost`, which
+is what the granularity facet beside it has always said in words.
+
+And: my first cut removed the **name-match** rung as well as the residual one.
+Two tests in `test_routed_grouping_evidence.py` failed, correctly — a result
+column named by REGISTRY FIELD is execution naming the field, and it is the same
+evidence the point-in-time path accepts through `result_cols`. Restored. It fires
+zero times on these corpora, which is exactly why the measurement could not
+distinguish the two rungs and the tests could. **The corpus said "one rung"; the
+tests said "two". The tests were right.**
+
+## What landed
+
+* `grouping_proven` — the one decision, both paths.
+* `declared_group_fields` — four declaration sources, in order: the concentration
+  workflow's `dimension_results` (already on the envelope, never read), a route's
+  `metadata.groupedBy`, `rankedMovement.canonicalField`, `ROUTE_DECLARED_AXES`,
+  plus the answer's own axis keys where they name a registry field.
+* `_two_or_more_populations` — two governed populations of one field are a
+  breakdown; one is a filter.
+* `risk_limits` derives `metadata.groupedBy` from the fields its **executed**
+  tests cover, so a limit reported unavailable certifies nothing.
+* `ROUTE_DECLARED_AXES` for `geo_exposure`, checked against a real envelope by
+  `test_declared_axes_match_what_the_route_publishes` rather than left as a
+  comment.
+
+Four mutations were applied and each was caught by the intended test: restoring
+the residual rung, not reading the concentration declaration, counting one
+population as a breakdown, and dropping the `geo_exposure` declaration.
+
+## Two new backlog entries
+
+**B17 — a drill-through on a routed question always refuses.** `material_predicates`
+is computed from `parsed.spec.filters` before `try_route` calls
+`parsed.merge_filters(extra_filters)`, so the narrowing never reaches the frame
+but is on the spec when the guard reads it. Fail-closed, wrong cause. Belongs to
+**D8**. Pinned as `rt_016`.
+
+**B18 — "limit status" resolves to `account_status`.** A term over-match, not a
+role or an evidence defect. It is why `risk_limits_013` now refuses a correct
+answer: wrong reason, safe outcome, no wrong number. Pinned as `rt_013`.

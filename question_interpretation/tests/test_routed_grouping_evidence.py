@@ -76,9 +76,15 @@ def test_a_frame_naming_an_alt_key_proves_it():
 def test_a_route_that_labels_its_axis_for_display_is_not_refused():
     """geo_exposure publishes `area`/`code`, never `collateral_geography`.
 
-    This is the residual half, stated rather than hidden: the frame proves THAT
-    a breakdown happened, not WHICH one. Refusing here would disable routes that
-    genuinely grouped and merely name their columns for a reader.
+    This used to pass on the residual rung — the frame proved THAT a breakdown
+    happened and not WHICH one, so the facet stayed applied. Measured in D7, that
+    rung was carrying every live certification on the routed path, eight of them
+    false. It is gone.
+
+    This still passes, and now for a reason: `geo_exposure` DECLARES its axis in
+    `ROUTE_DECLARED_AXES`. Same outcome, evidence instead of an inability to
+    disprove — and `test_d7_grouping_evidence.py` checks that declaration against
+    a real envelope rather than against the comment beside it.
     """
     out = _run(_grouping(), _frame({"area": "Westminster", "code": "TLI43",
                                     "balance": 1.0, "count": 2, "share": 0.1}),
