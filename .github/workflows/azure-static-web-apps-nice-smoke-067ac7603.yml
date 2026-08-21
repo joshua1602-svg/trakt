@@ -66,6 +66,61 @@ jobs:
         with:
           submodules: true
           lfs: false
+      # Which hosting-layer configuration this build ships.
+      #
+      # Static Web Apps enforces its routes BEFORE any JavaScript runs, so the
+      # default config's catch-all (`/*` → allowedRoles: ["authenticated"]) plus
+      # its 401 override means an anonymous browser asking for `/` is redirected
+      # to /.auth/login/aad and never receives index.html. MSAL cannot start a
+      # sign-in from a page that was never served — which is why a bearer-mode
+      # build was still landing on the Easy Auth authorize URL
+      # (redirect_uri=…/.auth/login/aad/callback, scope=openid profile email)
+      # instead of asking for api://…/MI.Access.
+      #
+      # So the bearer build ships a different config: the SHELL is anonymous,
+      # and access control moves to MSAL + the bearer token + trakt-mi-api,
+      # which stays fail-closed (react_auth.py) and is the only thing standing
+      # in front of MI data either way. The default file is never edited in the
+      # repository — rollback is unsetting VITE_MI_BEARER_AUTH.
+      - name: Select the Static Web Apps configuration
+        working-directory: frontend/mi-agent-ui
+        run: |
+          set -euo pipefail
+          if [ "${VITE_MI_BEARER_AUTH}" = "true" ]; then
+            cp staticwebapp.bearer.json staticwebapp.config.json
+            echo "MODE: bearer — the SPA shell is served anonymously; MSAL and trakt-mi-api enforce access."
+          else
+            echo "MODE: Static Web Apps Easy Auth — unchanged."
+          fi
+
+          # Assert the shipped file matches the mode. A build that says bearer
+          # and ships the gate would fail the same way this step exists to fix,
+          # and would do it silently.
+          python3 - "${VITE_MI_BEARER_AUTH}" <<'PY'
+          import json, sys
+          bearer = sys.argv[1] == "true"
+          cfg = json.load(open("staticwebapp.config.json"))
+          routes = {r.get("route"): r for r in cfg.get("routes", [])}
+          catch_all = set(routes.get("/*", {}).get("allowedRoles") or [])
+          override = (cfg.get("responseOverrides") or {}).get("401") or {}
+          redirects_to_easy_auth = ".auth/login" in (override.get("redirect") or "")
+
+          if bearer:
+              assert "anonymous" in catch_all, f"catch-all is not anonymous: {catch_all}"
+              assert not redirects_to_easy_auth, "a 401 still redirects to Easy Auth"
+              assert not (set(routes.get("/api/*", {}).get("allowedRoles") or []) & {"client", "operator"}), \
+                  "/api/* still requires a Static Web Apps role"
+              print("OK: anonymous shell, no Easy Auth interception, no SWA role gate.")
+          else:
+              assert catch_all == {"authenticated"}, f"catch-all is not authenticated: {catch_all}"
+              assert redirects_to_easy_auth, "the Easy Auth 401 redirect is missing"
+              print("OK: Easy Auth behaviour preserved.")
+
+          # True in BOTH modes, or a deep link 404s and the headers are lost.
+          assert (cfg.get("navigationFallback") or {}).get("rewrite") == "/index.html"
+          assert cfg.get("globalHeaders", {}).get("X-Content-Type-Options") == "nosniff"
+          PY
+
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
