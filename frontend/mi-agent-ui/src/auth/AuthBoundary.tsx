@@ -26,6 +26,8 @@ export interface AuthBoundaryProps {
   msal?: IPublicClientApplication | null;
   /** Injectable for tests; defaults to the build-time configuration. */
   config?: AuthConfig;
+  /** Why MSAL could not be initialised, when it could not. */
+  initError?: string;
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
@@ -88,12 +90,47 @@ function MisconfiguredGate({ config }: { config: AuthConfig }) {
   );
 }
 
+/**
+ * The build IS configured and MSAL still could not start.
+ *
+ * Distinct from the panel above on purpose: they have different causes and
+ * different fixes, and collapsing them sends whoever is on the deployment to
+ * check environment variables that were never the problem. The underlying error
+ * is shown because a deployed SPA is usually debugged by someone who cannot open
+ * devtools on the machine that hit it — an MSAL `errorCode` here names the fault
+ * outright ("invalid_client_id" for a client id that is not a GUID,
+ * "redirect_uri_mismatch" for a redirect URI missing from the registration).
+ */
+function InitialisationFailedGate({ reason }: { reason?: string }) {
+  return (
+    <Panel title="Microsoft sign-in could not start">
+      <p className="mb-4 text-sm text-slate-300">
+        The app is configured for Microsoft sign-in, but the sign-in library
+        failed to initialise, so there is nothing to sign in with.
+      </p>
+      {reason && (
+        <p className="mb-4 break-words rounded-lg bg-navy-950/60 p-3 text-left font-mono text-xs text-slate-300">
+          {reason}
+        </p>
+      )}
+      <button
+        type="button"
+        data-testid="retry-init"
+        onClick={() => window.location.reload()}
+        className="w-full rounded-lg border border-[var(--color-line)] px-4 py-2 text-sm text-slate-300"
+      >
+        Try again
+      </button>
+    </Panel>
+  );
+}
+
 function Gate({ children, config }: { children: ReactNode; config: AuthConfig }) {
   const isAuthenticated = useIsAuthenticated();
   return isAuthenticated ? <>{children}</> : <SignInGate config={config} />;
 }
 
-export function AuthBoundary({ children, msal, config }: AuthBoundaryProps) {
+export function AuthBoundary({ children, msal, config, initError }: AuthBoundaryProps) {
   const cfg = config ?? resolveAuthConfig();
 
   // The whole feature, switched off in one branch.
@@ -103,8 +140,11 @@ export function AuthBoundary({ children, msal, config }: AuthBoundaryProps) {
 
   // Flag on, configured, but bootstrap did not hand us an instance. Refusing is
   // the honest outcome: rendering the app would send unauthenticated requests
-  // from a build that claims to authenticate.
-  if (!msal) return <MisconfiguredGate config={{ ...cfg, missing: ["an initialised MSAL instance"] }} />;
+  // from a build that claims to authenticate. The configuration is NOT what is
+  // wrong here — saying "compiled without …" would send the reader to the
+  // workflow variables, which are demonstrably present or cfg.misconfigured
+  // would have caught them above.
+  if (!msal) return <InitialisationFailedGate reason={initError} />;
 
   return (
     <MsalProvider instance={msal}>

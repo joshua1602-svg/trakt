@@ -112,4 +112,30 @@ describe("with the flag on", () => {
     expect(screen.queryByTestId("the-app")).not.toBeInTheDocument();
     expect(screen.getByTestId("auth-gate")).toBeInTheDocument();
   });
+
+  it("does not blame the build configuration when the configuration is fine", () => {
+    // The two failures have different causes and different fixes. Saying
+    // "compiled without …" for an initialisation failure sends whoever is on
+    // the deployment to check workflow variables that are demonstrably present.
+    render(
+      <AuthBoundary config={resolveAuthConfig(on)} msal={null}>{APP}</AuthBoundary>,
+    );
+
+    const gate = screen.getByTestId("auth-gate");
+    expect(gate).toHaveTextContent(/could not start/i);
+    expect(gate).not.toHaveTextContent(/compiled without/i);
+    expect(gate).not.toHaveTextContent(/VITE_/);
+  });
+
+  it("shows the underlying reason so it can be diagnosed without devtools", () => {
+    render(
+      <AuthBoundary config={resolveAuthConfig(on)} msal={null}
+                    initError="invalid_client_id: The client id is not a valid GUID">
+        {APP}
+      </AuthBoundary>,
+    );
+
+    expect(screen.getByTestId("auth-gate")).toHaveTextContent("invalid_client_id");
+    expect(screen.getByTestId("retry-init")).toBeInTheDocument();
+  });
 });

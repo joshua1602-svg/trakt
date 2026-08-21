@@ -66,6 +66,73 @@ jobs:
         with:
           submodules: true
           lfs: false
+      # The build-time inputs MSAL needs, checked before anything is compiled.
+      #
+      # Vite inlines VITE_* at build time and silently accepts an empty string,
+      # so a repository Variable that is unset — or set as a Secret, or defined
+      # on an environment this job does not use — produces a bundle that looks
+      # fine and cannot sign anyone in. This step makes that a failed build with
+      # a named cause instead.
+      #
+      # Values are masked. They are public identifiers, not credentials, but a
+      # log line is the wrong place to publish anything by default; the length
+      # and last four characters are enough to tell "arrived" from "empty" and
+      # to spot a value pasted with a stray space or quote.
+      - name: Verify the MSAL build inputs
+        run: |
+          set -euo pipefail
+
+          mask() {
+            local value="$1"
+            local length=${#value}
+            if [ "${length}" -le 4 ]; then printf '(%d chars)' "${length}";
+            else printf '…%s (%d chars)' "${value: -4}" "${length}"; fi
+          }
+
+          if [ "${VITE_MI_BEARER_AUTH}" != "true" ]; then
+            echo "VITE_MI_BEARER_AUTH is '${VITE_MI_BEARER_AUTH}' — Easy Auth build, MSAL inputs not required."
+            exit 0
+          fi
+
+          missing=""
+          [ -n "${VITE_AAD_CLIENT_ID:-}" ] || missing="${missing} VITE_AAD_CLIENT_ID"
+          [ -n "${VITE_MI_API_SCOPE:-}" ]  || missing="${missing} VITE_MI_API_SCOPE"
+          if [ -n "${missing}" ]; then
+            echo "::error::VITE_MI_BEARER_AUTH=true but these are empty in this job:${missing}"
+            echo "They must exist as repository VARIABLES (Settings → Secrets and variables"
+            echo "→ Actions → Variables). A Secret of the same name does not reach \${{ vars.* }},"
+            echo "and an Actions *environment* variable does not reach a job with no environment."
+            exit 1
+          fi
+
+          # A client id that is not a GUID is accepted by Vite, inlined happily,
+          # and then throws inside MSAL's constructor — which surfaces in the
+          # browser as "sign-in could not start", nowhere near this build.
+          if ! printf '%s' "${VITE_AAD_CLIENT_ID}" \
+               | grep -Eqi '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "::error::VITE_AAD_CLIENT_ID is not a GUID $(mask "${VITE_AAD_CLIENT_ID}") — an Entra"
+            echo "application (client) id always is. Check for a stray space, quote or newline."
+            exit 1
+          fi
+
+          # The scope must be the API's delegated scope, not the app id on its
+          # own: a bare GUID yields a token for the wrong audience and the API
+          # answers 401 on `aud`.
+          case "${VITE_MI_API_SCOPE}" in
+            api://*/*) : ;;
+            *) echo "::error::VITE_MI_API_SCOPE should look like api://<mi-api-app-id>/MI.Access"
+               echo "          got: $(mask "${VITE_MI_API_SCOPE}")"
+               exit 1 ;;
+          esac
+
+          echo "MSAL build inputs present:"
+          echo "  VITE_AAD_CLIENT_ID : $(mask "${VITE_AAD_CLIENT_ID}")"
+          echo "  VITE_MI_API_SCOPE  : api://…/${VITE_MI_API_SCOPE##*/} (${#VITE_MI_API_SCOPE} chars)"
+          echo "  VITE_AAD_AUTHORITY : ${VITE_AAD_AUTHORITY:-(default) https://login.microsoftonline.com/organizations}"
+          if [ "${VITE_MI_API_SCOPE##*/}" != "MI.Access" ]; then
+            echo "::warning::the scope does not end in /MI.Access — confirm it matches the scope exposed on trakt-mi-api"
+          fi
+
       # Which hosting-layer configuration this build ships.
       #
       # Static Web Apps enforces its routes BEFORE any JavaScript runs, so the
