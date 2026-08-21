@@ -112,7 +112,30 @@ export class HttpAgentClient implements AgentClient {
    * cannot reach the API host directly, so the forwarding proxy answers instead.
    * Saying so turns a mystifying "404" into a one-line fix.
    */
-  private describeStatus(res: Response, path: string): string {
+  /**
+   * The API's own explanation for a failed response, when it gave one.
+   *
+   * FastAPI answers with `{"detail": "..."}`, and those details are written to
+   * be read by the caller — "Missing: TRAKT_MI_ENTRA_TENANT_ID …", "No MI access
+   * role assigned to this account." Discarding them left the UI saying only
+   * "returned 503", which is true and useless: the deployment that produced it
+   * had the answer in the body the whole time.
+   *
+   * Best-effort by construction. A non-JSON body, a body already consumed, an
+   * empty one — all resolve to undefined and the caller falls back to the status
+   * line.
+   */
+  private static async detailOf(res: Response): Promise<string | undefined> {
+    try {
+      const body = (await res.clone().json()) as { detail?: unknown };
+      const detail = body?.detail;
+      return typeof detail === "string" && detail.trim() ? detail.trim() : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private describeStatus(res: Response, path: string, detail?: string): string {
     const where = this.baseUrl || "(same origin)";
     if (res.status === 404) {
       const absolute = /^https?:\/\//i.test(this.baseUrl);
@@ -124,7 +147,8 @@ export class HttpAgentClient implements AgentClient {
           + "forwards this path.";
       return `MI Agent API returned 404 for ${path} (base ${where}).${hint}`;
     }
-    return `MI Agent API returned ${res.status} ${res.statusText} for ${path}`;
+    const base = `MI Agent API returned ${res.status} ${res.statusText} for ${path}`;
+    return detail ? `${base} — ${detail}` : base;
   }
 
   /**
@@ -152,7 +176,9 @@ export class HttpAgentClient implements AgentClient {
       if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
       throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
     }
-    if (!res.ok) throw new AgentError(this.describeStatus(res, path));
+    if (!res.ok) {
+      throw new AgentError(this.describeStatus(res, path, await HttpAgentClient.detailOf(res)));
+    }
     try {
       return (await res.json()) as T;
     } catch (err) {
@@ -318,7 +344,10 @@ export class HttpAgentClient implements AgentClient {
       if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
       throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
     }
-    if (!res.ok) throw new AgentError(this.describeStatus(res, "/mi/decks/download"));
+    if (!res.ok) {
+      throw new AgentError(this.describeStatus(
+        res, "/mi/decks/download", await HttpAgentClient.detailOf(res)));
+    }
     return res.blob();
   }
 
@@ -438,16 +467,27 @@ export class HttpAgentClient implements AgentClient {
       // store down) carry a mapped status WITH the full governed envelope —
       // surface the backend's client-facing reason, not a bare status line.
       let governedMessage: string | undefined;
+      let detail: string | undefined;
       try {
-        const errBody = (await res.json()) as ApiResponse;
+        const errBody = (await res.json()) as ApiResponse & { detail?: unknown };
         governedMessage =
           (typeof errBody.error === "string" && errBody.error) ||
           (typeof errBody.answer === "string" && errBody.answer) ||
           undefined;
+        // Not every refusal is a governed envelope. The auth guard answers with
+        // FastAPI's plain `{"detail": …}` — which is where "Missing:
+        // TRAKT_MI_ENTRA_TENANT_ID …" and "No MI access role assigned to this
+        // account." live. Reading only `error`/`answer` reduced both to a bare
+        // "returned 503", and a bare status line is what sends someone hunting
+        // through App Service logs for a message the response already carried.
+        if (typeof errBody.detail === "string" && errBody.detail.trim()) {
+          detail = errBody.detail.trim();
+        }
       } catch {
         /* not a JSON envelope — fall back to the status description */
       }
-      throw new AgentError(governedMessage ?? this.describeStatus(res, "/mi/query"));
+      throw new AgentError(
+        governedMessage ?? this.describeStatus(res, "/mi/query", detail));
     }
 
     let body: ApiResponse;

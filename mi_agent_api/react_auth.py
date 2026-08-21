@@ -103,6 +103,19 @@ logger = logging.getLogger("mi_agent_api.react_auth")
 MODE_ENV = "TRAKT_MI_REACT_AUTH_MODE"
 AUDIENCE_ENV = "TRAKT_MI_ENTRA_AUDIENCE"
 SCOPE_ENV = "TRAKT_MI_REQUIRED_SCOPE"
+#: Directories the DASHBOARD accepts tokens from, comma-separated.
+#:
+#: Additive to the two sources that already existed. It exists because the only
+#: way to name a directory for this surface was ``TRAKT_COPILOT_ENTRA_TENANT_ID``
+#: — a setting named after a different product — or a ``config/organisations.yaml``
+#: that a deployment may not have yet. An operator turning the dashboard on had
+#: to configure Copilot to do it, and if they did not, every request answered 503
+#: with the audience set correctly.
+#:
+#: Deliberately NOT read by ``copilot_auth``: a directory admitted to the
+#: dashboard should not silently become admissible on the Copilot surface. The
+#: union flows one way.
+TENANT_ENV = "TRAKT_MI_ENTRA_TENANT_ID"
 
 #: Only the Static Web Apps principal header authenticates the dashboard.
 MODE_SWA = "swa"
@@ -189,6 +202,49 @@ def _audiences() -> List[str]:
     return [a.strip() for a in raw.split(",") if a.strip()]
 
 
+def _dashboard_directories() -> List[str]:
+    """Directories named by this surface's own app setting."""
+    out: List[str] = []
+    for part in (os.environ.get(TENANT_ENV) or "").split(","):
+        directory = normalise_directory_id(part)
+        if directory and directory not in out:
+            out.append(directory)
+    return out
+
+
+def allowed_directories() -> List[str]:
+    """Every Entra directory the DASHBOARD accepts a token from.
+
+    The union of three sources, all additive and all fail-closed when empty:
+    this surface's own :data:`TENANT_ENV`, the historical
+    ``TRAKT_COPILOT_ENTRA_TENANT_ID``, and every enabled organisation in
+    ``config/organisations.yaml``. Sorted so the single-directory fallback in
+    ``copilot_auth._select_directory`` stays deterministic.
+    """
+    combined = set(_dashboard_directories())
+    try:
+        combined |= set(_copilot_auth.allowed_directories())
+    except Exception:  # noqa: BLE001 - a registry fault must not widen the set
+        logger.exception("organisation registry unreadable; using app settings only")
+    return sorted(combined)
+
+
+def missing_configuration() -> List[str]:
+    """Which halves of the bearer contract are absent, named as app settings.
+
+    Returned rather than merely counted so the 503 can say WHICH one is missing.
+    "not configured (a directory, plus an audience, are required)" sends an
+    operator to check both when exactly one is empty, and on this deployment the
+    directory list was the empty one while the audience was set correctly.
+    """
+    missing: List[str] = []
+    if not allowed_directories():
+        missing.append(f"{TENANT_ENV} (or a registered organisation directory)")
+    if not _audiences():
+        missing.append(AUDIENCE_ENV)
+    return missing
+
+
 def bearer_configured() -> bool:
     """Whether a bearer token could validate at all on this deployment.
 
@@ -199,7 +255,7 @@ def bearer_configured() -> bool:
     token" look identical from the browser.
     """
     try:
-        return bool(_copilot_auth.allowed_directories()) and bool(_audiences())
+        return not missing_configuration()
     except Exception:  # noqa: BLE001 - a probe must never take the route down
         logger.exception("could not determine bearer configuration state")
         return False
@@ -225,11 +281,12 @@ def _unauthorised() -> HTTPException:
                          headers={"WWW-Authenticate": "Bearer"})
 
 
-def _unconfigured() -> HTTPException:
+def _unconfigured(missing: Optional[List[str]] = None) -> HTTPException:
+    absent = missing if missing is not None else missing_configuration()
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=("Dashboard bearer authentication is not configured (a registered "
-                f"organisation directory, plus {AUDIENCE_ENV}, are required)."))
+        detail=("Dashboard bearer authentication is not configured on this "
+                f"deployment. Missing: {', '.join(absent)}."))
 
 
 def _validate_react_bearer(token: str, directory_id: str,
@@ -324,10 +381,11 @@ def validate_request(request: Request) -> ReactPrincipal:
     ``None``: a caller that reaches here has already decided a bearer credential
     was offered.
     """
-    directories = _copilot_auth.allowed_directories()
+    absent = missing_configuration()
+    if absent:
+        raise _unconfigured(absent)
+    directories = allowed_directories()
     audiences = _audiences()
-    if not directories or not audiences:
-        raise _unconfigured()
     if _copilot_auth._jwt is None or _copilot_auth._PyJWKClient is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

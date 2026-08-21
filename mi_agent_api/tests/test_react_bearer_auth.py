@@ -57,6 +57,12 @@ from trakt_core.principal import (
     PrincipalRegistry,
 )
 
+
+def _detail_of(exc) -> str:
+    """The message an operator actually reads out of an HTTPException."""
+    return str(getattr(exc, "detail", exc))
+
+
 TENANT = "ERE"
 
 #: The directory this deployment accepts today (the app setting), and a second
@@ -333,6 +339,34 @@ class TestTokenValidation:
         assert react_auth._required_scope() == ""
         monkeypatch.setenv(react_auth.SCOPE_ENV, "Custom.Scope")
         assert react_auth._required_scope() == "Custom.Scope"
+
+    def test_the_dashboard_can_name_its_own_directories(self, monkeypatch):
+        """Before this, the only app setting that opened a directory for the
+        DASHBOARD was named after Copilot. A deployment with the audience set and
+        no Copilot configuration answered 503 to every request — which is exactly
+        what the first bearer pilot hit."""
+        monkeypatch.delenv("TRAKT_COPILOT_ENTRA_TENANT_ID", raising=False)
+        monkeypatch.setenv(react_auth.TENANT_ENV, EXTERNAL_DIR)
+        assert EXTERNAL_DIR in react_auth.allowed_directories()
+
+    def test_a_dashboard_directory_does_not_open_the_copilot_surface(self, monkeypatch):
+        """The union flows one way. Admitting a directory to the dashboard must
+        not silently admit it to a different product's API."""
+        monkeypatch.delenv("TRAKT_COPILOT_ENTRA_TENANT_ID", raising=False)
+        monkeypatch.setenv(react_auth.TENANT_ENV, EXTERNAL_DIR)
+        assert EXTERNAL_DIR not in copilot_auth.allowed_directories()
+
+    def test_the_503_names_which_setting_is_missing(self, monkeypatch):
+        """"a directory, plus an audience, are required" sends an operator to
+        check both when one of them is already correct."""
+        monkeypatch.delenv("TRAKT_COPILOT_ENTRA_TENANT_ID", raising=False)
+        monkeypatch.delenv(react_auth.TENANT_ENV, raising=False)
+        monkeypatch.setenv(react_auth.AUDIENCE_ENV, AUDIENCE)
+
+        missing = react_auth.missing_configuration()
+        assert any(react_auth.TENANT_ENV in m for m in missing)
+        assert react_auth.AUDIENCE_ENV not in missing
+        assert react_auth.TENANT_ENV in _detail_of(react_auth._unconfigured())
 
     def test_react_auth_reuses_the_copilot_directory_allow_list(self):
         """Registering an organisation must open exactly one door, in one place.
