@@ -362,3 +362,56 @@ def test_answers_and_artefacts_are_two_different_acts(service, opened):
     delivered = service.generate_synthetic_response(answered, actor=ACTOR)
     assert delivered.run.received_artefacts, \
         "the artefact button still makes up files"
+
+
+# --------------------------------------------------------------------------- #
+# The confirm list is something a client can actually check
+# --------------------------------------------------------------------------- #
+
+def test_two_registrations_do_not_print_the_same_line_twice(service):
+    """A weekly pipeline and a monthly funded book are two registrations.
+
+    Dropping the qualifier made both read "Expected cadence: Weekly" — the same
+    line twice, which reads as a bug and gives the client nothing to correct.
+    """
+    case = service.create_case(
+        tenant=TENANT_A, initiating_user=ACTOR,
+        instruction="Onboard ERM Capital Mgt. It is a UK equity release "
+                    "lender. The need weekly pipeline, monthly MI and Annex 2 "
+                    "regime reporting.")
+    lines = [line for line in service.build_pack(case).document().split("\n")
+             if line.startswith("- **Expected cadence**")]
+    assert len(lines) == len(set(lines)), lines
+    assert len(lines) > 1, "this instruction registers two streams"
+
+
+def test_a_qualifier_is_never_an_internal_identifier(service):
+    """``direct_001/funded`` is a source key. A client cannot confirm a path."""
+    case = service.create_case(
+        tenant=TENANT_A, initiating_user=ACTOR,
+        instruction="Onboard ERM Capital Mgt. It is a UK equity release "
+                    "lender. The need weekly pipeline, monthly MI and Annex 2 "
+                    "regime reporting.")
+    confirm = service.build_pack(case).document()
+    confirm = confirm.split("## Please confirm what we already understand")[1]
+    confirm = confirm.split("## Optional context")[0]
+    # Only the QUALIFIER is checked: a VALUE may legitimately carry a slash
+    # (the reporting time zone is "Europe/London").
+    qualifiers = [line.split("**", 2)[2].split(":")[0]
+                  for line in confirm.split("\n")
+                  if line.startswith("- **") and " — " in line]
+    assert qualifiers, "this instruction needs at least one qualifier"
+    for qualifier in qualifiers:
+        assert "/" not in qualifier, qualifier
+        assert "direct_001" not in qualifier, qualifier
+    # …but the meaningful part of it survives, so the rows stay distinct.
+    assert "funded" in confirm and "pipeline" in confirm
+
+
+def test_a_single_registration_needs_no_qualifier(service, opened):
+    """The qualifier is restored only where a row would otherwise collide."""
+    document = service.build_pack(opened).document()
+    for line in document.split("\n"):
+        if line.startswith("- **Client name**") or \
+                line.startswith("- **Jurisdiction**"):
+            assert " — " not in line, line

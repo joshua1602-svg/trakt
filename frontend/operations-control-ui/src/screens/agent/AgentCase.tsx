@@ -91,6 +91,14 @@ export function AgentCaseScreen() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [proposal, setProposal] = useState<AgentProposal | null>(null);
+  // The operator's own words that produced the standing proposal. Confirming
+  // re-sends THESE, never the proposal's summary: the server re-reads the
+  // message to decide what to apply, and a summary is prose about a change
+  // rather than an instruction to make one. "Answer the onboarding." read back
+  // as an instruction means nothing, so every answer failed on confirmation
+  // with "Trakt could not tell what to do with that" — the proposal was right
+  // there on screen and the confirm button could not restate it.
+  const [proposedFrom, setProposedFrom] = useState("");
   const [showPackage, setShowPackage] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -115,11 +123,13 @@ export function AgentCaseScreen() {
   }
 
   async function send(confirm = false) {
-    const message = confirm ? (proposal?.summary ?? text) : text;
+    const message = confirm ? proposedFrom || text : text;
     if (!message.trim()) return;
     const turn = await act(() => client.instructAgent(caseId, message.trim(), confirm));
     if (!turn) return;
     setProposal(turn.proposal);
+    // Remember what produced this proposal, so confirming can re-send it.
+    setProposedFrom(turn.proposal ? message.trim() : "");
     if (turn.applied || !turn.proposal) setText("");
   }
 
@@ -449,7 +459,10 @@ export function AgentCaseScreen() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setProposal(null)}
+                    onClick={() => {
+                      setProposal(null);
+                      setProposedFrom("");
+                    }}
                     className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700"
                   >
                     {copy.agent.proposalDismiss}

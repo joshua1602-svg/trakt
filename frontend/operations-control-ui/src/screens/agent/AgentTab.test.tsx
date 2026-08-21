@@ -461,3 +461,56 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(link.getAttribute("href")).toMatch(/^\/onboarding\/ONB-\d{4}-\d{4}$/);
   });
 });
+
+describe("OCC Agent tab — confirming a proposal", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Confirming used to re-send the PROPOSAL'S SUMMARY rather than the
+   * operator's own words. The server re-reads the message to decide what to
+   * apply, and a summary is prose ABOUT a change, not an instruction to make
+   * one — so "Answer the onboarding." came back as "Trakt could not tell what
+   * to do with that", with the proposal still on screen describing exactly
+   * what it could no longer do.
+   *
+   * The mock's own summaries happen to contain the verbs its router matches on
+   * ("Submit the onboarding for approval." still reads as "submit"), which is
+   * why the defect survived: the mock never exercised the failing case. So
+   * this asserts what the COMPONENT sends, which is where the defect lived.
+   */
+  it("re-sends the operator's own words, never the proposal summary", async () => {
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+    const sent = vi.spyOn(MockOpsClient.prototype, "instructAgent");
+    const user = userEvent.setup();
+    renderApp("/agent");
+
+    const box = await screen.findByLabelText(copy.agent.newCaseHeading);
+    await user.type(box, "Onboard Northstar Lending. Monthly management information.");
+    await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
+    await screen.findByText(copy.agent.conversationHeading);
+
+    const said = "submit for approval";
+    const message = screen.getByLabelText(copy.agent.conversationHeading);
+    await user.type(message, `${said}{Enter}`);
+
+    const confirmButton = await screen.findByRole("button", {
+      name: copy.agent.proposalConfirm,
+    });
+    await user.click(confirmButton);
+
+    await waitFor(() => expect(sent.mock.calls.length).toBeGreaterThanOrEqual(2));
+    const [, proposeText, proposeConfirm] = sent.mock.calls[0];
+    const [, confirmText, confirmConfirm] = sent.mock.calls[1];
+    expect(proposeConfirm).toBeFalsy();
+    expect(proposeText).toBe(said);
+    expect(confirmConfirm).toBe(true);
+    // The whole point: the same words, not a restatement of them.
+    expect(confirmText).toBe(said);
+  });
+});
