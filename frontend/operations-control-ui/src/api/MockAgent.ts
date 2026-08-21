@@ -2234,12 +2234,17 @@ const FORM_STEPS: { key: string; label: string; help: string; sections: string[]
     sections: ["access"],
   },
   {
-    key: "meaning",
-    label: "What your numbers mean",
+    key: "anything_else",
+    label: "Anything else we need to know",
     help:
-      "The conventions behind your figures. Trakt works out the FORMAT of a " +
-      "file itself; what it cannot work out is what you mean by a balance, a " +
-      "redemption or a valuation.",
-    sections: ["data_semantics"],
+      "Anything specific to your business, your asset class or this portfolio " +
+      "that would help Trakt read your data correctly. Leave it blank if " +
+      "nothing comes to mind.",
+    sections: ["additional_context"],
   },
+  // No "what your numbers mean" step. `data_semantics` is deferred by the
+  // catalogue until a representative file has arrived, so those questions are
+  // put to a client against what was actually found in their data rather than
+  // asked in the abstract. A demo that still asked them would show a product
+  // that no longer exists.
 ];

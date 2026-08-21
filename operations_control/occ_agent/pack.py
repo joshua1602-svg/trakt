@@ -35,7 +35,7 @@ pack"), and :data:`MAPPING_STATEMENT` says so to the client.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..contracts import canonical_json, stable_hash
 from ..onboarding.case import OnboardingCase
@@ -281,8 +281,7 @@ class OnboardingPack:
         if self.confirmations:
             lines += ["## Please confirm what we already understand", "",
                       SECTION_CONFIRM_HELP, ""]
-            for question in self.confirmations:
-                lines.append(self._confirm_line(question))
+            lines += self._confirm_lines()
             lines.append("")
 
         if optional:
@@ -291,29 +290,48 @@ class OnboardingPack:
 
         return "\n".join(lines)
 
-    def _confirm_line(self, question: "PackQuestion") -> str:
-        """One already-known fact, stated the way a client would say it.
+    def _confirm_lines(self) -> List[str]:
+        """The already-known facts, as a client would read them back.
 
-        Two things are stripped, because both made the list read as machine
-        output rather than as a summary somebody could check:
-
-        * the **qualifier** — "Legal name — Mortgage Capital: Mortgage Capital"
-          repeats the client's own name twice and says nothing. It is kept only
-          where it genuinely disambiguates, and never when it is an internal
-          identifier (anything path-shaped), the client's name, or the value
-          itself;
-        * the **raw enum** — ``calendar_month_end`` becomes "Calendar month
-          end", using the label the CATALOGUE already declares for that option
-          rather than a transformation invented here, so the client reads the
-          same words the platform uses everywhere else.
+        Qualifiers are dropped where they add nothing — but only where dropping
+        one still leaves the row distinguishable. Two source registrations each
+        carry an "Expected cadence", and their qualifiers are internal ids
+        (``direct_001/funded``, ``direct_001/pipeline``); dropping both printed
+        the same line twice, which reads as a bug and gives the client nothing
+        to correct. So a qualifier is restored — humanised — wherever a row
+        would otherwise collide.
         """
-        shown = question.display_value or _render(question.value)
-        item = (question.item or "").strip()
-        redundant = (not item or "/" in item
-                     or item == (self.client_name or "").strip()
-                     or item == shown)
-        where = "" if redundant else f" — {item}"
-        return f"- **{question.label}**{where}: {shown}"
+        rendered = [(self._confirm_label(q), self._confirm_value(q))
+                    for q in self.confirmations]
+        # Keyed on the LABEL, not the whole line. Two registrations with the
+        # same cadence printed the same row twice; two with DIFFERENT cadences
+        # print two "Expected cadence" rows that disagree, and a client cannot
+        # tell which book each belongs to. Both need the qualifier.
+        seen: Dict[str, int] = {}
+        for label, _shown in rendered:
+            seen[label] = seen.get(label, 0) + 1
+
+        out: List[str] = []
+        for question, (label, shown) in zip(self.confirmations, rendered):
+            if seen[label] > 1:
+                where = _humanise_item(question.item)
+                out.append(f"- **{label}**{where}: {shown}")
+            else:
+                out.append(f"- **{label}**: {shown}")
+        return out
+
+    def _confirm_label(self, question: "PackQuestion") -> str:
+        return question.label
+
+    def _confirm_value(self, question: "PackQuestion") -> str:
+        """The value as a client reads it.
+
+        ``calendar_month_end`` becomes "Calendar month end", using the label
+        the CATALOGUE already declares for that option rather than a
+        transformation invented here, so the client reads the same words the
+        platform uses everywhere else.
+        """
+        return question.display_value or _render(question.value)
 
     def _render_steps(self, steps: List[Dict[str, Any]]) -> List[str]:
         """The questions of some steps, as the client sees them.
@@ -549,6 +567,23 @@ def _email(case: OnboardingCase, pack: OnboardingPack) -> DraftEmail:
     ])
     return DraftEmail(to=to, subject=f"Trakt onboarding — {name} "
                                      f"({pack.case_ref})", body=body)
+
+
+def _humanise_item(item: str) -> str:
+    """A repeatable item's qualifier, said the way a client would say it.
+
+    An internal identifier is not a client-facing name: ``direct_001/funded``
+    is a source registration's key, and printing it asks somebody outside Trakt
+    to confirm a path. Its last segment IS meaningful, though — "funded",
+    "pipeline" — so that is what is shown when a qualifier is needed at all.
+    """
+    text = str(item or "").strip()
+    if not text:
+        return ""
+    if "/" in text:
+        text = text.rsplit("/", 1)[-1].strip()
+    text = text.replace("_", " ").strip()
+    return f" — {text}" if text else ""
 
 
 def _present(value: Any) -> bool:

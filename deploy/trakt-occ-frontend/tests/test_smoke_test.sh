@@ -42,9 +42,22 @@ start_fixture() {
 
 # The smoke test uses plain curl; make sure it does not try the sandbox proxy.
 run_smoke() {
+  # The health check retries, sized for an API restarting after a deployment.
+  # These tests are about BRANCHING, not timing, so the retry is collapsed —
+  # otherwise every unreachable-API scenario would wait over a minute.
   NO_PROXY='*' no_proxy='*' \
+  HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-2}" HEALTH_GAP_SECONDS="${HEALTH_GAP_SECONDS:-1}" \
   OPS_SMOKE_OPERATOR_TOKEN="${SMOKE_TOKEN-$TOKEN}" \
     bash "$SMOKE" "$FRONTEND" "$API" >"$WORK/out" 2>&1
+  echo $?
+}
+
+# run_smoke against an API that is not listening at all.
+run_smoke_no_api() {
+  NO_PROXY='*' no_proxy='*' \
+  HEALTH_ATTEMPTS=2 HEALTH_GAP_SECONDS=1 \
+  OPS_SMOKE_OPERATOR_TOKEN="${SMOKE_TOKEN-$TOKEN}" \
+    bash "$SMOKE" "$FRONTEND" "http://127.0.0.1:1" >"$WORK/out" 2>&1
   echo $?
 }
 
@@ -123,6 +136,30 @@ run_smoke >/dev/null
 grep -q "GET /ops/me without a token -> 401" "$WORK/out" \
   && { PASS=$((PASS+1)); echo "  PASS  unauthenticated /ops/me is verified to be 401"; } \
   || { FAIL=$((FAIL+1)); echo "  FAIL  the unauthenticated check did not run"; }
+
+
+echo "=== 9. An API that is not answering is diagnosed as ONE thing ==="
+# The failure that started this: the API was mid-restart, every call returned a
+# connection failure, and the run reported six failures — including CORS advice
+# for a service that was not answering at all. One accurate failure beats five
+# confident ones.
+expect_fail "an unreachable API -> a failure naming the API, not CORS" \
+  "$(run_smoke_no_api)" "did not answer at all"
+if grep -q "5-8. Skipped" "$WORK/out"; then
+  PASS=$((PASS+1)); printf '  PASS  %s\n' "checks 5-8 are skipped rather than guessed at"
+else
+  FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "checks 5-8 should be skipped when the API is unreachable"
+fi
+if grep -qi "TRAKT_OPS_CORS_ORIGINS" "$WORK/out"; then
+  FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "an unreachable API must not be blamed on CORS"
+else
+  PASS=$((PASS+1)); printf '  PASS  %s\n' "CORS is not blamed for an unreachable API"
+fi
+if grep -q "The frontend itself passed every check" "$WORK/out"; then
+  PASS=$((PASS+1)); printf '  PASS  %s\n' "the frontend result is still reported"
+else
+  FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "the frontend result should still be reported"
+fi
 
 echo
 echo "-------------------------------------------------------------------"

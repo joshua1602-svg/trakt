@@ -18,6 +18,7 @@ import type {
   StreamSummary,
 } from "@/api/agentTypes";
 import type { ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
+import { ClientQuestionsPanel } from "./AgentClientQuestions";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
 import { StatusChip } from "@/components/StatusChip";
@@ -91,6 +92,14 @@ export function AgentCaseScreen() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [proposal, setProposal] = useState<AgentProposal | null>(null);
+  // The operator's own words that produced the standing proposal. Confirming
+  // re-sends THESE, never the proposal's summary: the server re-reads the
+  // message to decide what to apply, and a summary is prose about a change
+  // rather than an instruction to make one. "Answer the onboarding." read back
+  // as an instruction means nothing, so every answer failed on confirmation
+  // with "Trakt could not tell what to do with that" — the proposal was right
+  // there on screen and the confirm button could not restate it.
+  const [proposedFrom, setProposedFrom] = useState("");
   const [showPackage, setShowPackage] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -115,11 +124,13 @@ export function AgentCaseScreen() {
   }
 
   async function send(confirm = false) {
-    const message = confirm ? (proposal?.summary ?? text) : text;
+    const message = confirm ? proposedFrom || text : text;
     if (!message.trim()) return;
     const turn = await act(() => client.instructAgent(caseId, message.trim(), confirm));
     if (!turn) return;
     setProposal(turn.proposal);
+    // Remember what produced this proposal, so confirming can re-send it.
+    setProposedFrom(turn.proposal ? message.trim() : "");
     if (turn.applied || !turn.proposal) setText("");
   }
 
@@ -167,14 +178,27 @@ export function AgentCaseScreen() {
       case "pack_issue":
         if (key !== packStage) return null;
         return (
-          <PackPanel
-            status={status}
-            busy={busy}
-            caseId={caseId}
-            onDraft={() => void act(() => client.draftAgentPack(caseId))}
-            onApprove={() => void act(() => client.approveAgentPack(caseId))}
-            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
-          />
+          <>
+            <PackPanel
+              status={status}
+              busy={busy}
+              caseId={caseId}
+              onDraft={() => void act(() => client.draftAgentPack(caseId))}
+              onApprove={() => void act(() => client.approveAgentPack(caseId))}
+              onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+            />
+            {/* Beside the pack, not inside it: the pack is what goes OUT, and
+                this is the operator's own view of what it asks. */}
+            <div className="mt-4">
+              <ClientQuestionsPanel
+                caseId={caseId}
+                version={status.run.version}
+                confirmations={status.pack.confirmations ?? []}
+                busy={busy}
+                onSaved={() => void view.reload({ quiet: true })}
+              />
+            </div>
+          </>
         );
       case "responses":
         return (
@@ -183,6 +207,10 @@ export function AgentCaseScreen() {
             checklist={onboarding.client_checklist}
             busy={busy}
             canAsk={available.has("request_client_information")}
+            // Both buttons are gated. An action the state machine refuses used
+            // to render anyway, so clicking it could only produce an error —
+            // which reads as a broken button, not as a rule being enforced.
+            canGenerate={onboarding.client_checklist.length > 0}
             onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
             // Answers the outstanding questions. This panel used to call
             // generateAgentResponse, which makes up the data FILES — so the
@@ -196,6 +224,7 @@ export function AgentCaseScreen() {
           <ArtefactsPanel
             status={status}
             busy={busy}
+            canGenerate={available.has("register_synthetic_artefact")}
             onUpload={(files) => void act(() => client.uploadAgentArtefacts(caseId, files))}
             onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
             onFixture={() =>
@@ -449,7 +478,10 @@ export function AgentCaseScreen() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setProposal(null)}
+                    onClick={() => {
+                      setProposal(null);
+                      setProposedFrom("");
+                    }}
                     className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700"
                   >
                     {copy.agent.proposalDismiss}
@@ -830,6 +862,7 @@ function ResponsesBlock({
   checklist,
   busy,
   canAsk,
+  canGenerate,
   onAsk,
   onGenerate,
 }: {
@@ -837,6 +870,7 @@ function ResponsesBlock({
   checklist: ChecklistRow[];
   busy: boolean;
   canAsk: boolean;
+  canGenerate: boolean;
   onAsk: () => void;
   onGenerate: () => void;
 }) {
@@ -864,14 +898,16 @@ function ResponsesBlock({
             {copy.agent.checklistAsk}
           </button>
         )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onGenerate}
-          className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-        >
-          {copy.agent.uploadGenerate}
-        </button>
+        {canGenerate && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onGenerate}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {copy.agent.uploadGenerate}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -881,12 +917,14 @@ function ResponsesBlock({
 function ArtefactsPanel({
   status,
   busy,
+  canGenerate,
   onUpload,
   onGenerate,
   onFixture,
 }: {
   status: AgentStatus;
   busy: boolean;
+  canGenerate: boolean;
   onUpload: (files: File[]) => void;
   onGenerate: () => void;
   onFixture: () => void;
@@ -933,14 +971,16 @@ function ArtefactsPanel({
             }}
           />
         </label>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onGenerate}
-          className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-        >
-          {copy.agent.uploadGenerate}
-        </button>
+        {canGenerate && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onGenerate}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {copy.agent.uploadGenerate}
+          </button>
+        )}
         {run.fixture_id && (
           <button
             type="button"
