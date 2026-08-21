@@ -389,9 +389,34 @@ def test_an_ambiguous_seasoning_phrase_does_not_select_a_population():
         "what is the run rate of new lending?") is None
 
 
-def test_the_run_rate_question_is_unaffected(ask):
-    """The governed run-rate answer must not acquire a seasoning filter."""
+def test_the_run_rate_question_does_not_acquire_a_seasoning_filter(ask):
+    """The stated intent, preserved: no seasoning filter is invented.
+
+    The `ok is True` half is gone, and the reason is measured rather than
+    argued. Before routed groupings required evidence, this question — "what is
+    the run rate of NEW LENDING" — was answered:
+
+        "The current completion run-rate is ~£16.3m/month (£195.5m/year)
+         based on 2 month(s) of funded growth."
+
+    with `spec.filters == {}` and a projection whose first point is
+    £1,964,886,258 — the WHOLE BOOK. The run rate of new lending was never
+    computed; the whole book's was, presented as the answer, with the receipt
+    stamping the new-lending facet APPLIED.
+
+    So the answer must not stand. What this test guards is unchanged and still
+    asserted: the fix must not work by inventing the filter instead.
+    """
     envelope = ask("What is the run rate of new lending and is it accelerating?")
+    assert SEGMENT not in spec_filters(envelope)
+    assert envelope["ok"] is False
+    assert "new lending" in str(envelope.get("error") or "")
+    assert "whole population" in str(envelope.get("error") or "")
+
+
+def test_an_unrestricted_run_rate_question_still_answers(ask):
+    """Can-fail: a change that refused every run-rate question would pass above."""
+    envelope = ask("What is the completion run rate?")
     assert envelope["ok"] is True, envelope.get("error")
     assert SEGMENT not in spec_filters(envelope)
 

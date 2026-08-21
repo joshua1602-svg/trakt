@@ -219,7 +219,18 @@ UNIT_PATTERNS: Tuple[Tuple[str, str], ...] = (
     ("week", r"\bweeks?\b|\bweekly\b|\bfortnight\b"),
     ("month", r"\bmonths?\b|\bmonthly\b"),
     ("quarter", r"\bquarters?\b|\bquarterly\b"),
-    ("year", r"\byears?\b|\bannual\b|\bannually\b|\bytd\b"),
+    # B11. `year` carried the same defect `day` did — a unit word that names a
+    # reporting level in some constructions and an ATTRIBUTE in others. "How
+    # many loans are over 80 years old" read as a yearly grain, which put two
+    # corpus questions into the B9 series-substitution class that were never
+    # asking for a series. Unlike `day`, this one was already live: `day` was
+    # caught before it shipped and this was not.
+    #
+    # Narrower than `day`'s treatment, deliberately. "By year", "year to date"
+    # and "annual" are ordinary grain wordings and stay; only the age compounds
+    # are excluded, because those are the whole of the observed defect and a
+    # wider restriction would drop readings that work.
+    ("year", r"\byears?\b(?!\s+(?:old|of age))|\bannual\b|\bannually\b|\bytd\b"),
 )
 
 #: Coarsest last, so a request's unit can be compared to a series'.

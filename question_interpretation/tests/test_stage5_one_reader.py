@@ -198,3 +198,37 @@ def test_a_grain_substitution_and_a_coverage_limit_say_different_things():
     assert "reported at month level" in grain.reason
     assert "the last 12 months" in window.reason
     assert grain.reason != window.reason
+
+
+# --------------------------------------------------------------------------- #
+# B11 — `year` carried the defect `day` had
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("question", [
+    "how many loans are over 80 years old",
+    "how many loans are over 75 years old",
+    "borrowers over 75 years of age",
+])
+def test_an_age_in_years_is_not_a_reporting_grain(question):
+    """Two corpus questions entered the B9 class on this reading alone.
+
+    Unlike `day`, which was caught before it shipped, `year` was already live.
+    Same failure: a unit word that names a reporting level in some
+    constructions and an attribute in others.
+    """
+    from question_interpretation.lexical import requested_unit
+    assert requested_unit(question) is None
+
+
+@pytest.mark.parametrize("question", [
+    "balance by year", "year to date balance", "annual funded balance",
+    "show me the last 2 years",
+])
+def test_ordinary_yearly_grain_wordings_survive(question):
+    """Can-fail, and why the restriction is narrower than `day`'s.
+
+    "By year", "year to date" and "annual" are ordinary grain wordings. Only the
+    age compounds are excluded, because those are the whole of the observed
+    defect and a wider restriction would drop readings that work.
+    """
+    from question_interpretation.lexical import requested_unit
+    assert requested_unit(question) == "year"

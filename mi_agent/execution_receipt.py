@@ -2184,6 +2184,41 @@ def reconcile_population(facets: Sequence[RequestedFacet],
                             "book; it did not narrow to the requested population")
 
 
+#: Keys in a routed answer's frame that are MEASURES or the time axis, never a
+#: categorical breakdown. Everything else is an axis the answer is cut by.
+_NON_AXIS_KEYS = frozenset({
+    "period", "month", "date", "reporting_date", "reportingdate",
+    "value", "values", "balance", "amount", "count", "loans", "share",
+    "exposure", "rank", "base", "upside", "downside", "threshold",
+    "movement", "delta", "start_value", "end_value", "relative_change",
+})
+_NON_AXIS_SUFFIXES = ("_sum", "_pct", "_share", "_value", "_count", "_balance")
+
+
+def answer_axis_keys(envelope: Optional[Dict[str, Any]]) -> Set[str]:
+    """Every categorical axis the routed answer's own frame is cut by.
+
+    Read from the artifact rows the route publishes — the same standard
+    `declared_series_periods` uses, and the same standard `reconcile_facets`
+    applies to the point-in-time result frame via `result_cols`. A routed answer
+    was the one place no result frame was consulted, on the belief that there
+    was none to consult. There is.
+    """
+    out: Set[str] = set()
+    if not isinstance(envelope, dict):
+        return out
+    for artifact in envelope.get("artifacts") or []:
+        for row in (artifact.get("rows") or [])[:5]:
+            if not isinstance(row, Mapping):
+                continue
+            for key in row:
+                name = str(key).strip().lower()
+                if name in _NON_AXIS_KEYS or name.endswith(_NON_AXIS_SUFFIXES):
+                    continue
+                out.add(name)
+    return out
+
+
 def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional[str],
                             semantics: dict,
                             available_columns: Optional[Iterable[str]] = None,
@@ -2438,10 +2473,56 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.status = LOST
                 facet.reason = ("this answer does not rank that dimension")
             else:
-                # The route grouped by something it declared; without a result
-                # frame we cannot disprove it, and refusing on an unprovable
-                # facet would disable working governed analytics.
-                facet.status, facet.reason = APPLIED, ""
+                # THE FALSE APPLIED.
+                #
+                # This used to read: "the route grouped by something it
+                # declared; without a result frame we cannot disprove it, and
+                # refusing on an unprovable facet would disable working governed
+                # analytics." It stamped APPLIED on anything it could not
+                # DISPROVE — the exact inverse of the bar every other guard here
+                # holds. `reconcile_population`: "a facet is APPLIED only when
+                # the route reports having applied that field. A route that
+                # reports nothing leaves every population facet LOST."
+                #
+                # And the premise was false. `evolution` publishes a result
+                # frame, and its rows carry `period` and `value` and nothing
+                # else — so "balance by month BY REGION" returned the whole-book
+                # series, byte-identical to the ungrouped one, and the receipt
+                # vouched for a regional breakdown that was never computed. A
+                # receipt that misses an error is a gap; one that affirms it is
+                # worse than no receipt.
+                #
+                # The frame is now read. Routed artifacts name their columns for
+                # display — `area`, `category`, `region` — never by canonical
+                # field, so a name match proves a breakdown happened but its
+                # ABSENCE is what proves one did not. Hence two tiers, and the
+                # residue is stated rather than hidden: where the answer is cut
+                # by SOME axis this cannot identify, the facet stays applied,
+                # and which axis it was remains unproven.
+                axes = answer_axis_keys(envelope)
+                named = {str(k).strip().lower() for k in facet.satisfied_by()}
+                named |= {str(c).strip().lower() for c in canonicals if c}
+                if axes & named:
+                    facet.status, facet.reason = APPLIED, ""
+                elif not axes:
+                    # Worded for BOTH readings. The facet kind is GROUPING, but
+                    # the term is often a population — "new lending", "the front
+                    # book" — because the role split runs only on the
+                    # point-in-time path. Saying "not broken down by new
+                    # lending" would assert a breakdown claim the reader never
+                    # made. What is true either way is that the answer covers
+                    # everything.
+                    facet.status = LOST
+                    facet.reason = (
+                        "this answer covers the whole population; it is neither "
+                        f"narrowed to nor broken down by {facet.label}")
+                else:
+                    # An axis exists and cannot be matched to this facet by
+                    # name. Left applied: refusing here would disable routes
+                    # that genuinely grouped and merely label their columns for
+                    # a reader. Recorded as the remaining half of this defect —
+                    # THAT a breakdown happened is proven, WHICH one is not.
+                    facet.status, facet.reason = APPLIED, ""
     return facets
 
 
