@@ -60,10 +60,20 @@ class FakeGraph:
                  send_status: int = 202,
                  send_error: Optional[int] = None,
                  read_error: Optional[int] = None,
-                 echo_sent: bool = True):
+                 echo_sent: bool = True,
+                 inbox: Optional[List[Dict[str, Any]]] = None,
+                 attachments: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+                 inbox_error: Optional[int] = None):
         self.requests: List[urllib.request.Request] = []
         self.bodies: List[Any] = []
         self.sent_items = list(sent_items or [])
+        #: What the reader finds in the folder it is pointed at.
+        self.inbox = list(inbox or [])
+        #: Keyed by the message id the inbox entry declares.
+        self.attachments = dict(attachments or {})
+        self.inbox_error = inbox_error
+        #: Every message the reader marked read, in order.
+        self.marked_read: List[str] = []
         self.token_status = token_status
         self.send_status = send_status
         self.send_error = send_error
@@ -101,7 +111,28 @@ class FakeGraph:
                 self.sent_items.insert(0, _sent_entry(body))
             return self.send_status, b""
 
-        if "/mailFolders/sentitems/messages" in url or "/messages/" in url:
+        if "/attachments" in url:
+            message_id = url.split("/messages/")[-1].split("/")[0]
+            return 200, json.dumps(
+                {"value": self.attachments.get(message_id, [])}
+            ).encode("utf-8")
+
+        if "/mailFolders/sentitems/messages" in url:
+            if self.read_error:
+                raise urllib.error.HTTPError(url, self.read_error, "no", {},
+                                             None)
+            return 200, json.dumps({"value": self.sent_items}).encode("utf-8")
+
+        if "/mailFolders/" in url and "/messages" in url:
+            if self.inbox_error:
+                raise urllib.error.HTTPError(url, self.inbox_error, "no", {},
+                                             None)
+            return 200, json.dumps({"value": self.inbox}).encode("utf-8")
+
+        if "/messages/" in url:
+            if request.get_method() == "PATCH":
+                self.marked_read.append(url.split("/messages/")[-1])
+                return 200, b"{}"
             if self.read_error:
                 raise urllib.error.HTTPError(url, self.read_error, "no", {},
                                              None)
@@ -131,6 +162,21 @@ def _sent_entry(send_body: Any) -> Dict[str, Any]:
         "internetMessageHeaders": list(
             message.get("internetMessageHeaders") or []),
     }
+
+
+#: A complete, enabled INBOUND environment. Separate from ``mail_env`` because
+#: the two switches are separate, and a test that turns one on must not get the
+#: other for free.
+def inbound_env(**overrides: str) -> Dict[str, str]:
+    env = {
+        "TRAKT_MAIL_INBOUND_ENABLED": "true",
+        "TRAKT_MAIL_TENANT_ID": TENANT_ID,
+        "TRAKT_MAIL_CLIENT_ID": CLIENT_ID,
+        "TRAKT_MAIL_CLIENT_SECRET": CLIENT_SECRET,
+        "TRAKT_MAIL_MAILBOX": "onboarding@traktinfra.io",
+    }
+    env.update(overrides)
+    return env
 
 
 @pytest.fixture()

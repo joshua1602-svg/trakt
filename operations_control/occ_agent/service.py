@@ -2123,6 +2123,35 @@ class OccAgentService:
                 lines.append(f"- {row['label']}")
         return "\n".join(lines)
 
+    def audit_mail_ingest(self, run: SyntheticRun, *, actor: str,
+                          message: Any, correlation: Any, result: Any) -> None:
+        """Record that a client's reply was taken into this case.
+
+        Classified as ``human_confirmed`` rather than ``deterministic``: an
+        operator asked for the mailbox to be read and chose this message, and
+        the audit should name the person who did rather than imply the system
+        decided on its own. The evidence the message was matched on is recorded
+        with it, so "why is this file on this case?" has an answer that does
+        not depend on anyone remembering.
+        """
+        self._audit(run, "client_reply_ingested", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=str(getattr(message, "internet_message_id",
+                                                "") or ""),
+                    decision_basis=("a reply in the OCC mailbox, matched to "
+                                    "this case on "
+                                    + ", ".join(getattr(correlation, "bases",
+                                                        []) or ["nothing"])),
+                    detail={"sender": getattr(message, "sender", ""),
+                            "subject": getattr(message, "subject", ""),
+                            "received_at": getattr(message, "received_at", ""),
+                            "registered": list(getattr(result, "registered",
+                                                       [])),
+                            "skipped": [s.get("name") for s in
+                                        getattr(result, "skipped", [])],
+                            "recorded_text": bool(
+                                getattr(result, "recorded_text", False))})
+
     def available_actions(self, agent_case: AgentCase) -> List[str]:
         """Every action an operator could take on this case right now.
 

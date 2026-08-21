@@ -187,6 +187,20 @@ class SendPack(BaseModel):
     tenant: Optional[str] = None
 
 
+class IngestMail(BaseModel):
+    """Take named replies into this case.
+
+    ``message_ids`` are the mailbox identifiers reported by ``GET
+    /cases/{case_ref}/mail``. There is deliberately no "ingest everything
+    waiting": an operator chooses which replies belong to the case they are
+    looking at, and the correlator refuses any that it cannot tie there by
+    evidence.
+    """
+
+    message_ids: List[str] = []
+    tenant: Optional[str] = None
+
+
 class ConfirmActivation(BaseModel):
     """The last, separate act before anything reaches production.
 
@@ -597,6 +611,109 @@ def send_pack(case_ref: str, body: SendPack,
             **service.status(service.send_pack(agent_case,
                                                actor=principal.name,
                                                to=body.to))}
+
+
+# --------------------------------------------------------------------------- #
+# The client's reply
+# --------------------------------------------------------------------------- #
+
+def _mail_reader() -> Any:
+    """The reply reader, or ``None`` when this deployment does not carry it.
+
+    Imported lazily and behind a guard for the same reason the outbound adapter
+    is built that way in :mod:`operations_control.api.app`: ``trakt_mail``
+    depends on this package and not the other way round, so importing it at
+    module level would be a cycle — and a deployment that ships without it, or
+    without ``reportlab``, must still serve every other route rather than
+    failing to start.
+    """
+    try:
+        from trakt_mail import ingest as _ingest
+    except Exception:  # noqa: BLE001 — an absent integration is not an error
+        return None
+    return _ingest
+
+
+#: What the routes say when the package is absent. Distinct from "reading is
+#: not enabled", which is a setting, and from "nothing has arrived", which is
+#: an answer.
+_NO_READER = "This deployment does not carry the mailbox reader."
+
+
+@router.get("/cases/{case_ref}/mail")
+def waiting_mail(case_ref: str, tenant: Optional[str] = None,
+                 principal: Principal = Depends(authenticate)
+                 ) -> Dict[str, Any]:
+    """What has arrived in the OCC mailbox, and what it belongs to.
+
+    Read-only in both systems: nothing is written to a case and nothing is
+    marked read, so an operator may look as often as they like. Messages the
+    correlator could not tie to a case are reported too — that is a question
+    for a person, and hiding it would leave a client's reply sitting unread.
+    """
+    _require_feature()
+    service = get_service()
+    resolved = _tenant_for(principal, tenant)
+    agent_case = _load(service, resolved, case_ref)
+    reader = _mail_reader()
+    if reader is None:
+        return {"ok": True, "case_ref": agent_case.case_ref,
+                "mail": {"messages": [], "matched": 0, "unmatched": 0,
+                         "for_this_case": [], "note": _NO_READER}}
+    try:
+        found = reader.waiting(service, tenant=resolved)
+    except reader.MailIngestError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from None
+    return {"ok": True,
+            "case_ref": agent_case.case_ref,
+            "mail": {**found.to_dict(),
+                     "for_this_case": [w.to_dict()
+                                       for w in found.for_case(case_ref)]}}
+
+
+@router.post("/cases/{case_ref}/mail/ingest")
+def ingest_mail(case_ref: str, body: IngestMail,
+                principal: Principal = Depends(authenticate)
+                ) -> Dict[str, Any]:
+    """Take the named replies into this case.
+
+    Attachments are registered through the same governed method an operator's
+    own upload uses. The client's WORDS are recorded and left alone: applying
+    them to the case is an instruction a human gives, with the interpreter
+    showing its reading first, exactly as if they had typed it.
+    """
+    _require_feature()
+    service = get_service()
+    resolved = _tenant_for(principal, body.tenant)
+    agent_case = _load(service, resolved, case_ref)
+    if not body.message_ids:
+        raise HTTPException(status_code=400,
+                            detail="Name at least one message to take in.")
+    reader = _mail_reader()
+    if reader is None:
+        raise HTTPException(status_code=501, detail=_NO_READER)
+    try:
+        found = reader.waiting(service, tenant=resolved)
+    except reader.MailIngestError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from None
+
+    by_id = {w.message.graph_id: w for w in found.messages}
+    results: List[Dict[str, Any]] = []
+    for message_id in body.message_ids:
+        chosen = by_id.get(message_id)
+        if chosen is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(f"Message {message_id!r} is no longer in the mailbox "
+                        "folder this deployment reads."))
+        try:
+            agent_case, outcome = reader.ingest(
+                service, agent_case, chosen, actor=principal.name)
+        except reader.MailIngestError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        results.append(outcome.to_dict())
+    return {"ok": True, "ingested": results,
+            **service.status(agent_case)}
 
 
 @router.get("/cases/{case_ref}/form")

@@ -380,3 +380,57 @@ def test_the_meta_route_exposes_the_lifecycle_and_the_scenarios(api_client):
     # The wizard's own reference data, so the tab never restates the catalogue.
     assert body["onboarding_reference"]["steps"]
     assert body["onboarding_reference"]["catalogue"]["sections"]
+
+
+# --------------------------------------------------------------------------- #
+# The client's reply
+# --------------------------------------------------------------------------- #
+
+def test_the_reply_routes_are_mounted(api_client):
+    paths = route_paths(api_client.app)
+    assert "/ops/agent/cases/{case_ref}/mail" in paths
+    assert "/ops/agent/cases/{case_ref}/mail/ingest" in paths
+
+
+def test_looking_at_the_mailbox_needs_an_operator(api_client):
+    assert api_client.get("/ops/agent/cases/ONB-2026-0001/mail").status_code \
+        == 401
+
+
+def test_the_mailbox_route_answers_when_reading_is_not_configured(api_client):
+    """The deployment this suite runs in has no mail settings at all.
+
+    The honest answer is "nothing is enabled", not a 500 — an operator opening
+    a case in an environment without mail must not see an error where the
+    truth is that the capability is off.
+    """
+    headers = {"X-Operator-Token": "tok-a"}
+    created = api_client.post("/ops/agent/cases", headers=headers,
+                              json={"instruction": "Onboard Northstar Lending."})
+    case_ref = created.json()["case_ref"]
+    response = api_client.get(f"/ops/agent/cases/{case_ref}/mail",
+                              headers=headers)
+    assert response.status_code == 200
+    mail = response.json()["mail"]
+    assert mail["messages"] == []
+    assert mail["note"]
+
+
+def test_ingesting_nothing_is_refused_rather_than_silently_doing_nothing(
+        api_client):
+    headers = {"X-Operator-Token": "tok-a"}
+    created = api_client.post("/ops/agent/cases", headers=headers,
+                              json={"instruction": "Onboard Northstar Lending."})
+    case_ref = created.json()["case_ref"]
+    response = api_client.post(f"/ops/agent/cases/{case_ref}/mail/ingest",
+                               headers=headers, json={"message_ids": []})
+    assert response.status_code == 400
+
+
+def test_there_is_no_route_that_ingests_everything_waiting(api_client):
+    """An operator chooses which replies belong to the case they are looking
+    at. A route that took in whatever was in the mailbox would put the
+    correlation decision beyond anyone's sight."""
+    paths = {p for p in route_paths(api_client.app) if "/mail" in p}
+    assert paths == {"/ops/agent/cases/{case_ref}/mail",
+                     "/ops/agent/cases/{case_ref}/mail/ingest"}

@@ -88,6 +88,18 @@ class Receipt:
     content_hash: str = ""
     #: Operator-facing, and never optimistic.
     statement: str = ""
+    #: The message this receipt is FOR, as the mail system identifies it.
+    #: Empty for an adapter that sends nothing, and empty for a send whose
+    #: read-back did not resolve — in both cases the truth is "we do not know",
+    #: and a blank field says that where a fabricated one would not.
+    #:
+    #: These exist so a client's REPLY can be tied back to this case by
+    #: evidence rather than by guessing from the sender's address: a reply
+    #: stays in the same conversation, and names the message it answers in its
+    #: ``In-Reply-To`` header.
+    internet_message_id: str = ""
+    conversation_id: str = ""
+    graph_message_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

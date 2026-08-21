@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import pytest
 
-from operations_control.occ_agent import communication as _comms
 from operations_control.occ_agent import states as _states
 
 from .conftest import ACTOR, TENANT_A
