@@ -157,6 +157,46 @@ client's real questions **within the first month**, the slot is removed.
 
 ---
 
+## Note 1 — a governed-config dependency here is correct
+
+**For the record, to prevent a false conflict later.**
+
+`_analytical_population_satisfies` now reads the governed seasoning
+configuration to resolve a lending window before comparing. That does **not**
+contradict the reason conversion 4 was left partial.
+
+| | |
+|---|---|
+| `question_interpretation.lexical` | the LEXICAL owner. Reads question text and nothing else — no registry, no frame, no spec, no config. `requested_span` stayed out of it because resolving vague recency against `lending_windows.recent_max_months` is a config decision. |
+| `execution_receipt` | the SEMANTIC layer, downstream. Resolving a governed concept is exactly its job. |
+
+The principle protects the lexical owner's domain-blindness. It is not a general
+prohibition on configuration, and applying it downstream would be a
+misreading — a semantic layer that cannot consult the governed model cannot do
+its job at all.
+
+## Note 2 — generate the coverage where the corpus cannot exercise a construct
+
+**Adopted as the standing pattern.**
+
+Removing the `_parse_filters` rewrite could not be proved by the corpus: exactly
+**one** of 690 real-surface questions contains `between`, the only construct the
+rewrite existed for. So the old algorithm was reproduced verbatim against the
+same helpers and compared across a generated set built to hit every shape the
+construct appears in — **11,474 questions, 22,948 comparisons, 0 mismatches**.
+
+The rule this sets:
+
+> Where the corpus cannot exercise a construct, **generate the coverage rather
+> than declare it untested.**
+
+"The corpus does not cover this" is a statement about the corpus, not evidence
+about the change. A construct rare in the corpus is not rare in the field, and
+the one case that exists cannot distinguish a correct rewrite from a lucky one.
+This applies to any conversion touching a path the banks barely reach.
+
+---
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
@@ -218,6 +258,24 @@ is invisible because nothing measures it. A future reader finding two parsers
 has no way to know which one ships. Either it consumes the same owner as the
 serving path, or it is deleted, or it carries a header saying plainly that it is
 not the parser and must not be read as one.
+
+### B5 — the literal population comparison is permissive when a label omits its field
+
+**Found during Stage 4, pre-existing, recorded rather than fixed.**
+
+`_analytical_population_satisfies` derives the value it wants by splitting the
+facet's label on its field name. Where the label does not contain the field
+name, the value comes out empty and the check accepts **any** predicate naming
+that field — including the wrong population. A facet for *front book* is
+accepted against a declared `seasoning_segment = Back Book`.
+
+Verified present before the Stage 4 change by stashing it. Not reachable with
+the labels the receipt builds today, which embed the field and the value, and
+the governed comparison added in Stage 4 is stricter rather than looser.
+
+Not fixed here because it would change acceptance for populations outside the
+seasoning family, and the pre-registered prediction for Stage 4 says to report
+such a movement rather than absorb it.
 
 ### B2 — `answer_type.asked` disagrees with the parser on 46 questions
 

@@ -1661,6 +1661,52 @@ def analytical_populations(envelope: Optional[Dict[str, Any]]) -> List[str]:
     return out
 
 
+def _governed_population_predicates(facet: "RequestedFacet") -> List[str]:
+    """The declared-predicate forms of any GOVERNED lending window this facet names.
+
+    Why this exists
+    ---------------
+    A population can be governed under one name and executed under a different
+    field. "New lending" is defined by configuration as a months-on-book bound —
+    ``months_on_book le 1`` — while the term itself resolves to
+    ``seasoning_segment``. Comparing the facet's FIELD NAME against the
+    predicate text therefore rejects a population the plan genuinely applied,
+    which is how a reclassification of these terms cost 160 runs.
+
+    "Front book" survived that only by coincidence: its governed predicate
+    happens to name the same field the term resolves to. Resolving the window
+    and comparing ITS predicate treats both alike, so neither passes by
+    accident.
+
+    Keyed on the facet's WORDING, not on its field key, so acceptance cannot
+    depend on the two names coinciding.
+    """
+    from .population import Predicate
+    from .seasoning import lending_windows_named, load_seasoning_config
+
+    text = " ".join(str(part) for part in (facet.label, facet.field_key) if part)
+    keys = lending_windows_named(text)
+    if not keys:
+        return []
+    try:
+        config = load_seasoning_config()
+    except Exception:                                       # pragma: no cover
+        return []
+
+    out: List[str] = []
+    for key in keys:
+        window = config.lending_window(key)
+        if window is None:
+            continue
+        for field, condition in (window.predicate() or {}).items():
+            if isinstance(condition, Mapping):
+                out.append(Predicate(field, str(condition.get("op") or "eq"),
+                                     condition.get("value")).describe())
+            else:
+                out.append(Predicate(field, "eq", condition).describe())
+    return out
+
+
 def _analytical_population_satisfies(envelope: Optional[Dict[str, Any]],
                                      facet: "RequestedFacet") -> bool:
     """Is this facet's population the one the analytical plan already resolved?
@@ -1678,6 +1724,16 @@ def _analytical_population_satisfies(envelope: Optional[Dict[str, Any]],
     declared predicate names BOTH the same field and the value the facet asked
     for — so a plan that narrowed to KFI cannot satisfy a request for OFFER.
     """
+    declared = [str(p).strip().lower() for p in analytical_populations(envelope)]
+
+    # Governed comparison FIRST. A window the configuration defines is the same
+    # population however it is named, so this is the check that treats "new
+    # lending" and "front book" alike rather than letting one pass on a name
+    # coincidence the other does not have.
+    governed = _governed_population_predicates(facet)
+    if governed and any(g.strip().lower() in declared for g in governed):
+        return True
+
     field = str(facet.field_key or "").strip().lower()
     if not field:
         return False
