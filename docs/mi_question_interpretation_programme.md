@@ -343,6 +343,46 @@ test.** Until it is in one it is a hypothesis about the code, not a description
 of it — and it is worse than no comment, because it stops the next reader
 looking.
 
+## Standing rule — a scoping query built around one reader cannot bound a change that replaces the arrangement of readers
+
+From the seasoning consolidation (`7c46f81`). The pre-registered prediction
+defined group A correctly — *a single lending window named, no segment phrase* —
+and then listed **Q1.1** as its member. Q1.2, Q1.3 and Q1.4 are also group A and
+were not listed.
+
+The cause is the rule. That list came from a scan of **where reader 2 raises a
+seasoning dimension**, and those three questions do not raise one. The change
+was owner-shaped; the scoping query was reader-2-shaped, so it enumerated the
+wrong population of questions.
+
+Had the LIST been treated as the prediction rather than the DEFINITION, three
+correct movements would have read as stop-condition violations and the work
+would have halted on a false alarm.
+
+**When a change replaces how readers are arranged, scope it from the DECISION,
+not from any one reader's view of it.** And when a prediction states a class and
+then enumerates members, the class is the prediction and the enumeration is
+illustration — say which is which before measuring.
+
+## Standing rule — consolidating a decision can create a new reader of it
+
+The same commit, and the sharper of the two. Making one owner decide the
+seasoning role meant raising the population facet from the owner's answer. On
+the routed path `mi_service` already raised that population from `spec.filters`
+— which the owner had just written. **The same decision arrived twice, from two
+places, and the receipt stamped one applied and left the other lost, so
+`geo_exposure` and the movement path refused themselves.**
+
+Live for about ten minutes, and it is exactly the failure the consolidation
+exists to prevent, occurring **inside** the consolidation. The diagnosis had even
+recorded it as constraint 5 — *do not duplicate what already resolves correctly,
+or it becomes a fourth reader* — and the implementation created one anyway.
+
+**Before a consolidation lands, enumerate every place the owner's answer now
+arrives, and check none of them was already deriving it.** A consolidation adds
+a producer; the readers it was meant to replace do not stop reading merely
+because a new one is better.
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
