@@ -249,10 +249,38 @@ class TestWorkflowWiring(unittest.TestCase):
 
     def test_the_deploy_step_uploads_the_staged_artefact(self):
         text = _WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("package: ${{ env.STAGE_DIR }}", text, (
+        self.assertIn("package: ${{ env.ARTIFACT_ZIP }}", text, (
             "azure/webapps-deploy has no package: input — it would default to "
             "the whole checkout, and Oryx would read the repo-root "
             "requirements.txt as the runtime contract again"))
+        self.assertNotIn("package: ${{ env.STAGE_DIR }}", text, (
+            "package: must name the zip this workflow builds, not the staging "
+            "FOLDER. Handing the action a folder leaves the archive layout to "
+            "the action; a tree that lands one level deep inside the archive "
+            "gives Oryx no root requirements.txt to detect (no antenv, no "
+            "oryx-manifest.toml) and leaves /home/site/wwwroot/startup.sh "
+            "absent — the exact four messages the App Service reported"))
+
+    def test_the_artefact_is_zipped_from_inside_the_staging_directory(self):
+        """`cd` into the staging dir before zipping is what puts its CONTENTS at
+        the archive root. Zipping the directory by name from outside would wrap
+        everything one level deeper, which is the failure this guards."""
+        text = _WORKFLOW.read_text(encoding="utf-8")
+        self.assertRegex(
+            text, r'\(cd "\$\{STAGE_DIR\}" && zip -qr ',
+            "the artefact must be zipped from INSIDE ${STAGE_DIR}")
+
+    def test_the_zip_layout_is_asserted_before_deploying(self):
+        """A layout assertion that only exists in this test file cannot fail the
+        deploy. The workflow has to check it too, on the artefact it is about to
+        upload."""
+        text = _WORKFLOW.read_text(encoding="utf-8")
+        for needle in ("grep -qx 'startup.sh'", "grep -qx 'requirements.txt'",
+                       "^mi_agent_api/app.py$"):
+            self.assertIn(needle, text, (
+                f"the workflow does not assert {needle!r} on the built zip, so "
+                "a nested artefact would deploy 'successfully' and fail at "
+                "container start"))
 
     def test_the_workflow_installs_the_api_contract_not_the_root_one(self):
         text = _WORKFLOW.read_text(encoding="utf-8")
