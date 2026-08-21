@@ -35,7 +35,7 @@ blind spot.
 | id | decision | owners | class | id |
 |---|---|---|---|---|
 | D1 | where the subject ends and the first condition begins | 1 | derived | closed by Stage 3 |
-| D2 | whether a named dimension is an axis or a filter | 3 | **disagreeing** | — |
+| D2 | whether a named dimension is an axis or a filter | ~~3~~ **4** | ~~disagreeing~~ **one owner** | consolidated by `dimension_role`; **B16** left open |
 | D3 | whether a phrase names a governed population | 1 | single | closed by `7c46f81` |
 | D4 | what time grain the question requested | 1 | derived | — |
 | D5 | what reporting window the question requested | 1 | single | — |
@@ -50,6 +50,26 @@ blind spot.
 | D14 | what geographic scope the question named | 2 | **agree-by-maintenance** | — |
 
 ### The four defects
+
+> **CORRECTED WHEN D2 WAS WORKED.** Three things below are wrong, and are left
+> in place with the correction beside them rather than rewritten, because how
+> the census read is part of what it is evidence of. Full workings in
+> `mi_d2_dimension_role_prediction.md`.
+>
+> 1. **"Three owners" is four.** `requested_dimension_terms` decides nothing and
+>    therefore defaults every named dimension to an axis — which, on the routed
+>    path where the split does not run, IS the operative decision. A reader that
+>    defaults is a reader.
+> 2. **"Stage 4's fix not reaching the routed path" is the wrong subject.** All
+>    **37** divergences are `grouping_dimension` → `unresolved_role`; **zero**
+>    are population reclassifications. The count is right, the diagnosis attached
+>    to it was not.
+> 3. **"Reachable: yes" is right about the readers and wrong about the
+>    answers.** Of the 31 unique divergent questions, 16 never route and refuse
+>    upstream of the receipt; the other 15 route, where the split never runs.
+>    The routed receipt this paragraph cites IS wrong — four times, all
+>    `risk_limits` — but the wrong claim comes from the tier-3b evidence rule,
+>    which is **D7's**, not from the role decision.
 
 **D2 — axis or filter, across the two paths.** Owners: the parser (writes the
 spec), `requested_dimension_terms` (reads the question text, consults neither
@@ -140,7 +160,8 @@ failure mode was to inflate.
 
 | finding | status |
 |---|---|
-| D2's path-dependence | the mechanism behind the false APPLIED, but not previously stated as one decision with three owners |
+| D2's path-dependence | the mechanism behind the false APPLIED, but not previously stated as one decision with three owners. **Consolidated; the false APPLIED turned out to be D7's, and a new one — B16 — turned up underneath it** |
+| B16 — `lexical.is_filter_subject` is read by nobody, and the deterministic parser resolves no categorical filter at all | **new**, found while working D2; a parser change, not a facet change |
 | D10 | **new**, no identifier |
 | D8, D9, D14 as debt | new as *classified debt*; none previously recorded |
 

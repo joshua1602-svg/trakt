@@ -993,6 +993,9 @@ def run_mi_agent_query(
         _facets = _receipt_mod.reconcile_facets(
             _facets, spec=spec, query_result=qres, semantics=semantics,
             available_columns=available_columns, route=None,
+            # The question itself, so the role owner can consult the SENTENCE'S
+            # role markers and not only the slots the parser managed to fill.
+            question=question,
             # The point-in-time executor has no stress/scenario capability, so a
             # scenario is never applied on this path. Stating that explicitly is
             # what turns "what would a 10% fall do to LTV" into a refusal rather

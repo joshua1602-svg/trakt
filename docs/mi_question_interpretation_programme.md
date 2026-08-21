@@ -383,7 +383,65 @@ arrives, and check none of them was already deriving it.** A consolidation adds
 a producer; the readers it was meant to replace do not stop reading merely
 because a new one is better.
 
+## Standing rule — a reader that defaults is a reader
+
+Earned in D2. The census counted three owners of "is this named dimension an
+axis or a filter" and there were four. The one it missed was
+`requested_dimension_terms`, which **decides nothing**: it raises every named
+dimension as a `grouping_dimension` and moves on. That is not an abstention —
+on the routed path, where the reader that DOES decide never runs, it is the
+operative decision, and it asserted "axis" for every dimension any question
+named.
+
+A census that enumerates deciders will miss it every time, because it looks like
+plumbing. **When counting owners of a decision, count the places that produce an
+answer, not the places that deliberate.** A default is an answer.
+
+## Standing rule — a consolidation that moves nothing is a result, but only with the measurement that says why
+
+Also D2. The commit gave the decision one owner, both paths consumed it, and
+**nothing moved on any of the four surfaces** — because the branch it
+consolidates is unreachable through any well-formed question the deterministic
+arm can ask. That is not a null result and it is not a clean bill of health; it
+is the removal of a way for two readers to drift apart, plus a measurement of
+which part of the decision the corpora cannot see.
+
+The rule follows from the older one — *a clean surface is evidence about
+coverage before it is evidence about the product* — and sharpens it for
+consolidations specifically: **a consolidation whose surfaces do not move must
+say which construct they could not reach, and carry constructed coverage for
+it.** Otherwise "nothing moved" reads later as "it was already right".
+
 ## Backlog
+
+### B16 — the sentence marks a selector and nobody reads the mark
+
+**Found while working D2. A parser change, not a facet change.**
+
+`question_interpretation.lexical.is_filter_subject` is the declared lexical
+owner of *"this mention is a selector rather than an axis"*. **Nothing reads
+it.** `dimension_role` consults `grouping_cut` (the axis half) and deliberately
+does not consult this one, because a facet reclassified to a population must
+carry a **resolved predicate** — `_analytical_population_satisfies` recovers the
+value by splitting the label on the field name, and a valueless label accepts
+any predicate naming that field (B5). The parser is the only source of a
+resolved value, so the facet layer cannot act on the mark without inventing one,
+which would be a twelfth interpreter.
+
+Measured: across 693 questions the intersection of "field the parser slotted as
+a filter" and "dimension the detector named" is **empty**. Four of the five
+fields that ever appear in `spec.filters` are numeric bounds on measures; the
+fifth, `collateral_geography`, binds only where the dimension word is absent.
+
+So *"balance by region where account status is active"* has its narrowing
+asserted as a **breakdown** on the routed path and asked about — *"did you want
+the book split by it, or narrowed to one value of it?"* — on the point-in-time
+one, for a sentence that marked the role unambiguously.
+
+**The fix is in the parser**: resolve the categorical filter the sentence marks,
+and the role owner's existing source 1 answers correctly on both paths with no
+further change. B1 is the neighbouring half — the one categorical binding the
+parser does perform is validated against a denylist and fabricates values.
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
 

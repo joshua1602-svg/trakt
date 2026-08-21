@@ -504,7 +504,7 @@ def _parser_provenance(workflow: Dict[str, Any]) -> Dict[str, Any]:
 
 def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                          route: Optional[str], semantics: Dict[str, Any],
-                         frame) -> Dict[str, Any]:
+                         frame, parsed=None) -> Dict[str, Any]:
     """P0 semantic guard for an answer produced by a routed governed capability.
 
     A routed answer never reaches the point-in-time executor, so the workflow's
@@ -538,6 +538,28 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             requested_dimensions=receipt_mod.requested_dimension_terms(
                 question, semantics,
                 available_columns=set(frame.columns) if frame is not None else None))
+        # D2 — THE ROLE DECISION, CONSUMED RATHER THAN DEFAULTED.
+        #
+        # `requested_dimension_terms` raises every named dimension as a
+        # grouping. On the point-in-time path a later reader gave each one the
+        # role its sources actually assigned; on this path nothing did, so a
+        # dimension the parser positively slotted as a FILTER was asserted to be
+        # a breakdown and the routed reconciler stamped that assertion. Measured
+        # across 693 corpus questions, the two paths asserted a different role on
+        # 37 — every one of them the same divergence.
+        #
+        # The parse is the one already threaded through routing (it supplies the
+        # governed population predicates a few lines above), so this reads a
+        # decision that was taken once rather than re-deriving it.
+        #
+        # `settle_unresolved=False`: the ROLE is settled here, but what a routed
+        # answer owes an UNRESOLVED role is not, because that turns on evidence
+        # D7 (B12) has yet to repair. See the branch in the split for the
+        # measurement behind that choice.
+        facets = receipt_mod._split_named_dimension_roles(
+            facets, getattr(parsed, "spec", None) or {}, semantics,
+            set(frame.columns) if frame is not None else None,
+            question=question, settle_unresolved=False)
         granularity = receipt_mod.granularity_facets(question, route)
         # P1L: the material row population the spec carries. Raised from the
         # governed spec, proven from execution evidence the route reports — a
@@ -569,18 +591,48 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             if (_facet.status != receipt_mod.APPLIED
                     and receipt_mod._analytical_population_satisfies(routed, _facet)):
                 _facet.status, _facet.reason = receipt_mod.APPLIED, ""
-        # The population ledger and the detector can now raise the SAME
-        # governed population — the ledger from `spec.filters`, the detector
-        # from the seasoning owner's decision, which is the same decision that
-        # put it in `spec.filters`. Two identical facets meant one stamped
-        # applied and one left lost, and the answer refused itself.
+        # EVERY population on this receipt is stamped from the same evidence,
+        # whoever raised it. Three raisers now: the ledger from `spec.filters`,
+        # the detector from the seasoning owner's decision, and the role owner
+        # reclassifying a named dimension the parser slotted as a filter.
         #
-        # Deduped on (kind, field, label): the label carries the predicate, so
-        # two facets agreeing on all three ARE the same claim, and keeping the
-        # ledger's is right because it is the one execution evidence stamps.
+        # Two failure modes are closed here, both of them recurrences:
+        #
+        #   DUPLICATE  the ledger and the detector raise the same governed
+        #              population — the same decision seen from two places — and
+        #              one is stamped applied while the other is left lost, so
+        #              the answer refuses itself. Live for ten minutes in
+        #              7c46f81. Deduped on (kind, field, label): the label
+        #              carries the predicate, so two facets agreeing on all
+        #              three ARE the same claim.
+        #   UNSTAMPED  a population that is NOT a duplicate is pulled out of the
+        #              list below and never reaches `reconcile_routed_facets`,
+        #              so it keeps its LOST default whatever execution did — and
+        #              a lost population blocks. That is e35a01b's shape, a
+        #              reclassification into a kind with no receiver, arriving on
+        #              this path.
+        #
+        # Both are closed by MERGING into the ledger's list: a population from
+        # any raiser is stamped from the same evidence by the same two calls as
+        # it joins, and the merged list is the only one that reaches the receipt.
+        # `test_every_routed_population_is_stamped` is what says so.
         _seen = {(f.kind, f.field_key, f.label) for f in population}
+        for _extra in facets:
+            if _extra.kind != receipt_mod.KIND_POPULATION:
+                continue
+            _key = (_extra.kind, _extra.field_key, _extra.label)
+            if _key in _seen:
+                continue
+            _seen.add(_key)
+            population.append(_extra)
+            receipt_mod.reconcile_population(
+                [_extra], (routed.get("metadata") or {}).get("populationApplied"),
+                dataset_columns=(set(frame.columns) if frame is not None else None))
+            if (_extra.status != receipt_mod.APPLIED
+                    and receipt_mod._analytical_population_satisfies(routed, _extra)):
+                _extra.status, _extra.reason = receipt_mod.APPLIED, ""
         facets = [f for f in facets
-                  if (f.kind, f.field_key, f.label) not in _seen] + population
+                  if f.kind != receipt_mod.KIND_POPULATION] + population
         if not facets and not substitution and not granularity:
             # Nothing to adjudicate, but the answer still states what governed
             # capability produced it and as at when — the receipt is required on
@@ -856,7 +908,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                     {"metadata": {"parse_metadata": dict(getattr(parsed, "meta", {}) or {})}}))
         _stamp_routed_scope(routed, req)
         routed = _guard_routed_answer(routed, question=req.question, route=route,
-                                      semantics=semantics, frame=df)
+                                      semantics=semantics, frame=df,
+                                      parsed=parsed)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 

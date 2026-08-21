@@ -312,3 +312,128 @@ Stop and report; do not absorb.
    is wrong four times over — but the wrong claim comes from the tier-3b
    evidence rule, not the role decision. D2 is reachable in its READERS and
    currently unreachable in its ANSWERS.
+
+---
+
+# Result, measured against §7
+
+## Against the prediction
+
+| predicted | measured |
+|---|---|
+| nothing moves, any surface, either book | **nothing moved** |
+| answer text 343 of 343 identical | **343 of 343** |
+| robustness `32/10/2`, both books | **`32/10/2`, both books; 44 of 44 same verdict on both** |
+| routed surface 13 of 13 | **14 of 14** — rt_013 added, declared expected-to-fail (below) |
+| lexical 693 of 693 | **693 of 693** |
+| seasoning by name Q1 4, Q7 4, Q8 12, all CORRECT | **Q1 4, Q7 4, Q8 12, all CORRECT, both books** |
+| calibration bank unmoved | **249/249 generated; 255/255 curated held, 0 hard fails, 0 known gaps** |
+| stamping matrix 0 live holes | **17 holes, 17 designed, 0 live** |
+
+**No stop condition fired.** No answer, verdict, or lexical decision moved; no
+duplicate facet appeared on any receipt; no facet reached a reconciler with no
+branch to receive it.
+
+## What landed
+
+`dimension_role` is the owner. Five sources, ordered, first answer wins — and
+source 3 is new: `lexical.grouping_cut` is consulted by the role decision for
+the first time. `_split_named_dimension_roles` and `_guard_routed_answer` both
+call it; `reconcile_routed_facets` keeps stamping STATUS and no longer ratifies a
+role by doing so; `requested_dimension_terms` stops being the routed path's
+operative decision by default.
+
+§5's table was confirmed line by line, and the two hazards it named were closed
+by construction rather than by inspection. Both were verified to be catchable by
+mutating the code and watching the right test fail:
+
+| mutation | test that failed |
+|---|---|
+| owner not consulted on the routed path | `test_the_owners_answer_reaches_the_routed_receipt` |
+| population merged but never stamped (the `e35a01b` shape) | `test_a_population_the_owner_raises_is_STAMPED_not_left_lost` |
+| no dedupe against the ledger (the `7c46f81` shape) | `test_the_owner_and_the_ledger_do_not_raise_it_twice` |
+| routed path clarifies on an unresolved role | `test_an_unresolved_role_leaves_the_routed_facet_alone`, and rt_006's surface went 13/14 |
+
+## The prediction at §7.2 was wrong, and the reason is the finding
+
+Cases 1–3 were specified as **routed-surface** cases. They are not
+constructible there, and the reason is a fact about the parser that neither the
+census nor §2 had measured:
+
+> **No question can both name a dimension and have the parser slot it as a
+> filter.** Across all 693 questions, 81 carry a non-empty `spec.filters` and
+> the intersection of "field the parser slotted as a filter" with "dimension the
+> detector named" is **empty**. Five fields ever appear as filters, and four —
+> `current_loan_to_value`, `youngest_borrower_age`,
+> `current_outstanding_balance`, `current_interest_rate` — are numeric bounds on
+> MEASURES, which no dimension term resolves to.
+>
+> `collateral_geography` is the one categorical filter the parser does resolve,
+> 9 times. It never overlaps either, because naming the geography DIMENSION
+> suppresses the value binding: *"exposure to London"* binds the filter and
+> names no dimension; *"regional exposure to London"* names the dimension and
+> binds nothing. Every categorical phrasing tried parses to `filters={}` —
+> *"balance by region where account status is active"*, *"total balance where
+> repayment type is interest roll-up"*, *"show funded exposure by region for
+> joint borrowers"*, *"show geographic exposure in the South East"*. The single
+> constructed phrasing that DOES produce the overlap, *"how many loans are in
+> the South East by region"*, binds the fabricated value **"South East By"** —
+> which is B1, not a usable case.
+
+So the owner's FILTER answer — the whole population branch of the split, the
+one `e35a01b` regressed and `b79f400` repaired — **is unreachable through any
+question this arm can ask.** The coverage is therefore constructed at the level
+below the surface: `test_d2_routed_role_carriage.py` builds the parse and drives
+`_guard_routed_answer` directly, and
+`test_no_corpus_question_slots_a_named_dimension_as_a_filter` asserts the fact
+that makes the construction necessary — so the day that stops being true, the
+test fails and the construction can be replaced by a real question.
+
+The routed surface records this in `cannot_see` rather than in a case, because a
+surface that cannot reach a construct should say so and not carry a case
+pretending otherwise.
+
+## What this hands to D7, named and unfixed
+
+`rt_013` — *"Are any regional limits breached?"* — is now on the routed surface
+as a **declared expected-to-fail**, stating the correct outcome: verdict `ok`
+and **no** grouping facet. It fails today because the residual tier stamps
+APPLIED on a `risk_limits` answer with no dimension axis at all. Its three
+siblings are `risk_limits_005`, `risk_limits_006` and `risk_limits_013`.
+
+The answer is right in every one of the four; only the receipt is wrong. That is
+why the expectation keeps the verdict and removes the claim, and why this is
+D7's fix and not D2's: **the role decision did not make the false claim, the
+evidence rule did.**
+
+## B16 — a new backlog entry, out of scope and stated
+
+`lexical.is_filter_subject` is the declared lexical owner of "this mention is a
+selector", and **nothing reads it.** Combined with the parser fact above, a
+question that says *"where account status is active"* has its narrowing asserted
+as a breakdown on the routed path and asked about on the point-in-time one — for
+a sentence that marked the role unambiguously. `B1` is the neighbouring half of
+the same gap: the parser's one categorical binding is validated against a
+denylist and fabricates values.
+
+The owner's source 3 answers AXIS only, deliberately, and
+`test_the_sentence_cannot_make_something_a_filter` pins the reason: a population
+facet must carry a resolved PREDICATE, because
+`_analytical_population_satisfies` recovers the value by splitting the label on
+the field name and a valueless label accepts any predicate naming that field
+(B5). Reader 1 is the only source of a resolved value. Inventing one in the
+facet layer would be a twelfth interpreter, which is the thing this contract
+exists to prevent.
+
+**B16 is therefore a parser change, not a facet change**, and it is where the
+axis-or-filter decision still has a live user-visible consequence.
+
+## A correction to §7.3, item 1
+
+"No answer text changes. Any change stops the work" was written as a stop
+condition, and it held — but it was also, on the evidence in §3, a prediction
+that the commit would be invisible to the product. It was. **A commit that
+consolidates a decision and provably moves nothing is not a null result**; it is
+the removal of a way for two readers to drift apart, plus the measurement that
+says which part of the decision the corpora cannot see. Both are recorded above
+so neither is quoted later as more than it is.

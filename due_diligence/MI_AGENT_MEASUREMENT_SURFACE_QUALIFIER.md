@@ -29,7 +29,7 @@ until a defect walked through it.
 |---|---|---|---|
 | calibration bank (255) | `run_mi_agent_query` | numeric correctness, the parse, artifact shape | **routing — it is always point-in-time.** Four of six time-axis questions behave differently in production. |
 | robustness bank (44 x 2 books) | `/mi/query` | routing, two books, a frozen grader | *which* route answered, and what the receipt claimed. Grades one outcome label. |
-| routed surface (13) | `execute_governed_mi_query` | the routing decision, the verdict, the facet kinds and statuses | numbers, the LLM arm, kestrelmoor, answer text, and anything a route declines to declare |
+| routed surface (14) | `execute_governed_mi_query` | the routing decision, the verdict, the facet kinds and statuses | numbers, the LLM arm, kestrelmoor, answer text, anything a route declines to declare, and a named dimension the parser slotted as a **filter** — no question this surface can ask reaches that branch |
 | answer diff (343) | both banks | every answer, byte for byte | anything in neither bank — which is where three stages of change landed |
 
 ## What follows for a reader of these numbers

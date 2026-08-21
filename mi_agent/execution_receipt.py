@@ -1286,20 +1286,151 @@ def executed_statistics(query_result: Any) -> List[str]:
     return [str(published)] if published else []
 
 
+# --------------------------------------------------------------------------- #
+# D2 — THE ONE OWNER OF "axis or filter"
+# --------------------------------------------------------------------------- #
+# Four readers had an opinion about whether a named dimension is a breakdown or
+# a selector, and the census (9ee0e5b) found them disagreeing on 37 of 693
+# questions:
+#
+#   1  `_deterministic_parse`            writes spec.filters / spec.dimensions
+#   2  `_split_named_dimension_roles`    reads reader 1's slots — point-in-time only
+#   3  `reconcile_routed_facets`         reads the ANSWER's axes — routed only
+#   4  `requested_dimension_terms`       raises EVERY named dimension as a
+#                                        grouping, deciding nothing, and so
+#                                        asserting "axis" by default
+#
+# Reader 4 is the one the census missed, and on the routed path it is the
+# operative decision: reader 2 never runs there, so every dimension the question
+# names is asserted to be a breakdown and reader 3 stamps that assertion.
+#
+# The sources are ordered here, once, and the first that answers wins. What is
+# NEW is source 3: `lexical.grouping_cut` and `lexical.is_filter_subject` are the
+# declared lexical owners of the sentence's own role markers — "balance BY
+# region" marks an axis, "loans FOR joint borrowers" marks a selector — and until
+# now the role decision consulted neither. A parser that failed to fill a slot
+# made the question look ambiguous when the sentence was not.
+#
+# Reader 3 is deliberately NOT a source. Execution evidence settles STATUS, never
+# ROLE. Letting the answer's axes decide what the question meant is how a false
+# APPLIED becomes a role: `risk_limits` publishes no dimension axis at all and its
+# receipts still certify breakdowns by region and by account status. That is D7's
+# defect (B12) and is fixed there, not laundered into a role here.
+#
+#: A dimension the sentence or the spec used to SELECT rows.
+ROLE_FILTER = "filter"
+#: A dimension the sentence or the spec used to SPLIT the answer.
+ROLE_AXIS = "axis"
+#: No source settled it. The point-in-time path asks; see KIND_UNRESOLVED_ROLE.
+ROLE_UNRESOLVED = "unresolved"
+
+
+def _named_term_span(question: Optional[str],
+                     term: Optional[str]) -> Optional[Tuple[int, int]]:
+    """Where the question named this dimension, or None.
+
+    Recovered rather than carried. `requested_dimension_terms` returns the
+    matched TERM but no offsets, so every dimension facet reaches here with
+    ``span=None`` — checked, not assumed, across all 693 corpus questions. The
+    term was matched against the lowercased question, so it is found the same
+    way, and the offsets are over the ORIGINAL text because that is what the
+    lexical owners read.
+    """
+    text = (question or "")
+    needle = str(term or "").strip().lower()
+    if not text or not needle:
+        return None
+    start = text.lower().find(needle)
+    if start < 0:
+        return None
+    return (start, start + len(needle))
+
+
+def dimension_role(facet: RequestedFacet, *, question: Optional[str],
+                   filters: Mapping[str, Any], axes: Set[str],
+                   columns: Optional[Set[str]] = None,
+                   fields: Optional[Mapping[str, Any]] = None
+                   ) -> Tuple[str, Optional[str]]:
+    """``(role, filter_key)`` for one named dimension. THE decision, in one place.
+
+    Sources in order; the first that answers wins.
+
+      1. reader 1 put a candidate key in ``spec.filters``          -> FILTER
+      2. reader 1 put a candidate key on an axis                   -> AXIS
+      3. the SENTENCE marked it, via the lexical owners            -> AXIS
+      4. the BOOK cannot express any candidate key                 -> AXIS
+      5. otherwise                                                 -> UNRESOLVED
+
+    EVERY key that legitimately satisfies the facet is considered, not just the
+    one it is filed under. A generic term resolves to different concrete fields
+    depending on what the book carries — "region" is `collateral_geography` on a
+    real tape and `geographic_region_obligor` on the generated fixture — and
+    reader 1 may have slotted EITHER.
+
+    Source 3 answers AXIS only, and the asymmetry is deliberate rather than an
+    omission. A grouping facet reclassified to a filter must carry a resolved
+    PREDICATE — `_analytical_population_satisfies` splits the label on the field
+    name to recover the value, and a population facet with no value accepts any
+    predicate naming that field (B5). Reader 1 is the only source of a resolved
+    value, so where the sentence marks a selector reader 1 did not resolve, there
+    is a narrowing that was requested and lost and no way to name it. Reporting
+    that honestly needs a facet kind this commit does not introduce; until then it
+    falls to UNRESOLVED, which is where it already fell.
+
+    Source 4 is reader 2's rule, unchanged: a field the BOOK cannot express has
+    no role worth settling. Whether the reader meant to split by broker channel
+    or narrow to one, a tape with no broker column can do neither, and "did you
+    mean a breakdown or a filter?" invites an answer that cannot be honoured
+    either way. Left an axis, so the KIND_GROUPING branch stamps it UNAVAILABLE
+    and the reader is told the thing they can act on.
+    """
+    from question_interpretation import lexical as _lexical
+
+    candidates = list(facet.satisfied_by())
+    filter_key = next((k for k in candidates if k in (filters or {})), None)
+    if filter_key is not None:
+        return ROLE_FILTER, filter_key
+    if any(k in (axes or ()) for k in candidates):
+        return ROLE_AXIS, None
+
+    span = _named_term_span(question, facet.label)
+    if span is not None:
+        cut = _lexical.grouping_cut(question or "")
+        if cut is not None and span[0] >= cut:
+            return ROLE_AXIS, None
+
+    if columns:
+        registry = fields or {}
+        expressible = any(
+            (registry.get(k, {}) or {}).get("canonical_field", k) in columns
+            for k in candidates)
+        if not expressible:
+            return ROLE_AXIS, None
+    return ROLE_UNRESOLVED, None
+
+
 def _split_named_dimension_roles(facets: Sequence[RequestedFacet], spec,
                                  semantics: Optional[dict] = None,
-                                 available_columns: Optional[Iterable[str]] = None
+                                 available_columns: Optional[Iterable[str]] = None,
+                                 question: Optional[str] = None,
+                                 settle_unresolved: bool = True
                                  ) -> List[RequestedFacet]:
-    """Give a named dimension the ROLE the sentence gave it.
+    """Rewrite each named-dimension facet into the role its OWNER assigned.
 
     ``KIND_GROUPING`` has meant "a dimension the question named", with no
     grouping-versus-filter distinction. "balance by region for joint borrowers"
     raises it for the axis and for the filter alike, and the reader is told
     borrower type was a breakdown when it was a selector.
 
-    The role comes from the parser's own slot assignment — a field in
-    ``spec.filters`` was read as a filter, a field in ``spec.dimension(s)`` as
-    an axis. Only a POSITIVELY identified filter moves.
+    **This reader does not decide the role.** ``dimension_role`` does, for both
+    paths, and this consumes its answer. Only a POSITIVELY identified filter
+    moves; an axis is left exactly as it is.
+
+    ``settle_unresolved`` is the only difference between the two callers, and it
+    is about the CONSEQUENCE of the decision rather than the decision. The
+    point-in-time path turns an unresolved role into a question back; the routed
+    path leaves the facet alone until D7 repairs the evidence its status is
+    stamped from.
 
     Where this differs from 32c263a, deliberately
     ---------------------------------------------
@@ -1336,56 +1467,43 @@ def _split_named_dimension_roles(facets: Sequence[RequestedFacet], spec,
     columns = set(available_columns or ())
     fields = (semantics or {}).get("fields", {}) if isinstance(semantics, dict) else {}
 
-    def _unexpressible(keys: Sequence[str]) -> bool:
-        """True when no key this facet resolves to is a column of this book."""
-        if not columns:
-            return False                 # nothing declared: assume expressible
-        return not any((fields.get(k, {}) or {}).get("canonical_field", k) in columns
-                       for k in keys)
-
     out: List[RequestedFacet] = []
     for facet in facets:
         field = getattr(facet, "field_key", None)
         if facet.kind != KIND_GROUPING or not field:
             out.append(facet)
             continue
-        # EVERY key that legitimately satisfies this facet, not just the one it
-        # is filed under. A generic term resolves to different concrete fields
-        # depending on what the book carries — "region" is `collateral_geography`
-        # on a real tape and `geographic_region_obligor` on the generated
-        # fixture — and the parser may put EITHER on the axis. Reading only
-        # `field_key` made a facet whose axis was named by an alt key look as
-        # though no source had given it a role, and "balance by borrower type by
-        # region" became a clarification instead of a two-dimensional answer.
-        # This is the same resolution the KIND_GROUPING branch of
-        # `reconcile_facets` already applies via `satisfied_by()`; the split must
-        # not read the slots more narrowly than the branch it diverts facets
-        # away from.
-        candidates = facet.satisfied_by()
-        filter_key = next((k for k in candidates if k in filters), None)
-        if filter_key is None:
-            # No source supplies a role. A field the parser put on an AXIS has
-            # one, and is left exactly as it is. Anything else is the ambiguous
-            # case: rather than answer over a set the question may not have
-            # asked for, or refuse a question nobody has been asked to restate,
-            # it becomes a question back. `assess` reads this kind directly and
-            # never consults its status, which is why it needs no reconciler
-            # branch — recorded as an exemption in RECLASSIFICATION_TARGETS.
-            if any(k in axes for k in candidates) or _unexpressible(candidates):
-                # A field the BOOK cannot express has no role worth settling.
-                # Whether the reader meant to split by broker channel or narrow
-                # to one, a tape that carries no broker column can do neither,
-                # and "did you mean a breakdown or a filter?" invites an answer
-                # that cannot be honoured either way. Left as a grouping, so the
-                # KIND_GROUPING branch stamps it UNAVAILABLE and the reader is
-                # told the thing they can act on: this book does not report it.
+        role, filter_key = dimension_role(
+            facet, question=question, filters=filters, axes=axes,
+            columns=columns, fields=fields)
+        if role == ROLE_AXIS:
+            out.append(facet)
+            continue
+        if role == ROLE_UNRESOLVED:
+            if not settle_unresolved:
+                # The ROUTED path. The decision is the same one — this reader
+                # consumes it rather than taking its own — but what a routed
+                # answer OWES an unresolved role is not settled here, because
+                # settling it needs evidence D7 (B12) is about to repair.
+                #
+                # Measured before choosing: on the 15 corpus questions that
+                # route and diverge, asking instead of answering would turn TEN
+                # correct answers into clarifications. That is 32c263a's shape —
+                # a role default falling to the side that declines to answer —
+                # and the reason this path leaves the facet exactly as it is.
                 out.append(facet)
-            else:
-                out.append(RequestedFacet(
-                    kind=KIND_UNRESOLVED_ROLE,
-                    label=facet.label, field_key=field, alt_keys=facet.alt_keys,
-                    concepts=facet.concepts, status=facet.status,
-                    reason=facet.reason, span=facet.span))
+                continue
+            # No source supplied a role, and this path can act on that. Rather
+            # than answer over a set the question may not have asked for, or
+            # refuse a question nobody has been asked to restate, it becomes a
+            # question back. `assess` reads this kind directly and never
+            # consults its status, which is why it needs no reconciler branch —
+            # recorded as an exemption in RECLASSIFICATION_TARGETS.
+            out.append(RequestedFacet(
+                kind=KIND_UNRESOLVED_ROLE,
+                label=facet.label, field_key=field, alt_keys=facet.alt_keys,
+                concepts=facet.concepts, status=facet.status,
+                reason=facet.reason, span=facet.span))
             continue
         condition = filters[filter_key]
         if isinstance(condition, Mapping):
@@ -1405,7 +1523,8 @@ def _split_named_dimension_roles(facets: Sequence[RequestedFacet], spec,
 def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                      semantics: dict, available_columns: Optional[Iterable[str]] = None,
                      route: Optional[str] = None,
-                     scenario_applied: bool = False) -> List[RequestedFacet]:
+                     scenario_applied: bool = False,
+                     question: Optional[str] = None) -> List[RequestedFacet]:
     """Stamp a status on every requested facet from EXECUTION EVIDENCE.
 
     Evidence, never prose: a filter counts as applied only when execution
@@ -1413,7 +1532,7 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     column is in the executor's group keys or the result columns.
     """
     facets = _split_named_dimension_roles(facets, spec, semantics,
-                                          available_columns)
+                                          available_columns, question=question)
 
     meta = getattr(query_result, "metadata", None) or {}
     recon = meta.get("reconciliation") or {}
