@@ -18,6 +18,7 @@ import type {
   StreamSummary,
 } from "@/api/agentTypes";
 import type { ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
+import { ClientMailPanel } from "./AgentClientMail";
 import { ClientQuestionsPanel } from "./AgentClientQuestions";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
@@ -202,22 +203,35 @@ export function AgentCaseScreen() {
         );
       case "responses":
         return (
-          <ResponsesBlock
-            requests={onboarding.information_requests}
-            checklist={onboarding.client_checklist}
-            busy={busy}
-            canAsk={available.has("request_client_information")}
-            // Both buttons are gated. An action the state machine refuses used
-            // to render anyway, so clicking it could only produce an error —
-            // which reads as a broken button, not as a rule being enforced.
-            canGenerate={onboarding.client_checklist.length > 0}
-            onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
-            // Answers the outstanding questions. This panel used to call
-            // generateAgentResponse, which makes up the data FILES — so the
-            // call succeeded, the checklist was untouched, and the button
-            // looked broken.
-            onGenerate={() => void act(() => client.generateAgentAnswers(caseId))}
-          />
+          <>
+            {/* First, because a reply the client has already sent is the
+                cheapest way to answer the checklist below it. */}
+            <ClientMailPanel
+              caseId={caseId}
+              busy={busy}
+              canRegister={available.has("register_synthetic_artefact")}
+              onIngested={() => void view.reload({ quiet: true })}
+            />
+            <div className="mt-4">
+              <ResponsesBlock
+                requests={onboarding.information_requests}
+                checklist={onboarding.client_checklist}
+                busy={busy}
+                canAsk={available.has("request_client_information")}
+                // Both buttons are gated. An action the state machine refuses
+                // used to render anyway, so clicking it could only produce an
+                // error — which reads as a broken button, not as a rule being
+                // enforced.
+                canGenerate={onboarding.client_checklist.length > 0}
+                onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
+                // Answers the outstanding questions. This panel used to call
+                // generateAgentResponse, which makes up the data FILES — so the
+                // call succeeded, the checklist was untouched, and the button
+                // looked broken.
+                onGenerate={() => void act(() => client.generateAgentAnswers(caseId))}
+              />
+            </div>
+          </>
         );
       case "artefacts":
         return (
@@ -454,9 +468,20 @@ export function AgentCaseScreen() {
                     "rounded-xl px-3 py-2 text-sm whitespace-pre-wrap",
                     message.role === "operator"
                       ? "bg-stone-100 text-stone-800"
-                      : "border border-stone-200 bg-white text-stone-700",
+                      : message.role === "client"
+                        // A client's own words, arrived from outside. Marked so
+                        // they can never be read as something Trakt said or an
+                        // operator instructed — which is the whole reason the
+                        // role exists rather than being folded into "agent".
+                        ? "border border-blue-200 bg-blue-50 text-stone-800"
+                        : "border border-stone-200 bg-white text-stone-700",
                   )}
                 >
+                  {message.role === "client" && (
+                    <p className="mb-1 text-xs font-semibold text-blue-800">
+                      {copy.agent.mailFrom(message.author || copy.agent.mailUnnamed)}
+                    </p>
+                  )}
                   {message.text}
                 </li>
               ))}

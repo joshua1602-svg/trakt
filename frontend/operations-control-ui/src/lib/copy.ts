@@ -2,6 +2,27 @@
  * Every user-facing string used by the app chrome and labels.
  * Plain, calm, non-technical English only — a test enforces this.
  */
+/**
+ * How a reply was tied to a case, in words rather than in the correlator's own
+ * vocabulary. An operator reads "the conversation it belongs to", not
+ * "conversation" — and the distinction between evidence the mail system
+ * carries and a mere coincidence of address is what they need to see.
+ */
+function basisLabel(basis: string): string {
+  switch (basis) {
+    case "conversation":
+      return "the conversation it belongs to";
+    case "in_reply_to":
+      return "the message it replies to";
+    case "case_ref":
+      return "the reference in its subject";
+    case "sender":
+      return "the sender's address";
+    default:
+      return basis.replace(/_/g, " ");
+  }
+}
+
 export const copy = {
   appName: "Trakt Operations",
 
@@ -529,6 +550,43 @@ export const copy = {
       "conversation: the change is read, put to you, and recorded with who said it.",
     yes: "Yes",
     no: "No",
+    mailHeading: "What the client has sent back",
+    mailShow: "Check the mailbox",
+    mailHide: "Close",
+    mailClosed:
+      "Look in the onboarding mailbox for replies to this case. Nothing is read or " +
+      "changed until you ask.",
+    mailChecking: "Looking…",
+    mailRecheck: "Check again",
+    mailNone: "Nothing has arrived for this case.",
+    mailFrom: (who: string) => `From ${who}`,
+    mailUnnamed: "an unnamed sender",
+    mailMatchedOn: (bases: string[]) =>
+      `Matched on ${bases.map(basisLabel).join(", ")}.`,
+    mailTake: "Take this into the case",
+    mailTaking: "Taking it in…",
+    mailAlready: "Already taken in",
+    mailCannotRegister:
+      "This case is past the point where a file can be added to it. Take this reply in " +
+      "from a case that is still gathering files, or say what it changes in the " +
+      "conversation.",
+    mailNoAttachments: "No attachments",
+    mailOversize: "Too large for this deployment to read",
+    mailUnreadable: "Trakt could not read this file",
+    mailIngested: "Taken in. The files are on the case.",
+    mailNotApplied:
+      "The client's message is recorded on the case, not applied to it. Read it, then " +
+      "tell the agent in the conversation if it should change an answer — the change is " +
+      "put to you before anything is written.",
+    mailUnmatchedHeading: "In the mailbox, but not tied to this case",
+    mailUnmatchedHelp:
+      "Trakt will not record a reply against a case unless the mail itself says which " +
+      "one it is — the conversation it belongs to, the message it answers, or the " +
+      "reference in its subject. A sender's address alone is not enough: one contact " +
+      "can be on several onboardings. These need a person to look.",
+    mailMailbox: (mailbox: string, folder: string) =>
+      `Reading ${mailbox}${folder && folder !== "inbox" ? ` · ${folder}` : ""}`,
+
     packConfirmHeading: "Already known — check these are right",
     packConfirmNote:
       "Trakt worked these out or was told them. They are pre-populated, not asked again.",

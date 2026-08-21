@@ -366,6 +366,19 @@ describe("OCC Agent tab — the operating loop", () => {
     ).toBeInTheDocument();
   });
 
+  it("the mailbox is reachable from the case, and reads nothing on its own", async () => {
+    await runScenario("A — Clean onboarding");
+    const panel = (await screen.findByText(copy.agent.mailHeading)).closest("section");
+    expect(panel).not.toBeNull();
+    // Present, and inert: opening the case must not reach a mailbox.
+    expect(
+      within(panel as HTMLElement).getByText(copy.agent.mailClosed),
+    ).toBeInTheDocument();
+    expect(
+      within(panel as HTMLElement).queryByRole("button", { name: copy.agent.mailTake }),
+    ).not.toBeInTheDocument();
+  });
+
   it("the client is only asked what the client can answer", async () => {
     const client = new MockOpsClient();
     const created = await client.runAgentScenario("scenario_a_clean");
