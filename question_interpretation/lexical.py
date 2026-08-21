@@ -106,3 +106,61 @@ def subject_side(question: str) -> str:
     replaces, proved across the corpus at each conversion."""
     start, end = subject_side_span(question)
     return (question or "")[start:end].strip()
+
+
+# --------------------------------------------------------------------------- #
+# The predicate test — a DIFFERENT lexical decision on the same sentence.
+#
+# `subject_side` asks "where does the subject clause end". This asks "is the
+# measure word at THIS position the subject of a predicate rather than the thing
+# being measured" — "balance by region where LTV above 50%" measures balance and
+# filters on LTV, and counting the filter subject as a second requested measure
+# would refuse a perfectly good filtered breakdown.
+#
+# Its vocabulary genuinely differs from CONDITION_OPENERS, and the difference is
+# CORRECT rather than drift. It carries `between`, `exceeding`, `in excess of`
+# and the comparison operators, and it does NOT carry `where`, `with` or `for`,
+# because those are clause openers and this test wants comparators. The
+# inventory's finding was that the three splits were separately DECLARED, not
+# that they should be identical — so ownership is consolidated here while the
+# two vocabularies stay distinct and named.
+# --------------------------------------------------------------------------- #
+
+#: Comparators, for the predicate test. Distinct from CONDITION_OPENERS.
+COMPARATORS: Tuple[str, ...] = (
+    "above", "below", "over", "under", "more than", "less than",
+    "greater than", "at least", "at most", "exceeding", "in excess of",
+)
+#: `between` reads as a comparator only AFTER the measure word: "LTV between 40
+#: and 60" is a predicate, while "between" before it is not a bound on it.
+COMPARATORS_AFTER_ONLY: Tuple[str, ...] = ("between",)
+
+#: Filler that can sit between a measure word and its comparator
+#: ("LTV of more than 40%", "balance is above £100k").
+_FILTER_FILLER = r"(?:of|is|are|that is|which is|at|with|having)?"
+
+_FILTER_AFTER_RE = re.compile(
+    r"^\s*" + _FILTER_FILLER + r"\s*(?:[<>]=?|=)|"
+    r"^\s*" + _FILTER_FILLER + r"\s*\b(?:"
+    + "|".join(COMPARATORS + COMPARATORS_AFTER_ONLY) + r")\b|"
+    r"^\s*\d[\d,.]*\s*(?:%|\+)", re.I)
+
+_FILTER_BEFORE_RE = re.compile(
+    r"\b(?:" + "|".join(COMPARATORS) + r"|[<>]=?)"
+    r"\s*£?\s*\d[\d,.]*\s*%?\s*$", re.I)
+
+#: How far either side of the measure word to look. A predicate binds close;
+#: widening this would start matching a comparator from a different clause.
+PREDICATE_WINDOW = 32
+
+
+def is_filter_subject(text: str, start: int, end: int) -> bool:
+    """True when the word at ``[start:end]`` is the subject of a predicate.
+
+    Both sides are checked: a comparator immediately after ("LTV above 50%") or
+    a comparator and number immediately before ("above 50% LTV").
+    """
+    if _FILTER_AFTER_RE.search(text[end:end + PREDICATE_WINDOW]):
+        return True
+    return bool(_FILTER_BEFORE_RE.search(
+        text[max(0, start - PREDICATE_WINDOW):start]))

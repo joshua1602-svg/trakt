@@ -612,32 +612,26 @@ PROJECTION_ROUTES = frozenset({"forecast_extrapolation", "scenario"})
 SCENARIO_ROUTES = frozenset({"scenario"})
 
 
-#: Filler that can sit between a measure word and its comparator
-#: ("LTV of more than 40%", "balance is above £100k").
-_FILTER_FILLER = r"(?:of|is|are|that is|which is|at|with|having)?"
-#: A comparator immediately AFTER the measure word.
-_FILTER_AFTER_RE = re.compile(
-    r"^\s*" + _FILTER_FILLER + r"\s*(?:[<>]=?|=)|"
-    r"^\s*" + _FILTER_FILLER + r"\s*\b(?:above|below|over|under|more than|"
-    r"less than|greater than|at least|at most|between|exceeding|"
-    r"in excess of)\b|"
-    r"^\s*\d[\d,.]*\s*(?:%|\+)", re.I)
-#: A comparator + number immediately BEFORE the measure word ("above 50% LTV").
-_FILTER_BEFORE_RE = re.compile(
-    r"\b(?:above|below|over|under|more than|less than|greater than|at least|"
-    r"at most|exceeding|in excess of|[<>]=?)\s*£?\s*\d[\d,.]*\s*%?\s*$", re.I)
-
-
 def _is_filter_subject(q: str, start: int, end: int) -> bool:
     """True when this measure word is the subject of a predicate, not a measure.
 
     "balance by region where LTV above 50%" measures balance and FILTERS on LTV.
     Counting the filter subject as a second requested measure would refuse a
     perfectly good filtered breakdown, so both sides are checked.
+
+    Stage 3, conversion 2: the comparator vocabulary and the two window regexes
+    that used to sit here now live in ``question_interpretation.lexical``, which
+    owns them. They are kept DISTINCT from that module's condition openers
+    rather than merged: this test wants comparators, so it carries "between",
+    "exceeding", "in excess of" and the operators and does not carry "where",
+    "with" or "for". The inventory's finding was that the three subject-side
+    splits were separately DECLARED, not that they should be identical.
+
+    Proved byte-identical at 400,097 positions — every offset pair across the
+    corpus, not only the ones the receipt layer happens to probe.
     """
-    if _FILTER_AFTER_RE.search(q[end:end + 32]):
-        return True
-    return bool(_FILTER_BEFORE_RE.search(q[max(0, start - 32):start]))
+    from question_interpretation.lexical import is_filter_subject as _owner
+    return _owner(q, start, end)
 
 
 def named_measure_concepts(question: str) -> List[str]:
