@@ -4,7 +4,7 @@ meta:
     The third measurement surface. Drives execute_governed_mi_query, so a
     question is claimed by whichever route claims it in production, and the
     answer is adjudicated by the guard that actually adjudicates it.
-  count: 21
+  count: 23
   entry_point: mi_agent_api.mi_service.execute_governed_mi_query
   enforced_by: question_interpretation/routed_surface.py
 
@@ -420,3 +420,56 @@ questions:
     expect_route: forecast_extrapolation
     expect_ok: false
     expect_verdict: refuse
+
+  # --- D8: the population evidence, and what a drill-through must not lose ---
+  - id: rt_020
+    question: What is the balance of the front book?
+    filters:
+      collateral_geography: South East
+    expected_to_fail: >-
+      D8, and NOT the same defect as rt_016 — the mirror of it.
+
+      Here the drill-through DOES reach the frame and IS applied: the answer
+      reads "Seasoning Segment = Front Book · South East · 278 loans", down from
+      1,177. Both narrowings ran. The receipt carries **one** population facet,
+      for the seasoning segment, and says nothing about the geography.
+
+      A narrowing that ran, unrecorded. B16a's mirror: there a narrowing was lost
+      and unrecorded, here one is applied and unrecorded, and either way the
+      receipt does not say what happened to the rows.
+
+      The cause is the D8 divergence in one line. The ROUTED path raises
+      populations from `spec.filters` through `population_facets(spec)`; the
+      point-in-time path raises them only from the seasoning owner or by
+      reclassifying a dimension the question NAMED. So "balance by region" with
+      the same drill records it — region is named — and "balance of the front
+      book" does not.
+
+      Both populations must reach the receipt, and both must be applied.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [row_population, applied]
+      - [row_population, applied]
+
+  - id: rt_021
+    question: Show geographic exposure by ITL3 area.
+    filters:
+      account_status: Active
+    note: >-
+      The second half of rt_016, on a field the geo route does NOT resolve its
+      frame through and cannot report. Pinned as it stands today so that fixing
+      the drill-through ordering is measured against a case whose correct
+      outcome is a refusal rather than an answer: no evidence, no certification.
+
+      If this ever answers `ok`, a population reached the receipt applied on
+      something other than execution evidence.
+    expect_route: geo_exposure
+    expect_ok: false
+    expect_verdict: refuse
+    expect_facets:
+      - [grouping_dimension, applied]
+      - [grouping_dimension, applied]
+      - [granularity, applied]
+      - [row_population, lost]

@@ -516,6 +516,34 @@ rather than against the design's headline.**
 
 ## Backlog
 
+### B21, B22, B23 — the two text-driven data-visibility decisions
+
+**Reported in full in `mi_view_selection_report.md`. Not scheduled.**
+
+Asked alongside D8: is `resolve_active_view` one instance or one of several?
+**One of several — there are two, and both are substring tests.**
+
+* **B21** — `workspace.resolve_active_view` is a bare substring test that loads
+  the forecast frame whenever the word "forecast" appears anywhere, dropping 60
+  of the book's 71 columns. *"What is the balance by vintage, ignoring the
+  forecast?"* answers `vintage_year: field_missing`: **the clause saying to
+  ignore the forecast is what causes the forecast frame to be loaded.** D6 did
+  not fix this — D6 made the RECEIPT honest, and this fails earlier, at
+  prepared-data validation.
+* **B22** — `portfolio_lens.resolve_lens` has the same shape on ROWS, with bare
+  single-word terms (`direct`, `acquired`, `purchased`, `organic`, `inorganic`).
+  *"the balance for loans purchased at auction"* silently answers over the
+  acquired cohort.
+* **B23** — neither decision is disclosed where a reader would see it.
+
+The row decision is **more dangerous by construction** (it changes the number and
+leaves the answer looking complete) and **less harmful by accident** (it is
+declared on the receipt and has a comparison guard). That is accidental safety
+for the fourth time.
+
+All three are changes to what data is put in front of the question — upstream of
+every decision this programme consolidates — so none was folded into D8.
+
 ### B20 — a mutation pass over the guard set
 
 **Scoped, not scheduled. Do not run it as part of another commit.**

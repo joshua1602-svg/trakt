@@ -77,13 +77,31 @@ here.
 
 ## A LIMITATION ON EVERY CORPUS-DERIVED FIGURE IN THIS PACK
 
-**The corpora are built from registry names and enumerated families. They
-systematically miss plain phrasings.** Every number in this pack that is
-expressed as "N of 693" — or 697, or any corpus denominator — inherits this, and
-it is stated here rather than only in the engineering brief because it qualifies
-the evidence, not the engineering.
+### The mechanism
 
-### The measurement
+**A test family enumerated from a projection cannot exercise that projection's
+gap.**
+
+Whenever a question set is written by working outward from an artefact — a field
+registry, a view's column list, the segment names a config declares — the
+questions inherit that artefact's idea of what exists. The corpus and the code
+then share an assumption, and the corpus is blind in exactly the direction the
+assumption is wrong. It is not that the corpus is too small. **A larger corpus
+built the same way is blind in the same direction**, because size is not what is
+missing: an independent source of what a reader might ask is what is missing.
+
+This generalises past the forecast view that made it obvious. Any enumeration
+carries it: a family written from the registry's field NAMES misses the plain
+words a person uses for those fields; a family written from a config's segment
+labels misses the other governed definitions of the same segment; a family
+written from a view's columns misses everything the view drops. In each case the
+questions are correct, the coverage looks broad, and the one thing that cannot be
+reached is the thing the enumeration got wrong.
+
+**The practical consequence for reading this pack: a clean corpus result is
+evidence about the enumeration before it is evidence about the product.**
+
+### The measurement, and four instances of it
 
 `balance where account status is active` is about as ordinary as a management
 question gets. Across all 693 questions in the four corpora there are **fifteen**
@@ -100,21 +118,20 @@ The same shape, three more times in the same programme:
 | the front-book regression that cost 160 answers | the same family, the same enumeration |
 | a field reported unavailable that the book carries | the 27 forecast questions are built from the 12 fields the forecast projection carries, so the projection's own gap cannot be exercised |
 
-The last is the clearest statement of the mechanism: **a family enumerated from a
-projection cannot exercise that projection's gap.** The corpus and the defect
-share an author's assumption, so the corpus is systematically blind to exactly
-the thing the assumption got wrong.
+The last is the mechanism at its most literal — a family enumerated from the very
+projection whose gap it would have to reach — but the seasoning instances are the
+same shape one step removed: the family was enumerated from the SEGMENT names a
+config declares, so the months-on-book windows that name the same population a
+different way were unreachable, and the whole-book answer sat behind them.
 
 ### What follows for reading this pack
 
-1. **A clean corpus result is evidence about COVERAGE before it is evidence about
-   the product.** This was already a standing rule; it is restated here because
-   the pack's headline figures are corpus-derived.
-2. **A count of "N of 693 affected" is a lower bound**, and where the construct
+1. **A count of "N of 693 affected" is a lower bound**, and where the construct
    is a plain phrasing rather than a registry term it may be a lower bound of
-   zero against a live defect.
-3. **Constructed cases are not weaker evidence than corpus cases** in this
+   zero against a live defect. Three of the four instances above measured zero
+   while the defect was live.
+2. **Constructed cases are not weaker evidence than corpus cases** in this
    programme; for several defects they are the only evidence that exists. Where a
    figure rests on constructed coverage the document says so.
-4. The corpora remain the right instrument for REGRESSION — they are large,
+3. The corpora remain the right instrument for REGRESSION — they are large,
    stable and byte-diffed. They are not an instrument for DISCOVERY.
