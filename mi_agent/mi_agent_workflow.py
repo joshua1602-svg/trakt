@@ -1017,7 +1017,8 @@ def run_mi_agent_query(
         result["semantic_guard"] = {"verdict": verdict, "message": message,
                                     "facets": [f.to_dict() for f in _facets],
                                     "substitution": _substitution}
-        if verdict == _receipt_mod.VERDICT_REFUSE:
+        if verdict in (_receipt_mod.VERDICT_REFUSE,
+                       getattr(_receipt_mod, "VERDICT_CLARIFY", "\0")):
             # Fail closed: the calculation that ran answers a materially
             # different question from the one asked. Never present it.
             result["ok"] = False
@@ -1025,6 +1026,11 @@ def run_mi_agent_query(
             result["answer"] = message
             result["controlled_refusal"] = True
             result["semantic_refusal"] = True
+            # A clarification fails closed the same way — no figure ships — but
+            # it is a question back, not a judgement that the question cannot be
+            # answered. The reader is asked; nothing is asserted.
+            result["clarification_requested"] = (
+                verdict == getattr(_receipt_mod, "VERDICT_CLARIFY", "\0"))
             result["warnings"] = _dedupe(warnings + [message])
             result["metadata"] = {
                 "parse_metadata": parse_meta,

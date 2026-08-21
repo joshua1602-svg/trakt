@@ -149,7 +149,7 @@ def summarise(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _run_both_books() -> Dict[str, Any]:
+def _run_both_books(unresolved_role: str = None) -> Dict[str, Any]:
     """Both books, one subprocess each.
 
     Not a loop in this process: the app binds its book from the environment at
@@ -162,9 +162,17 @@ def _run_both_books() -> Dict[str, Any]:
     for book in ("alderbridge", "kestrelmoor"):
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as fh:
             out = Path(fh.name)
-        proc = subprocess.run(
-            [sys.executable, "-m", __spec__.name, "--book", book, "--json", str(out)],
-            cwd=str(_REPO_ROOT), capture_output=True, text=True)
+        # EVERY argument that changes what is measured must be forwarded. The
+        # first version of this forwarded only --book, so `--all-books
+        # --unresolved-role population` silently measured the DEFAULT twice and
+        # reported it as the variant. An instrument that cannot tell you it did
+        # not run is worse than no instrument.
+        argv = [sys.executable, "-m", __spec__.name, "--book", book,
+                "--json", str(out)]
+        if unresolved_role:
+            argv += ["--unresolved-role", unresolved_role]
+        proc = subprocess.run(argv, cwd=str(_REPO_ROOT), capture_output=True,
+                              text=True)
         if proc.returncode != 0:
             raise RuntimeError("book %s failed:\n%s" % (book, proc.stdout + proc.stderr))
         books[book] = json.loads(out.read_text(encoding="utf-8"))
@@ -178,10 +186,17 @@ def main(argv=None) -> int:
     ap.add_argument("--all-books", action="store_true",
                     help="run both books, one subprocess each, and compare")
     ap.add_argument("--json", type=Path, default=None)
+    ap.add_argument("--unresolved-role", default=None,
+                    choices=("grouping", "population", "clarify", "population_bare"),
+                    help="MEASUREMENT ONLY: run under one variant of the "
+                         "unresolved-role default. Omit for current behaviour.")
     args = ap.parse_args(argv)
+    if getattr(args, "unresolved_role", None):
+        from mi_agent import execution_receipt as _R
+        _R.UNRESOLVED_ROLE_DEFAULT = args.unresolved_role
 
     if args.all_books:
-        books = _run_both_books()
+        books = _run_both_books(getattr(args, "unresolved_role", None))
         print("=" * 74)
         print("44-variation robustness bank — DETERMINISTIC ARM, BOTH BOOKS")
         print("NOT the recorded 752-run LLM measurement")

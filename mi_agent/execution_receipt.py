@@ -1076,6 +1076,44 @@ SHAPE_FACETS = frozenset({KIND_GROUPING})
 VERDICT_OK = "ok"
 VERDICT_PARTIAL = "partial"
 VERDICT_REFUSE = "refuse"
+#: A question back to the reader, not an answer and not a refusal. Reached only
+#: under ``UNRESOLVED_ROLE_DEFAULT == "clarify"``; see below.
+VERDICT_CLARIFY = "clarify"
+
+# --------------------------------------------------------------------------- #
+# The unresolved-role default — MEASUREMENT SWITCH, not a setting
+# --------------------------------------------------------------------------- #
+# `_split_named_dimension_roles` gives a named dimension the role the sentence
+# gave it. Where NO source supplies a role — the field is neither in
+# `spec.filters` nor in `spec.dimensions` — something still has to be done with
+# the facet, and the three available answers differ in what the reader receives:
+#
+#   "grouping"    leave it as it is. An unapplied grouping is a SHAPE facet, so
+#                 the answer stands and the dimension is named as not applied:
+#                 a whole-book figure with a disclosure attached.
+#   "population"  let it fall to the blocking side, as 32c263a did. Nothing is
+#                 answered over a broader population; the run refuses.
+#   "clarify"     ask which was meant — split the book by this dimension, or
+#                 narrow it to a value of it. No number, and no refusal either.
+#
+# This exists so the three can be measured side by side on the same corpora.
+# It is NOT a deployment knob and must not become one: the default is the
+# current behaviour, so with it untouched every path is byte-identical to
+# before this constant existed. One of the three will be chosen on the numbers
+# and the other two deleted.
+UNRESOLVED_ROLE_DEFAULT = "grouping"
+#: "population_bare" is NOT a candidate. It is "population" with the facet
+#: relabelled to the bare field name, destroying the wording the governed arm of
+#: the population check reads. It exists so the claim "32c263a cannot recur"
+#: can be shown to be falsifiable rather than asserted: under it, a governed
+#: lending window in the unresolved set SHOULD break. An instrument that cannot
+#: produce the failure it rules out has not ruled it out.
+UNRESOLVED_ROLE_VARIANTS = ("grouping", "population", "clarify", "population_bare")
+
+#: A dimension the question named and no source gave a role to, under the
+#: "clarify" variant. Distinct from KIND_GROUPING because it must not be
+#: disclosed and must not refuse: it asks.
+KIND_UNRESOLVED_ROLE = "unresolved_role"
 
 
 def _applied_filter_phrases(spec, semantics: dict, narrowed: bool) -> List[str]:
@@ -1158,16 +1196,61 @@ def _split_named_dimension_roles(facets: Sequence[RequestedFacet],
     """
     from .population import Predicate
 
-    filters = dict((getattr(spec, "filters", None) or {}) if not isinstance(spec, dict)
-                   else (spec.get("filters") or {}))
-    if not filters:
-        return list(facets)
+    if isinstance(spec, dict):
+        filters = dict(spec.get("filters") or {})
+        axes = list(spec.get("dimensions") or [])
+        if spec.get("dimension"):
+            axes.append(spec.get("dimension"))
+    else:
+        filters = dict(getattr(spec, "filters", None) or {})
+        axes = list(getattr(spec, "dimensions", None) or [])
+        if getattr(spec, "dimension", None):
+            axes.append(getattr(spec, "dimension"))
+    axes = {str(a) for a in axes if a}
 
     out: List[RequestedFacet] = []
     for facet in facets:
         field = getattr(facet, "field_key", None)
-        if facet.kind != KIND_GROUPING or not field or field not in filters:
+        if facet.kind != KIND_GROUPING or not field:
             out.append(facet)
+            continue
+        if field not in filters:
+            # No source supplies a role: the parser put this field neither in
+            # the filters nor on an axis. Which way it falls is the open
+            # question, and the switch is what makes the three measurable.
+            if field in axes or UNRESOLVED_ROLE_DEFAULT == "grouping":
+                out.append(facet)
+            elif UNRESOLVED_ROLE_DEFAULT in ("population", "population_bare"):
+                # No predicate was parsed, so there is no value to describe.
+                # Two things the label must do at once, and getting either
+                # wrong decides the variant's result rather than measuring it:
+                #   * carry the FIELD NAME, or B5 becomes reachable — the
+                #     literal arm of the population check derives its value by
+                #     splitting the label on the field, and an empty value
+                #     there accepts any predicate naming that field;
+                #   * carry the original WORDING, because the governed arm of
+                #     the same check resolves lending windows from the facet's
+                #     words. Relabelling to the bare field name destroys
+                #     "front book" and re-creates the 32c263a failure by
+                #     construction, which would be an artefact of the
+                #     measurement and not a property of the variant.
+                out.append(RequestedFacet(
+                    kind=KIND_POPULATION,
+                    label=("the population %s" % field
+                           if UNRESOLVED_ROLE_DEFAULT == "population_bare"
+                           else "the population %s: %s" % (field, facet.label)),
+                    field_key=field, alt_keys=facet.alt_keys,
+                    concepts=facet.concepts, status=facet.status,
+                    reason=facet.reason, span=facet.span))
+            elif UNRESOLVED_ROLE_DEFAULT == "clarify":
+                out.append(RequestedFacet(
+                    kind=KIND_UNRESOLVED_ROLE,
+                    label=facet.label, field_key=field, alt_keys=facet.alt_keys,
+                    concepts=facet.concepts, status=facet.status,
+                    reason=facet.reason, span=facet.span))
+            else:
+                raise ValueError("unknown UNRESOLVED_ROLE_DEFAULT %r"
+                                 % (UNRESOLVED_ROLE_DEFAULT,))
             continue
         condition = filters[field]
         if isinstance(condition, Mapping):
@@ -1582,6 +1665,18 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
             # not support.
             return True
         return facet.kind in NUMBER_OR_SUBJECT_FACETS or _is_seasoning_population(facet)
+
+    # A dimension no source gave a role to, under the "clarify" variant. Asked
+    # BEFORE the refusal test, because a question the reader has not disambiguated
+    # cannot be refused on the strength of a reading it never confirmed.
+    unresolved = [f for f in receipt.facets
+                  if f.kind == KIND_UNRESOLVED_ROLE and f.status != APPLIED]
+    if unresolved:
+        return VERDICT_CLARIFY, (
+            "I could not tell how you meant "
+            f"{_join([f.label for f in unresolved])}. Did you want the book "
+            "split by it, or narrowed to one value of it? I have not answered "
+            "over the whole book in the meantime.")
 
     blocking = [f for f in receipt.facets if _blocks(f)]
     if blocking:

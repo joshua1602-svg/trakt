@@ -197,6 +197,57 @@ This applies to any conversion touching a path the banks barely reach.
 
 ---
 
+## Standing rule — an instrument tends to carry the defect it was built to find
+
+Not an incident. A pattern, recorded because it has now happened often enough
+that it must be designed against rather than caught by luck. Every instance was
+found by chance or by a late cross-check, and each one would have shipped a
+false clean result.
+
+1. The Phase 1 measurements were taken 136 commits off the intended base. Every
+   score was internally consistent and every one was void.
+2. The calibration bank graded against `build_fixture` rather than the real tape
+   — the surface built to prove the tape's answers, not reading the tape.
+3. `answer_diff` keyed on `(intent, variation)` and silently dropped 16 of 88
+   robustness answers, all of them the seasoning family: the differ built to
+   catch seasoning movement could not see the seasoning questions.
+4. Two of the 14 mutations did not reproduce the defect they named, so the
+   mutation suite that proves the instruments can fail contained instruments
+   that could not fail.
+5. My own role-split test asserted the Stage-1 role value rather than the value
+   production gives.
+6. The source-check test for the removed rewrite matched a comment describing
+   the rewrite rather than executable code.
+7. The B5 scanner watched detection-time facets while the split it guards
+   happens at reconcile — it would have missed precisely the facets it exists to
+   guard.
+8. `run_robustness_deterministic --all-books` re-invokes itself per book and
+   forwarded only `--book`, so a variant run measured the default twice and
+   reported it as the variant.
+9. `answer_diff` had the same defect on `--only-book`, so a variant run moved
+   the 252 in-process calibration records and left the 88 subprocess robustness
+   records on the default — which reads as "the variant only affects the
+   calibration bank", a conclusion about the product drawn from a defect in the
+   instrument.
+
+Three properties separate the instances that were caught from the ones that
+nearly were not, and they are the rule:
+
+* **An instrument must be able to produce the failure it rules out.** Every
+  instrument ships with a case proving it fails. Where the corpus cannot
+  exercise the construct, generate it (Note 2).
+* **An instrument must be read at the point the code it measures runs.** Both
+  the B5 scanner and the two forwarding defects were instruments reading a
+  different moment, or a different process, from the one under test.
+* **Every argument that changes what is measured must reach every process that
+  measures.** A runner that fans out to subprocesses and forwards a subset
+  cannot report that it did not measure what it was asked to.
+
+Corollary, from instance 9: when a measurement splits cleanly along the seam of
+the instrument's own plumbing — one surface moves, the other does not, and the
+seam is a process boundary or a call site rather than anything in the product —
+suspect the instrument first.
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
