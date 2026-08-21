@@ -248,6 +248,21 @@ the instrument's own plumbing — one surface moves, the other does not, and the
 seam is a process boundary or a call site rather than anything in the product —
 suspect the instrument first.
 
+Instances 10 and 11, both from the stamping coverage inventory and both caught
+by its own `--self-test` rather than by reading its output: a one-size evidence
+bundle reported eleven false holes, and a malformed analytical envelope reported
+a false hole on the very cell that distinguishes the two reconcilers. The rule
+they add: **an instrument that classifies must be able to produce every class it
+reports.** A hole-finder that can only produce holes has not found any.
+
+Instance 12 is of a different and worse kind, from the same inventory: the two
+standing measurement surfaces were BOTH clean throughout a live shipped
+regression — three ordinary questions about the front and back book refusing on
+the shipped tape. Neither surface was defective; between them they simply do not
+exercise the point-in-time population path. Recorded as backlog B6. The rule:
+a clean surface is evidence about the surface's coverage before it is evidence
+about the product.
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
