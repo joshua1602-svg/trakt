@@ -1,0 +1,17 @@
+==============================================================================
+vocabulary blast-radius — 5 synonyms added in memory
+==============================================================================
+  drawn balance    -> current_outstanding_balance    (metric, collision risk high)
+  gearing          -> current_loan_to_value          (metric, collision risk high)
+  leverage band    -> ltv_bucket                     (dimension, collision risk high)
+  coupon           -> current_interest_rate          (metric, collision risk low)
+  territory        -> collateral_geography           (dimension, collision risk low)
+
+tree: rc
+bank                      compared pass before    pass after regressions
+calibration_bank               252         252           252           0
+generated_harness              249         249           249           0
+probes_adversarial              40          22            22           0
+probes_time_series              24           1             1           0
+
+wrote clause_splitting_phase1/baseline/rc_blast_radius.json

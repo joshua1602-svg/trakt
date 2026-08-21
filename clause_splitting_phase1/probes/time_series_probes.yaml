@@ -1,0 +1,274 @@
+# Time-series probe set — §4.0(c)
+#
+# 24 questions whose answer needs a grouping on a TIME axis. Draft rule 26 says
+# 'by month' / 'by quarter' / 'monthly' / 'each month' / 'over time' is a
+# grouping on a time axis, not a period filter — and that this case has no home
+# in the current design.
+#
+# Each probe declares the correct split, plus what the fixture can actually
+# support. The fixture is tests/history_portfolio.py: 18 monthly snapshots,
+# 2025-02-28 to 2026-07-31, in which the same loans persist through time. The
+# brief specified twelve-month fixtures; eighteen is what exists, and the
+# declared point counts below are the eighteen-month truth. Nothing here calls
+# the analytics under test to decide what the answer should be.
+#
+#   monthly grain    18 points
+#   quarterly grain   7 points  (2025-Q1 partial through 2026-Q3 partial)
+#   weekly grain      NOT AVAILABLE — the fixture is month-end snapshots only
+#
+# `fixture` is authored now, before any splitter exists, so Phase 2 can assert
+# the produced series without anyone re-deciding what the right answer is after
+# seeing a result.
+version: 1
+instrument: time_series_probe_set
+authored_before_splitter: true
+fixture:
+  module: tests.history_portfolio
+  snapshots: 18
+  first_period: "2025-02-28"
+  last_period: "2026-07-31"
+  monthly_points: 18
+  quarterly_points: 7
+  weekly_points: null
+probes:
+
+# --------------------------------------------------------------------------
+# Explicit grain, stated as a grouping.
+# --------------------------------------------------------------------------
+- id: ts_grain_01
+  question: "funded balance by month"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: ["time:month"]
+  fixture_points: 18
+
+- id: ts_grain_02
+  question: "funded balance by quarter"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: ["time:quarter"]
+  fixture_points: 7
+
+- id: ts_grain_03
+  question: "loan count by month"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: ["time:month"]
+  fixture_points: 18
+
+- id: ts_grain_04
+  question: "how many loans each month"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: ["time:month"]
+  fixture_points: 18
+
+- id: ts_grain_05
+  question: "show the funded balance monthly"
+  expect:
+    operation: [neutral]
+    subject: [current_outstanding_balance]
+    grouping: ["time:month"]
+  fixture_points: 18
+  rationale: >-
+    'show' is a neutral opener (draft rule 9) — the answer type comes from the
+    subject span. The time axis still has to be recognised.
+
+- id: ts_grain_06
+  question: "average LTV by month"
+  expect:
+    operation: [average_or_rate]
+    subject: [current_loan_to_value]
+    grouping: ["time:month"]
+  fixture_points: 18
+
+- id: ts_grain_07
+  question: "total exposure each quarter"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: ["time:quarter"]
+  fixture_points: 7
+
+- id: ts_grain_08
+  question: "arrears balance by month"
+  expect:
+    operation: [amount]
+    subject: [arrears_balance]
+    grouping: ["time:month"]
+  fixture_points: 18
+
+# --------------------------------------------------------------------------
+# Unstated grain — 'over time' names an axis without naming its step.
+# The span is filled; the grain is the data's default, not a clarification.
+# --------------------------------------------------------------------------
+- id: ts_open_01
+  question: "show the funded balance over time"
+  expect:
+    operation: [neutral]
+    subject: [current_outstanding_balance]
+    grouping: ["time:unspecified"]
+  fixture_points: 18
+
+- id: ts_open_02
+  question: "how has the funded balance changed over time"
+  expect:
+    operation: [movement]
+    subject: [current_outstanding_balance]
+    grouping: ["time:unspecified"]
+  fixture_points: 18
+  rationale: >-
+    'how has ... changed' is a movement opener (draft rule 4) AND 'over time'
+    is a time grouping (rule 26). Both spans fill; neither consumes the other.
+
+- id: ts_open_03
+  question: "loan count over time"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: ["time:unspecified"]
+  fixture_points: 18
+
+- id: ts_open_04
+  question: "how has average LTV moved over time"
+  expect:
+    operation: [movement]
+    subject: [current_loan_to_value]
+    grouping: ["time:unspecified"]
+  fixture_points: 18
+
+# --------------------------------------------------------------------------
+# A time axis alongside a second, non-time axis. The two must coexist.
+# --------------------------------------------------------------------------
+- id: ts_two_01
+  question: "funded balance over time by region"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [collateral_geography, "time:unspecified"]
+  fixture_points: 18
+  rationale: >-
+    The failure to watch for is a tree that recognises the time axis and
+    silently drops the region axis, or the reverse.
+
+- id: ts_two_02
+  question: "balance by month by broker"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [broker_channel, "time:month"]
+  fixture_points: 18
+
+- id: ts_two_03
+  question: "loan count by quarter and region"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: [collateral_geography, "time:quarter"]
+  fixture_points: 7
+
+- id: ts_two_04
+  question: "balance by arrears bucket each month"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [arrears_bucket, "time:month"]
+  fixture_points: 18
+
+# --------------------------------------------------------------------------
+# A time axis alongside a filter. Draft rule 26 vs draft rules 10-16: the
+# grouping is on time, the narrowing is not.
+# --------------------------------------------------------------------------
+- id: ts_filt_01
+  question: "balance by month where LTV is above 60%"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: ["time:month"]
+    filter: [current_loan_to_value]
+  fixture_points: 18
+
+- id: ts_filt_02
+  question: "how many loans in London by quarter"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: ["time:quarter"]
+    filter: [collateral_geography]
+  fixture_points: 7
+
+- id: ts_filt_03
+  question: "balance by month excluding London"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: ["time:month"]
+    filter: [collateral_geography]
+  fixture_points: 18
+
+# --------------------------------------------------------------------------
+# The distinction the layer exists to make: a time GROUPING against a time
+# FILTER. 'by month' breaks the answer down; 'last three months' narrows it.
+# --------------------------------------------------------------------------
+- id: ts_vs_period_01
+  question: "balance over the last 3 months"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    period: [window]
+  rationale: >-
+    A period FILTER and no grouping at all. One number, not a series. A tree
+    that treats every time word as an axis fails here.
+
+- id: ts_vs_period_02
+  question: "balance by month over the last 6 months"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: ["time:month"]
+    period: [window]
+  fixture_points: 6
+  rationale: "Both spans fill, on the same time dimension, doing different jobs."
+
+- id: ts_vs_period_03
+  question: "loan count this year by month"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: ["time:month"]
+    period: [current]
+  fixture_points: 7
+  rationale: >-
+    'this year' is the period span; the fixture's 2026 coverage is January to
+    July, so seven points. The answer must state the window it actually has.
+
+# --------------------------------------------------------------------------
+# Filled-but-unresolvable on the time axis — draft rule 36, expressed
+# structurally rather than as a special case.
+# --------------------------------------------------------------------------
+- id: ts_unres_01
+  question: "funded balance by week"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping:
+      unresolvable: "by week"
+  rationale: >-
+    A weekly axis is a legitimate request the fixture cannot serve: the
+    snapshots are month-end only. The grouping span is FILLED and
+    UNRESOLVABLE, so the answer clarifies. Silently serving monthly points
+    under a weekly label, or dropping the axis and serving one number, are
+    both wrong and are both what a tree without this state must do.
+
+- id: ts_unres_02
+  question: "funded balance by day"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping:
+      unresolvable: "by day"
+  rationale: "Same as ts_unres_01 one grain finer."

@@ -1,0 +1,23 @@
+
+==============================================================================
+adversarial_probe_set  (adversarial, 40 probes)
+==============================================================================
+tree                             total      passed      failed substantive  structural
+rc                                  40          22          18          16           2   pass rate 55.0%
+rc_workflow                         40          21          19          19           0   pass rate 52.5%
+
+by shape:
+shape                                       rc           rc_workflow
+measure_in_filter                          7/9                   7/9
+measure_in_grouping                      10/10                 10/10
+vague_unbounded                           0/10                  0/10
+value_as_axis                             5/11                  4/11
+
+==============================================================================
+time_series_probe_set  (time_series, 24 probes)
+==============================================================================
+tree                             total      passed      failed substantive  structural
+rc                                  24           1          23          23           0   pass rate 4.2%
+rc_workflow                         24           0          24          24           0   pass rate 0.0%
+
+wrote clause_splitting_phase1/baseline/rc_probes.json

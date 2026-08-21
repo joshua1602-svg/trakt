@@ -1,0 +1,551 @@
+# Clause-splitting rules — §4.1
+#
+# The rule set as data, not embedded in code. clause_splitting_phase1's
+# reference splitter reads this file and does nothing that is not written here.
+#
+# Numbering follows the draft in the brief so every rule stays traceable to its
+# origin. `corpus_support` is the number of questions in the 602-question
+# natural-language corpus whose wording the rule's openers match — measured, not
+# estimated. `status` is the recommendation this file makes:
+#
+#   active     evidenced by the corpus and implemented
+#   declared   written down, implemented, and NOT exercised by the corpus. Kept
+#              because the shape is real and clients will produce it, but its
+#              behaviour is unverified and it must be labelled as such.
+#   withheld   NOT implemented. Either the corpus gives no evidence for the
+#              distinction the rule turns on, or implementing it would require
+#              knowledge this layer must not have.
+#
+# The layer is DOMAIN-BLIND. Every rule below decides only that a clause of some
+# kind starts here and stops there. No rule reads a registry, knows what a field
+# means, or knows what values a field can take. Where a rule looks like it needs
+# that — rule 16 is the clearest case — it is withheld and the reason is stated.
+version: 1
+
+# ===========================================================================
+# STALE CORPUS COUNTS — READ BEFORE USING corpus_support
+#
+# Every `corpus_support` number below was measured against a calibration bank
+# that differs from this tree's by +647/-148 lines, on a base that did not
+# contain the release candidate. They are NOT valid for this tree and have not
+# been re-measured: the instruction after the base was corrected was to
+# re-establish the baseline and revise nothing else.
+#
+# `status` (active / declared / withheld) derives from those counts, so it is
+# stale in the same way. The two `withheld` rulings rest on facts that were
+# re-checked and still hold — rule 16 on the absence of a governed value domain,
+# rule 29 on "as per" — but their counts must be re-run before this file is
+# relied on.
+#
+# Re-run: python -m clause_splitting_phase1.run_corpus
+# ===========================================================================
+corpus:
+  questions: 602
+  banks: [ere_mi_calibration_250, ere_mi_questions]
+  measured_against: "1351c51 - WRONG BASE, does not contain the release candidate"
+  status: STALE
+  revalidated: false
+
+# ===========================================================================
+# A. Operation openers — sentence-initial, and they decide the answer type.
+# Count-vs-amount is decided here and nowhere else.
+# ===========================================================================
+rules:
+
+- id: 1
+  section: A
+  span: operation
+  value: count
+  openers: ["how many", "number of", "count of", "how many of"]
+  corpus_support: 35
+  status: active
+
+- id: 2
+  section: A
+  span: operation
+  value: amount
+  openers: ["how much", "total", "what is the value of", "value of", "what is the total"]
+  corpus_support: 30
+  status: active
+
+- id: 3
+  section: A
+  span: operation
+  value: average_or_rate
+  openers: ["what is the average", "average", "mean", "weighted average", "typical"]
+  corpus_support: 57
+  status: active
+
+- id: 4
+  section: A
+  span: operation
+  value: movement
+  openers: ["how has", "how have", "changed", "moved", "grown", "fallen", "shifted"]
+  corpus_support: 0
+  status: declared
+  note: >-
+    Zero corpus support. The corpus expresses movement as 'evolution' and
+    'trend' instead, which rule 26 catches as a time GROUPING rather than as a
+    movement operation. See finding F3 in the corpus report: this is a real gap
+    between the draft vocabulary and the corpus vocabulary, not a rule that can
+    be deleted.
+
+- id: 5
+  section: A
+  span: operation
+  value: ranking
+  openers: ["which", "top", "highest", "largest", "biggest", "most", "lowest", "smallest", "rank"]
+  direction:
+    descending: ["largest", "biggest", "highest", "top", "most"]
+    ascending: ["smallest", "lowest", "least"]
+  corpus_support: 60
+  status: active
+  note: >-
+    'which' alone is a listing, not a ranking. It opens a ranking span only
+    where a direction word is also present. Probe adv_vag_02 pins this.
+
+- id: 6
+  section: A
+  span: operation
+  value: forward
+  openers: ["when will", "when do we expect", "when are we", "forecast", "projected", "project", "expected to"]
+  corpus_support: 24
+  status: active
+
+- id: 7
+  section: A
+  span: operation
+  value: forward_probability
+  openers: ["are we likely to", "is there a risk of", "do we expect to", "will we"]
+  corpus_support: 0
+  status: declared
+
+- id: 8
+  section: A
+  span: operation
+  value: forward
+  openers: ["estimate", "what's your estimate of", "roughly when", "approximately when"]
+  corpus_support: 0
+  status: declared
+  note: "Same operation class as rules 6 and 7. Rule 30 governs the one discard case."
+
+- id: 9
+  section: A
+  span: operation
+  value: neutral
+  openers: ["show", "show me", "list", "give me", "display", "what is", "what are"]
+  corpus_support: 207
+  status: active
+  note: >-
+    The single most common opener in the corpus by a wide margin, and the one
+    that carries the least information: the answer type comes from the subject
+    span instead. A layer that treats 'show' as decisive is deciding nothing.
+
+# ===========================================================================
+# B. Filter openers — each opens a filter span and closes whatever preceded it.
+# ===========================================================================
+- id: 10
+  section: B
+  span: filter
+  openers: ["where"]
+  corpus_support: 26
+  status: active
+
+- id: 11
+  section: B
+  span: filter
+  openers: ["with"]
+  requires_comparator: true
+  comparators: ["above", "below", "over", "under", "at least", "of at least", "greater than", "less than", "more than"]
+  corpus_support: 17
+  status: active
+
+- id: 12
+  section: B
+  span: filter
+  openers: ["for"]
+  requires_comparator: true
+  shape: "for <noun> over|under|above|below <value>"
+  corpus_support: 6
+  status: active
+
+- id: 13
+  section: B
+  span: filter
+  openers: ["above", "over", "below", "under", "greater than", "less than", "more than", "at least", "exceeding", "exceed", "exceeds"]
+  bare_comparator: true
+  corpus_support: 91
+  status: active
+  note: "Subject to rules 32 and 41. A bare comparator is not always a filter."
+
+- id: 14
+  section: B
+  span: filter
+  openers: ["between"]
+  corpus_support: 1
+  status: active
+  note: "Rule 31 decides period vs filter by whether both operands parse as dates."
+
+- id: 15
+  section: B
+  span: filter
+  openers: ["excluding", "other than", "apart from", "net of", "except", "ex "]
+  negated: true
+  corpus_support: 0
+  status: declared
+  note: >-
+    Zero corpus support and a live defect at the reference commit: 'balance
+    excluding London' drops the clause and silently WIDENS the population.
+    Silent widening and silent narrowing are the same defect facing opposite
+    directions, and only one direction has been named so far.
+
+- id: 16
+  section: B
+  span: filter
+  openers: ["in", "to"]
+  shape: "in|to <dimension value>"
+  corpus_support: 5
+  status: withheld
+  note: >-
+    WITHHELD, and this is the most important entry in the file.
+
+    The draft constrains this rule to open a filter 'only when the operand
+    resolves to a governed dimension value'. That constraint cannot be
+    evaluated here without the layer knowing what values a field can take,
+    which is precisely the domain knowledge that keeps vocabulary and sentence
+    structure entangled. Implementing it would make the splitter domain-aware
+    on its second-most-common filter idiom.
+
+    Worse, the knowledge does not exist to consult: the registry declares no
+    value domain for any dimension. `allowed_values` is absent on all 54
+    dimension fields, and the only list of region values in the repository is
+    a hard-coded literal in mi_agent/concentration_tests/matching.py.
+
+    The correct shape is: this layer marks 'in|to <operand>' as a filter span
+    of UNKNOWN resolution and hands the operand to business semantics, which
+    either resolves it to a value or reports it unresolvable. That is the
+    convergent validation pass described in §5, and it is the only version of
+    this rule that does not put geography knowledge inside the splitter.
+    Until that pass exists, this rule stays withheld and every 'in|to' operand
+    is reported as an unresolvable filter rather than guessed at.
+
+# ===========================================================================
+# C. Grouping openers
+# ===========================================================================
+- id: 17
+  section: C
+  span: grouping
+  openers: ["by"]
+  corpus_support: 294
+  status: active
+  note: "Subject to rule 26: a time unit after 'by' is a time axis, not a dimension."
+
+- id: 18
+  section: C
+  span: grouping
+  openers: ["per"]
+  corpus_support: 0
+  status: declared
+
+- id: 19
+  section: C
+  span: grouping
+  openers: ["split by", "broken down by", "across", "grouped by", "breakdown by"]
+  corpus_support: 4
+  status: active
+
+- id: 20
+  section: C
+  span: grouping
+  openers: ["for each", "each"]
+  corpus_support: 0
+  status: declared
+  note: "'each <time unit>' is rule 26, not this rule. Precedence: 26 before 20."
+
+# ===========================================================================
+# D. Period and comparison openers
+# ===========================================================================
+- id: 21
+  section: D
+  span: period
+  kind: window
+  openers: ["last", "past", "trailing"]
+  shape: "last|past <n> <unit>"
+  corpus_support: 0
+  status: declared
+
+- id: 22
+  section: D
+  span: period
+  kind: current
+  openers: ["this", "current", "year to date", "ytd", "so far this year"]
+  shape: "this|current <unit>"
+  corpus_support: 2
+  status: active
+
+- id: 23
+  section: D
+  span: period
+  kind: prior
+  openers: ["previous", "prior", "preceding"]
+  corpus_support: 1
+  status: active
+  note: "Rule 28 decides period sense vs comparison sense by what the word qualifies."
+
+- id: 24
+  section: D
+  span: period
+  kind: as_at
+  openers: ["since", "as at", "as of"]
+  corpus_support: 0
+  status: declared
+  note: "'as per' is deliberately NOT here. See rule 29."
+
+- id: 25
+  section: D
+  span: period
+  kind: comparison
+  openers: ["compared with", "compared to", "versus", "vs", "vs.", "against", "relative to"]
+  corpus_support: 5
+  status: active
+  note: "Rule 27 decides period vs second population by the shape of the operand."
+
+- id: 26
+  section: D
+  span: grouping
+  kind: time_axis
+  openers: ["by month", "by quarter", "by week", "by day", "by year", "monthly", "quarterly", "weekly", "daily", "each month", "each quarter", "over time", "evolution", "trend"]
+  grain_from_opener: true
+  corpus_support: 35
+  status: active
+  note: >-
+    A GROUPING on a time axis, not a period filter. This is the rule the layer
+    unlocks trend questions with, and it takes precedence over rules 17 and 20
+    so that 'by month' never resolves as a dimension lookup on the word month.
+
+    Corrected by the corpus: the draft lists 'by month / by quarter / monthly /
+    each month / over time'. The corpus overwhelmingly says 'evolution' and
+    'trend' instead, and both are added here. That addition is vocabulary, and
+    it is the one place in this file where corpus wording was taken in — noted
+    explicitly so a reviewer can reject it if they judge it smuggling.
+
+# ===========================================================================
+# E. Precedence and conflict rules. Most defects live here.
+# ===========================================================================
+- id: 27
+  section: E
+  kind: precedence
+  applies_to: 25
+  rule: >-
+    'compared with' / 'relative to' takes a PERIOD if the operand resolves to a
+    time expression, otherwise a second POPULATION. When it is a population it
+    fills a second subject slot, not a filter.
+  corpus_support: 5
+  status: active
+
+- id: 28
+  section: E
+  kind: precedence
+  applies_to: 23
+  rule: >-
+    'previous' / 'prior' is a period opener when it qualifies a TIME UNIT and a
+    comparison marker when it qualifies a POPULATION. Resolve by what the word
+    qualifies, not by the word.
+  corpus_support: 1
+  status: active
+
+- id: 29
+  section: E
+  kind: precedence
+  rule: "'as per' — resolve empirically from the corpus, not from intuition."
+  corpus_support: 0
+  status: withheld
+  note: >-
+    RESOLVED EMPIRICALLY, AND THE ANSWER IS THAT THERE IS NO EVIDENCE.
+
+    'as per' occurs ZERO times in all 602 corpus questions, in either sense.
+    Neither the period reading ('as per 31 May') nor the source reading ('as
+    per the schedule') is attested. The reference commit binds nothing for
+    either phrasing.
+
+    The draft says to report both senses with counts before choosing. The
+    counts are 0 and 0. Choosing between them on this evidence would be
+    inventing a rule and calling it corpus-corrected, so the rule is withheld
+    and 'as per' is left to fall through to rule 35 as unresolved wording that
+    clarifies. If a client uses it, the clarification will say so and the rule
+    can be written then, from a real example.
+
+- id: 30
+  section: E
+  kind: precedence
+  applies_to: 8
+  rule: >-
+    'estimate' is a forward marker and inherits the full forecast treatment —
+    the same maturity sufficiency gate and basis disclosure as an explicit
+    forecast. It is never permission to relax governance: an estimate the data
+    cannot support is a clarify or a refusal, exactly as a forecast would be.
+    EXCEPTION: where the rest of the sentence is unambiguously about current or
+    historical state, the word is discarded as noise and the operation comes
+    from rules 1-5. Never forecast a number the data can compute exactly.
+  corpus_support: 0
+  status: declared
+  watch_item: >-
+    'estimate our conversion rate' is genuinely ambiguous between the observed
+    historical rate and the forward assumption, and in this domain those are
+    materially different numbers. Flagged, not resolved by rule.
+
+- id: 31
+  section: E
+  kind: precedence
+  applies_to: 14
+  rule: >-
+    'between' is a PERIOD opener when both operands parse as dates, otherwise a
+    FILTER opener. Between 2025 and 2026 is a period; between £100k and £250k
+    is a filter.
+  corpus_support: 1
+  status: active
+  note: "Decided on operand SHAPE — date-like vs quantity-like — never on field meaning."
+
+- id: 32
+  section: E
+  kind: precedence
+  applies_to: 13
+  rule: "'over' before a DURATION is a period; before a QUANTITY it is a filter."
+  corpus_support: 91
+  status: active
+
+- id: 33
+  section: E
+  kind: precedence
+  rule: >-
+    Leftmost-outermost wins. An opener occurring inside a span already consumed
+    does not reopen.
+  corpus_support: null
+  status: active
+  note: "Structural. Applies to every question, so a support count is meaningless."
+
+- id: 34
+  section: E
+  kind: structural
+  span: subject
+  rule: >-
+    Subject is the RESIDUE — whatever remains once every other span is removed.
+    Never computed by scanning.
+  corpus_support: null
+  status: active
+  note: >-
+    This single rule is what makes the four known defects unexpressible. A
+    measure word inside a consumed filter or grouping span is not in the
+    residue, so it cannot become the subject, whatever it says.
+
+- id: 35
+  section: E
+  kind: structural
+  rule: >-
+    An unrecognised trailing clause becomes an UNRESOLVED span, never the
+    subject. A prepositional phrase surviving with no recognised opener is
+    marked unresolved and clarifies.
+  corpus_support: null
+  status: active
+  note: "The safety valve. Turns 'I did not follow part of that' into a question back."
+
+- id: 36
+  section: E
+  kind: structural
+  rule: >-
+    A span may be FILLED and UNRESOLVABLE. 'This year' fills the period span;
+    if the data covers three months the span is filled-unresolvable and the
+    answer clarifies.
+  corpus_support: null
+  status: active
+  note: "The honour-or-clarify rule, expressed structurally rather than as a special case."
+
+# ===========================================================================
+# F. Target openers. A target is a value the answer solves FOR; a filter is a
+# value that narrows the population. Confusing them is the most dangerous
+# collision in this rule set.
+# ===========================================================================
+- id: 37
+  section: F
+  span: target
+  openers: ["reach", "hit", "get to", "cross", "exceed", "pass", "reaching", "hitting"]
+  corpus_support: 8
+  status: active
+  note: >-
+    'exceed' also appears in rule 13 as a bare comparator. Rule 41 resolves the
+    collision: under a forward operation it is a target, otherwise a filter.
+
+- id: 38
+  section: F
+  span: target
+  openers: ["until", "how long until", "time to", "how long before"]
+  corpus_support: 0
+  status: declared
+  note: >-
+    Zero corpus support and a live gap: 'how long until we hit £250m' binds
+    nothing at all at the reference commit — no forecast, no target, no filter.
+
+- id: 39
+  section: F
+  span: target
+  openers: ["at"]
+  requires_forward_operation: true
+  shape: "at <value>, in a forward question"
+  corpus_support: 0
+  status: declared
+
+- id: 40
+  section: F
+  span: target
+  kind: configured
+  openers: ["on target", "against target", "versus plan", "vs plan", "versus budget", "vs budget", "against plan", "against budget"]
+  corpus_support: 0
+  status: declared
+  note: >-
+    A different sense: the threshold is not in the question, it references a
+    configured plan or budget. With no plan configured the target span is
+    FILLED and UNRESOLVABLE and the answer clarifies — the same pattern as an
+    unconfigured limit schedule. Never substitute a value.
+
+# ===========================================================================
+# G. Target precedence — the critical rule.
+# ===========================================================================
+- id: 41
+  section: G
+  kind: precedence
+  rule: >-
+    A quantity in a FORWARD question is a TARGET, not a filter. Where a bare
+    comparator or quantity appears and the operation span is forward (rules 6,
+    7, 8), it fills the target span and MUST NOT fill the filter span.
+  corpus_support: 8
+  status: active
+  note: >-
+    This is the rule that stops 'estimate when we will reach £100m in loans'
+    being read as funded_balance >= 100,000,000 and silently narrowing the book
+    to loans of over £100m each. Without a target span there is nowhere else
+    for the value to go. Verified holding at the reference commit for the
+    'reach' phrasing; NOT holding for the 'how long until' phrasing, which
+    binds nothing.
+
+- id: 42
+  section: G
+  kind: precedence
+  rule: >-
+    A target REQUIRES a forward operation. A target span filled on a historical
+    operation is a contradiction: report it unresolvable and clarify rather
+    than guessing which the user meant.
+  corpus_support: null
+  status: active
+
+- id: 43
+  section: G
+  kind: precedence
+  rule: >-
+    Governed thresholds are NOT question targets. Concentration limits from the
+    schedule fill the target concept from configuration, and the target span
+    stays empty. Do not conflate the two paths.
+  corpus_support: 18
+  status: active
+  note: >-
+    The 18 risk_limits questions in the ERE bank all take the configuration
+    path. None states a threshold in the question, so none fills a target span.
