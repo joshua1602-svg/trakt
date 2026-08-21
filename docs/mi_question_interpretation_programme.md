@@ -78,6 +78,50 @@ Reproduce: `python -m question_interpretation.run_robustness_deterministic --all
 
 ---
 
+## Amendment 2 — join sequencing, Stage 2 vs Stage 3
+
+**Adopted.** The filter join is built in halves.
+
+**Stage 2 emits the facet half.** `_detect_thresholds` and
+`_detect_geographic_scope` already compute `match.start()` / `match.end()` and
+discard them; recording those into the object is **additive** and cannot move an
+answer. Parser-side claims are recorded as **spanless**, and the join is reported
+as **half-built, with the missing half named**.
+
+**Stage 3 supplies the parser half**, when `_parse_filters` is converted as a
+consumer. `_parse_filters` rewrites the question as it consumes clauses
+(`work_q = work_q[:bm.start()] + " " + work_q[bm.end():]`), so sound spans need
+either removing the rewrite or maintaining an offset map through it. **That
+choice is made then, on measurement rather than preference.**
+
+**Why not in Stage 2:** Stage 2's guarantee is byte-identical answers. Changing
+how `_parse_filters` rewrites the question forfeits that guarantee, and a stage
+whose acceptance is "nothing moved" cannot also be the stage that moves
+something.
+
+---
+
+## Amendment 3 — the principle behind removing `coverage` and keeping `CONFIGURED`
+
+**Adopted.** *Remove things that can be wrong; keep empty things that can only be
+unused.*
+
+An unused **operation type** can still misclassify later — it is a value
+something may be assigned. An unfilled **slot state** is inert: it describes a
+condition nothing currently reports. That distinction, not the presence of a
+rationale, is what justified removing `coverage` and keeping `CONFIGURED` marked
+unsupplied.
+
+**The contract's rationale for the configured-target sense is not evidence.**
+The wording (*on target*, *versus plan*, *versus budget*) appears in **0 of 690**
+real-surface questions, which contradicts it. The slot is retained because it is
+inert, not because the corpus supports it.
+
+**Review rule:** if the configured-target wording does not appear in the
+client's real questions **within the first month**, the slot is removed.
+
+---
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
@@ -111,5 +155,24 @@ Fuller analysis, including what tape normalisation would additionally require:
 
 ### B2 — `answer_type.asked` disagrees with the parser on 46 questions
 
-**Recorded, not to be fixed in Stage 2.** Analysis and user-visibility finding:
+**Recorded, not to be fixed in Stage 2.** No user-visible difference: `asked()`
+is on no production path. Analysis:
 `docs/mi_question_interpretation_stage2_readiness.md`.
+
+### B3 — `of_measure` cannot distinguish one measure from several
+
+**Open, blocking nothing, and it weakens `mixed` as an acceptance type.**
+`of_measure` types an answer from a single `metric` + `aggregation`. A portfolio
+summary carries `metric=None, aggregation='count'` and types as `count`, which
+`_SATISFIES[MIXED]` accepts — so four calibration cases declaring `mixed` would
+pass identically if the answer lost every measure but the count.
+
+Found by the bounded pre-Stage-2 check:
+`docs/mi_answer_type_expectation_check.md`.
+
+### Standing rule — do not regenerate the calibration bank
+
+All 252 `expected_answer_type` values were derived from `answer_type.asked()`.
+Regenerating the bank during this programme would rewrite those expectations
+from a classifier the programme is changing, and a bank that moves with the code
+it grades has stopped being a control.
