@@ -37,7 +37,20 @@ from ..onboarding.catalogue import Catalogue, Field, Section, catalogue
 
 #: Confidence for a value bound by an explicit cue, versus one recognised by
 #: shape alone (an LEI in a sentence that never says "LEI").
+#: A value whose SHAPE proves it. An LEI, an email, a date, or one of a
+#: closed option list: the catalogue's own pattern or vocabulary decides
+#: whether the value is that field's, so a cued match is certain.
 CUED = 1.0
+
+#: A value with no shape of its own, bound by a cue. The FIELD is certain — the
+#: cue named it — but the value's extent is a judgement: free text runs until
+#: something ends it, and "something" is a rule rather than a proof. This is
+#: the class "the client needs weekly pipeline" fell into, where the cue was
+#: right and the value was three words of verb phrase. Graded below certainty
+#: so it reaches a human as a proposal rather than a silent write.
+INFERRED = 0.8
+
+#: A value recognised by shape alone, in a sentence that never named the field.
 SHAPE_ONLY = 0.6
 
 
@@ -534,6 +547,7 @@ def _read_clause(clause: str, cat: Catalogue) -> List[Extracted]:
             if _overlaps(taken, (start, end)):
                 continue
             taken.append((start, end))
+            graded = CUED if candidate.typed else INFERRED
             if not ref.repeated_mentions:
                 # A field whose every mention is its own answer is NOT finished
                 # once one cue has read it. "They send a funded book and a
@@ -542,7 +556,7 @@ def _read_clause(clause: str, cat: Catalogue) -> List[Extracted]:
                 # instead of two. The option pass below picks up the rest, and
                 # the span just taken keeps it from re-reading this one.
                 claimed.add(ref.path)
-            out.append(Extracted(ref=ref, value=value, confidence=CUED,
+            out.append(Extracted(ref=ref, value=value, confidence=graded,
                                  cue=candidate.cue, span=(start, end)))
             break
 

@@ -527,6 +527,13 @@ class OccAgentService:
                       for stream in plan.streams]
         if plan.reporting_period:
             lines.append(f"- Reporting period: {plan.reporting_period}")
+        uncertain = plan.uncertain
+        if uncertain:
+            # Named separately from what was read with certainty. An operator
+            # scanning a wall of "Recorded:" lines has no way to tell which one
+            # Trakt guessed at, and the guess is the line worth reading.
+            lines.append("Read, but not certain — please check:")
+            lines += [f"- {change.sentence()}" for change in uncertain]
         if plan.unrecognised:
             lines.append("I could not read:")
             lines += [f"- \"{fragment}\"" for fragment in plan.unrecognised]

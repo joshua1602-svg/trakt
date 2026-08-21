@@ -35,6 +35,7 @@
 #       stream_cadence: {pipeline: weekly}  # per-stream cadences
 #       reporting_period: "2026-06-30"
 #       unrecognised: []                    # clauses read as nothing
+#       uncertain: [client.client_name]     # paths read below CERTAIN, sorted
 #     reject:
 #       # Substrings that must NOT appear in a read value. This is how a defect
 #       # is pinned: name the wrong answer, not just the right one.
@@ -59,6 +60,13 @@
     cadence: monthly
     stream_cadence: {}
     unrecognised: []
+    # "UK" names the jurisdiction without the sentence ever naming the FIELD,
+    # so it is read by shape alone and shown to the operator. The asset class,
+    # the cadence and the product all come from closed vocabularies and are
+    # certain. This entry exists partly to keep that distinction honest,
+    # and the portfolio NAME is Trakt's own suggestion ("<client> portfolio")
+    # rather than anything the operator said — the other thing worth a look.
+    uncertain: [client.jurisdiction, portfolios.display_name]
 
 - name: erm-capital-two-cadences
   why: >-
@@ -91,6 +99,11 @@
     client_name: ERM Capital
     jurisdiction: GB
     streams: [pipeline]
+    # The name is read from free text, so Trakt is NOT certain where the value
+    # ended — the operator is shown it rather than it being written silently.
+    # The jurisdiction is read from "UK" with no cue at all, which is less
+    # certain still.
+    uncertain: [client.client_name, client.jurisdiction]
   reject:
     client_name: ["needs", "mortgage lender", "a UK"]
 

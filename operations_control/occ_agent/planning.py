@@ -68,6 +68,12 @@ def item_label(section: Section, item: Dict[str, Any], index: int) -> str:
     return ident or f"item {index + 1}"
 
 
+#: Anything read below this is put to a human before it is written. Not a
+#: tuning knob: it is the line between "the catalogue proved this value" and
+#: "a rule decided where the value ended", and only the first is certain.
+CERTAIN = 1.0
+
+
 # --------------------------------------------------------------------------- #
 # One proposed value
 # --------------------------------------------------------------------------- #
@@ -101,7 +107,7 @@ class ProposedFieldChange:
         """
         if self.action == UNCHANGED:
             return False
-        if self.confidence is not None and self.confidence < 1.0:
+        if self.confidence is not None and self.confidence < CERTAIN:
             return True
         return _present(self.before) and self.before != self.after
 
@@ -189,8 +195,28 @@ class ApplicationPlan:
                     or self.questions)
 
     @property
+    def uncertain(self) -> List[ProposedFieldChange]:
+        """Changes read with less than certainty.
+
+        Reported in their own right, because "Trakt read this and is sure" and
+        "Trakt read this and is guessing at where the value ended" are
+        different claims, and only one of them needs checking. Burying the
+        second among the first is how a client ends up named after a verb
+        phrase.
+        """
+        return [c for c in self.understood
+                if c.action != UNCHANGED and c.confidence is not None
+                and c.confidence < CERTAIN]
+
+    @property
     def complete(self) -> bool:
-        """Whether the whole instruction was read."""
+        """Whether the whole instruction was read.
+
+        Deliberately NOT affected by confidence. An uncertain read is
+        something Trakt DID read and can show you; an unrecognised clause is
+        something it could not read at all. Folding the first into the second
+        would make every ordinary instruction look like a failure.
+        """
         return not self.unrecognised and not self.questions
 
     @property
@@ -230,6 +256,8 @@ class ApplicationPlan:
                           + [f"A {s} stream will be registered"
                              for s in self.streams],
             "proposed": self.summary(),
+            "uncertain": [f"{c.sentence()} — read, but not certain"
+                          for c in self.uncertain],
             "questions": [q.question for q in self.questions],
             "unrecognised": list(self.unrecognised),
         }

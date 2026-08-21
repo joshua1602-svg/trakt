@@ -54,6 +54,10 @@ READERS: Dict[str, Any] = {
                                  for k, v in i.stream_delivery.items()},
     "reporting_period": lambda i: i.reporting_period,
     "unrecognised": lambda i: list(i.unrecognised),
+    # Which reads Trakt is not certain of. Pinning this is how the corpus
+    # protects the grading: a change that quietly promotes a guess to a
+    # certainty fails here.
+    "uncertain": lambda i: sorted(i.confidence),
 }
 
 
@@ -121,7 +125,7 @@ def test_the_instruction_is_read_as_the_corpus_says(entry, interpreter):
 
     for key, expected in (entry.get("expect") or {}).items():
         actual = READERS[key](read)
-        if key == "streams" and isinstance(expected, list):
+        if key in ("streams", "uncertain") and isinstance(expected, list):
             expected = sorted(expected)
         assert actual == expected, (
             f"{entry['name']}: {key} was {actual!r}, expected {expected!r}")
