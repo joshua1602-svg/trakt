@@ -2517,6 +2517,66 @@ def detect_measure_substitution(question: str, *, route: Optional[str] = None,
 #: substitution is stated.
 _ROUTE_GRANULARITY = {"geo_exposure": ("postcode", "ITL3 area")}
 
+# --------------------------------------------------------------------------- #
+# The TIME axis, as an axis in its own right
+# --------------------------------------------------------------------------- #
+#: The grain each series-publishing route reports at. Every one of these reads
+#: the governed month-end funded snapshots, so every one publishes MONTHS, and
+#: a question asking for weeks or days receives months.
+#:
+#: Declared here rather than inferred from the answer, for the same reason
+#: `_ROUTE_GRANULARITY` is: a route's reporting grain is a property of the
+#: capability, and reading it back out of the prose would be the receipt
+#: checking the question against itself.
+_ROUTE_TIME_GRAIN = {
+    "evolution": "month",
+    "evolution_funnel": "month",
+    "evolution_pipeline_stage": "month",
+    "period_movement": "month",
+    "period_change_analysis": "month",
+    "temporal_compare": "month",
+    "cohort_progression": "month",
+    "cohort_conversion": "month",
+    "forecast_extrapolation": "month",
+    "funded_bridge": "month",
+}
+
+
+def route_time_grain(route: Optional[str]) -> Optional[str]:
+    """The grain the route's series is published at, or None if it publishes none."""
+    return _ROUTE_TIME_GRAIN.get(route or "")
+
+
+def time_axis_disclosure(unit: Optional[str], route: Optional[str]
+                         ) -> Optional[RequestedFacet]:
+    """A facet for the TIME grain a question named, or None.
+
+    Why this is not a `KIND_GROUPING`
+    ---------------------------------
+    A time grain is not a registry field. There is no `week` column to be
+    applied or unavailable, and `satisfied_by()` has nothing to resolve, so
+    every reader that works by matching a field key against group keys, result
+    columns or spec filters is answering a question about the wrong object. That
+    is why the facet layer raised nothing for a time axis in any of the 24
+    time-series probes the inventory ran: it had no way to say what it had seen.
+
+    It is a `KIND_GRANULARITY` — the level an answer is reported at — carrying
+    `(asked, reported)` on `concepts`, so the same reconciler branch that
+    adjudicates a spatial grain adjudicates a temporal one. The two are the same
+    kind of claim about an answer, and one implementation is the point of the
+    programme.
+
+    Returns None when the route publishes no series, so a point-in-time KPI is
+    never told it failed to honour a grain nobody could have expected it to.
+    """
+    if not unit:
+        return None
+    grain = route_time_grain(route)
+    if not grain:
+        return None
+    return RequestedFacet(kind=KIND_GRANULARITY, label=unit,
+                          concepts=(unit, grain))
+
 
 def granularity_disclosure(question: str, route: Optional[str]
                            ) -> Optional[RequestedFacet]:
