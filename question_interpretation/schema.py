@@ -59,10 +59,13 @@ AVERAGE = "average"
 MOVEMENT = "movement"
 RANKING = "ranking"
 FORWARD = "forward"
-COVERAGE = "coverage"
 NEUTRAL = "neutral"
-OPERATION_TYPES = (COUNT, AMOUNT, AVERAGE, MOVEMENT, RANKING, FORWARD,
-                   COVERAGE, NEUTRAL)
+#: CORRECTION 3, earned by the Stage 1 corpus. `coverage` was in the first
+#: draft and is REMOVED: it was produced 0 times in 690 real-surface questions,
+#: and no existing interpreter supplies it. An unsupplied member invites someone
+#: to populate it by intuition, which is the failure the corpus-first rule
+#: exists to prevent. Re-add it when a question demands it, with the question.
+OPERATION_TYPES = (COUNT, AMOUNT, AVERAGE, MOVEMENT, RANKING, FORWARD, NEUTRAL)
 
 #: The SYNTACTIC role a named dimension plays in this sentence. Not a semantic
 #: judgement about the registry: both `region` and `borrower type` are
@@ -73,11 +76,32 @@ FILTER = "filter"
 UNRESOLVED_ROLE = "unresolved"
 DIMENSION_ROLES = (GROUPING, FILTER, UNRESOLVED_ROLE)
 
+#: CORRECTION 5, earned by the Stage 1 corpus — and NARROWED by it.
+#:
+#: Stage 1 proposed splitting `unresolved` into "no source has an opinion" and
+#: "the sources disagree". The corpus supports only the first: 55 of 690
+#: real-surface questions name a dimension no source assigns a role to, and
+#: ZERO name a dimension two sources put in different roles. A `conflicted`
+#: value would therefore have been invented from intuition, so it is NOT added.
+#:
+#: What IS required is that an unresolved role says WHY, in `Slot.reason`, so
+#: the distinction can be made from evidence if a conflicting case ever appears.
+ROLE_UNATTRIBUTED = "no source supplies a role"
+
 #: Where a target threshold came from. `stated` is in the question; `configured`
 #: references a plan or budget the question does not state.
 STATED = "stated"
 CONFIGURED = "configured"
 TARGET_SOURCES = (STATED, CONFIGURED)
+
+#: CORRECTION 4, earned by the Stage 1 corpus. `configured` is a STATED
+#: REQUIREMENT of the contract, so it stays in the vocabulary — but it has ZERO
+#: corpus evidence: the wording ("on target", "versus plan") appears in 0 of 690
+#: real-surface questions, and no interpreter supplies it. The projection's own
+#: regex, which was the only thing producing it, has been removed: a regex owned
+#: by the projection is a reading the projection invented, not one it observed.
+#: Populating this slot requires an interpreter that supplies it.
+UNSUPPLIED_TARGET_SOURCES = (CONFIGURED,)
 
 #: Time grains a question can name.
 GRAINS = ("day", "week", "month", "quarter", "year")
@@ -109,7 +133,20 @@ class Span:
 
 @dataclass
 class Slot:
-    """One claim about the question. State plus the words that produced it."""
+    """One claim about the question. State plus the words that produced it.
+
+    CORRECTION 2, earned by the Stage 1 corpus: ``span`` is absent far more
+    often than it is present. 170 of the dimension and filter claims raised
+    across 690 real-surface questions have no recoverable span, because the
+    interpreter that made the claim emitted a field key or a rendered label
+    rather than the words. A consumer must therefore treat ``span`` as
+    genuinely optional and must never require it.
+
+    Position capture is deliberately NOT added here. Making an interpreter
+    emit offsets is a change to that interpreter, which belongs to Stage 3, one
+    consumer at a time. Until then the honest record is that the span is
+    absent, and ``has_span`` says so.
+    """
 
     state: str = EMPTY
     raw_text: Optional[str] = None
@@ -124,9 +161,15 @@ class Slot:
         if self.state not in STATES:
             raise ValueError("unknown slot state %r" % (self.state,))
 
+    @property
+    def has_span(self) -> bool:
+        """Whether this claim can be located in the question at all."""
+        return self.span is not None
+
     def as_dict(self) -> Dict[str, Any]:
         return {"state": self.state, "raw_text": self.raw_text,
                 "span": [self.span.start, self.span.end] if self.span else None,
+                "has_span": self.has_span,
                 "reason": self.reason, "source": self.source}
 
 
@@ -176,6 +219,24 @@ class DimensionClaim(Slot):
         return d
 
 
+#: What a filter claim actually carries. CORRECTION 1, earned by the Stage 1
+#: corpus: on 76 of 690 real-surface questions ONE filter clause is read twice,
+#: by two interpreters, each supplying a different half and neither supplying
+#: the other's.
+#:
+#:    WORDING  the words of the clause      — the facet layer supplies this
+#:    BOUND    operator and value           — the parser supplies this
+#:    FIELD    which field it bears on      — the parser supplies this
+#:
+#: Before this correction a half-claim was inferred from which attributes
+#: happened to be None, which is indistinguishable from "the interpreter looked
+#: and found nothing". A claim must say what it knows.
+WORDING = "wording"
+BOUND = "bound"
+FIELD = "field"
+CLAIM_CONTENTS = (WORDING, BOUND, FIELD)
+
+
 @dataclass
 class FilterClaim(Slot):
     """A narrowing condition, as the QUESTION states it.
@@ -184,6 +245,12 @@ class FilterClaim(Slot):
     condition bears on is not here: every `threshold` facet in the release
     candidate carries ``field_key=None`` for the same reason — identifying that
     a clause exists is a different job from resolving what it binds.
+
+    A claim may be a HALF of one clause. ``provides`` says which half, and
+    ``clause_id`` is how two halves of the same clause are linked. Stage 1
+    established that no existing interpreter emits anything that makes the link
+    sound, so ``clause_id`` stays None until an interpreter supplies a basis
+    for it — an unjoined pair is reported as unjoined, never guessed at.
     """
 
     operator: Optional[str] = None
@@ -191,11 +258,32 @@ class FilterClaim(Slot):
     #: Set when the condition names a dimension VALUE ("in London", "status is
     #: offer") rather than a numeric bound.
     categorical_value: Optional[str] = None
+    #: Which halves of the clause this claim carries.
+    provides: Tuple[str, ...] = ()
+    #: Identity of the clause. Two claims sharing one are two halves of the
+    #: same clause. None means "not joined", which is a reportable state and
+    #: not an absence.
+    clause_id: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        unknown = set(self.provides) - set(CLAIM_CONTENTS)
+        if unknown:
+            raise ValueError("unknown claim contents %s" % sorted(unknown))
+
+    @property
+    def is_half_claim(self) -> bool:
+        """True when this claim knows the wording or the binding, not both."""
+        has_wording = WORDING in self.provides
+        has_binding = bool({BOUND, FIELD} & set(self.provides))
+        return has_wording != has_binding
 
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
         d.update({"operator": self.operator, "value": self.value,
-                  "categorical_value": self.categorical_value})
+                  "categorical_value": self.categorical_value,
+                  "provides": list(self.provides), "clause_id": self.clause_id,
+                  "is_half_claim": self.is_half_claim})
         return d
 
 

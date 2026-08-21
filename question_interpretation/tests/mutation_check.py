@@ -115,6 +115,65 @@ MUTATIONS: List[Tuple[str, str, str, str, str]] = [
         "        d[\"candidate_concept\"] = self.candidate_concept",
         "test_no_slot_carries_a_resolved_field_key",
     ),
+    (
+        "coverage is re-added to the operation vocabulary",
+        "Correction 3. An operation type nothing supplies invites someone to "
+        "populate it by intuition — the failure the corpus-first rule prevents.",
+        "OPERATION_TYPES = (COUNT, AMOUNT, AVERAGE, MOVEMENT, RANKING, FORWARD, NEUTRAL)",
+        "COVERAGE = \"coverage\"\n"
+        "OPERATION_TYPES = (COUNT, AMOUNT, AVERAGE, MOVEMENT, RANKING, FORWARD,\n"
+        "                   NEUTRAL, COVERAGE)",
+        "test_coverage_is_not_an_operation_type",
+    ),
+    (
+        "a conflicted dimension role is invented",
+        "Correction 5. Zero of 690 questions evidence it. Adding it is exactly "
+        "the intuition-shaped slot the contract warns about.",
+        "DIMENSION_ROLES = (GROUPING, FILTER, UNRESOLVED_ROLE)",
+        "CONFLICTED_ROLE = \"conflicted\"\n"
+        "DIMENSION_ROLES = (GROUPING, FILTER, UNRESOLVED_ROLE, CONFLICTED_ROLE)",
+        "test_no_conflicted_role_was_invented",
+    ),
+    (
+        "a filter claim stops declaring what it carries",
+        "Correction 1. Inferring a half-claim from which attributes are None "
+        "cannot distinguish 'this interpreter does not supply it' from 'this "
+        "interpreter looked and found nothing'.",
+        "    provides: Tuple[str, ...] = ()",
+        "    provides: Tuple[str, ...] = (WORDING, BOUND, FIELD)",
+        "test_a_filter_claim_declares_nothing_by_default",
+    ),
+    (
+        "claim contents stop being validated",
+        "Correction 1. An unchecked `provides` lets a claim assert a half that "
+        "does not exist.",
+        "        unknown = set(self.provides) - set(CLAIM_CONTENTS)\n"
+        "        if unknown:\n"
+        "            raise ValueError(\"unknown claim contents %s\" % sorted(unknown))",
+        "        pass",
+        "test_unknown_claim_contents_are_rejected",
+    ),
+    (
+        "span presence stops being reportable",
+        "Correction 2. 170 claims across 690 questions have no span; a "
+        "consumer that cannot tell is a consumer that will assume one.",
+        "    @property\n"
+        "    def has_span(self) -> bool:\n"
+        "        \"\"\"Whether this claim can be located in the question at all.\"\"\"\n"
+        "        return self.span is not None",
+        "    @property\n"
+        "    def has_span(self) -> bool:\n"
+        "        return True",
+        "test_a_claim_without_a_span_is_valid_and_says_so",
+    ),
+    (
+        "the configured target source stops being marked unsupplied",
+        "Correction 4. Silently treating it as supplied is how a slot nothing "
+        "populates comes to look populated.",
+        "UNSUPPLIED_TARGET_SOURCES = (CONFIGURED,)",
+        "UNSUPPLIED_TARGET_SOURCES = ()",
+        "test_the_configured_target_source_is_recorded_as_unsupplied",
+    ),
 ]
 
 

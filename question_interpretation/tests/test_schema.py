@@ -295,3 +295,133 @@ def test_as_dict_round_trips_every_slot():
     keys = set(qi.as_dict())
     assert keys == {"question", "operation", "subject", "dimensions", "filters",
                     "time", "target", "population", "residue", "notes"}
+
+
+# --------------------------------------------------------------------------- #
+# The five corrections earned from the Stage 1 corpus.
+#
+# Counts below are from the THREE REAL SURFACES only — the calibration bank,
+# the ERE golden library and the 44-variation robustness bank, 690 questions.
+# The generated harness is excluded: its phrasings are machine-generated from
+# registry names, so it is a valid invariant check and no evidence at all about
+# client wording, and it must not shape the schema.
+# --------------------------------------------------------------------------- #
+from question_interpretation.schema import (  # noqa: E402
+    BOUND, CLAIM_CONTENTS, FIELD, ROLE_UNATTRIBUTED,
+    UNSUPPLIED_TARGET_SOURCES, WORDING,
+)
+
+
+# -- Correction 1: a filter claim says which half of the clause it carries --
+def test_a_filter_claim_declares_what_it_carries():
+    """Driven by: 76 of 690 questions where ONE clause is read twice, the facet
+    layer supplying the wording and the parser the field and bound."""
+    facet_half = FilterClaim(state=FILLED, raw_text="LTV over 50",
+                             provides=(WORDING,))
+    parser_half = FilterClaim(state=FILLED, operator="gt", value="50.0",
+                              provides=(FIELD, BOUND))
+    assert facet_half.is_half_claim and parser_half.is_half_claim
+    assert facet_half.clause_id is None and parser_half.clause_id is None
+
+
+def test_a_complete_filter_claim_is_not_a_half_claim():
+    whole = FilterClaim(state=FILLED, raw_text="LTV over 50", operator="gt",
+                        value="50.0", provides=(WORDING, FIELD, BOUND))
+    assert not whole.is_half_claim
+
+
+def test_the_half_claim_check_can_fail():
+    """Before the correction a half was inferred from which attributes were
+    None — indistinguishable from an interpreter that looked and found
+    nothing. Declaring nothing must not read as a complete claim."""
+    silent = FilterClaim(state=FILLED, raw_text="LTV over 50", provides=())
+    assert not silent.is_half_claim  # declares nothing, so claims nothing
+
+
+def test_a_filter_claim_declares_nothing_by_default():
+    """The DEFAULT must be empty, not complete.
+
+    Added because the mutation check caught a real gap: every other test passed
+    `provides` explicitly, so a default of (WORDING, BOUND, FIELD) went
+    unnoticed. A claim that has declared nothing must not read as complete —
+    that is the whole point of the correction.
+    """
+    bare = FilterClaim(state=FILLED)
+    assert bare.provides == ()
+    assert not bare.is_half_claim
+    assert bare.as_dict()["provides"] == []
+
+
+def test_unknown_claim_contents_are_rejected():
+    with pytest.raises(ValueError):
+        FilterClaim(state=FILLED, provides=("field", "vibes"))
+
+
+def test_clause_id_is_none_until_an_interpreter_supplies_a_basis():
+    """Stage 1 established no interpreter emits anything that makes the join
+    sound. An unjoined pair is reported unjoined, never guessed."""
+    assert FilterClaim(state=FILLED, provides=(WORDING,)).clause_id is None
+    assert set(CLAIM_CONTENTS) == {WORDING, BOUND, FIELD}
+
+
+# -- Correction 2: span absence is explicit ---------------------------------
+def test_a_claim_without_a_span_is_valid_and_says_so():
+    """Driven by: 170 dimension and filter claims across 690 questions have no
+    recoverable span, because the interpreter emitted a field key or a rendered
+    label rather than the words."""
+    c = DimensionClaim(state=FILLED, raw_text=None, role=GROUPING,
+                       candidate_concept="collateral_geography")
+    assert c.has_span is False
+    assert c.as_dict()["has_span"] is False
+
+
+def test_has_span_can_fail():
+    c = DimensionClaim(state=FILLED, raw_text="region", role=GROUPING,
+                       span=Span(11, 17))
+    assert c.has_span is True
+
+
+# -- Correction 3: `coverage` removed ---------------------------------------
+def test_coverage_is_not_an_operation_type():
+    """Driven by: produced 0 times in 690 questions, and no interpreter
+    supplies it. An unsupplied member invites population by intuition."""
+    assert "coverage" not in OPERATION_TYPES
+
+
+def test_the_coverage_removal_can_fail():
+    with pytest.raises(ValueError):
+        OperationClaim(state=FILLED, raw_text="what share", type="coverage")
+
+
+# -- Correction 4: `configured` kept but unsupplied --------------------------
+def test_the_configured_target_source_is_recorded_as_unsupplied():
+    """Driven by: the wording appears in 0 of 690 questions, and the only thing
+    producing it was a regex the projection owned — a reading it invented."""
+    assert CONFIGURED in UNSUPPLIED_TARGET_SOURCES
+    assert STATED not in UNSUPPLIED_TARGET_SOURCES
+
+
+def test_a_configured_target_is_still_expressible_when_a_source_appears():
+    """Kept in the vocabulary because it is a stated requirement, not because
+    the corpus earned it. It must remain constructible."""
+    t = TargetClaim(state=UNRESOLVABLE, raw_text="on target",
+                    target_source=CONFIGURED, reason="no plan configured")
+    assert t.target_source == CONFIGURED
+
+
+# -- Correction 5: an unresolved role must say why --------------------------
+def test_an_unresolved_role_carries_a_reason():
+    """Driven by: 55 of 690 questions name a dimension no source assigns a role
+    to."""
+    c = DimensionClaim(state=FILLED, raw_text="broker", role=UNRESOLVED_ROLE,
+                       reason=ROLE_UNATTRIBUTED)
+    assert c.role == UNRESOLVED_ROLE and c.reason == ROLE_UNATTRIBUTED
+
+
+def test_no_conflicted_role_was_invented():
+    """Stage 1 proposed splitting `unresolved` into 'no opinion' and 'sources
+    disagree'. ZERO of 690 questions show a dimension two sources put in
+    different roles, so the second value would have been intuition. It is
+    deliberately absent, and this test is what stops it reappearing."""
+    assert set(DIMENSION_ROLES) == {GROUPING, FILTER, UNRESOLVED_ROLE}
+    assert "conflicted" not in DIMENSION_ROLES

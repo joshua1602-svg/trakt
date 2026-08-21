@@ -32,11 +32,11 @@ import re
 from typing import Any, Dict, List, Optional
 
 from .schema import (
-    AMOUNT, AVERAGE, CONFIGURED, COUNT, EMPTY, FILLED, FILTER, FORWARD,
-    GRAINS, GROUPING, MOVEMENT, NEUTRAL, RANKING, STATED, UNRESOLVABLE,
-    UNRESOLVED_ROLE, DimensionClaim, FilterClaim, OperationClaim,
-    PopulationClaim, QuestionInterpretation, Slot, Span, SubjectClaim,
-    TargetClaim, TimeClaim,
+    AMOUNT, AVERAGE, BOUND, COUNT, EMPTY, FIELD, FILLED, FILTER, FORWARD,
+    GRAINS, GROUPING, MOVEMENT, NEUTRAL, RANKING, ROLE_UNATTRIBUTED, STATED,
+    UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
+    OperationClaim, PopulationClaim, QuestionInterpretation, Slot, Span,
+    SubjectClaim, TargetClaim, TimeClaim,
 )
 
 #: How the parser's aggregation reads as an operation type. `coverage` has no
@@ -172,7 +172,9 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
                             "from any source" % key)
         qi.dimensions.append(DimensionClaim(
             state=FILLED, raw_text=term, span=_span_of(qi.question, term),
-            role=role, candidate_concept=key, source=src))
+            role=role, candidate_concept=key, source=src,
+            # CORRECTION 5: an unresolved role must say WHY.
+            reason=ROLE_UNATTRIBUTED if role == UNRESOLVED_ROLE else None))
 
     # A dimension the parser assigned that the facet layer never named.
     for key in parser_groups:
@@ -200,6 +202,10 @@ def _filters(qi, spec, facets) -> None:
             continue
         qi.filters.append(FilterClaim(
             state=FILLED, raw_text=f.label, span=_span_of(qi.question, f.label),
+            # The facet supplies the WORDING of the clause. Every threshold
+            # facet carries field_key=None, so it supplies neither field nor
+            # bound — recorded, not inferred from which attributes are None.
+            provides=(WORDING,) if f.field_key is None else (WORDING, FIELD),
             source="facet.%s" % f.kind))
         if f.field_key is None:
             qi.notes.append("filter %r: facet identifies the clause, no field "
@@ -214,9 +220,14 @@ def _filters(qi, spec, facets) -> None:
             op, val = condition.get("op"), condition.get("value")
         else:
             cat = str(condition)
+        provides = [FIELD]
+        if op is not None or val is not None or cat is not None:
+            provides.append(BOUND)
         qi.filters.append(FilterClaim(
             state=FILLED, raw_text=None, operator=op,
             value=None if val is None else str(val), categorical_value=cat,
+            # The parser supplies the FIELD and the BOUND, never the wording.
+            provides=tuple(provides),
             source="parser.filters[%s]" % key))
         qi.notes.append("filter on %s: parser supplies the field and bound, no "
                         "raw text" % key)
@@ -254,14 +265,10 @@ def _target(qi, spec, facets) -> None:
                                 target_source=STATED,
                                 source="parser.forecast_target_value")
         return
-    if re.search(r"\b(on target|against target|versus plan|vs plan|"
-                 r"versus budget|vs budget)\b", qi.question, re.I):
-        qi.target = TargetClaim(
-            state=UNRESOLVABLE, raw_text="target",
-            target_source=CONFIGURED,
-            reason="threshold referenced from configuration; no source supplies it",
-            source="projection(no interpreter supplies a configured target)")
-        qi.notes.append("target: configured sense present, no source supplies it")
+    # CORRECTION 4: the configured sense is NOT read here. A regex owned by the
+    # projection is a reading the projection invented, not one it observed, and
+    # this one never fired on the real corpus anyway. The slot stays empty until
+    # an interpreter supplies it.
 
 
 def _population(qi, spec, facets) -> None:
