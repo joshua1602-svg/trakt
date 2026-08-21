@@ -69,8 +69,12 @@ DEFAULT_ROLE_RULES: List[Tuple[str, List[List[str]]]] = [
     ("loan_extract",      [["loanextract"], ["loan", "extract"],
                            ["loan", "tape"], ["loanbook"], ["loan", "report"]]),
     ("cashflow_extract",  [["cashflow"], ["cash", "flow"]]),
-    ("origination_pipeline", [["origination", "pipeline"], ["pipeline"],
-                              ["origination"]]),
+    # A bare "pipeline" is deliberately NOT a rule. The pipeline BOOK's own loan
+    # tape is often named exactly that, and matching it here would classify a
+    # book's primary extract as a supplementary report — the same word meaning
+    # two things, resolved in favour of the wrong one.
+    ("pipeline_report",   [["pipeline", "report"], ["origination", "pipeline"],
+                           ["origination"]]),
     ("collateral_extract", [["collateral"]]),
 ]
 

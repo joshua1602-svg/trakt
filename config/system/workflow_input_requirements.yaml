@@ -10,7 +10,12 @@ role_labels:
   collateral_extract: "Collateral tape"
   cashflow_extract: "Cash-flow tape"
   funder_pi_extract: "Funder principal & interest tape"
-  origination_pipeline: "Origination pipeline"
+  # NOT "pipeline": that word already names a BOOK in this platform — the
+  # forward-looking stream that is registered, cadenced and reported separately
+  # from the funded book. This is a FILE a client sends. `pipeline_report` is
+  # the name the engine's own classifier and the operator's screen already use
+  # for it, so it is reused rather than a third name invented.
+  pipeline_report: "Pipeline report"
   # Still recognised by the classifier so an existing delivery keeps its role,
   # but no longer asked for separately: property and valuation detail is
   # captured under the collateral tape.
@@ -23,7 +28,7 @@ workflows:
       - collateral_extract
       - cashflow_extract
       - funder_pi_extract
-      - origination_pipeline
+      - pipeline_report
   mi_annex2:
     required_roles:
       - loan_extract
@@ -31,7 +36,7 @@ workflows:
       - collateral_extract
       - cashflow_extract
       - funder_pi_extract
-      - origination_pipeline
+      - pipeline_report
 # Minimum recognition confidence for a file to SATISFY a required role without
 # operator confirmation. Below this, readiness parks as review_required.
 min_required_role_confidence: 0.4

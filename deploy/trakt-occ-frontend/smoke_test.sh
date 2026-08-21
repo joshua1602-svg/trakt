@@ -116,7 +116,42 @@ else
 fi
 
 echo "=== 4. API health ==="
-CODE="$(status_of "$API/health")"
+# RETRIED, not probed once. This gate runs right after a deployment, and the two
+# services deploy independently: an API restarting while the frontend workflow
+# ran answered nothing, and a single call turned a routine race into six
+# failures whose advice pointed at CORS.
+#
+# Sized for a restart, not for the ops-api's own worst case: this is a frontend
+# gate, and waiting thirteen minutes to be told the API is down helps nobody.
+: "${HEALTH_ATTEMPTS:=6}"
+: "${HEALTH_GAP_SECONDS:=12}"
+
+# Not `probe_health.sh` from the ops-api gate, though the reasoning is borrowed
+# from it: that one builds `https://<host>/health` and this script is handed a
+# full URL, which the fixture server serves over plain HTTP. Reusing it would
+# mean either changing a file the API's own deployment gate depends on, or
+# making this script unable to test itself.
+health_status() {
+  local attempt=1 code
+  while [ "$attempt" -le "$HEALTH_ATTEMPTS" ]; do
+    code="$(status_of "$API/health")"
+    if [ "$code" = "200" ]; then
+      printf '%s' "$code"; return
+    fi
+    printf '  attempt %s/%s: HTTP %s\n' "$attempt" "$HEALTH_ATTEMPTS" "$code" >&2
+    if [ "$attempt" -lt "$HEALTH_ATTEMPTS" ]; then
+      sleep "$HEALTH_GAP_SECONDS"
+    fi
+    attempt=$((attempt + 1))
+  done
+  printf '%s' "$code"
+}
+
+CODE="$(health_status)"
+API_UP=0
+if [ "$CODE" = "200" ]; then
+  API_UP=1
+fi
 if [ "$CODE" = "200" ]; then
   ok "GET /health -> 200"
   sed 's/^/        /' "$WORK/body"; echo
@@ -130,8 +165,26 @@ if [ "$CODE" = "200" ]; then
   else
     bad "auth_configured is false" "TRAKT_OPS_OPERATORS is unset; every route will answer 503"
   fi
+elif [ "$CODE" = "000" ]; then
+  bad "the API did not answer at all, after $HEALTH_ATTEMPTS attempts" \
+      "nothing is served at $API — it is stopped, still deploying, or the hostname is stale. Checks 5-8 cannot say anything until it answers."
 else
   bad "GET /health -> $CODE (expected 200)"
+fi
+
+# Everything below asks the API a question. With nothing answering, each one
+# would fail for the same single reason and offer a different wrong remedy —
+# which is exactly how an API restart got diagnosed as a CORS misconfiguration.
+# One accurate failure beats five confident ones.
+if [ "$API_UP" -ne 1 ]; then
+  echo
+  echo "=== 5-8. Skipped ==="
+  echo "  SKIP  authentication and CORS cannot be assessed while the API is unreachable"
+  echo
+  echo "-------------------------------------------------------------------"
+  printf 'passed: %d   failed: %d\n' "$PASS" "$FAIL"
+  echo "The frontend itself passed every check. Bring the API up and re-run."
+  exit 1
 fi
 
 echo "=== 5. Unauthenticated access is refused ==="

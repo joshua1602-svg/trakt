@@ -207,6 +207,10 @@ export function AgentCaseScreen() {
             checklist={onboarding.client_checklist}
             busy={busy}
             canAsk={available.has("request_client_information")}
+            // Both buttons are gated. An action the state machine refuses used
+            // to render anyway, so clicking it could only produce an error —
+            // which reads as a broken button, not as a rule being enforced.
+            canGenerate={onboarding.client_checklist.length > 0}
             onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
             // Answers the outstanding questions. This panel used to call
             // generateAgentResponse, which makes up the data FILES — so the
@@ -220,6 +224,7 @@ export function AgentCaseScreen() {
           <ArtefactsPanel
             status={status}
             busy={busy}
+            canGenerate={available.has("register_synthetic_artefact")}
             onUpload={(files) => void act(() => client.uploadAgentArtefacts(caseId, files))}
             onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
             onFixture={() =>
@@ -857,6 +862,7 @@ function ResponsesBlock({
   checklist,
   busy,
   canAsk,
+  canGenerate,
   onAsk,
   onGenerate,
 }: {
@@ -864,6 +870,7 @@ function ResponsesBlock({
   checklist: ChecklistRow[];
   busy: boolean;
   canAsk: boolean;
+  canGenerate: boolean;
   onAsk: () => void;
   onGenerate: () => void;
 }) {
@@ -891,14 +898,16 @@ function ResponsesBlock({
             {copy.agent.checklistAsk}
           </button>
         )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onGenerate}
-          className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-        >
-          {copy.agent.uploadGenerate}
-        </button>
+        {canGenerate && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onGenerate}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {copy.agent.uploadGenerate}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -908,12 +917,14 @@ function ResponsesBlock({
 function ArtefactsPanel({
   status,
   busy,
+  canGenerate,
   onUpload,
   onGenerate,
   onFixture,
 }: {
   status: AgentStatus;
   busy: boolean;
+  canGenerate: boolean;
   onUpload: (files: File[]) => void;
   onGenerate: () => void;
   onFixture: () => void;
@@ -960,14 +971,16 @@ function ArtefactsPanel({
             }}
           />
         </label>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onGenerate}
-          className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-        >
-          {copy.agent.uploadGenerate}
-        </button>
+        {canGenerate && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onGenerate}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {copy.agent.uploadGenerate}
+          </button>
+        )}
         {run.fixture_id && (
           <button
             type="button"
