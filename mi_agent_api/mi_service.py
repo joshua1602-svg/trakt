@@ -581,6 +581,14 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             if line:
                 routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{line}"
             return routed
+        # The granularity facet joins the list BEFORE reconciliation, not after.
+        # It used to be appended below, which is why its status had to be
+        # written at detection: nothing ever adjudicated it. A facet whose
+        # outcome is decided before execution cannot record a request that
+        # SUCCEEDED, and a rule can only be enforced on a request that is
+        # represented.
+        if granularity is not None:
+            facets = list(facets) + [granularity]
         _population = [f for f in facets if f.kind == receipt_mod.KIND_POPULATION]
         facets = receipt_mod.reconcile_routed_facets(
             [f for f in facets if f.kind != receipt_mod.KIND_POPULATION],
@@ -592,8 +600,6 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         # named ("since inception" answered as one month). Verified against the
         # periods the route itself declares.
         facets = receipt_mod.check_period_grain(facets, routed)
-        if granularity is not None:
-            facets = list(facets) + [granularity]
         receipt = receipt_mod.build_routed_receipt(
             route=route, envelope=routed, facets=facets)
         verdict, message = receipt_mod.assess(receipt, substitution=substitution)

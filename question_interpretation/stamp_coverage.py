@@ -195,6 +195,14 @@ def _pit_bundles(R) -> Dict[str, Dict[str, Any]]:
             spec=_Spec(dimensions=[_FIELD]),
             result=_Result(metadata={"group_field_keys": [_FIELD]})),
         R.KIND_PROJECTION: dict(),
+        # A grain is proven by the route REPORTING the level it delivered, which
+        # travels on `concepts` as (asked, reported). Note there is no evidence
+        # bundle shape here at all beyond the facet itself: the comparison is
+        # between what was asked and what the route declares, so a route that
+        # declares nothing cannot stamp one — which is the correct failure.
+        R.KIND_GRANULARITY: dict(
+            facet=dict(label="ITL3 area", concepts=("ITL3 area", "ITL3 area"),
+                       field_key=None)),
         # A bundle exists here only because the branch does. Until the
         # reconciler gained a KIND_POPULATION case there was no evidence to
         # construct, and the absence of this entry WAS the finding.
@@ -225,6 +233,14 @@ def _routed_bundles(R) -> Dict[str, Dict[str, Any]]:
         R.KIND_COMPARISON_PERIOD: dict(envelope={}),
         R.KIND_STRESS: dict(envelope={}),
         R.KIND_PROJECTION: dict(envelope={}),
+        # A grain is proven by the route REPORTING the level it delivered, which
+        # travels on `concepts` as (asked, reported). Note there is no evidence
+        # bundle shape here at all beyond the facet itself: the comparison is
+        # between what was asked and what the route declares, so a route that
+        # declares nothing cannot stamp one — which is the correct failure.
+        R.KIND_GRANULARITY: dict(
+            facet=dict(label="ITL3 area", concepts=("ITL3 area", "ITL3 area"),
+                       field_key=None), envelope={}),
         R.KIND_COHORT_COMPARISON: dict(envelope={}),
         R.KIND_RANKING: dict(envelope=_analytical_envelope()),
     }

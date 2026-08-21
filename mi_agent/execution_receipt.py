@@ -107,6 +107,18 @@ KIND_POPULATION = "row_population"
 #: aggregation on the spec is NOT evidence that the requested statistic ran.
 KIND_STATISTIC = "requested_statistic"
 
+#: A requested reporting GRAIN — the level an answer is reported at, rather than
+#: a field it is grouped by. "By postcode" against a route that reports ITL3
+#: areas, "by week" against month-end snapshots.
+#:
+#: Distinct from KIND_GROUPING, which carries a registry `field_key`. A grain is
+#: not a field: there is no `postcode` column to be applied or unavailable, and
+#: no `week` column either. Filing one as a grouping meant the receipt described
+#: a reporting level as a breakdown, and — because the status was written at
+#: DETECTION — no reconciler ever adjudicated it, so a grain the route DID
+#: honour raised nothing at all and nothing downstream could act on it.
+KIND_GRANULARITY = "granularity"
+
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
 #: The dataset does not carry the field the facet needs. Disclosable.
@@ -1061,6 +1073,12 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     KIND_COMPARISON_PERIOD, KIND_RANKING, KIND_PROJECTION,
     KIND_COHORT_COMPARISON, KIND_MULTI_MEASURE, KIND_RELATIONSHIP,
     KIND_CONTRIBUTION, KIND_UNRESOLVED_MEASURE, KIND_SHARE,
+    # A grain the answer could not express is a SUBSTITUTION: a different level
+    # was measured from the one asked for, and presented as the answer. Tranche D
+    # settled that for periods and this programme settled it for populations;
+    # disclosure is not honouring. A coverage LIMIT is a different thing and is
+    # not this kind — see `assess`.
+    KIND_GRANULARITY,
     # Dropping the population changes WHICH ROWS were counted, so it changes
     # every number in the answer. It can never be a partial disclosure.
     KIND_POPULATION,
@@ -1534,6 +1552,20 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                 facet.status = UNSUPPORTED
                 facet.reason = ("a single aggregate was calculated, which cannot "
                                 "express one measure relative to another")
+
+        elif facet.kind == KIND_GRANULARITY:
+            # Stamped from what the route REPORTS, not from what was asked.
+            # `concepts` carries (asked, reported); a grain the answer expresses
+            # is APPLIED, and one it cannot is UNSUPPORTED with the level it did
+            # use — which blocks, because a different level measured and
+            # presented as the answer is a substitution, not a shortfall.
+            asked, reported = (tuple(facet.concepts or ()) + ("", ""))[:2]
+            if asked and reported and str(asked).lower() == str(reported).lower():
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = UNSUPPORTED
+                facet.reason = ("this answer is reported at %s level, not by %s"
+                                % (reported or "another", asked or facet.label))
 
         elif facet.kind == KIND_POPULATION:
             # THE GAP THAT COST TWO REGRESSIONS.
@@ -2205,6 +2237,20 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.reason = ("this answer does not state what proportion of "
                                 "the book the figure represents")
 
+        elif facet.kind == KIND_GRANULARITY:
+            # Stamped from what the route REPORTS, not from what was asked.
+            # `concepts` carries (asked, reported); a grain the answer expresses
+            # is APPLIED, and one it cannot is UNSUPPORTED with the level it did
+            # use — which blocks, because a different level measured and
+            # presented as the answer is a substitution, not a shortfall.
+            asked, reported = (tuple(facet.concepts or ()) + ("", ""))[:2]
+            if asked and reported and str(asked).lower() == str(reported).lower():
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = UNSUPPORTED
+                facet.reason = ("this answer is reported at %s level, not by %s"
+                                % (reported or "another", asked or facet.label))
+
         elif facet.kind == KIND_POPULATION:
             # EXTEND, rather than constrain: a filter consistent with the
             # population the plan resolved from the intent is a no-op. Anything
@@ -2474,16 +2520,38 @@ _ROUTE_GRANULARITY = {"geo_exposure": ("postcode", "ITL3 area")}
 
 def granularity_disclosure(question: str, route: Optional[str]
                            ) -> Optional[RequestedFacet]:
-    """A facet for a granularity the route could not honour, or None."""
+    """A facet for the reporting GRAIN this question names, or None.
+
+    Raised whether or not the route can honour it — the change that makes the
+    facet layer able to record a request that SUCCEEDED, not only one that
+    failed.
+
+    What this used to do, and why it was not enough
+    ----------------------------------------------
+    It returned a facet only on a MISMATCH, filed as ``KIND_GROUPING``, with
+    ``status=UNAVAILABLE`` written at detection. Three consequences, all of
+    which had to go together:
+
+    * a reporting level was described to the reader as a breakdown;
+    * the status was decided before execution, so no reconciler adjudicated it
+      and no evidence was ever weighed;
+    * a grain the route DID honour raised nothing, so nothing downstream could
+      act on a correct request. A rule can only be enforced on a request that
+      is represented.
+
+    The status is now left at the default and stamped from what the route
+    reports, in both reconcilers. The comparison the reconciler needs travels on
+    ``concepts`` as ``(asked, reported)``.
+    """
     pair = _ROUTE_GRANULARITY.get(route or "")
     if not pair:
         return None
     asked, reported = pair
-    if not re.search(r"\b" + asked + r"s?\b", question or "", re.I):
-        return None
-    return RequestedFacet(
-        kind=KIND_GROUPING, label=asked, status=UNAVAILABLE,
-        reason=f"this answer is reported at {reported} level, not by {asked}")
+    for grain in (asked, reported):
+        if re.search(r"\b" + re.escape(grain) + r"s?\b", question or "", re.I):
+            return RequestedFacet(kind=KIND_GRANULARITY, label=grain,
+                                  concepts=(grain, reported))
+    return None
 
 
 #: How a comparison aggregation reads in the receipt.
