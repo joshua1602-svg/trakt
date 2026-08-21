@@ -121,8 +121,21 @@ export function buildMsalConfig(cfg: AuthConfig): Configuration {
       navigateToLoginRequestUrl: true,
     },
     cache: {
+      // Tokens die with the tab rather than persisting on a shared machine. A
+      // silent renewal still works within the session because MSAL holds the
+      // refresh token here.
       cacheLocation: "sessionStorage",
-      storeAuthStateInCookie: false,
+      // The REQUEST state — code verifier, nonce, the `state` value — also goes
+      // into a short-lived cookie, and this is not the same thing as storing
+      // tokens. That state has to survive a full-page round trip to
+      // login.microsoftonline.com and back; when the browser discards it (ITP,
+      // strict site-data settings, some in-app browsers), MSAL cannot match the
+      // response to the request that started it, so the user signs in
+      // successfully at Microsoft and returns with no account — landing back on
+      // the sign-in screen with nothing to explain why. The cookie is the
+      // documented mitigation, it holds no token, and it is cleared as soon as
+      // the redirect is processed.
+      storeAuthStateInCookie: true,
     },
     system: {
       // MSAL logs verbosely by default; keep the console usable and never log

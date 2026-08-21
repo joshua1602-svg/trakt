@@ -52,6 +52,14 @@ export interface Bootstrapped {
    * hit the problem.
    */
   error?: string;
+  /**
+   * Why THIS sign-in did not take, when MSAL is fine but the user came back
+   * signed out. Without it the app returns to the sign-in screen saying nothing,
+   * and the user presses the button again — the exact loop reported after the
+   * first bearer deployment. The reason is on the page for the same reason as
+   * above, and because this is the failure a user (not a developer) hits.
+   */
+  signInError?: string;
 }
 
 function describe(err: unknown): string {
@@ -89,6 +97,15 @@ export async function bootstrapAuth(
     return { msal: null, config, error: describe(err) };
   }
 
+  // Whether Microsoft actually sent us back with a response to process. Captured
+  // BEFORE the promise runs, because handling it clears the fragment: it is the
+  // difference between "a normal page load, nobody has signed in yet" and "a
+  // sign-in came back and produced no account", which look identical afterwards
+  // and need completely different messages.
+  const returningFromSignIn =
+    typeof window !== "undefined" && /[#&](code|error|id_token)=/.test(window.location.hash);
+  let signInError: string | undefined;
+
   try {
     // Step 2: consume the redirect. Returns null on a normal page load.
     const result = await msal.handleRedirectPromise();
@@ -96,6 +113,17 @@ export async function bootstrapAuth(
       msal.setActiveAccount(result.account);
     } else {
       resolveActiveAccount(msal);
+      if (returningFromSignIn && !msal.getActiveAccount()) {
+        // Came back from Microsoft, no error thrown, and still no account. The
+        // usual cause is auth state that did not survive the round trip, so the
+        // response could not be matched to the request that started it.
+        signInError =
+          "Microsoft returned a sign-in response, but no account was established. "
+          + "This usually means the browser discarded the sign-in state during the "
+          + "redirect (private browsing, or blocked site data).";
+        // eslint-disable-next-line no-console
+        console.error("[MI Agent] redirect processed but no account resulted");
+      }
     }
   } catch (err) {
     // This redirect failed; MSAL did not. Drop the fragment so a reload — or
@@ -103,6 +131,7 @@ export async function bootstrapAuth(
     // reprocessing the same broken response forever.
     // eslint-disable-next-line no-console
     console.error("[MI Agent] this sign-in response could not be processed:", err);
+    signInError = describe(err);
     if (typeof window !== "undefined" && window.location.hash) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
@@ -110,5 +139,5 @@ export async function bootstrapAuth(
   }
 
   setAccessTokenProvider(createMsalTokenProvider(msal, config));
-  return { msal, config };
+  return { msal, config, signInError };
 }
