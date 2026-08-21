@@ -15,6 +15,7 @@ release candidate `28ece25`, unchanged and shippable throughout.
 5. Report a flat result as flat. Do not re-author an instrument after seeing
    its result.
 6. Do not weaken a rule to make a change fit.
+7. **Every stage diffs answer TEXT, not only grades.** See below.
 
 ---
 
@@ -75,6 +76,40 @@ Same verdict on **44 / 44** variations across both books. Seasoning family
 (Q1 4, Q7 4, Q8 12) — **20 / 20 `CORRECT`**, per book, by name.
 
 Reproduce: `python -m question_interpretation.run_robustness_deterministic --all-books`
+
+---
+
+## Standing condition 7 — diff the answer text, not only the grades
+
+**Adopted, and it is what covers Finding 1 for the duration of the programme.**
+
+Every stage compares the **answer text byte for byte**, on both surfaces,
+deterministic arm — not merely whether each case still grades as passing.
+
+### Why this is the safe form
+
+The bounded pre-Stage-2 check found four cases (`kpi_028`–`kpi_031`) whose
+`expected_answer_type: mixed` is satisfied by an observed type of `count`, so a
+portfolio summary that silently dropped its balance measure would **pass the
+bank**. The grader cannot see that regression.
+
+The answer diff can. A summary that lost a measure produces different text.
+
+> **Byte-identical answer text is strictly stricter than the grader.**
+> A change that passes the bank and fails the diff is a real regression the bank
+> could not see. A change that fails the diff and passes the bank is stopped.
+
+That is why option (a) — proceed, record, and fix nothing in the grading path —
+is safe rather than merely convenient. It does not rely on the grader being
+right about `mixed`; it relies on the text not moving.
+
+### Why the grading path is not touched instead
+
+`of_measure` and `_SATISFIES` are **graders**. Changing a grader mid-programme
+invalidates every measurement taken before the change, because the before and
+the after are no longer scored by the same instrument. A moved grader is worse
+than a weak one: a weak grader has a known blind spot, a moved grader has no
+comparable history.
 
 ---
 
@@ -169,6 +204,45 @@ pass identically if the answer lost every measure but the count.
 
 Found by the bounded pre-Stage-2 check:
 `docs/mi_answer_type_expectation_check.md`.
+
+**The right shape of the fix, recorded while it is fresh.**
+
+The defect is *four cases asserting a property nothing verifies*. So the fix is
+to **verify the property**: assert the required measures on `kpi_028`,
+`kpi_029`, `kpi_030` and `kpi_031` directly — that the result carries both
+`loan_count` and a balance measure — rather than inferring it from a type.
+
+That is a **test-side addition**. No production change, no effect on the
+baseline, and it makes the four cases detect the regression they describe.
+
+**Two fixes that look adjacent and are wrong:**
+
+* **Changing `of_measure`** so it reads the result's measure set rather than a
+  single spec slot. It is a grader. Changing it mid-programme means before and
+  after are scored by different instruments, and every measurement taken
+  earlier stops being comparable.
+* **Narrowing `_SATISFIES[MIXED]`** so `count` no longer satisfies `mixed`. Same
+  objection, and it would likely fail those four cases immediately — which is
+  Finding 1 becoming visible rather than being fixed. The property would still
+  be unverified; only the symptom would move.
+
+The distinction is that asserting the measures **adds a check**, while both
+alternatives **move an existing one**.
+
+### Recorded as working — the derivation cross-check
+
+56 of 252 stored `expected_answer_type` values differ from `answer_type.asked()`
+today, and **none of them is drift**. 33 of the 35 `currency`-versus-`any` cases
+carry an `expected_metric` that justifies `currency` — 27
+`current_outstanding_balance`, 5 `current_valuation_amount`, 1
+`original_principal_balance` — and the 21 `none` cases are authored from
+`expected_status` rather than from the wording.
+
+That is `derive_answer_type.py`'s documented cross-check behaving exactly as
+designed: *"the question's own wording decides, cross-checked against the
+declared expected_metric"*. Recorded as a control that works, not dropped
+quietly — a mechanism only known to be sound if someone has checked it and said
+so.
 
 ### Standing rule — do not regenerate the calibration bank
 
