@@ -164,3 +164,21 @@ def is_filter_subject(text: str, start: int, end: int) -> bool:
         return True
     return bool(_FILTER_BEFORE_RE.search(
         text[max(0, start - PREDICATE_WINDOW):start]))
+
+
+def metric_slot(text: str) -> str:
+    """The span that may legitimately NAME the metric.
+
+    The same condition truncation as `subject_side`, WITHOUT the grouping cut:
+    the parser splits grouping clauses upstream in `_grouping_segments`, so
+    `_metric_slot` composes with that split rather than repeating it.
+
+    That difference is why the owner exposes `condition_cut` and `grouping_cut`
+    separately — two consumers need the same vocabulary applied in different
+    compositions, and a single fused function could serve only one of them.
+    """
+    head = text or ""
+    cut = condition_cut(head)
+    if cut is not None and head[:cut].strip():
+        return head[:cut].strip()
+    return head.strip()

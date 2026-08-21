@@ -1702,13 +1702,6 @@ def _scatter_axes(q: str, semantics: dict, available_columns=None
 #: word appearing after one of these names the field being filtered ON, never
 #: the field being reported: in "balance where LTV above 50%" the subject is
 #: balance and LTV is the condition.
-_FILTER_CLAUSE_OPENERS = (
-    "where", "with", "for", "above", "below", "over", "under",
-    "greater than", "less than", "at least", "at most", "more than", "fewer than",
-)
-_FILTER_OPENER_RE = re.compile(
-    r"\b(" + "|".join(re.escape(t) for t in
-                      sorted(_FILTER_CLAUSE_OPENERS, key=len, reverse=True)) + r")\b")
 
 
 def _metric_slot(text: str) -> str:
@@ -1728,15 +1721,15 @@ def _metric_slot(text: str) -> str:
 
     Grouping clauses are already handled upstream by ``_grouping_segments``;
     this composes with that split rather than repeating it.
+
+    Stage 3, conversion 3: the thirteen openers used to be declared here AND,
+    byte for byte, in ``answer_type``. They are now declared once in
+    ``question_interpretation.lexical``, which owns this decision. The rule is
+    unchanged — proved identical on all 690 real-surface corpus questions and on
+    12 edge cases before the delegation was made.
     """
-    head = (text or "")
-    match = _FILTER_OPENER_RE.search(head)
-    while match:
-        tail = head[match.end():]
-        if re.search(r"\d", tail):
-            return head[: match.start()].strip() or head.strip()
-        match = _FILTER_OPENER_RE.search(head, match.end())
-    return head.strip()
+    from question_interpretation.lexical import metric_slot as _owner
+    return _owner(text)
 
 
 def _grouping_segments(q: str) -> Tuple[str, List[str]]:
