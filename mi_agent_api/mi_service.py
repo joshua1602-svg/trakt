@@ -868,6 +868,20 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # answer a narrowed question.
         from mi_agent import population as _population_mod
 
+        # B17: the caller-supplied drill-through filters are merged BEFORE the
+        # predicates are computed, not after.
+        #
+        # `try_route` calls `parsed.merge_filters(extra_filters)` itself, so the
+        # drill was on the spec by the time `population_facets(spec)` read it —
+        # and absent from the predicates the frame resolver narrows on. Raised,
+        # never applied, refused: every drill-through on a routed question came
+        # back "the population collateral_geography = South East … could not be
+        # applied", fail-closed and correct in outcome, wrong in cause.
+        #
+        # Merging here is idempotent, so the call inside `try_route` still stands
+        # and this does not become a second owner of the merge.
+        if parsed is not None and req.filters:
+            parsed.merge_filters(req.filters)
         _predicates = _population_mod.material_predicates(
             (parsed.spec.filters if parsed is not None else None), semantics)
         _population_evidence: Dict[str, Any] = {}

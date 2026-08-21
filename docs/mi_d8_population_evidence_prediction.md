@@ -170,3 +170,110 @@ answer and `rt_020` moves only `executionSummary`.
 * B16a's copied branches consume the owner rather than repeating it;
 * both defects closed: raised-and-never-applied, and applied-and-never-raised;
 * all five surfaces, deterministic arm, both books; seasoning by name.
+
+---
+
+# Result, measured against §6
+
+## Against the prediction
+
+| predicted | measured |
+|---|---|
+| `rt_016` moves to `ok`, geography population applied | **yes** |
+| `rt_020` gains a second population; **answer text unchanged** | **yes — only `executionSummary` moved** |
+| `answer_diff` 2 moved, both `routed_surface` | **719 compared, 717 identical, 2 MOVED, both `routed_surface`** |
+| no corpus answer moves | **none** — calibration, service path and both robustness books all identical |
+| seasoning families unchanged, both books | **Q1 4, Q7 4, Q8 12 all CORRECT** |
+| robustness `32/10/2`; calibration `259/259`, 0 hard fails, 0 gaps | **both** |
+| lexical 693 of 693 | **693 of 693** |
+| stamping matrix 0 live holes | **17 holes, 17 designed, 0 live** |
+| **`rt_021` unchanged** | **NO — it fired, and it was right to** |
+
+## The stop condition fired, and the case was what was wrong
+
+§6.3 listed *"`rt_021` answering"* as a stop condition:
+
+> If this ever answers `ok`, a population reached the receipt applied on
+> something other than execution evidence.
+
+It answered `ok`. Work stopped and the evidence was checked before anything else
+was written:
+
+```
+"Show geographic exposure by ITL3 area." + {"account_status": "Active"}
+  populationApplied: {"applied": ["account_status = Active"],
+                      "rowsBefore": 11035, "rowsAfter": 11000}
+```
+
+**The narrowing genuinely ran.** The answer text does not change because Active
+is 11,000 of 11,035 loans and the largest ITL3 area is the same either way — a
+real narrowing whose effect is invisible at that precision.
+
+So the case's premise was wrong, not the code. It was written on the belief that
+`geo_exposure` could not narrow on `account_status`. It can: the route resolves
+its frame through the governed population seam, so it narrows on **any** material
+predicate and reports evidence — which is what the seam's own comment says it
+does.
+
+Replaced by `rt_022` against `forecast_extrapolation`, which answers from a
+replayed history model rather than a resolved frame and therefore genuinely
+reports nothing. That is the route where "no evidence, no certification" can be
+tested.
+
+**Recorded rather than quietly rewritten**, because a stop condition that fires
+and turns out to be the instrument's fault is the case a surface exists to
+produce, and it is the second time in three commits that a declared expectation
+was the thing that was wrong.
+
+## Three defects, not two
+
+§2 predicted two. The tests found a third, in the change itself.
+
+`"What is the balance by region?"` with a drill to South East raised **two
+identical** `row_population collateral_geography` facets — the drill ledger and
+the role owner reclassifying the named `region` grouping, with byte-identical
+labels. One stamped applied, one left lost, the answer refusing itself.
+
+**That is `7c46f81`'s ten-minute defect, on the path this commit added a raiser
+to.** The dedupe was in the wrong place: it ran where the drill is raised, and
+the split's copy does not exist yet at that point. Moved to after the split,
+where every raiser has run.
+
+Caught by `test_no_duplicate_population_reaches_a_receipt`, which exists because
+`7c46f81` recorded the defect. **The standing rule paid for itself.**
+
+## What the site-by-site verification found
+
+Nine sites listed, all nine confirmed. Two things the list did not say:
+
+* **`reconcile_facets`'s `KIND_POPULATION` branch matched on `satisfied_by()` and
+  canonicals; `reconcile_population` matched on `field_key` alone.** Two rules
+  for one question, which is what "agree-by-maintenance" hides. The owner uses
+  the richer rule and both readers now share it; no surface moved, so the
+  difference had never been reachable.
+* **The two analytical accessors are not interchangeable, and the caller must
+  choose.** `_analytical_population_satisfies` reads a population LABEL and needs
+  field and value to match; `_analytical_narrowed_to` reads a bare VALUE label
+  and matches on value alone. Passing a population facet through the second
+  silently fails — which it did, in a test I wrote, which is how it was found.
+  Now stated in the owner's docstring rather than discovered again.
+
+## A measurement hazard, recorded
+
+Re-pointing `rt_021` to a different question **under the same id** made
+`answer_diff` report a third movement. The differ keys on `(surface, id)`, so a
+case replaced in place reads as behaviour that moved.
+
+The replacement took a new id (`rt_022`), and the differ then reported it
+correctly as `only_before: rt_021` / `only_after: rt_022` — one case gone, one
+arrived. **A replaced case must take a new id**, or the instrument reports a
+product change where there was a test change.
+
+## Mutations, and what caught each
+
+| mutation | caught by |
+|---|---|
+| B17's ordering restored | `test_a_drill_through_on_a_routed_question_is_applied` |
+| the drill raiser removed | `test_a_drill_through_that_ran_is_recorded` |
+| the dedupe moved back before the split | `test_no_duplicate_population_reaches_a_receipt` |
+| the stamper accepts any ledger entry | `test_nothing_proves_nothing` |

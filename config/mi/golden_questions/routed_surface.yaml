@@ -331,21 +331,30 @@ questions:
       The DRILL-THROUGH API — a UI drill from a breakdown into one of its
       groups. No question text can reach this path, which is why the case
       supplies filters rather than words.
-    expected_to_fail: >-
-      D8 / B17 — a drill-through on a question that ROUTES always refuses.
+    note: >-
+      CLOSED BY D8 (B17); re-declared, because a case still claiming a closed
+      defect makes the surface lie.
 
-      `material_predicates` is computed from `parsed.spec.filters` BEFORE
-      `try_route` calls `parsed.merge_filters(extra_filters)`, so the drill-
-      through narrowing never reaches the frame but is on the spec by the time
-      the guard reads it. The population is stamped LOST and the answer refuses:
-      "the population collateral_geography = South East … could not be applied".
+      Every drill-through on a routed question used to refuse:
+      `material_predicates` was computed from `parsed.spec.filters` BEFORE
+      `try_route` merged the caller's filters into that same spec, so the
+      narrowing never reached the frame resolver but WAS on the spec when the
+      population ledger read it. Raised, never applied, refused — fail-closed
+      and correct in outcome, wrong in cause.
 
-      Fail-closed and correct in outcome, wrong in cause — no whole-book figure
-      is passed off as the narrow one. The correct outcome is the narrowed
-      answer the drill asked for, with the population applied.
+      The merge now happens before the predicates are computed. `geo_exposure`
+      resolves its frame through the governed population seam, so it narrows and
+      reports evidence: rowsBefore 11,035, rowsAfter 2,420.
 
-      Found while proving that D2's role owner has a live FILTER branch: the
-      same API reaches it on the point-in-time path, where it works.
+      Found while proving D2's FILTER branch reachable — the same API reaches it
+      on the point-in-time path, where it always worked.
+
+      ONE grouping facet, not the two `geo_exposure` usually raises, and the
+      difference is the role owner doing its job: with the drill on the spec,
+      `collateral_geography` is a FILTER and is reclassified into the population
+      below, leaving `geographic_region_collateral_itl3` as the only axis. The
+      question asks for a breakdown by ITL3 area and a narrowing to South East,
+      and the receipt now says exactly that.
     expect_route: geo_exposure
     expect_ok: true
     expect_verdict: ok
@@ -426,26 +435,26 @@ questions:
     question: What is the balance of the front book?
     filters:
       collateral_geography: South East
-    expected_to_fail: >-
-      D8, and NOT the same defect as rt_016 — the mirror of it.
+    note: >-
+      CLOSED BY D8; re-declared. NOT the same defect as rt_016 — its mirror.
 
-      Here the drill-through DOES reach the frame and IS applied: the answer
-      reads "Seasoning Segment = Front Book · South East · 278 loans", down from
-      1,177. Both narrowings ran. The receipt carries **one** population facet,
-      for the seasoning segment, and says nothing about the geography.
+      The drill-through here always DID reach the frame and WAS applied: the
+      answer reads "Seasoning Segment = Front Book · South East · 278 loans",
+      down from 1,177. Both narrowings ran. The receipt carried ONE population
+      facet, for the seasoning segment, and said nothing about the geography.
 
-      A narrowing that ran, unrecorded. B16a's mirror: there a narrowing was lost
-      and unrecorded, here one is applied and unrecorded, and either way the
-      receipt does not say what happened to the rows.
+      A narrowing that ran, unrecorded — B16a's mirror, where one was lost and
+      unrecorded. Either way the receipt did not say what happened to the rows,
+      and honour-or-clarify can only adjudicate what is represented.
 
-      The cause is the D8 divergence in one line. The ROUTED path raises
-      populations from `spec.filters` through `population_facets(spec)`; the
-      point-in-time path raises them only from the seasoning owner or by
-      reclassifying a dimension the question NAMED. So "balance by region" with
-      the same drill records it — region is named — and "balance of the front
-      book" does not.
+      The cause was the D8 divergence: the routed path raised populations from
+      `spec.filters`, the point-in-time path only from the seasoning owner or by
+      reclassifying a dimension the question NAMED. So the same drill on
+      "balance by region" was recorded and this one was not — whether a
+      narrowing reached the receipt depended on whether the question happened to
+      mention the field.
 
-      Both populations must reach the receipt, and both must be applied.
+      Both populations now reach the receipt and both are applied.
     expect_route: null
     expect_ok: true
     expect_verdict: ok
@@ -453,23 +462,34 @@ questions:
       - [row_population, applied]
       - [row_population, applied]
 
-  - id: rt_021
-    question: Show geographic exposure by ITL3 area.
+  - id: rt_022
+    question: What is the completion run rate?
     filters:
-      account_status: Active
+      collateral_geography: South East
     note: >-
-      The second half of rt_016, on a field the geo route does NOT resolve its
-      frame through and cannot report. Pinned as it stands today so that fixing
-      the drill-through ordering is measured against a case whose correct
-      outcome is a refusal rather than an answer: no evidence, no certification.
+      THE CAN-FAIL for rt_016 and rt_020. It replaces rt_021, whose premise
+      turned out to be wrong, and it takes a NEW ID rather than reusing that one
+      — the answer differ keys on (surface, id), so re-pointing a case in place
+      reports a MOVEMENT where there was only a case change. A replaced case
+      should read as one case gone and another arrived.
+
+      rt_021 was written against `geo_exposure` on the belief that the route could
+      not narrow on `account_status`. It can: `geo_exposure` resolves its frame
+      through the governed population seam, so it narrows on ANY material
+      predicate and reports evidence — rowsBefore 11,035, rowsAfter 11,000. The
+      case fired as a stop condition, the evidence was checked, and the premise
+      was the thing that was wrong. Recorded rather than quietly rewritten.
+
+      `forecast_extrapolation` is the route that genuinely cannot: it answers
+      from a replayed history model rather than a resolved frame, so it reports
+      no narrowing evidence at all. The drill must therefore REFUSE — no
+      evidence, no certification — and that is the bar `reconcile_population`
+      has always held.
 
       If this ever answers `ok`, a population reached the receipt applied on
       something other than execution evidence.
-    expect_route: geo_exposure
+    expect_route: forecast_extrapolation
     expect_ok: false
     expect_verdict: refuse
     expect_facets:
-      - [grouping_dimension, applied]
-      - [grouping_dimension, applied]
-      - [granularity, applied]
       - [row_population, lost]

@@ -514,6 +514,19 @@ paragraphs later the same commit found two things that were already published.
 **The check is only worth anything if it is made against each piece of the design
 rather than against the design's headline.**
 
+## Standing rule — a replaced test case takes a new id
+
+D8. `rt_021`'s premise turned out to be wrong, and it was re-pointed at a
+different question **under the same id**. `answer_diff` keys on
+`(surface, id)` and duly reported a third movement — a product change where
+there had only been a test change.
+
+Given a new id, the differ reported it correctly: one case gone, one arrived.
+
+> **A replaced case takes a new id.** An instrument that keys on identity cannot
+> tell a rewritten case from moved behaviour, and the reading it produces is the
+> more alarming of the two.
+
 ## Backlog
 
 ### B21, B22, B23 — the two text-driven data-visibility decisions

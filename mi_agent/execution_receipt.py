@@ -1957,6 +1957,25 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     """
     facets = _split_named_dimension_roles(facets, spec, semantics,
                                           available_columns, question=question)
+    # THE DEDUPE RUNS AFTER THE SPLIT, and that ordering is the whole point.
+    #
+    # `7c46f81`'s ten-minute defect, arriving on the path D8 added a raiser to:
+    # "balance by region" with a drill to South East had the drill ledger raise a
+    # population AND the role owner reclassify the named `region` grouping into
+    # the same one — identical labels, two facets, one stamped and one lost, and
+    # the answer refusing itself.
+    #
+    # Deduping where the drill is raised would have missed it, because the
+    # split's copy does not exist yet at that point. Here every raiser has run.
+    _seen_claims: Set[Tuple[str, Optional[str], str]] = set()
+    _deduped: List[RequestedFacet] = []
+    for _facet in facets:
+        _claim = (_facet.kind, _facet.field_key, _facet.label)
+        if _facet.kind == KIND_POPULATION and _claim in _seen_claims:
+            continue
+        _seen_claims.add(_claim)
+        _deduped.append(_facet)
+    facets = _deduped
 
     meta = getattr(query_result, "metadata", None) or {}
     recon = meta.get("reconciliation") or {}
@@ -2029,8 +2048,9 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
             # refused. LOST at construction — the first design — would have
             # refused every question the parser DOES resolve, which is 32c263a's
             # shape.
-            _applied_fields = set(meta.get("applied_filter_fields") or ())
-            if facet.field_key and facet.field_key in _applied_fields:
+            if population_applied(
+                    facet, applied_fields=meta.get("applied_filter_fields"),
+                    fields=fields):
                 facet.status, facet.reason = APPLIED, ""
             elif narrowed and any(str(facet.label).lower() in v
                                   or v in str(facet.label).lower()
@@ -2205,12 +2225,12 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
             # field. Spec presence is not evidence — a filter the executor
             # dropped is in `spec.filters` exactly as one it ran, and accepting
             # spec presence is how the P1K silent errors passed.
-            applied_fields = set(meta.get("applied_filter_fields") or ())
             candidates = facet.satisfied_by()
             canonicals = [(fields.get(k, {}) or {}).get("canonical_field", k)
                           for k in candidates]
-            if any(k in applied_fields for k in candidates) or \
-                    any(c in applied_fields for c in canonicals):
+            if population_applied(
+                    facet, applied_fields=meta.get("applied_filter_fields"),
+                    fields=fields):
                 facet.status, facet.reason = APPLIED, ""
             elif canonicals and columns and \
                     not any(c in columns for c in canonicals):
@@ -2767,6 +2787,128 @@ def population_facets(spec: Optional[Dict[str, Any]],
     return out
 
 
+# --------------------------------------------------------------------------- #
+# D8 — THE ONE OWNER OF "was this narrowing actually applied"
+# --------------------------------------------------------------------------- #
+# Three evidence sources, each read in a different place, each scoped to a path
+# the others do not run on — so they could not contradict one another, by
+# construction of the paths rather than by design. That is what the census meant
+# by AGREE-BY-MAINTENANCE, and the maintenance had already lapsed: B16a needed
+# the same three sources for a new kind and got them by COPYING the branches,
+# which is the standing rule about a consolidation creating a new reader,
+# arriving from inside this programme's own work.
+#
+# One function reads all three, in a fixed order, for every kind that asks.
+
+
+def population_applied(facet: RequestedFacet, *,
+                       applied_fields: Optional[Iterable[str]] = None,
+                       ledger: Optional[Mapping[str, Any]] = None,
+                       envelope: Optional[Dict[str, Any]] = None,
+                       analytical: Optional[Mapping[str, Any]] = None,
+                       fields: Optional[Mapping[str, Any]] = None) -> bool:
+    """True only where EXECUTION reports having narrowed on this facet's field.
+
+    The three sources, in order, and every one of them is execution declaring
+    what it did rather than the receipt inferring it:
+
+      1. ``applied_fields`` — the point-in-time executor's `applied_filter_fields`;
+      2. ``ledger`` — a route's ``metadata.populationApplied``, the seam through
+         which the governed population is resolved once and handed to the route;
+      3. the analytical plan's declaration, through whichever of its two
+         accessors fits the facet's LABEL — and the caller chooses by passing
+         ``envelope`` or ``analytical``, because the two are not
+         interchangeable:
+
+           ``envelope``   -> ``_analytical_population_satisfies``, which reads a
+                             population label ("the population X = South East")
+                             and requires the plan to have narrowed on BOTH the
+                             field and the value.
+           ``analytical`` -> ``_analytical_narrowed_to``, which reads a bare
+                             VALUE label ("South East") and matches on the value
+                             alone, because the field a facet resolves to and the
+                             field a plan narrowed on can be two names for the
+                             same geography.
+
+         Passing a population facet through the second silently fails to match.
+         Stated here because it did, in this commit, in a test.
+
+    Order matters only for cost: any one of them is sufficient and none
+    outranks another, because all three are the same claim made by whichever
+    layer ran.
+
+    The bar is `reconcile_population`'s and is deliberately unchanged: a route
+    that reports nothing leaves the facet unproven. Spec presence, route identity
+    and answer wording are not evidence — that is how the P1K silent errors
+    passed.
+    """
+    keys = {str(k) for k in (facet.satisfied_by() or ())}
+    if getattr(facet, "field_key", None):
+        keys.add(str(facet.field_key))
+    registry = fields or {}
+    keys |= {str((registry.get(k, {}) or {}).get("canonical_field", k))
+             for k in list(keys)}
+    if keys & {str(f) for f in (applied_fields or ())}:
+        return True
+    declared = {str(a).split(" ")[0] for a in ((ledger or {}).get("applied") or ())}
+    if keys & declared:
+        return True
+    if envelope is not None and _analytical_population_satisfies(envelope, facet):
+        return True
+    if analytical and _analytical_narrowed_to(analytical, facet):
+        return True
+    return False
+
+
+def population_ledger(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The narrowing ledger a routed envelope carries, or ``{}``."""
+    if not isinstance(envelope, dict):
+        return {}
+    ledger = (envelope.get("metadata") or {}).get("populationApplied")
+    return ledger if isinstance(ledger, dict) else {}
+
+
+def drill_population_facets(extra_filters: Optional[Mapping[str, Any]],
+                            semantics: Optional[dict] = None
+                            ) -> List[RequestedFacet]:
+    """Populations the CALLER supplied, rather than the sentence.
+
+    D8. A drill-through — a UI drilling from a breakdown into one of its groups —
+    arrives as `MiQueryRequest.filters` and is merged onto the spec. It is a
+    narrowing the reader requested; it is simply not one they typed, so no reader
+    of the QUESTION can raise it.
+
+    On the routed path `population_facets(spec)` picks it up, because that ledger
+    reads the whole spec. On the point-in-time path nothing did, and the
+    consequence was a narrowing that RAN and went unrecorded:
+
+        "What is the balance of the front book?" + {collateral_geography: South East}
+          -> "Seasoning Segment = Front Book · South East · 278 loans"   (from 1,177)
+          -> receipt: one population facet, for the seasoning segment only.
+
+    The same drill on "balance by region" WAS recorded, because region is named
+    and the role owner could reclassify the grouping. So whether a narrowing
+    reached the receipt depended on whether the question happened to mention the
+    field — not a property of the narrowing at all.
+
+    Why not raise the whole spec here. Measured: raising every `spec.filters`
+    entry on the point-in-time path would add a population facet to **81 corpus
+    questions**, all of them numeric bounds — "LTV above 50%" — which
+    `KIND_THRESHOLD` already represents. Two facets for one predicate is the
+    duplicate-claim defect, not a fix for the missing one. The caller's filters
+    are precisely the narrowings no other reader can see.
+    """
+    from .population import material_predicates
+
+    out: List[RequestedFacet] = []
+    for predicate in material_predicates(dict(extra_filters or {}), semantics):
+        out.append(RequestedFacet(
+            kind=KIND_POPULATION,
+            label=f"the population {predicate.describe()}",
+            field_key=predicate.field))
+    return out
+
+
 def reconcile_population(facets: Sequence[RequestedFacet],
                          evidence: Optional[Dict[str, Any]],
                          dataset_columns: Optional[Iterable[str]] = None) -> None:
@@ -2787,7 +2929,7 @@ def reconcile_population(facets: Sequence[RequestedFacet],
             continue
         expressible = (dataset_columns is None
                        or facet.field_key in set(dataset_columns))
-        if facet.field_key in applied:
+        if population_applied(facet, ledger={"applied": sorted(applied)}):
             facet.status, facet.reason = APPLIED, ""
         elif not expressible:
             # The BOOK cannot express this predicate, so it never narrowed
@@ -2916,7 +3058,8 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             # EXTEND, rather than constrain: a filter consistent with the
             # population the plan resolved from the intent is a no-op. Anything
             # else keeps the status the population ledger already stamped.
-            if analytical and _analytical_population_satisfies(envelope, facet):
+            if population_applied(facet, ledger=population_ledger(envelope),
+                                  envelope=envelope if analytical else None):
                 facet.status, facet.reason = APPLIED, ""
 
         elif facet.kind == KIND_LOST_NARROWING:
@@ -2924,15 +3067,8 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             # evidence the geographic branch below uses. This is what makes a
             # COMPARISON safe with no lexical rule at all: a plan that narrowed
             # to both sides declares both, and both facets are stamped applied.
-            _ledger = {str(a).split(" ")[0] for a in
-                       (((envelope or {}).get("metadata") or {})
-                        .get("populationApplied") or {}).get("applied") or ()}
-            if facet.field_key and facet.field_key in _ledger:
-                # The population ledger — the same evidence `reconcile_population`
-                # reads. A route that narrowed on this field HONOURED the
-                # narrowing, whatever else it did.
-                facet.status, facet.reason = APPLIED, ""
-            elif analytical and _analytical_narrowed_to(analytical, facet):
+            if population_applied(facet, ledger=population_ledger(envelope),
+                                  analytical=analytical):
                 facet.status, facet.reason = APPLIED, ""
             elif listing:
                 facet.status = UNSUPPORTED

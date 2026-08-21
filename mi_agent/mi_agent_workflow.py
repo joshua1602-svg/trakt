@@ -981,6 +981,13 @@ def run_mi_agent_query(
             # The parser's resolved filters, so the narrowing owner consumes that
             # answer instead of claiming the same field.
             resolved_filters=set(getattr(spec, "filters", None) or ()))
+        # D8: the caller's drill-through narrowings, which no reader of the
+        # QUESTION can raise because they were never spoken. Deduped on
+        # (kind, field, label), as 7c46f81 established — the seasoning owner and
+        # this ledger can name the same governed population.
+        _drill = _receipt_mod.drill_population_facets(extra_filters, semantics)
+        if _drill:
+            _facets = list(_facets) + list(_drill)
 
         # ---- Stage 2: build the question interpretation and CARRY it --------
         # Assembled from the spec and the facets that were just produced for
