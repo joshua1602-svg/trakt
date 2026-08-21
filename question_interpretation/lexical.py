@@ -166,6 +166,82 @@ def is_filter_subject(text: str, start: int, end: int) -> bool:
         text[max(0, start - PREDICATE_WINDOW):start]))
 
 
+# --------------------------------------------------------------------------- #
+# THE SELECTOR MARK — a decision with no owner until now
+# --------------------------------------------------------------------------- #
+# `is_filter_subject` above owns "this mention is the subject of a predicate",
+# and it owns it for NUMERIC predicates only: both its patterns require a
+# comparator, a `<>=` symbol or a leading digit, and `condition_cut` needs a
+# digit after the opener before it will cut. Measured:
+#
+#   "how many loans have LTV above 50%"            is_filter_subject -> True
+#   "balance where account status is active"       is_filter_subject -> False
+#   "balance for interest roll-up loans"           is_filter_subject -> False
+#   "show loans in the South East"                 is_filter_subject -> False
+#
+# The numeric cases are exactly the ones the parser already resolves — four of
+# the five fields that ever reach `spec.filters` are numeric bounds on measures.
+# So the CATEGORICAL selector had no owner at all, and a question that says
+# "where account status is active" was answered over the whole book, split by
+# status, with the breakdown certified: 11,035 loans for a narrowed question.
+#
+# This is that owner, and it is deliberately narrow. The cost of a false positive
+# is a refused answer to a question that was fine, which is what 32c263a cost.
+#: Words that can introduce a row selector. A superset of CONDITION_OPENERS
+#: because a categorical selector uses prepositions a numeric bound does not
+#: ("for interest roll-up loans", "of the front book"), and a subset in the other
+#: direction because the comparators are numeric-only and live there.
+SELECTOR_OPENERS: Tuple[str, ...] = (
+    "where", "with", "for", "whose", "having", "of", "in",
+    "is", "are", "equals", "equal to",
+)
+
+#: Words that mark an AXIS rather than a selector — "balance by broker" is a
+#: breakdown, and `Broker` is also a value of `origination_channel`, so the
+#: collision is real and the separation matters.
+#:
+#: There is NO runtime check against these, and that is deliberate. A check was
+#: written and then removed because it could never fire: the two vocabularies are
+#: DISJOINT, so a mention preceded by an axis marker cannot also be preceded by a
+#: selector opener within the window. The invariant that makes the check
+#: unnecessary is asserted instead —
+#: `test_the_selector_and_axis_vocabularies_are_disjoint` — which fails loudly
+#: the moment someone adds "by" to `SELECTOR_OPENERS` and the collision becomes
+#: reachable.
+#:
+#: Recorded this way because of the standing rule earned in D7: a branch that
+#: fires zero times is unmeasured, not unused. Here the paths WERE searched, and
+#: there is none.
+AXIS_MARKERS: Tuple[str, ...] = (
+    "by", "per", "across", "split by", "broken down by", "grouped by",
+)
+
+_SELECTOR_BEFORE_RE = re.compile(
+    r"\b(?:" + "|".join(sorted((re.escape(t) for t in SELECTOR_OPENERS),
+                               key=len, reverse=True)) + r"|=)"
+    r"\s+(?:the\s+|a\s+|an\s+|all\s+|our\s+|its\s+)?$", re.I)
+
+#: How far back to look for the opener. Short, so an opener from a different
+#: clause cannot claim a mention two phrases away.
+SELECTOR_WINDOW = 24
+
+
+def selector_mark(text: str, start: int, end: int) -> bool:
+    """True when the sentence uses the mention at ``[start:end]`` to SELECT rows.
+
+    An opener immediately before it ("for **interest roll-up** loans", "where
+    account status is **active**"). "balance by **broker**" is a breakdown and is
+    not marked, because `AXIS_MARKERS` and `SELECTOR_OPENERS` are disjoint — the
+    invariant, not a second test here.
+
+    This answers only whether the SENTENCE selected. It says nothing about which
+    field, which value, or whether anything resolved it — those belong to the
+    readers that consume this, not here.
+    """
+    before = (text or "")[max(0, start - SELECTOR_WINDOW):start]
+    return bool(_SELECTOR_BEFORE_RE.search(before))
+
+
 def metric_slot(text: str) -> str:
     """The span that may legitimately NAME the metric.
 

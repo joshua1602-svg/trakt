@@ -100,10 +100,12 @@ def test_the_real_corpus_is_covered_and_stable():
     same answer twice."""
     from question_interpretation.lexical_decisions import collect, corpus
     cases = corpus()
-    # 693, not 690: pop_253/254/255 were added to the calibration bank as the
-    # regression test for the point-in-time population hole. The corpus grew;
-    # no existing decision moved, which is what the stability half asserts.
-    assert len(cases) == 693, len(cases)
+    # 697, not 693: b16_001..004 were added to the calibration bank as B16a's
+    # surface, declared failing BEFORE the fix. Before them, pop_253/254/255 were
+    # added the same way for the point-in-time population hole. The corpus grows
+    # when a defect earns a case; no existing decision moved, which is what the
+    # stability half asserts.
+    assert len(cases) == 697, len(cases)
     surfaces = {c["surface"] for c in cases}
     assert surfaces == {"ere_mi_calibration_250", "ere_mi_questions",
                         "nl_robustness_alderbridge", "nl_robustness_kestrelmoor"}

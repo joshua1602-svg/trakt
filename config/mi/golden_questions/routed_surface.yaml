@@ -297,26 +297,28 @@ questions:
 
   - id: rt_015
     question: What is the balance where account status is active?
-    expected_to_fail: >-
-      B16a — the sentence marks a selector and nothing reads the mark.
+    note: >-
+      RE-DECLARED: B16a closed this, and leaving it claiming a defect that is
+      closed would make the surface lie.
 
-      Today this answers `ok`: "Total Balance · grouped by Account Status · 2
-      groups · 11,035 loans", with `grouping_dimension account_status APPLIED`.
-      The reader asked for the balance of ACTIVE loans and was given the whole
-      book split by status, certified.
+      It answered `ok`: "Total Balance · grouped by Account Status · 2 groups ·
+      11,035 loans", with `grouping_dimension account_status APPLIED` — the
+      reader asked for the balance of ACTIVE loans and was given the whole book
+      split by status, certified. B13's class, and a wrong NUMBER.
 
-      That is B13's class — a narrowed question answered over 11,035 loans — and
-      it is a wrong NUMBER, not a wrong receipt. `lexical.is_filter_subject`
-      already owns the mark; no reader consults it, and the deterministic parser
-      resolves no filter for it, so no source can say "filter".
+      It now refuses, carrying `lost_narrowing account_status LOST` and no
+      grouping claim at all: the field the narrowing owner takes is not also
+      raised as a breakdown, which is B15's shape and would have been reopened
+      by a second selector owner.
 
-      The correct outcome is honour-or-clarify doing its job: a narrowing was
-      requested and not applied, so the answer must not be the whole book.
-      Recording the loss needs no predicate value and therefore no parser
-      change — that is B16a, and it is the step that removes the wrong number.
+      What this pins going forward is the pair: a refusal, AND exactly one facet.
+      A change that reinstated the breakdown claim beside the refusal would still
+      refuse and would still be wrong.
     expect_route: null
     expect_ok: false
     expect_verdict: refuse
+    expect_facets:
+      - [lost_narrowing, lost]
 
   - id: rt_016
     question: Show geographic exposure by ITL3 area.

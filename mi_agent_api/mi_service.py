@@ -537,7 +537,11 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             question, semantics, frame=frame,
             requested_dimensions=receipt_mod.requested_dimension_terms(
                 question, semantics,
-                available_columns=set(frame.columns) if frame is not None else None))
+                available_columns=set(frame.columns) if frame is not None else None),
+            # The parser's resolved filters, so the narrowing owner consumes that
+            # answer instead of claiming the same field.
+            resolved_filters=set(getattr(getattr(parsed, "spec", None),
+                                         "filters", None) or ()))
         # D2 — THE ROLE DECISION, CONSUMED RATHER THAN DEFAULTED.
         #
         # `requested_dimension_terms` raises every named dimension as a

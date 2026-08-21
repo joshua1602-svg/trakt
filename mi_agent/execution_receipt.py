@@ -48,6 +48,11 @@ from . import statistic as _statistic
 # Vocabulary
 # --------------------------------------------------------------------------- #
 KIND_GEOGRAPHIC_SCOPE = "geographic_scope"
+#: A row selector the SENTENCE marked, on any dimension, that no source resolved
+#: into a predicate. Distinct from KIND_GEOGRAPHIC_SCOPE, which is the same idea
+#: restricted to geography and carrying geographic prose, and from
+#: KIND_POPULATION, which carries a RESOLVED predicate and its value.
+KIND_LOST_NARROWING = "lost_narrowing"
 KIND_THRESHOLD = "threshold"
 KIND_GROUPING = "grouping_dimension"
 KIND_STRESS = "stress_scenario"
@@ -327,6 +332,174 @@ def geographic_values(frame, semantics: dict, *, max_cardinality: int = 60
                 continue
             out.setdefault(token.lower(), key)
     return out
+
+
+def dimension_values(frame, semantics: dict, *, max_cardinality: int = 60
+                     ) -> Dict[str, str]:
+    """``{lowercased value: semantic field key}`` for EVERY low-cardinality dimension.
+
+    `geographic_values` above, without its geography restriction — and the
+    restriction is kept there rather than removed, because its consumers are
+    geography-specific and its narrowness is what lets it be read with no other
+    guard. Generalising it in place would have raised a scope facet on 101 of 697
+    corpus questions.
+
+    The reason is one collision, and it is why every consumer of THIS map must
+    check the sentence first: **`Broker` is a value of `origination_channel` and
+    also the ordinary word for the dimension**, so "balance by broker" — a plain
+    breakdown, 78 times over in the corpora — reads as a narrowing to
+    `origination_channel = Broker` unless something notices the `by`.
+    Geography values (London, South East, Wales) do not collide with dimension
+    words. General dimension values do.
+
+    Built from the LOADED BOOK, so a value this tape does not carry cannot be
+    recognised — the profiled-allowlist discipline, rather than a denylist that
+    has to be completed.
+
+    **A token that names a DIFFERENT field is never accepted as a value.** That
+    is the collision, stated as a rule instead of patched per word: `Broker` is a
+    value of `origination_channel` and a synonym of `broker_channel`, so
+    "balance by broker" would read as a narrowing. The registry already declares
+    every field's names and synonyms, so the exclusion is read from it rather
+    than maintained as a list here.
+
+    A different DIMENSION, and both qualifiers are load-bearing. `Redeemed` is a
+    value of `account_status` and also a synonym of `loan_redemption_flag` — a
+    FLAG, not a dimension, so it is no collision: a flag name is not a word
+    anyone breaks a book down by. And a token naming the very field it is a value
+    of is no collision either ("front book" names `seasoning_segment` and is one
+    of its values), which is why that case is left to the seasoning owner through
+    `taken` rather than dropped here.
+
+    `_GEO_STOPWORDS` is deliberately NOT reused. It is geography-shaped — it
+    contains "active", because a stray "active" must never bind a region — and
+    `Active` is a legitimate `account_status` value. Importing one map's
+    assumptions into another is how the geography restriction would have leaked.
+    """
+    out: Dict[str, str] = {}
+    if frame is None or not hasattr(frame, "columns"):
+        return out
+    fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
+    named_by: Dict[str, Set[str]] = {}
+    for key, entry in fields.items():
+        entry = entry or {}
+        if entry.get("role") != "dimension":
+            continue
+        names = [str(key), str(entry.get("business_name") or ""),
+                 str(entry.get("display_name") or ""),
+                 str(entry.get("canonical_field") or "")]
+        names.extend(str(n) for n in (entry.get("synonyms") or ()))
+        for name in names:
+            token = name.strip().lower()
+            if token:
+                named_by.setdefault(token, set()).add(key)
+    for key, entry in fields.items():
+        if (entry or {}).get("role") != "dimension":
+            continue
+        column = (entry or {}).get("canonical_field", key)
+        if column not in frame.columns:
+            continue
+        try:
+            values = frame[column].dropna().unique()
+        except Exception:  # noqa: BLE001 - profiling must never break a query
+            continue
+        if len(values) > max_cardinality:
+            continue
+        for value in values:
+            token = str(value).strip().lower()
+            if len(token) < 4 or (named_by.get(token, set()) - {key}):
+                continue
+            out.setdefault(token, key)
+    return out
+
+
+#: Words that say the question COMPARES two things rather than narrowing to one.
+#:
+#: Earned by the families each one would otherwise have broken. Without this
+#: guard the detector below fires on 13 questions instead of 5, and the extra
+#: eight are Q7.3, Q7.4 and Q8.x on both books — the seasoning and provenance
+#: comparison families, which is 32c263a's family.
+#:
+#: A count of named values cannot replace it: "the front book" versus "our
+#: seasoned lending" names its second side with a synonym the frame does not
+#: carry, and "direct" versus "acquired" splits across two fields so each sees
+#: exactly one value. The sentence says "compare"; that is the reliable signal.
+_COMPARISON_MARKERS = re.compile(
+    r"\b(?:compare[ds]?|comparing|comparison|versus|vs\.?|against|"
+    r"relative to|differ(?:s|ent|ently|ence)?|between|both sides)\b", re.I)
+
+
+def _detect_lost_narrowing(q: str, values: Dict[str, str],
+                           taken: Optional[Iterable[str]] = None
+                           ) -> List[RequestedFacet]:
+    """A row selector the SENTENCE marked, naming a governed value of this book.
+
+    Raised so that a narrowing which never reached execution is RECORDED rather
+    than silently answered over the whole book. "What is the balance where
+    account status is active?" returned Total Balance grouped by Account Status,
+    2 groups, 11,035 loans — the whole book, with the breakdown certified.
+
+    Four conditions, and each one is load-bearing:
+
+      1. the token names a value the LOADED BOOK carries (`dimension_values`);
+      2. `lexical.selector_mark` says the sentence used it to select — without
+         this, "balance by broker" reads as a narrowing to Broker;
+      3. the question contains no comparison marker — without this the seasoning
+         and provenance comparison families refuse;
+      4. exactly one value of that field is marked, so "London and the South
+         East" is not read as a narrowing to one of them.
+
+    Fields another owner has already taken are skipped: `taken` carries the
+    seasoning owner's predicate fields and the parser's resolved filters, because
+    a narrowing somebody resolved is not lost.
+
+    Deliberately NOT reused for geography: `_detect_geographic_scope` owns that,
+    reads a narrower map, and its facet carries prose about geographic scope.
+    """
+    from question_interpretation.lexical import selector_mark
+    from .portfolio_lens import mask_scope_phrases
+
+    if not values or _COMPARISON_MARKERS.search(q):
+        return []
+    # THE SCOPE OWNER CLAIMS ITS SPANS FIRST.
+    #
+    # "the direct book" names the POPULATION BEING REPORTED ON, and
+    # `portfolio_lens` owns that vocabulary: "It is not a row predicate, not a
+    # grouping axis, and not a place. The cure is to CLAIM THE SPAN FIRST."
+    # `Direct` is also a value of `origination_channel`, so without this the
+    # narrowing owner reads "the balance of the direct book" as a lost row
+    # filter and refuses a governed scope question — eleven tests across P1I,
+    # P1J-1, P1L and P1N said so.
+    #
+    # Masking preserves offsets, so every span below stays valid. This is the
+    # same call the filter and dimension parsers already make; a sixth reader of
+    # the scope vocabulary would have been the defect this programme removes.
+    q = mask_scope_phrases(q)
+    skip = {str(k) for k in (taken or ())}
+    marked: Dict[str, List[Tuple[str, Tuple[int, int]]]] = {}
+    seen_span: List[Tuple[int, int]] = []
+    for value in sorted(values, key=len, reverse=True):
+        field = values[value]
+        if field in skip:
+            continue
+        for match in re.finditer(r"\b" + re.escape(value) + r"\b", q):
+            span = (match.start(), match.end())
+            # Longest first, so a value contained in a longer one already matched
+            # does not match again ("east" inside "south east").
+            if any(s <= span[0] and span[1] <= e for s, e in seen_span):
+                continue
+            seen_span.append(span)
+            if selector_mark(q, span[0], span[1]):
+                marked.setdefault(field, []).append((value, span))
+    found: List[RequestedFacet] = []
+    for field, hits in marked.items():
+        if len({v for v, _s in hits}) != 1:
+            continue                      # two values of one field: a comparison
+        value, span = hits[0]
+        found.append(RequestedFacet(
+            kind=KIND_LOST_NARROWING, label=value.title(), field_key=field,
+            concepts=(value,), span=span))
+    return found
 
 
 def _detect_geographic_scope(q: str, geo_values: Dict[str, str]) -> List[RequestedFacet]:
@@ -810,7 +983,8 @@ def _unresolved_measure_slots(q: str, semantics: dict, frame) -> Tuple[str, ...]
 
 
 def detect_requested_facets(question: str, semantics: dict, *, frame=None,
-                            requested_dimensions: Optional[Sequence[Tuple[str, str]]] = None
+                            requested_dimensions: Optional[Sequence[Tuple[str, str]]] = None,
+                            resolved_filters: Optional[Iterable[str]] = None
                             ) -> List[RequestedFacet]:
     """Every material facet stated in ``question``, before any parsing decision.
 
@@ -857,6 +1031,25 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     facets.extend(_detect_stress(q))
     facets.extend(_detect_thresholds(q))
     facets.extend(_detect_geographic_scope(q, geographic_values(frame, semantics)))
+    # B16a. The same idea on every OTHER dimension, and it needs the sentence's
+    # mark where geography does not: geography values do not collide with
+    # dimension words and general dimension values do — `Broker` is a value of
+    # `origination_channel` and also the word for the dimension.
+    #
+    # Fields the seasoning owner has taken are skipped, because a narrowing
+    # somebody RESOLVED is not lost, and raising both would put the same decision
+    # on the receipt twice.
+    #
+    # `resolved_filters` is the PARSER'S answer, consumed rather than competed
+    # with: a field it put in `spec.filters` was resolved into a predicate, so
+    # the narrowing is not lost and the role owner reclassifies it into a
+    # population downstream. Without this the two owners claimed the same field
+    # and the population facet vanished — the D2 carriage tests caught it.
+    facets.extend(_detect_lost_narrowing(
+        q, dimension_values(frame, semantics),
+        taken=set(_predicate or ()) | set(resolved_filters or ()) | {
+            f.field_key for f in _detect_geographic_scope(
+                q, geographic_values(frame, semantics)) if f.field_key}))
     facets.extend(_detect_comparison_period(q))
     facets.extend(_detect_ranking(q, list(requested_dimensions or [])))
     facets.extend(_detect_contribution(q))
@@ -917,7 +1110,22 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
             reason=("this was asked for alongside measures that were "
                     "calculated, but it is not a governed measure in this "
                     "dataset, so it was not calculated")))
+    # A field the SELECTOR owner has claimed is not also raised as a breakdown.
+    #
+    # B15's shape, which `7c46f81` closed for the seasoning vocabulary and which
+    # a second selector owner would have reopened: "balance where account status
+    # is active" raised `lost_narrowing account_status LOST` and
+    # `grouping_dimension account_status APPLIED` on one receipt — the same field
+    # asserted both ways, one of them wrong whichever way the reader reads it.
+    #
+    # This CONSUMES the narrowing owner's answer; it takes no decision of its
+    # own. Same treatment `requested_dimension_terms` already gives a phrase the
+    # seasoning owner took.
+    _narrowed_fields = {f.field_key for f in facets
+                        if f.kind == KIND_LOST_NARROWING and f.field_key}
     for key, term, alts in (requested_dimensions or []):
+        if key in _narrowed_fields or any(a in _narrowed_fields for a in alts):
+            continue
         facets.append(RequestedFacet(kind=KIND_GROUPING, label=term,
                                      field_key=key, alt_keys=alts))
     return seasoning_population + facets
@@ -1144,6 +1352,12 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # A substituted statistic IS the number. There is no version of "here is the
     # weighted average, you asked for the median" that is a partial answer.
     KIND_STATISTIC,
+    # A narrowing the sentence asked for and execution did not apply changes
+    # WHICH ROWS were counted, exactly as a population does. Answering over the
+    # whole book and disclosing it underneath is the substitution this contract
+    # exists to prevent: "balance where account status is active" returned
+    # 11,035 loans.
+    KIND_LOST_NARROWING,
 })
 #: Facets that change the SHAPE of a still-valid answer. A partial answer is
 #: acceptable provided the unhonoured facet is named.
@@ -1757,6 +1971,26 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
             else:
                 facet.status = LOST
                 facet.reason = "the geographic scope was not applied to the calculation"
+
+        elif facet.kind == KIND_LOST_NARROWING:
+            # B16a. Proven the way the geographic scope above is proven, and from
+            # the same ledger: the executor records the FIELD KEYS it narrowed
+            # on, so a narrowing that ran is recorded as honoured rather than
+            # refused. LOST at construction — the first design — would have
+            # refused every question the parser DOES resolve, which is 32c263a's
+            # shape.
+            _applied_fields = set(meta.get("applied_filter_fields") or ())
+            if facet.field_key and facet.field_key in _applied_fields:
+                facet.status, facet.reason = APPLIED, ""
+            elif narrowed and any(str(facet.label).lower() in v
+                                  or v in str(facet.label).lower()
+                                  for v in values):
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = LOST
+                facet.reason = (
+                    "this narrowing was not applied, so the figure covers the "
+                    "whole book rather than only %s" % facet.label)
 
         elif facet.kind == KIND_THRESHOLD:
             thresholds_seen += 1
@@ -2634,6 +2868,31 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             # else keeps the status the population ledger already stamped.
             if analytical and _analytical_population_satisfies(envelope, facet):
                 facet.status, facet.reason = APPLIED, ""
+
+        elif facet.kind == KIND_LOST_NARROWING:
+            # The routed twin, proven from the plan's own declaration — the same
+            # evidence the geographic branch below uses. This is what makes a
+            # COMPARISON safe with no lexical rule at all: a plan that narrowed
+            # to both sides declares both, and both facets are stamped applied.
+            _ledger = {str(a).split(" ")[0] for a in
+                       (((envelope or {}).get("metadata") or {})
+                        .get("populationApplied") or {}).get("applied") or ()}
+            if facet.field_key and facet.field_key in _ledger:
+                # The population ledger — the same evidence `reconcile_population`
+                # reads. A route that narrowed on this field HONOURED the
+                # narrowing, whatever else it did.
+                facet.status, facet.reason = APPLIED, ""
+            elif analytical and _analytical_narrowed_to(analytical, facet):
+                facet.status, facet.reason = APPLIED, ""
+            elif listing:
+                facet.status = UNSUPPORTED
+                facet.reason = ("this answer covers the whole book rather than "
+                                f"narrowing to {facet.label}")
+            else:
+                facet.status = LOST
+                facet.reason = (
+                    "this narrowing was not applied, so the figure covers the "
+                    "whole book rather than only %s" % facet.label)
 
         elif facet.kind == KIND_GEOGRAPHIC_SCOPE:
             if analytical:

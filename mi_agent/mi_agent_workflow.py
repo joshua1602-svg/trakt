@@ -970,7 +970,10 @@ def run_mi_agent_query(
         _requested_dims = _receipt_mod.requested_dimension_terms(
             question, semantics, available_columns=available_columns)
         _facets = _receipt_mod.detect_requested_facets(
-            question, semantics, frame=df, requested_dimensions=_requested_dims)
+            question, semantics, frame=df, requested_dimensions=_requested_dims,
+            # The parser's resolved filters, so the narrowing owner consumes that
+            # answer instead of claiming the same field.
+            resolved_filters=set(getattr(spec, "filters", None) or ()))
 
         # ---- Stage 2: build the question interpretation and CARRY it --------
         # Assembled from the spec and the facets that were just produced for

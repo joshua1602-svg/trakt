@@ -5697,17 +5697,17 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 0
-  known_gap: 'B16a. Today this ANSWERS: "Total Balance, grouped by Account Status,
-    2 groups, 11,035 loans", with the breakdown certified. The reader asked for
-    the balance of ACTIVE loans and was given the whole book split by status.
-    B13''s class, and a wrong NUMBER rather than a wrong receipt. The sentence
-    marks account status as a selector and no reader consults the mark, because
-    the lexical predicate machinery is entirely NUMERIC -- is_filter_subject and
-    condition_cut both require a comparator and a number. The correct outcome is
-    the honour-or-clarify refusal: a narrowing was requested, it was not applied,
-    and no whole-book figure stands in for it.'
-  notes: Constructed. No question in any of the four corpora contains this
-    construct, which is why this case exists rather than a corpus finding.
+  known_gap: null
+  notes: 'CLOSED BY B16a; the flag is retired and the story kept. This ANSWERED:
+    "Total Balance, grouped by Account Status, 2 groups, 11,035 loans", with the
+    breakdown certified -- the reader asked for the balance of ACTIVE loans and
+    was given the whole book split by status. B13''s class, a wrong NUMBER rather
+    than a wrong receipt. It answered because the lexical predicate machinery is
+    entirely NUMERIC (is_filter_subject and condition_cut both need a comparator
+    and a number), so the categorical selector had no owner at all.
+
+    Constructed: no question in any of the four corpora contains this construct,
+    which is why this case exists rather than a corpus finding.'
 - id: b16_002
   category: unapplied_narrowing
   question: What is the balance for interest roll-up loans?
@@ -5726,13 +5726,16 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 0
-  known_gap: 'B16a, the worse shape. Today this answers "entire funded portfolio,
-    11,035 loans" with NO FACET AT ALL -- the dimension term is never raised, so
-    the receipt makes no claim and nothing blocks. A whole-book figure for a
-    narrowed question, silently. Where b16_001 has a wrong claim to catch, this
-    has none.'
-  notes: Constructed, and the pair matters. A fix that only repaired cases where
-    a grouping facet already exists would satisfy b16_001 and leave this one.
+  known_gap: null
+  notes: 'CLOSED BY B16a; the flag is retired and the story kept. The worse shape:
+    this answered "entire funded portfolio, 11,035 loans" with NO FACET AT ALL --
+    the dimension term is never raised, so the receipt made no claim and nothing
+    blocked. A whole-book figure for a narrowed question, silently.
+
+    The pair matters. A fix that only repaired cases where a grouping facet
+    already exists would have satisfied b16_001 and left this one, which is why
+    the owner reads a VALUE allowlist built from the book rather than the
+    dimension terms the detector happens to raise.'
 - id: b16_003
   category: unapplied_narrowing
   question: What is the balance by account status?

@@ -100,10 +100,12 @@ def test_the_whole_corpus_is_unchanged():
         return head.strip()
 
     cases = corpus()
-    # 693, not 690: pop_253/254/255 were added to the calibration bank as the
-    # regression test for the point-in-time population hole. The corpus grew;
-    # no existing decision moved, which is what the stability half asserts.
-    assert len(cases) == 693
+    # 697, not 693: b16_001..004 were added to the calibration bank as B16a's
+    # surface, declared failing BEFORE the fix. Before them, pop_253/254/255 were
+    # added the same way for the point-in-time population hole. The corpus grows
+    # when a defect earns a case; no existing decision moved, which is what the
+    # stability half asserts.
+    assert len(cases) == 697
     differing = [c["question"] for c in cases
                  if original(c["question"]) != lexical.subject_side(c["question"])]
     assert differing == [], differing[:5]

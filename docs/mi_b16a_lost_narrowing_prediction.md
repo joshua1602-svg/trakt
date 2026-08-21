@@ -377,3 +377,127 @@ family it would otherwise have broken.**
 
 §5's arrival table gains one row and loses none: `_detect_geographic_scope` and
 `geographic_values` are **not** modified, so nothing that reads them changes.
+
+---
+
+# Result, measured against §6 and the amendment
+
+## Against the prediction
+
+| predicted | measured |
+|---|---|
+| `b16_001` and `b16_002` flip to passing | **both flipped**; bank `259/259 held, 0 hard fails, 0 known gaps` |
+| `rt_015` flips | **flipped**, and the surface demanded re-declaration, which it got |
+| `b16_003` and `b16_004` keep passing | **both pass** |
+| the seasoning families unchanged, both books | **Q1 4, Q7 4, Q8 12 all CORRECT, both books** |
+| robustness `32/10/2` both books | **`32/10/2`, 44 of 44 same verdict** |
+| the other 255 bank cases held, 0 hard fails | **held** |
+| no lexical decision moves | **693 of 693** |
+| stamping matrix 0 live holes | **17 holes, 17 designed, 0 live**; `lost_narrowing` registered |
+| `answer_diff` moves 2 on `calibration_bank` | **0 moved, 4 `only_after`** — see the correction below |
+
+```
+calibration      249/249 generated; 259/259 curated held, 0 hard fails, 0 gaps
+routed surface   18 of 18
+answer diff      693 compared, 693 identical, 0 moved (+4 new records)
+robustness       32/10/2 both books; seasoning Q1 4, Q7 4, Q8 12
+lexical          693 of 693
+qi tests         339 passed
+MI sweep         1404 passed; the 10 that fail, fail identically at HEAD
+```
+
+**No stop condition fired.**
+
+## What the surface bought, which is the point of naming it first
+
+`b16_001` and `b16_002` were declared failing in `3046a49`, **before the fix**, on
+the calibration bank — the only surface that grades numbers and the one the
+defect lives on. They flipped. That is the first time in this programme a fix has
+been measured by an instrument chosen and demonstrated failing in advance rather
+than reached for afterwards.
+
+## Four things the implementation found that the design did not predict
+
+Each was caught by a test or a surface, not by inspection.
+
+### 1. A fifth owner: `portfolio_lens` already owns "the direct book"
+
+Eleven tests across P1I, P1J-1, P1L and P1N failed on the first run. `Direct` is
+a value of `origination_channel`, so *"what is the balance of the direct book"*
+raised a lost narrowing and refused a governed **scope** question.
+
+`portfolio_lens` states the doctrine exactly, and has for some time:
+
+> *"A phrase that names the POPULATION BEING REPORTED ON is a scope reference. It
+> is not a row predicate, not a grouping axis, and not a place. The cure is to
+> CLAIM THE SPAN FIRST."*
+
+It publishes `mask_scope_phrases`, which the filter and dimension parsers already
+call. The narrowing owner now calls it too. **A sixth reader of the scope
+vocabulary would have been precisely the defect this programme removes**, and the
+mechanism to avoid it was already built — a fifth instance of the carriage
+pattern in the same commit that recorded the fourth.
+
+### 2. `Redeemed` is a value AND a flag name — the exclusion had to be narrowed twice
+
+The first cut excluded any value token that names **any** field. That dropped
+`Redeemed`, a legitimate `account_status` value that is also a synonym of
+`loan_redemption_flag`. Narrowed to *another DIMENSION*: a flag name is not a
+word anyone breaks a book down by, and a token naming the very field it is a
+value of ("front book" naming `seasoning_segment`) is no collision either — that
+one is left to the seasoning owner through `taken`.
+
+### 3. One field was both narrowed and broken down — B15's shape, reopened
+
+`b16_001`'s first receipt carried `lost_narrowing account_status LOST` **and**
+`grouping_dimension account_status APPLIED`. The same field asserted both ways,
+one of them wrong however the reader reads it — which is exactly what `7c46f81`
+closed for the seasoning vocabulary. A second selector owner reopened it within
+the hour. The detector now drops a grouping whose field the narrowing owner took,
+consuming that answer rather than competing with it.
+
+### 4. A guard that could never fire, removed rather than kept
+
+`selector_mark` was written with a runtime axis check so that *"balance by
+broker"* could not read as a narrowing. Mutating it away **changed no outcome and
+failed no test**: `SELECTOR_OPENERS` and `AXIS_MARKERS` are disjoint, so a
+mention preceded by an axis marker cannot also be preceded by a selector opener.
+
+By the D7 standing rule — *a branch that fires zero times is unmeasured, not
+unused* — the paths were searched, and there is none. So the branch is **removed**
+and the invariant that makes it unnecessary is asserted instead
+(`test_the_selector_and_axis_vocabularies_are_disjoint`), which fails loudly the
+moment someone adds `by` to the opener list and the collision becomes reachable.
+
+## A correction to §6.1's form, not its substance
+
+§6.1 predicted *"`answer_diff` moves exactly 2, both on `calibration_bank`"*.
+Measured: **0 moved, 4 `only_after`.** The four cases were added in the
+pre-registration commit, which is AFTER the `answer_baseline_d7` the differ
+compares against, so they are new records rather than movements.
+
+The substance holds — no answer that existed before this work moved anywhere —
+and the form was wrong because I predicted a movement against a baseline that
+never contained the case. **Naming the surface in advance does not by itself get
+the baseline right**; the baseline has to be re-recorded once the cases exist,
+which is what `answer_baseline_b16a.json` now is.
+
+## Every guard, and the family that earned it
+
+| guard | without it | caught by |
+|---|---|---|
+| the value allowlist is built from the LOADED BOOK | a token this tape does not carry could bind | `test_a_value_this_book_does_not_carry_is_not_recognised` |
+| a token naming another DIMENSION is not a value | *"balance by broker"* narrows to Broker — 78 questions | `test_a_word_that_names_another_dimension_is_never_a_value` |
+| `mask_scope_phrases` first | *"the direct book"* refuses — 11 tests | `tests/test_p1i_scope_resolution.py` (6 fail on mutation) |
+| the comparison marker | Q7.3, Q7.4, Q8.x both books — `32c263a`'s family | `test_a_comparison_marker_stops_it`, `test_the_rule_fires_on_exactly_the_two_constructed_cases` |
+| exactly one value of the field | *"active loans and redeemed loans"* narrows to one | `test_two_values_of_one_field_are_not_a_narrowing` |
+| fields another owner resolved are skipped | the population facet vanishes | `test_a_field_another_owner_resolved_is_skipped` |
+| the grouping is dropped where the narrowing owner took the field | B15's shape | `test_a_narrowed_field_is_not_also_raised_as_a_breakdown` |
+
+Every one was mutated and the named test failed.
+
+## B16b, unchanged and still behind D6 and B1
+
+No parser change here. The narrowing is **recorded as lost**, not resolved. Making
+it narrow needs a resolved value, which needs B1's allowlist routing and D6's
+book-scoped availability check, in that order.

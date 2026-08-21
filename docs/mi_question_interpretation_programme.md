@@ -455,6 +455,40 @@ and a real regression into a reported fix.** Before declaring one, read what the
 route actually publishes; state the correct outcome from evidence, not from the
 diagnosis that prompted the case.
 
+## Standing rule — before adding a producer, check whether the answer is already published and merely unread
+
+Five instances now, and the last two were found in the same commit:
+
+1. **Stage 5** — the time grain was read from the question and dropped before
+   anything could act on it.
+2. **Stage 2** — the parser's filter offsets were computed and discarded, never
+   reaching the spec. Still open as B0.
+3. **D7** — `concentration_analysis` published `workflow.dimension_results`, the
+   exact canonical field keys it grouped by, on every envelope. The receipt
+   reader ignored it and guessed from a display column called `category`.
+4. **B16a** — the whole lost-narrowing mechanism existed, restricted to geography
+   by one `if` in `geographic_values`: a value allowlist built from the book, a
+   detector, a blocking facet kind, branches in both reconcilers. A variant the
+   rule did not name — not *produced and unread*, but **built for one field when
+   it generalises to all**.
+5. **B16a again** — `portfolio_lens` publishes `mask_scope_phrases` and states
+   the doctrine ("claim the span first"), and the filter and dimension parsers
+   already call it. The new owner did not, and refused eleven scope questions
+   until it did.
+
+In every one the fix was **a reader, not a producer**, and in every one the
+instinct was to add a producer.
+
+> **Before adding a producer, check whether the answer is already being published
+> and merely unread — and record the result of the check, negative or positive.**
+
+Recording the negative matters as much as the positive. B16a's pre-registration
+performed this check for the categorical selector MARK and reported back that
+nothing produces it, which is why that part of the commit adds an owner. Two
+paragraphs later the same commit found two things that were already published.
+**The check is only worth anything if it is made against each piece of the design
+rather than against the design's headline.**
+
 ## Backlog
 
 ### B18 — "limit status" resolves to the registry field `account_status`
@@ -482,6 +516,19 @@ Fail-closed and correct in outcome — no whole-book figure is passed off as the
 narrow one — and wrong in cause. The same API works on the point-in-time path,
 which is how it was found: proving D2's FILTER branch reachable. Pinned as
 `rt_016`.
+
+### B16b — resolve the categorical filter the sentence marks
+
+**B16a is CLOSED.** A narrowing the sentence marked and execution did not apply
+is now recorded and refuses rather than answering over the whole book. What
+remains is resolving the value so the answer NARROWS instead of refusing.
+
+**B1 and D6 are both hard prerequisites**, in that order: resolving more
+categorical filters through a denylist multiplies the fabricated-binding class
+B1 exists to retire, and D6 governs whether the resolved field is judged
+available in the book being asked about.
+
+Original entry follows, kept because it is the diagnosis.
 
 ### B16 — the sentence marks a selector and nobody reads the mark
 
