@@ -455,6 +455,31 @@ and a real regression into a reported fix.** Before declaring one, read what the
 route actually publishes; state the correct outcome from evidence, not from the
 diagnosis that prompted the case.
 
+## Standing rule — the corpora are built from registry names and miss plain phrasings
+
+Four instances, and the fourth arrived unprompted while measuring D6.
+
+`balance where account status is active` is about as ordinary as a management
+question gets. Across 693 questions there are **fifteen** mentions of a named
+dimension behind a selector preposition and **not one** is that construction; all
+four cases proving the defect had to be constructed. The seasoning whole-book
+answer and the front-book regression were hidden the same way — the family
+enumerates the SEGMENT names, so the months-on-book windows were unreachable.
+
+D6 is the clearest statement of the mechanism. The 27 forecast questions are
+*forecast balance by region · by broker · by LTV bucket · by completion month*
+— built from the twelve fields the forecast projection carries. **A family
+enumerated from a projection cannot exercise that projection's gap.** The corpus
+and the defect share an author's assumption.
+
+> **The corpora are an instrument for REGRESSION, not for DISCOVERY.** A count of
+> "N of 693 affected" is a lower bound, and where the construct is a plain
+> phrasing rather than a registry term it may be a lower bound of zero against a
+> live defect.
+
+Recorded in the due diligence pack as a limitation on every corpus-derived figure
+there, not only here.
+
 ## Standing rule — before adding a producer, check whether the answer is already published and merely unread
 
 Five instances now, and the last two were found in the same commit:
@@ -490,6 +515,40 @@ paragraphs later the same commit found two things that were already published.
 rather than against the design's headline.**
 
 ## Backlog
+
+### B20 — a mutation pass over the guard set
+
+**Scoped, not scheduled. Do not run it as part of another commit.**
+
+B16a's `selector_mark` was written with a runtime axis check so that "balance by
+broker" could not read as a narrowing. Mutating it away **changed no outcome and
+failed no test**: the selector and axis vocabularies are disjoint, so the branch
+could never fire. It was removed and the invariant asserted in its place.
+
+**The point is not that one guard was dead. It is that a dead guard is a
+DISTINCT class of instrument defect, and this programme has been recording a
+different one.**
+
+* *An instrument carries the defect it was built to find* — 16 instances — is
+  about an instrument being WRONG.
+* A guard whose removal changes nothing is about an instrument that **looks like
+  coverage and is not**. It was providing false assurance for its whole life, and
+  every review that read it as protection was misled. Nothing fails when it is
+  deleted, so nothing ever surfaces it.
+
+The two are found by different means. The first is found by measuring the
+instrument against reality. The second is found ONLY by mutation: remove the
+guard, run everything, and see whether anything notices.
+
+**The work:** enumerate the guard set — every conditional whose stated purpose is
+to prevent a wrong outcome rather than to compute one — remove each in turn, run
+the four banks and the test suite, and list every guard whose removal is silent.
+For each: either find the path that reaches it, or delete it and assert the
+invariant that makes it unnecessary.
+
+Related to, and distinct from, the D7 standing rule *a branch that fires zero
+times is unmeasured, not unused*: that rule is about branches found by
+measurement, this is about finding them systematically.
 
 ### B18 — "limit status" resolves to the registry field `account_status`
 

@@ -4,7 +4,7 @@ meta:
     The third measurement surface. Drives execute_governed_mi_query, so a
     question is claimed by whichever route claims it in production, and the
     answer is adjudicated by the guard that actually adjudicates it.
-  count: 18
+  count: 21
   entry_point: mi_agent_api.mi_service.execute_governed_mi_query
   enforced_by: question_interpretation/routed_surface.py
 
@@ -350,3 +350,68 @@ questions:
       - [grouping_dimension, applied]
       - [granularity, applied]
       - [row_population, applied]
+
+  # --- D6 / B14: the availability check reads the FRAME, not the book --------
+  - id: rt_017
+    question: What is the forecast run rate by vintage?
+    expected_to_fail: >-
+      D6 / B14, the second instance and the one that shows it is a CLASS.
+
+      `resolve_active_view` picks the frame from a keyword scan of the question —
+      the word "forecast" anywhere selects the forecast view — before the
+      question is parsed and before any route claims it. That view is a DERIVED
+      frame of **12 columns**; the book carries **76**. Every availability check
+      downstream then reads those 12.
+
+      So `vintage_year`, which the book carries for all 11,035 loans, is reported
+      as "field is unavailable in this dataset". True of the projection, false of
+      the book.
+
+      The correct outcome is the one its own sibling already gets: `rt_018` asks
+      the same shape about REGION, which the forecast frame does carry, and is
+      told the truth — the breakdown was not applied. Both refuse; only one of
+      them is honest about why.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [projection, applied]
+      - [grouping_dimension, lost]
+
+  - id: rt_018
+    question: What is the forecast run rate by region?
+    note: >-
+      THE CONTROL, and the reason rt_014 and rt_017 state the expectations they
+      do. `collateral_geography` IS one of the forecast frame's twelve columns,
+      so the same question shape gets `lost` and the true sentence: "this answer
+      covers the whole population; it is neither narrowed to nor broken down by
+      region".
+
+      Passes today and must keep passing. A change that made every forecast facet
+      LOST would satisfy rt_014 and rt_017 and be indistinguishable here — which
+      is why this case asserts the STATUS and not just the refusal.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [projection, applied]
+      - [grouping_dimension, lost]
+
+  - id: rt_019
+    question: What is the forecast run rate for active loans?
+    expected_to_fail: >-
+      B19 — the same root, a worse symptom, and NOT fixed by D6.
+
+      This answers `ok`: "The current completion run-rate is ~£16.3m/month
+      (£195.5m/year)" — byte-identical to the unqualified "What is the completion
+      run rate?", with **no facet at all**. A narrowed question answered over the
+      whole book, silently. B13's class again.
+
+      It happens because B16a's value allowlist is built from the LOADED FRAME,
+      and the forecast projection carries no `account_status` column, so no value
+      of it can be recognised and no narrowing is raised. D6 scopes the
+      availability check to the book's SCHEMA; recognising the VALUE needs the
+      book's ROWS, which is a different change and is left as B19.
+
+      Stated here so the gap is visible rather than closed by silence.
+    expect_route: forecast_extrapolation
+    expect_ok: false
+    expect_verdict: refuse

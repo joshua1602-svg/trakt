@@ -206,6 +206,54 @@ def _service_records() -> List[Dict[str, Any]]:
     return out
 
 
+# --------------------------------------------------------------------------- #
+# Surface 5 — the routed surface's own questions, as TEXT.
+# --------------------------------------------------------------------------- #
+# ADDED IN D6, and for the reason D7 added surface 4: the routed surface asserts
+# STRUCTURE — which route answered, what kinds and statuses — and says nothing
+# about the sentence a reader sees. D6 changes exactly that sentence, from "field
+# is unavailable in this dataset" to "this answer covers the whole population",
+# and no standing instrument would have recorded it.
+#
+# These are also the only questions in any surface that reach a NON-FUNDED view.
+# `resolve_active_view` picks the frame from a keyword scan, so the forecast and
+# pipeline projections are reachable only by asking for them by name, and the
+# 350-question service corpus never does in a way that names a missing field.
+def _routed_surface_records() -> List[Dict[str, Any]]:
+    import os
+
+    import yaml
+
+    from demo_platform import config as cfg
+
+    bank = (_REPO_ROOT / "config" / "mi" / "golden_questions"
+            / "routed_surface.yaml")
+    if not bank.exists():
+        return []
+    os.environ.update(cfg.mi_env(period_role="current"))
+    os.environ["MI_AGENT_LLM_PARSER"] = "off"
+    os.environ["MI_AGENT_LLM_ENABLED"] = "0"
+    from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+    from trakt_core.context import ExecutionContext
+
+    ctx = ExecutionContext.for_internal(cfg.CLIENT_ID)
+    doc = yaml.safe_load(bank.read_text(encoding="utf-8")) or {}
+    out: List[Dict[str, Any]] = []
+    for case in (doc.get("questions") or []):
+        try:
+            payload = execute_governed_mi_query(
+                MiQueryRequest(question=case["question"],
+                               filters=case.get("filters") or None),
+                ctx).result or {}
+        except Exception as exc:                            # noqa: BLE001
+            payload = {"ok": False, "error": "raised: %r" % (exc,)}
+        record = _user_visible(payload)
+        out.append({"surface": "routed_surface", "id": case["id"],
+                    "question": case["question"], "digest": _digest(record),
+                    "record": record})
+    return out
+
+
 def collect(only_book: Optional[str] = None) -> List[Dict[str, Any]]:
     logging.disable(logging.WARNING)
     if only_book:
@@ -214,6 +262,7 @@ def collect(only_book: Optional[str] = None) -> List[Dict[str, Any]]:
     for book in ("alderbridge", "kestrelmoor"):
         records.extend(_robustness_via_subprocess(book))
     records.extend(_service_records())
+    records.extend(_routed_surface_records())
     return records
 
 

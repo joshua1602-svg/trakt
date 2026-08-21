@@ -72,3 +72,49 @@ questions are never driven through the service. Its movement was measured
 directly and no standing instrument reports it. Closing that means driving the
 calibration corpus through the service as well — a fifth surface, not attempted
 here.
+
+---
+
+## A LIMITATION ON EVERY CORPUS-DERIVED FIGURE IN THIS PACK
+
+**The corpora are built from registry names and enumerated families. They
+systematically miss plain phrasings.** Every number in this pack that is
+expressed as "N of 693" — or 697, or any corpus denominator — inherits this, and
+it is stated here rather than only in the engineering brief because it qualifies
+the evidence, not the engineering.
+
+### The measurement
+
+`balance where account status is active` is about as ordinary as a management
+question gets. Across all 693 questions in the four corpora there are **fifteen**
+mentions of a named dimension behind a selector preposition, and **not one** is
+the construction above. All four cases proving that defect had to be
+**constructed**.
+
+The same shape, three more times in the same programme:
+
+| what was missed | how the corpora were built |
+|---|---|
+| a narrowed question answered over the whole book (`balance where account status is active` → 11,035 loans) | 15 selector-preposition mentions in 693; zero live instances |
+| a governed population's whole-book answer (`balance of new lending` → 11,035 loans) | the seasoning family enumerates the SEGMENT names, so the months-on-book windows were unreachable |
+| the front-book regression that cost 160 answers | the same family, the same enumeration |
+| a field reported unavailable that the book carries | the 27 forecast questions are built from the 12 fields the forecast projection carries, so the projection's own gap cannot be exercised |
+
+The last is the clearest statement of the mechanism: **a family enumerated from a
+projection cannot exercise that projection's gap.** The corpus and the defect
+share an author's assumption, so the corpus is systematically blind to exactly
+the thing the assumption got wrong.
+
+### What follows for reading this pack
+
+1. **A clean corpus result is evidence about COVERAGE before it is evidence about
+   the product.** This was already a standing rule; it is restated here because
+   the pack's headline figures are corpus-derived.
+2. **A count of "N of 693 affected" is a lower bound**, and where the construct
+   is a plain phrasing rather than a registry term it may be a lower bound of
+   zero against a live defect.
+3. **Constructed cases are not weaker evidence than corpus cases** in this
+   programme; for several defects they are the only evidence that exists. Where a
+   figure rests on constructed coverage the document says so.
+4. The corpora remain the right instrument for REGRESSION — they are large,
+   stable and byte-diffed. They are not an instrument for DISCOVERY.
