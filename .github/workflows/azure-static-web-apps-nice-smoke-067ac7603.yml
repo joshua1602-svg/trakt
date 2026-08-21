@@ -48,7 +48,7 @@ jobs:
       # id, an authority and an `api://…/MI.Access` scope are public identifiers
       # that ship inside every SPA bundle by design. This is a public client using
       # Authorization Code + PKCE; there is no secret to hold, and
-      # `scripts/check-bundle-secrets.mjs` fails the build if one appears.
+      # `scripts/check-bundle-leaks.mjs` fails the build if one appears.
       #
       # With VITE_MI_BEARER_AUTH unset or false, MSAL is never constructed, no
       # token is requested, no Authorization header is attached, and the Static
