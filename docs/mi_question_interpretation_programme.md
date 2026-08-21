@@ -501,8 +501,19 @@ Five instances now, and the last two were found in the same commit:
    already call it. The new owner did not, and refused eleven scope questions
    until it did.
 
+6. **B21/B22** — the sharpest of the six. `portfolio_lens` states the doctrine
+   ("Only QUALIFIED phrases count. A bare 'current' or 'entire' is ordinary
+   English") and implements it as `scope_phrase_spans`, over a vocabulary that
+   **already contains `direct`, `acquired`, `purchased` and `funded`** — the
+   exact words of both defective decisions. The function is called by the filter
+   and dimension parsers, to protect them FROM the scope vocabulary. It was never
+   turned on the two decisions that own that vocabulary.
+
 In every one the fix was **a reader, not a producer**, and in every one the
-instinct was to add a producer.
+instinct was to add a producer. The sixth is the variant to remember: not
+produced-and-unread, not built-for-one-field, but **written as a doctrine,
+implemented as a function, and applied to everyone except the decision it was
+written for.**
 
 > **Before adding a producer, check whether the answer is already being published
 > and merely unread — and record the result of the check, negative or positive.**
@@ -513,6 +524,63 @@ nothing produces it, which is why that part of the commit adds an owner. Two
 paragraphs later the same commit found two things that were already published.
 **The check is only worth anything if it is made against each piece of the design
 rather than against the design's headline.**
+
+## Standing rule — recording a defect with a test is worth more than fixing it
+
+The clearest evidence for this practice so far, and it is not an argument — it is
+a sequence of events in D8.
+
+`7c46f81` hit a duplicate-population defect that was live for about ten minutes:
+two readers raised the same governed population, one was stamped applied and the
+other left lost, and the answer refused itself. It was fixed **and recorded**,
+with a test asserting no receipt carries a duplicate claim.
+
+D8 added a new raiser for drill-through populations, and deduped it — **at the
+point the drill is raised**. That looked right and was wrong: the role owner
+creates its copy later, inside the split, so at dedupe time the second facet did
+not exist yet. `"balance by region"` with a drill to South East produced two
+identical population facets and the answer refused itself.
+
+**The only thing that caught it was the test written for `7c46f81`.** No surface
+moved — the defect is unreachable from question text, because the drill-through
+is an API parameter. No review would have found it: the dedupe was present,
+looked correct, and was in the wrong place by one function call.
+
+> **A fix protects the instance. A recorded defect protects the class — including
+> against the person who recorded it.** The cost of writing the test is paid once;
+> it was collected here by a different commit, months of work later, against a
+> mistake made by someone who knew the original defect intimately.
+
+The corollary is about where to put the test: it asserted the PROPERTY (no
+receipt carries a duplicate claim) rather than the mechanism (the dedupe runs
+here). A test written against the mechanism would have passed.
+
+## Standing rule — a declared expectation states the evidence it rests on
+
+Twice in three commits a case was wrong because it assumed a route could not do
+something it could.
+
+* **`rt_013`** was declared expected-to-fail on the belief that `risk_limits` has
+  no dimension axis. Its tests ARE per region — London 21.1% against 25.0% — so
+  the certification it called false was true.
+* **`rt_021`** was declared on the belief that `geo_exposure` could not narrow on
+  `account_status`. It resolves its frame through the governed population seam
+  and narrows on **any** material predicate, reporting `rowsBefore 11,035,
+  rowsAfter 11,000`.
+
+Both were assumptions about a route's capability, stated as expectations, with no
+record of what they rested on. Both fired as stop conditions and cost a
+diagnosis each to unwind.
+
+> **A declared expectation states the evidence it rests on, not only the outcome
+> it expects.** "This refuses" is an expectation. "This refuses because the route
+> publishes no narrowing ledger — verified in its envelope, which carries
+> `populationApplied: null`" is an expectation that can be checked before it
+> costs a stop condition.
+
+The discipline is cheap: the evidence is in hand when the case is written,
+because that is when the behaviour was measured. Writing it down is what makes
+the difference between a case that is wrong and a case that is **visibly** wrong.
 
 ## Standing rule — a replaced test case takes a new id
 
@@ -529,9 +597,20 @@ Given a new id, the differ reported it correctly: one case gone, one arrived.
 
 ## Backlog
 
-### B21, B22, B23 — the two text-driven data-visibility decisions
+### B21, B22 — the two text-driven data-visibility decisions  ·  **FIRST IN LINE**
 
-**Reported in full in `mi_view_selection_report.md`. Not scheduled.**
+**Diagnosed together in `mi_b21_b22_b23_diagnosis.md`; reported in
+`mi_view_selection_report.md`. B23 collapses into B21 — it is that decision's
+missing disclosure half, not a third defect.**
+
+**Ranked ahead of D10, D9, D14 and the segmented series, and ahead of B9 and
+B10.** They change the number in the shipped product; the census entries left are
+receipt defects and agree-by-maintenance entries where nothing is currently
+wrong. Within the pair, measurement puts **B22 first**: it is the only one
+changing a number on this book — 3,909 of 11,035 rows for "loans purchased at
+auction" — and its fix is a call to `scope_phrase_spans`, a function in the same
+module that discriminates every case correctly and that `resolve_lens` does not
+call.
 
 Asked alongside D8: is `resolve_active_view` one instance or one of several?
 **One of several — there are two, and both are substring tests.**
