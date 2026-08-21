@@ -371,6 +371,14 @@ class OccAgentService:
         if interpretation.delivery:
             plan.cadence = str(interpretation.delivery.get("cadence") or "")
             plan.steps["_delivery"] = dict(interpretation.delivery)
+        if interpretation.stream_delivery:
+            plan.stream_cadence = {
+                stream: str(payload.get("cadence") or "")
+                for stream, payload in interpretation.stream_delivery.items()
+                if payload.get("cadence")}
+            plan.steps["_stream_delivery"] = {
+                stream: dict(payload) for stream, payload
+                in interpretation.stream_delivery.items()}
         return plan
 
     def answer_from_instruction(self, agent_case: AgentCase, *,
@@ -397,6 +405,7 @@ class OccAgentService:
         run = agent_case.run
         case = agent_case.case
         delivery = dict((plan.steps or {}).pop("_delivery", {}) or {})
+        per_stream = dict((plan.steps or {}).pop("_stream_delivery", {}) or {})
         written: List[str] = []
         for step in STEPS:
             payload = (plan.steps or {}).get(step)
@@ -416,8 +425,9 @@ class OccAgentService:
                 case = self.onboarding.add_pipeline_source(
                     case_id=case.case_id, portfolio_id=pid, by=actor)
                 written.append("pipeline_book")
-        if delivery:
-            case = self._apply_delivery(case, delivery, actor)
+        if delivery or per_stream:
+            case = self._apply_delivery(case, delivery, actor,
+                                        per_stream=per_stream)
             written.append("sources")
         if plan.reporting_period:
             run.reporting_period = plan.reporting_period
@@ -529,11 +539,21 @@ class OccAgentService:
         return "\n".join(lines) or "Nothing changed."
 
     def _apply_delivery(self, case: OnboardingCase, values: Dict[str, Any],
-                        actor: str) -> OnboardingCase:
-        """Apply delivery answers to every delivery Trakt has derived.
+                        actor: str, *,
+                        per_stream: Optional[Dict[str, Any]] = None
+                        ) -> OnboardingCase:
+        """Apply delivery answers to the deliveries Trakt has derived.
 
         Deliveries are derived from the portfolios, so "they send monthly by
-        SFTP" is a statement about all of them, not about one.
+        SFTP" is a statement about all of them, not about one — and that is
+        what ``values`` carries.
+
+        ``per_stream`` is what a single registration said about ITSELF: "a
+        weekly pipeline" answers for the pipeline and for nothing else. It is
+        applied after the blanket and overrides it, because a statement about
+        one book is more specific than a statement about every book. Before
+        this existed, one cadence field held both answers and every
+        registration got whichever was read last.
         """
         sources = [dict(s) for s in case.items("sources")]
         if not sources:
@@ -541,11 +561,17 @@ class OccAgentService:
         # A source's identity — which book, which dataset — is never a blanket
         # answer. "They deliver monthly" applies to every registration;
         # "a funded book" names ONE stream and is handled as one.
-        values = {k: v for k, v in values.items()
-                  if k not in ("dataset", "portfolio_id", "source_key")}
+        blanket = {k: v for k, v in (values or {}).items()
+                   if k not in ("dataset", "portfolio_id", "source_key")}
         for source in sources:
-            source.update({k: v for k, v in values.items() if v not in
+            source.update({k: v for k, v in blanket.items() if v not in
                            (None, "", [])})
+            own = (per_stream or {}).get(str(source.get("dataset") or ""))
+            if own:
+                source.update({k: v for k, v in own.items()
+                               if k not in ("dataset", "portfolio_id",
+                                            "source_key")
+                               and v not in (None, "", [])})
         return self.onboarding.save_step(case_id=case.case_id, step="sources",
                                          payload={"sources": sources}, by=actor)
 

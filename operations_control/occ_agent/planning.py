@@ -145,7 +145,13 @@ class ApplicationPlan:
     unrecognised: List[str] = field(default_factory=list)
     #: Delivery facts, which are the run's rather than the case's.
     reporting_period: str = ""
+    #: The blanket cadence: what every registration gets unless it stated its
+    #: own.
     cadence: str = ""
+    #: ``{stream: cadence}`` for the streams that DID state their own. A weekly
+    #: pipeline beside a monthly funded book is two answers, and one field
+    #: could only ever carry one of them.
+    stream_cadence: Dict[str, str] = field(default_factory=dict)
     #: Operational data streams the instruction declared ("funded",
     #: "pipeline"), each becoming its own source registration on apply.
     streams: List[str] = field(default_factory=list)
@@ -161,6 +167,7 @@ class ApplicationPlan:
             "unrecognised": list(self.unrecognised),
             "reporting_period": self.reporting_period,
             "cadence": self.cadence,
+            "stream_cadence": dict(self.stream_cadence),
             "streams": list(self.streams),
             "expected_artefacts": list(self.expected_artefacts),
             "provenance": dict(self.provenance),
@@ -177,6 +184,7 @@ class ApplicationPlan:
     @property
     def empty(self) -> bool:
         return not (self.change_count or self.reporting_period or self.cadence
+                    or self.stream_cadence
                     or self.streams or self.expected_artefacts
                     or self.questions)
 
@@ -210,6 +218,8 @@ class ApplicationPlan:
             parts.append(f"Reporting period: {self.reporting_period}")
         if self.cadence:
             parts.append(f"Expected cadence: {self.cadence}")
+        for stream, cadence in sorted(self.stream_cadence.items()):
+            parts.append(f"Expected cadence ({stream}): {cadence}")
         return ". ".join(parts) + "." if parts else "Nothing to change."
 
     def disclosure(self) -> Dict[str, Any]:

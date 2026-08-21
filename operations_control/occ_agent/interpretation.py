@@ -113,6 +113,13 @@ class Interpretation:
     reporting_period: str = ""
     #: Answers for every derived delivery — cadence, channel, format, sender.
     delivery: Dict[str, Any] = field(default_factory=dict)
+    #: Delivery answers that belong to ONE stream rather than to every
+    #: registration: ``{"pipeline": {"cadence": "weekly"}}``. "A weekly
+    #: pipeline and monthly MI" is two cadences, and folding them into one
+    #: ``delivery.cadence`` gave both registrations whichever was read last.
+    #: Anything in ``delivery`` remains the blanket answer for the streams that
+    #: did not state their own.
+    stream_delivery: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     #: The operational data streams the instruction declared, in the order it
     #: named them — the governed dataset vocabulary ("funded", "pipeline").
     #: A stream is a SEPARATE source registration, never a blanket delivery
@@ -139,7 +146,8 @@ class Interpretation:
     @property
     def empty(self) -> bool:
         return not (self.steps or self.reporting_period or self.delivery
-                    or self.streams or self.expected_artefacts)
+                    or self.streams or self.stream_delivery
+                    or self.expected_artefacts)
 
     @property
     def complete(self) -> bool:
@@ -167,12 +175,19 @@ class Interpretation:
         delivery_section = cat.section(DELIVERY_SECTION)
         if self.delivery and delivery_section is not None:
             _check_keys(delivery_section, self.delivery, DELIVERY_SECTION)
-        if self.streams:
+        if self.stream_delivery:
+            if delivery_section is None:
+                raise InterpretationError("unknown step 'sources'")
+            for stream, payload in self.stream_delivery.items():
+                if not isinstance(payload, dict):
+                    raise InterpretationError(f"{stream} delivery payload")
+                _check_keys(delivery_section, payload, DELIVERY_SECTION)
+        if self.streams or self.stream_delivery:
             dataset_field = cat.field(DELIVERY_SECTION, "dataset")
             allowed = {str(o.get("value"))
                        for o in ((dataset_field.options if dataset_field
                                   else None) or [])}
-            for stream in self.streams:
+            for stream in list(self.streams) + list(self.stream_delivery):
                 if allowed and stream not in allowed:
                     raise InterpretationError(f"unknown stream '{stream}'")
         if self.reporting_period and not re.fullmatch(
@@ -342,6 +357,25 @@ class DeterministicInterpreter:
                 PROV_HUMAN if hit.confidence >= 1.0 else PROV_AGENT)
             if hit.confidence < 1.0:
                 out.confidence[hit.ref.path] = hit.confidence
+
+        # Which cadence belongs to which stream. Decided from the sentence's
+        # own shape rather than from whichever cadence the generic reader
+        # happened to bind last, so "weekly pipeline, monthly MI" registers a
+        # weekly pipeline and a monthly funded book.
+        paired, blanket = stream_cadences(raw, self.catalogue)
+        for stream, cadence in paired.items():
+            out.stream_delivery.setdefault(stream, {})["cadence"] = cadence
+            if stream not in out.streams:
+                out.streams.append(stream)
+            out.provenance[f"{DELIVERY_SECTION}.cadence"] = PROV_HUMAN
+        if paired:
+            # The blanket is what is LEFT once each stream has taken its own.
+            # Without this the paired cadence would also be applied to every
+            # other registration, which is the defect in the other direction.
+            if blanket:
+                out.delivery["cadence"] = blanket
+            else:
+                out.delivery.pop("cadence", None)
 
         # The telegraphic shape of an opening instruction.
         rows: Dict[str, List[Dict[str, Any]]] = {}
@@ -599,6 +633,115 @@ def _says_something(interpretation: Interpretation,
         elif payload:
             return True
     return False
+
+
+#: Where one delivery statement ends and the next begins. A comma counts:
+#: "weekly pipeline, monthly MI" is two statements, and a reader that ignored
+#: the comma would happily pair "pipeline" with "monthly".
+_SEGMENT_RE = re.compile(r"[,.;\n]+")
+
+#: How far apart a cadence and its stream may sit and still be one statement,
+#: in characters. "a funded book monthly" is a pairing; two clauses apart is a
+#: coincidence.
+_PAIR_REACH = 40
+
+
+def _vocabulary(cat: Catalogue, key: str) -> Dict[str, str]:
+    """``{spoken phrase: declared value}`` for one delivery field.
+
+    Both the option's value and its label are accepted, because an operator
+    writes "ad hoc" where the catalogue stores ``ad_hoc``. The vocabulary is
+    the catalogue's own; nothing is listed here.
+    """
+    field_ = cat.field(DELIVERY_SECTION, key)
+    out: Dict[str, str] = {}
+    for option in (field_.options if field_ else None) or []:
+        value = str(option.get("value") or "")
+        if not value:
+            continue
+        out[value.replace("_", " ").lower()] = value
+        label = str(option.get("label") or "").lower()
+        if label:
+            out[label] = value
+    return out
+
+
+def _mentions(segment: str, vocabulary: Dict[str, str]
+              ) -> List[Tuple[int, int, str]]:
+    """Every phrase from ``vocabulary`` in ``segment``, as (start, end, value).
+
+    Longest phrases first, and overlapping matches dropped, so "ad hoc" is one
+    mention rather than two.
+    """
+    out: List[Tuple[int, int, str]] = []
+    for phrase in sorted(vocabulary, key=len, reverse=True):
+        for match in re.finditer(rf"\b{re.escape(phrase)}\b", segment, re.I):
+            if any(match.start() < e and s < match.end() for s, e, _ in out):
+                continue
+            out.append((match.start(), match.end(), vocabulary[phrase]))
+    return sorted(out)
+
+
+def stream_cadences(text: str, cat: Catalogue) -> Tuple[Dict[str, str], str]:
+    """Which cadence belongs to which stream, and which belongs to all of them.
+
+    Returns ``({stream: cadence}, blanket_cadence)``.
+
+    The rule is proximity within a single statement: a stream takes the cadence
+    nearest to it, closest pairing first, and each cadence is claimed once. A
+    cadence that no stream claims is the blanket answer for every registration
+    that did not state its own.
+
+    So "a weekly pipeline, monthly MI" registers a weekly pipeline and leaves
+    monthly to the funded book, and "a funded book monthly and a pipeline
+    weekly" reads both — where an order-based rule matched whichever pattern it
+    tried first and silently dropped the other pairing.
+
+    Deliberately conservative in one respect: "MI" is not treated as naming the
+    funded book. That would be Trakt inferring a stream from a PRODUCT, and the
+    same rule would then attach a cadence to a book the client never mentioned.
+    An unpaired cadence stays blanket, which is both truthful and correctable.
+    """
+    cadences = _vocabulary(cat, "cadence")
+    datasets = _vocabulary(cat, "dataset")
+    if not cadences or not datasets:
+        return {}, ""
+
+    paired: Dict[str, str] = {}
+    blanket = ""
+    for segment in _SEGMENT_RE.split(str(text or "")):
+        segment = segment.strip()
+        if not segment:
+            continue
+        cadence_hits = _mentions(segment, cadences)
+        dataset_hits = _mentions(segment, datasets)
+        if not cadence_hits:
+            continue
+
+        # Every possible pairing, closest first. Greedy from there, so the
+        # nearest reading wins and nothing is claimed twice.
+        options = sorted(
+            ((min(abs(d_s - c_e), abs(c_s - d_e)), d_s, c_s, stream, cadence)
+             for d_s, d_e, stream in dataset_hits
+             for c_s, c_e, cadence in cadence_hits),
+            key=lambda row: row[:3])
+        taken_cadence: set = set()
+        taken_stream: set = set()
+        for distance, _d_s, c_s, stream, cadence in options:
+            if distance > _PAIR_REACH:
+                continue
+            if stream in taken_stream or c_s in taken_cadence:
+                continue
+            taken_stream.add(stream)
+            taken_cadence.add(c_s)
+            paired.setdefault(stream, cadence)
+
+        if not blanket:
+            spare = [cadence for c_s, _c_e, cadence in cadence_hits
+                     if c_s not in taken_cadence]
+            if spare:
+                blanket = spare[0]
+    return paired, blanket
 
 
 def _clause_of(text: str, position: int) -> str:

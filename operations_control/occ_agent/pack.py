@@ -303,13 +303,17 @@ class OnboardingPack:
         """
         rendered = [(self._confirm_label(q), self._confirm_value(q))
                     for q in self.confirmations]
-        seen: Dict[Tuple[str, str], int] = {}
-        for pair in rendered:
-            seen[pair] = seen.get(pair, 0) + 1
+        # Keyed on the LABEL, not the whole line. Two registrations with the
+        # same cadence printed the same row twice; two with DIFFERENT cadences
+        # print two "Expected cadence" rows that disagree, and a client cannot
+        # tell which book each belongs to. Both need the qualifier.
+        seen: Dict[str, int] = {}
+        for label, _shown in rendered:
+            seen[label] = seen.get(label, 0) + 1
 
         out: List[str] = []
         for question, (label, shown) in zip(self.confirmations, rendered):
-            if seen[(label, shown)] > 1:
+            if seen[label] > 1:
                 where = _humanise_item(question.item)
                 out.append(f"- **{label}**{where}: {shown}")
             else:
