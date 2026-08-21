@@ -268,3 +268,112 @@ instinct was to add a producer. Going into the standing rules as:
 categorical selector mark is produced by nothing, which is why this commit adds
 an owner rather than a reader. The check is recorded as performed, with its
 result, rather than assumed.
+
+---
+
+# Amendment, written before implementing and after measuring
+
+§4's design does not survive contact with the measurement. Three things were
+found in order, each one changing the design, and they are recorded here rather
+than discovered inside the fix. **§6's prediction is unchanged** — the same two
+answers move — so this amends the mechanism, not the claim.
+
+## A1. The mechanism already exists, for exactly one dimension
+
+`funded_filtered_qa_018` — *"What is the balance of South East loans with LTV
+above 50%?"* — already refuses, with `geographic_scope collateral_geography
+LOST`. Reading that path:
+
+* `geographic_values(frame, semantics)` builds `{value → field key}` **from the
+  loaded book**, low-cardinality dimension columns only — the profiled allowlist
+  B1 wants, already built;
+* `_detect_geographic_scope` raises a facet for a named value;
+* `KIND_GEOGRAPHIC_SCOPE` is in `NUMBER_OR_SUBJECT_FACETS`, so it **blocks**;
+* both reconcilers have branches for it.
+
+**Every part of B16a exists and is restricted to geography by one `if` in
+`geographic_values`.** That is a fourth instance of the carriage pattern in a
+variant the standing rule did not name: not *produced and unread*, but **built
+for one field when it generalises to all**. The rule is amended to say so.
+
+**And it settles comparisons without any lexical rule.** *"How has lending to
+South East changed compared with London"* raises **two** scope facets and both
+are **APPLIED**, because `analytical_composition` declares `narrowedTo` for both
+sides. Execution proves the comparison; nothing has to recognise it in the
+sentence. That is the contract working, and it is a better answer than the
+comparison guard I was about to write.
+
+## A2. But the geography restriction is load-bearing, and removing it is a disaster
+
+Measured: generalising `geographic_values` to every low-cardinality dimension
+adds 40 value tokens and would newly raise a scope facet on **101 of 697
+questions**.
+
+```
+by field: origination_channel 78 · seasoning_segment 25 · source_portfolio_type 8
+          vintage_year 5 · amortisation_type 2
+```
+
+The cause is one collision: **`Broker` is a VALUE of `origination_channel` and
+also the ordinary word for the dimension.** So *"balance by broker"* — a plain
+breakdown, 78 times over — would be read as a narrowing to
+`origination_channel = Broker` and refuse. `front book` / `back book` add 25 more
+in the seasoning owner's territory.
+
+Geography values (*London*, *South East*, *Wales*) do not collide with dimension
+words. General dimension values do, badly. **The restriction is not an arbitrary
+limitation; it is what keeps the allowlist safe without a mark.**
+
+## A3. So the mark IS needed — and the safe rule is the conjunction
+
+Neither half works alone. The allowlist without a mark hits 101; a mark without
+the allowlist cannot name the field. Measured across all 697 questions, the
+conjunction fires **5 times**:
+
+```
+value allowlist  AND  selector mark  AND  not already resolved
+                 AND  no comparison marker  AND  exactly one value of that field
+```
+
+| id | question | today |
+|---|---|---|
+| `b16_001` | balance where account status is active | **answers** — the defect |
+| `b16_002` | balance for interest roll-up loans | **answers** — the defect |
+| `pipe_191` | pipeline by stage for broker Alpha | already refuses: no governed pipeline data |
+| `funded_filtered_qa_018` | balance of South East loans with LTV above 50% | already refuses: `geographic_scope` LOST |
+| `data_quality_006` | How complete is broker? | already refuses at measure resolution |
+
+**Three of the five already refuse for their own reasons, so their outcomes
+cannot move. The other two are the defect.** That is why §6.1's prediction stands
+unchanged.
+
+The intermediate rules are recorded because their failures are the evidence for
+the final one: allowlist + mark alone → **28** hits, reaching Q7.3/Q7.4/Q8.x on
+both books — the seasoning family, `32c263a`'s family. Adding *exactly one value
+named* → **13**, still reaching them, because *"the front book"* versus *"our
+seasoned lending"* names its second side with a synonym the frame does not
+contain, and *"direct"* versus *"acquired"* splits across two fields so each sees
+one value. Adding the comparison marker → **5**. **Each guard was earned by a
+family it would otherwise have broken.**
+
+## A4. The amended design
+
+1. **`lexical.selector_mark(text, start, end)`** — the one owner of *"the sentence
+   uses this mention to select rows"*. New decision, zero owners today (§2).
+   `is_filter_subject`, `condition_cut` and `subject_side` are untouched.
+2. **`execution_receipt.dimension_values(frame, semantics)`** — `geographic_values`'
+   scan without the geography `if`. The existing function keeps its restriction,
+   because its consumers are geography-specific and its narrowness is what makes
+   it safe unaccompanied.
+3. **`KIND_LOST_NARROWING`** — modelled on `KIND_GEOGRAPHIC_SCOPE`, not on
+   `KIND_UNRESOLVED_MEASURE` as §4.3 said. It is **provable**: the point-in-time
+   reconciler stamps it APPLIED from `applied_filter_fields` and the routed one
+   from `_analytical_narrowed_to`, exactly as the geographic facet is. That is
+   strictly better than §4.3's LOST-at-construction, because a narrowing that
+   execution DID apply must be recorded as honoured, and because it is what makes
+   the comparison families safe by evidence rather than by the lexical guard
+   alone.
+4. **The guards from A3**, each with the family that earned it named in the code.
+
+§5's arrival table gains one row and loses none: `_detect_geographic_scope` and
+`geographic_values` are **not** modified, so nothing that reads them changes.
