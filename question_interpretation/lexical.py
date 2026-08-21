@@ -182,3 +182,49 @@ def metric_slot(text: str) -> str:
     if cut is not None and head[:cut].strip():
         return head[:cut].strip()
     return head.strip()
+
+
+# --------------------------------------------------------------------------- #
+# Time granularity — the grain a question names.
+#
+# A question can name a time UNIT without naming a count. "Based on the last few
+# weeks" pins no number, so there is no span to honour or fail — but it does pin
+# a GRANULARITY, and a series that cannot express weeks cannot answer it. The
+# count being vague does not make the unit vague.
+#
+# This is Stage 5's input: the reading already exists and is correct, and the
+# carriage is what is missing.
+# --------------------------------------------------------------------------- #
+
+#: Ordered FINEST FIRST, so the finest unit a question names is the one returned.
+UNIT_PATTERNS: Tuple[Tuple[str, str], ...] = (
+    ("week", r"\bweeks?\b|\bweekly\b|\bfortnight\b"),
+    ("month", r"\bmonths?\b|\bmonthly\b"),
+    ("quarter", r"\bquarters?\b|\bquarterly\b"),
+    ("year", r"\byears?\b|\bannual\b|\bannually\b|\bytd\b"),
+)
+
+#: Coarsest last, so a request's unit can be compared to a series'.
+UNIT_ORDER = {"week": 0, "month": 1, "quarter": 2, "year": 3}
+
+_UNIT_RES = tuple((unit, re.compile(pattern)) for unit, pattern in UNIT_PATTERNS)
+
+
+def requested_unit(question: str) -> Optional[str]:
+    """The finest time UNIT the question names, or None.
+
+    Padded with spaces before matching, as the original did: several patterns
+    rely on a word boundary at the string edge.
+    """
+    text = " %s " % (question or "").lower().strip()
+    for unit, pattern in _UNIT_RES:
+        if pattern.search(text):
+            return unit
+    return None
+
+
+def finer_than(requested: Optional[str], available: str) -> bool:
+    """Is the requested unit finer than the one a series can express?"""
+    if not requested:
+        return False
+    return UNIT_ORDER.get(requested, 99) < UNIT_ORDER.get(available, 99)

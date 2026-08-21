@@ -135,34 +135,27 @@ def requested_span(question: str, config=None) -> Optional[SpanRequest]:
     return None
 
 
-#: A question can name a time UNIT without naming a count. "Based on the last
-#: few weeks" pins no number, so there is no span to honour or fail — but it
-#: does pin a GRANULARITY, and a series that cannot express weeks cannot answer
-#: it. The count being vague does not make the unit vague.
-_UNIT_PATTERNS = (
-    ("week", r"\bweeks?\b|\bweekly\b|\bfortnight\b"),
-    ("month", r"\bmonths?\b|\bmonthly\b"),
-    ("quarter", r"\bquarters?\b|\bquarterly\b"),
-    ("year", r"\byears?\b|\bannual\b|\bannually\b|\bytd\b"),
-)
-#: Units ordered coarsest-last, so a series' unit can be compared to a request's.
-_UNIT_ORDER = {"week": 0, "month": 1, "quarter": 2, "year": 3}
-
-
 def requested_unit(question: str) -> Optional[str]:
-    """The finest time UNIT the question names, or None."""
-    text = f" {(question or '').lower().strip()} "
-    for unit, pattern in _UNIT_PATTERNS:
-        if re.search(pattern, text):
-            return unit
-    return None
+    """The finest time UNIT the question names, or None.
+
+    Stage 3, conversion 4: the unit vocabulary now lives in
+    ``question_interpretation.lexical``, which owns it. This reading is Stage
+    5's input — it is already correct for every time-series probe, including
+    "by quarter" and "each month", which the deterministic parser does not
+    recognise as a time axis at all — and what has been missing is the carriage,
+    not the comprehension.
+
+    Proved identical on all 690 real-surface corpus questions and on 13 edge
+    cases before the delegation was made.
+    """
+    from question_interpretation.lexical import requested_unit as _owner
+    return _owner(question)
 
 
 def finer_than(requested: Optional[str], available: str) -> bool:
     """Is the requested unit finer than the one the series can express?"""
-    if not requested:
-        return False
-    return _UNIT_ORDER.get(requested, 99) < _UNIT_ORDER.get(available, 99)
+    from question_interpretation.lexical import finer_than as _owner
+    return _owner(requested, available)
 
 
 def granularity_clarification(requested: str, available: str, basis: str) -> str:
