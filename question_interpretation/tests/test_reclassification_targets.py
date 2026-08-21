@@ -26,8 +26,9 @@ from question_interpretation import stamp_coverage as SC
 
 
 class _Spec:
-    """No filters and no axes: the shape that sends a facet down every branch
-    of the reclassifier, so no variant's target is missed."""
+    """No filters and no axes: the unresolved case. Together with the two
+    below, every branch of the reclassifier is exercised, so no target is
+    missed."""
 
     filters: dict = {}
     dimensions: list = []
@@ -37,6 +38,14 @@ class _Spec:
 class _SpecWithFilter:
     filters = {"probe_field": "probe value"}
     dimensions: list = []
+    dimension = None
+
+
+class _SpecWithAxis:
+    """A field with an axis role, which no rule may move."""
+
+    filters: dict = {}
+    dimensions = ["probe_field"]
     dimension = None
 
 
@@ -54,16 +63,10 @@ def _observed_targets() -> set:
     of half the instrument defects in this programme.
     """
     seen = set()
-    original = R.UNRESOLVED_ROLE_DEFAULT
-    try:
-        for variant in R.UNRESOLVED_ROLE_VARIANTS:
-            R.UNRESOLVED_ROLE_DEFAULT = variant
-            for spec in (_Spec(), _SpecWithFilter()):
-                for facet in R._split_named_dimension_roles([_grouping()], spec):
-                    if facet.kind != R.KIND_GROUPING:
-                        seen.add(facet.kind)
-    finally:
-        R.UNRESOLVED_ROLE_DEFAULT = original
+    for spec in (_Spec(), _SpecWithFilter(), _SpecWithAxis()):
+        for facet in R._split_named_dimension_roles([_grouping()], spec):
+            if facet.kind != R.KIND_GROUPING:
+                seen.add(facet.kind)
     return seen
 
 

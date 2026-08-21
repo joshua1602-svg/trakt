@@ -602,14 +602,14 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                                    "route": route,
                                    "facets": [f.to_dict() for f in facets]}
         if verdict in (receipt_mod.VERDICT_REFUSE,
-                       getattr(receipt_mod, "VERDICT_CLARIFY", "\0")):
+                       receipt_mod.VERDICT_CLARIFY):
             routed["ok"] = False
             routed["error"] = message
             routed["answer"] = message
             routed["artifacts"] = []
             routed["controlledRefusal"] = True
             routed["clarificationRequested"] = (
-                verdict == getattr(receipt_mod, "VERDICT_CLARIFY", "\0"))
+                verdict == receipt_mod.VERDICT_CLARIFY)
             routed.setdefault("warnings", []).append(message)
         elif verdict == receipt_mod.VERDICT_PARTIAL and message:
             routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{message}"

@@ -67,28 +67,52 @@ def test_both_roles_in_one_sentence_are_told_apart():
 
 
 # -- 3: an unresolved-role dimension does NOT move --------------------------
-def test_a_dimension_with_no_role_from_any_source_stays_put():
-    """The 32c263a failure, avoided by construction. That commit let anything
-    unjustifiable fall to POPULATION — the side that blocks — and it cost 160
-    runs. A dimension in neither slot stays exactly as it is."""
+def test_a_dimension_with_no_role_from_any_source_becomes_a_question():
+    """Superseded by the settled clarify rule, and the reason matters.
+
+    This asserted the facet STAYS PUT — the conservatism the split shipped with,
+    chosen against 32c263a, which let anything unjustifiable fall to POPULATION,
+    the side that blocks, at a cost of 160 runs.
+
+    Staying put turned out not to be the safe option it looked like: an
+    unapplied grouping refuses too, because `_blocks` returns True for any of
+    them. The measured choice was never between a whole-book number and a
+    refusal; it was between a refusal and a question. It is now a question.
+
+    What is preserved from 32c263a is the thing that actually mattered: an
+    ambiguous dimension does not become a POPULATION. Falling to the blocking
+    side is still wrong; the correction is that staying put was blocking too.
+    """
     spec = _Spec(filters={}, dimension=None)
     out = R._split_named_dimension_roles([_grouping("broker_channel", "broker")], spec)
-    assert out[0].kind == R.KIND_GROUPING
+    assert out[0].kind == R.KIND_UNRESOLVED_ROLE
+    assert out[0].kind != R.KIND_POPULATION
 
 
 # -- 4: the reclassifier can fail -------------------------------------------
 def test_the_reclassifier_does_not_simply_move_everything():
     """Proof the three above are detecting the slot assignment.
 
-    Same facets, same call, a spec whose filters name a DIFFERENT field: nothing
-    moves. A reclassifier that moved on the presence of any filter at all would
-    fail here and pass every test above.
+    Same facets, same call, a spec whose filters name a DIFFERENT field: neither
+    becomes a POPULATION. A reclassifier that moved on the presence of any
+    filter at all would fail here and pass every test above.
+
+    They become questions rather than staying groupings — no source gave either
+    one a role — which is the settled rule, not a failure of this check. What
+    this proves is that the FILTER slot is being read, not merely counted.
     """
     spec = _Spec(filters={"collateral_geography": "London"}, dimension=None)
     facets = [_grouping("borrower_type", "joint borrower"),
               _grouping("broker_channel", "broker")]
     out = R._split_named_dimension_roles(facets, spec)
-    assert [f.kind for f in out] == [R.KIND_GROUPING, R.KIND_GROUPING]
+    assert [f.kind for f in out] == [R.KIND_UNRESOLVED_ROLE, R.KIND_UNRESOLVED_ROLE]
+
+    # And the same two fields WITH a role are read correctly, which is what
+    # makes the assertion above about the slot rather than about the default.
+    on_axis = _Spec(filters={}, dimension=None)
+    on_axis.dimensions = ["borrower_type", "broker_channel"]
+    assert [f.kind for f in R._split_named_dimension_roles(facets, on_axis)] \
+        == [R.KIND_GROUPING, R.KIND_GROUPING]
 
 
 def test_no_other_facet_kind_is_touched():
@@ -132,7 +156,13 @@ def test_a_comparator_filter_relabels_through_the_same_renderer():
 # -- the seasoning families must not be reclassified -------------------------
 def test_no_seasoning_facet_is_reclassified_on_the_robustness_bank():
     """Verified rather than assumed, as the brief requires: the population
-    over-assignment that caused the 160-run regression must not recur."""
+    over-assignment that caused the 160-run regression must not recur.
+
+    Counts moves to POPULATION specifically. Under the settled clarify rule an
+    unresolved dimension does move — to KIND_UNRESOLVED_ROLE, which asks rather
+    than blocks — and counting every kind change would make this fail for the
+    one reclassification it was never about.
+    """
     sys.path.insert(0, str(_REPO_ROOT / "due_diligence" / "evidence" / "analytical_intent_v1"))
     import nl_bank
     from mi_agent import mi_calibration as CAL
@@ -160,5 +190,6 @@ def test_no_seasoning_facet_is_reclassified_on_the_robustness_bank():
             detected = R.detect_requested_facets(q, semantics, frame=df,
                                                  requested_dimensions=dims)
             after = R._split_named_dimension_roles(detected, spec)
-            moved += sum(1 for a, b in zip(detected, after) if a.kind != b.kind)
+            moved += sum(1 for a, b in zip(detected, after)
+                         if a.kind != b.kind and b.kind == R.KIND_POPULATION)
     assert moved == 0

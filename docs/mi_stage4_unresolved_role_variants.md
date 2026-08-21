@@ -323,3 +323,90 @@ Separately, `tests/test_p1l_population_propagation.py` has 2 failures that
 predate all of this — they are live at the release candidate `28ece25` and are
 stale assertions from before Tranche D moved populations to the blocking side.
 Not caused here, and not fixed here.
+
+---
+
+## 10. Clarify applied — and the numbers that chose it no longer hold
+
+Recorded because the decision was made on §2's numbers and this changes them.
+The choice is the user's; this is what the chosen rule actually does.
+
+### 10.1 Two rules were added while applying it, and both are principled
+
+Neither was in the measured variant. Both were forced by failures the two
+standing surfaces could not see, and both are stated as principles rather than
+as accommodations:
+
+**A clarification is only worth asking when answering it changes something.**
+The measured variant asked *before* the blocking test. That pre-empted six
+refusals with a question, including the P0 contribution message: *"which region
+contributes most to the weighted average LTV?"*, answered by a plain
+weighted-average spec, asked whether region was meant as a breakdown or a filter
+— a question whose answer changes nothing, in place of one naming the real
+obstacle. The clarification now runs after the blocking test.
+
+**A field the book cannot express has no role worth settling.** Whether the
+reader meant to split by broker channel or narrow to one, a tape with no broker
+column can do neither. Asking invites an answer that cannot be honoured either
+way; naming the absent field can be acted on. Such facets stay groupings, and
+the grouping branch stamps them UNAVAILABLE with the reason.
+
+### 10.2 Between them, they remove all three cases the variant was measured on
+
+`filt_129`, `filt_135` and `filt_151` are the three answers §2.2 recorded as
+moving under clarify. All three are `borrower_type`, which the alderbridge tape
+does not carry, so all three now take the unavailability refusal instead.
+
+**The rule that was chosen on "converts three refusals into three questions"
+converts none of them.**
+
+### 10.3 What it does instead
+
+| surface | result |
+|---|---|
+| robustness, both books | 32/10/2 each, seasoning 20 of 20 by name, 44/44 |
+| answer text, 343 answers | **343 of 343 identical** |
+| MI test sweep | zero new failures against the fix commit |
+
+Reachable, and measured by construction rather than inferred: on the real tape
+the rule classifies **10 facets across 9 questions** — `collateral_geography` 4,
+`ltv_bucket` 2, `seasoning_segment` 2, `age_bucket` 1, `account_status` 1. On
+the generated fixture, 14 across 14, including `borrower_type` and
+`broker_channel`, which that book carries and the real one does not.
+
+Through the point-in-time workflow the clarification wins on five of those nine
+— *"Are any regional limits breached?"*, *"Show LTV bucket evolution over
+time."*, *"Show age bucket evolution over time."*, *"Show concentration limit
+status."*, *"Show geographic concentration against limits."* On the shipped
+service path all five are claimed by `risk_limits` or an evolution route and
+never reach `reconcile_facets`, which is why no answer text moves. The same
+routing dependency §4 measured, now on the other side of the ledger: it is what
+keeps this change invisible.
+
+The ninth refuses rather than asking — *"Are the front book and the back book
+balances developing differently over time?"* — because `_blocks` claims an
+unresolved-role facet whose wording names a governed seasoning window, and the
+refusal names the population. That is the right outcome and it corrects the
+`RECLASSIFICATION_TARGETS` exemption, which originally claimed this kind is read
+"before the blocking test and never consults its status". Both halves were wrong
+once the order was corrected, and that exemption is what licenses the kind
+having no reconciler branch, so it had to be accurate.
+
+### 10.4 What this means for the decision
+
+The asymmetry that chose clarify still holds as a principle: a refusal and a
+clarification both decline to answer, and only one hands the reader the next
+move. What no longer holds is the evidence quoted for it. On these corpora and
+this tape, clarify is **not measurably better than the variant it replaced** —
+it is measurably identical, and the three cases that distinguished them are
+gone. It is live code that fires, on questions the shipped routing does not send
+to it.
+
+Two honest readings, and the choice between them is not mine:
+
+* the rule is correct and the corpora are the problem — which is backlog B6,
+  already open, and the same gap that hid a production regression for a commit;
+* the rule is correct and inert, and should be left in place precisely because
+  it costs nothing until a book or a routing change makes it matter.
+
+Recorded rather than resolved. Nothing here argues for reverting it.

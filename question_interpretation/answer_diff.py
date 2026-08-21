@@ -139,9 +139,7 @@ def _robustness_records(book: str) -> List[Dict[str, Any]]:
     return out
 
 
-def _robustness_via_subprocess(book: str,
-                               unresolved_role: Optional[str] = None
-                               ) -> List[Dict[str, Any]]:
+def _robustness_via_subprocess(book: str) -> List[Dict[str, Any]]:
     """One book per process: the app binds its book at import time.
 
     EVERY argument that changes what is measured must be forwarded. The first
@@ -157,8 +155,6 @@ def _robustness_via_subprocess(book: str,
         out_path = Path(fh.name)
     argv = [sys.executable, "-m", __spec__.name, "--only-book", book,
             "--record", str(out_path)]
-    if unresolved_role:
-        argv += ["--unresolved-role", unresolved_role]
     proc = subprocess.run(argv, cwd=str(_REPO_ROOT), capture_output=True,
                           text=True)
     if proc.returncode != 0:
@@ -168,14 +164,13 @@ def _robustness_via_subprocess(book: str,
     return data["records"]
 
 
-def collect(only_book: Optional[str] = None,
-            unresolved_role: Optional[str] = None) -> List[Dict[str, Any]]:
+def collect(only_book: Optional[str] = None) -> List[Dict[str, Any]]:
     logging.disable(logging.WARNING)
     if only_book:
         return _robustness_records(only_book)
     records = _calibration_records()
     for book in ("alderbridge", "kestrelmoor"):
-        records.extend(_robustness_via_subprocess(book, unresolved_role))
+        records.extend(_robustness_via_subprocess(book))
     return records
 
 
@@ -231,17 +226,9 @@ def main(argv=None) -> int:
     ap.add_argument("--record", type=Path, help="collect and write a baseline")
     ap.add_argument("--against", type=Path, help="collect and diff against one")
     ap.add_argument("--only-book", default=None, help=argparse.SUPPRESS)
-    ap.add_argument("--unresolved-role", default=None,
-                    choices=("grouping", "population", "clarify", "population_bare"),
-                    help="MEASUREMENT ONLY: run under one variant of the "
-                         "unresolved-role default. Omit for current behaviour.")
     args = ap.parse_args(argv)
-    if getattr(args, "unresolved_role", None):
-        from mi_agent import execution_receipt as _R
-        _R.UNRESOLVED_ROLE_DEFAULT = args.unresolved_role
 
-    records = collect(only_book=args.only_book,
-                      unresolved_role=getattr(args, "unresolved_role", None))
+    records = collect(only_book=args.only_book)
 
     if args.record:
         args.record.write_text(

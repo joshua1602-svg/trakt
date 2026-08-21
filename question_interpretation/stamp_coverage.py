@@ -183,8 +183,17 @@ def _pit_bundles(R) -> Dict[str, Dict[str, Any]]:
         R.KIND_SHARE: dict(spec=_Spec(aggregation="share")),
         R.KIND_CONTRIBUTION: dict(spec=_Spec(aggregation="contribution")),
         R.KIND_RELATIONSHIP: dict(result=_Result(result_type="loan_level")),
-        R.KIND_GROUPING: dict(result=_Result(metadata={"group_field_keys": [_FIELD]})),
-        R.KIND_RANKING: dict(result=_Result(metadata={"group_field_keys": [_FIELD]})),
+        # The spec must put the field on an AXIS. `reconcile_facets` runs the
+        # role split on its first line, and a grouping facet whose field has no
+        # role from any source is rewritten to KIND_UNRESOLVED_ROLE before any
+        # branch sees it — so probing with an empty spec would measure the
+        # split, not the grouping branch, and report a false hole.
+        R.KIND_GROUPING: dict(
+            spec=_Spec(dimensions=[_FIELD]),
+            result=_Result(metadata={"group_field_keys": [_FIELD]})),
+        R.KIND_RANKING: dict(
+            spec=_Spec(dimensions=[_FIELD]),
+            result=_Result(metadata={"group_field_keys": [_FIELD]})),
         R.KIND_PROJECTION: dict(),
         # A bundle exists here only because the branch does. Until the
         # reconciler gained a KIND_POPULATION case there was no evidence to

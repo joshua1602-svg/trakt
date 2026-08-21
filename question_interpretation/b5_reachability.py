@@ -117,14 +117,7 @@ def scan() -> Dict[str, Any]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--json", type=Path, default=None)
-    ap.add_argument("--unresolved-role", default=None,
-                    choices=("grouping", "population", "clarify", "population_bare"),
-                    help="MEASUREMENT ONLY: scan under one variant of the "
-                         "unresolved-role default.")
     args = ap.parse_args(argv)
-    if getattr(args, "unresolved_role", None):
-        from mi_agent import execution_receipt as _R
-        _R.UNRESOLVED_ROLE_DEFAULT = args.unresolved_role
 
     result = scan()
     print("=" * 72)

@@ -1077,38 +1077,42 @@ VERDICT_OK = "ok"
 VERDICT_PARTIAL = "partial"
 VERDICT_REFUSE = "refuse"
 #: A question back to the reader, not an answer and not a refusal. Reached only
-#: under ``UNRESOLVED_ROLE_DEFAULT == "clarify"``; see below.
+#: Returned when the question named a dimension no source gave a role to.
 VERDICT_CLARIFY = "clarify"
 
 # --------------------------------------------------------------------------- #
-# The unresolved-role default — MEASUREMENT SWITCH, not a setting
+# The unresolved-role default — settled: CLARIFY
 # --------------------------------------------------------------------------- #
 # `_split_named_dimension_roles` gives a named dimension the role the sentence
 # gave it. Where NO source supplies a role — the field is neither in
-# `spec.filters` nor in `spec.dimensions` — something still has to be done with
-# the facet, and the three available answers differ in what the reader receives:
+# `spec.filters` nor on an axis — the question is genuinely ambiguous: "balance
+# by borrower type" could mean split the book by it or narrow the book to one
+# value of it, and nothing in the sentence or the spec settles which.
 #
-#   "grouping"    leave it as it is. An unapplied grouping is a SHAPE facet, so
-#                 the answer stands and the dimension is named as not applied:
-#                 a whole-book figure with a disclosure attached.
-#   "population"  let it fall to the blocking side, as 32c263a did. Nothing is
-#                 answered over a broader population; the run refuses.
-#   "clarify"     ask which was meant — split the book by this dimension, or
-#                 narrow it to a value of it. No number, and no refusal either.
+# Three answers were measured side by side on both surfaces in 8a084c9;
+# `docs/mi_stage4_unresolved_role_variants.md` holds the numbers. Summarised:
 #
-# This exists so the three can be measured side by side on the same corpora.
-# It is NOT a deployment knob and must not become one: the default is the
-# current behaviour, so with it untouched every path is byte-identical to
-# before this constant existed. One of the three will be chosen on the numbers
-# and the other two deleted.
-UNRESOLVED_ROLE_DEFAULT = "grouping"
-#: "population_bare" is NOT a candidate. It is "population" with the facet
-#: relabelled to the bare field name, destroying the wording the governed arm of
-#: the population check reads. It exists so the claim "32c263a cannot recur"
-#: can be shown to be falsifiable rather than asserted: under it, a governed
-#: lending window in the unresolved set SHOULD break. An instrument that cannot
-#: produce the failure it rules out has not ruled it out.
-UNRESOLVED_ROLE_VARIANTS = ("grouping", "population", "clarify", "population_bare")
+#   grouping    leave it. On the corpus this REFUSES — `_blocks` returns True
+#               for any unapplied grouping, so the disclosure path everyone
+#               assumed was here is unreachable.
+#   population  fall to the blocking side, as 32c263a did. Moved NO verdict on
+#               either surface: it changed three refusals' wording and nothing
+#               else, and the wording got worse — a field key in user-facing
+#               prose, and the loss of "field is unavailable in this dataset",
+#               the only part that said WHY.
+#   clarify     ask which was meant. Converts those three refusals into three
+#               questions and changes nothing else.
+#
+# CLARIFY, and the measured asymmetry is why: a refusal and a clarification both
+# decline to answer, but a clarification hands the reader the next move and a
+# refusal does not. The switch that made the three measurable is gone along with
+# the two variants that lost, so the side-by-side is not re-runnable — the
+# recorded numbers stand as the record.
+#
+# What clarify does NOT touch, measured rather than assumed: a field with a
+# RESOLVED filter role. Those go down the population branch under every variant.
+# The refusals e35a01b introduced were of exactly that kind, which is why the
+# population hole had to be closed first (b79f400) rather than masked by this.
 
 #: A dimension the question named and no source gave a role to, under the
 #: "clarify" variant. Distinct from KIND_GROUPING because it must not be
@@ -1148,9 +1152,13 @@ KIND_UNRESOLVED_ROLE = "unresolved_role"
 RECLASSIFICATION_TARGETS: Dict[str, str] = {
     KIND_POPULATION: "",
     KIND_UNRESOLVED_ROLE: (
-        "`assess` reads this kind directly, BEFORE the blocking test, and returns "
-        "a clarification without ever consulting the facet's status. A reconciler "
-        "branch would have nothing to contribute and nothing would read it."),
+        "`assess` decides this kind from its KIND and its detection status alone "
+        "— a clarification when nothing else blocks, and `_blocks` may claim it "
+        "first where the wording names a governed seasoning population, in which "
+        "case the refusal wins and says why. Neither reader needs a reconciler to "
+        "stamp it, because there is no execution evidence to weigh: the facet "
+        "records that the question did not settle a role, which no route can "
+        "confirm or deny."),
 }
 
 
@@ -1201,8 +1209,10 @@ def executed_statistics(query_result: Any) -> List[str]:
     return [str(published)] if published else []
 
 
-def _split_named_dimension_roles(facets: Sequence[RequestedFacet],
-                                 spec) -> List[RequestedFacet]:
+def _split_named_dimension_roles(facets: Sequence[RequestedFacet], spec,
+                                 semantics: Optional[dict] = None,
+                                 available_columns: Optional[Iterable[str]] = None
+                                 ) -> List[RequestedFacet]:
     """Give a named dimension the ROLE the sentence gave it.
 
     ``KIND_GROUPING`` has meant "a dimension the question named", with no
@@ -1246,61 +1256,72 @@ def _split_named_dimension_roles(facets: Sequence[RequestedFacet],
             axes.append(getattr(spec, "dimension"))
     axes = {str(a) for a in axes if a}
 
+    columns = set(available_columns or ())
+    fields = (semantics or {}).get("fields", {}) if isinstance(semantics, dict) else {}
+
+    def _unexpressible(keys: Sequence[str]) -> bool:
+        """True when no key this facet resolves to is a column of this book."""
+        if not columns:
+            return False                 # nothing declared: assume expressible
+        return not any((fields.get(k, {}) or {}).get("canonical_field", k) in columns
+                       for k in keys)
+
     out: List[RequestedFacet] = []
     for facet in facets:
         field = getattr(facet, "field_key", None)
         if facet.kind != KIND_GROUPING or not field:
             out.append(facet)
             continue
-        if field not in filters:
-            # No source supplies a role: the parser put this field neither in
-            # the filters nor on an axis. Which way it falls is the open
-            # question, and the switch is what makes the three measurable.
-            if field in axes or UNRESOLVED_ROLE_DEFAULT == "grouping":
+        # EVERY key that legitimately satisfies this facet, not just the one it
+        # is filed under. A generic term resolves to different concrete fields
+        # depending on what the book carries — "region" is `collateral_geography`
+        # on a real tape and `geographic_region_obligor` on the generated
+        # fixture — and the parser may put EITHER on the axis. Reading only
+        # `field_key` made a facet whose axis was named by an alt key look as
+        # though no source had given it a role, and "balance by borrower type by
+        # region" became a clarification instead of a two-dimensional answer.
+        # This is the same resolution the KIND_GROUPING branch of
+        # `reconcile_facets` already applies via `satisfied_by()`; the split must
+        # not read the slots more narrowly than the branch it diverts facets
+        # away from.
+        candidates = facet.satisfied_by()
+        filter_key = next((k for k in candidates if k in filters), None)
+        if filter_key is None:
+            # No source supplies a role. A field the parser put on an AXIS has
+            # one, and is left exactly as it is. Anything else is the ambiguous
+            # case: rather than answer over a set the question may not have
+            # asked for, or refuse a question nobody has been asked to restate,
+            # it becomes a question back. `assess` reads this kind directly and
+            # never consults its status, which is why it needs no reconciler
+            # branch — recorded as an exemption in RECLASSIFICATION_TARGETS.
+            if any(k in axes for k in candidates) or _unexpressible(candidates):
+                # A field the BOOK cannot express has no role worth settling.
+                # Whether the reader meant to split by broker channel or narrow
+                # to one, a tape that carries no broker column can do neither,
+                # and "did you mean a breakdown or a filter?" invites an answer
+                # that cannot be honoured either way. Left as a grouping, so the
+                # KIND_GROUPING branch stamps it UNAVAILABLE and the reader is
+                # told the thing they can act on: this book does not report it.
                 out.append(facet)
-            elif UNRESOLVED_ROLE_DEFAULT in ("population", "population_bare"):
-                # No predicate was parsed, so there is no value to describe.
-                # Two things the label must do at once, and getting either
-                # wrong decides the variant's result rather than measuring it:
-                #   * carry the FIELD NAME, or B5 becomes reachable — the
-                #     literal arm of the population check derives its value by
-                #     splitting the label on the field, and an empty value
-                #     there accepts any predicate naming that field;
-                #   * carry the original WORDING, because the governed arm of
-                #     the same check resolves lending windows from the facet's
-                #     words. Relabelling to the bare field name destroys
-                #     "front book" and re-creates the 32c263a failure by
-                #     construction, which would be an artefact of the
-                #     measurement and not a property of the variant.
-                out.append(RequestedFacet(
-                    kind=KIND_POPULATION,
-                    label=("the population %s" % field
-                           if UNRESOLVED_ROLE_DEFAULT == "population_bare"
-                           else "the population %s: %s" % (field, facet.label)),
-                    field_key=field, alt_keys=facet.alt_keys,
-                    concepts=facet.concepts, status=facet.status,
-                    reason=facet.reason, span=facet.span))
-            elif UNRESOLVED_ROLE_DEFAULT == "clarify":
+            else:
                 out.append(RequestedFacet(
                     kind=KIND_UNRESOLVED_ROLE,
                     label=facet.label, field_key=field, alt_keys=facet.alt_keys,
                     concepts=facet.concepts, status=facet.status,
                     reason=facet.reason, span=facet.span))
-            else:
-                raise ValueError("unknown UNRESOLVED_ROLE_DEFAULT %r"
-                                 % (UNRESOLVED_ROLE_DEFAULT,))
             continue
-        condition = filters[field]
+        condition = filters[filter_key]
         if isinstance(condition, Mapping):
-            predicate = Predicate(field, str(condition.get("op") or "eq"),
+            predicate = Predicate(filter_key, str(condition.get("op") or "eq"),
                                   condition.get("value"))
         else:
-            predicate = Predicate(field, "eq", condition)
+            predicate = Predicate(filter_key, "eq", condition)
         out.append(RequestedFacet(
             kind=KIND_POPULATION,
             label="the population %s" % predicate.describe(),
-            field_key=field, alt_keys=facet.alt_keys, concepts=facet.concepts,
-            status=facet.status, reason=facet.reason, span=facet.span))
+            field_key=filter_key, alt_keys=facet.alt_keys,
+            concepts=facet.concepts, status=facet.status, reason=facet.reason,
+            span=facet.span))
     return out
 
 
@@ -1314,7 +1335,8 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     actually narrowed the frame; a grouping counts as applied only when its
     column is in the executor's group keys or the result columns.
     """
-    facets = _split_named_dimension_roles(facets, spec)
+    facets = _split_named_dimension_roles(facets, spec, semantics,
+                                          available_columns)
 
     meta = getattr(query_result, "metadata", None) or {}
     recon = meta.get("reconciliation") or {}
@@ -1738,9 +1760,28 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
             return True
         return facet.kind in NUMBER_OR_SUBJECT_FACETS or _is_seasoning_population(facet)
 
-    # A dimension no source gave a role to, under the "clarify" variant. Asked
-    # BEFORE the refusal test, because a question the reader has not disambiguated
-    # cannot be refused on the strength of a reading it never confirmed.
+    blocking = [f for f in receipt.facets if _blocks(f)]
+    if blocking:
+        detail = "; ".join(f.disclosure(semantics) for f in blocking)
+        return VERDICT_REFUSE, (
+            f"I understood that you asked for {_join([f.label for f in blocking])}, "
+            f"but that could not be applied to the calculation ({detail}). "
+            "I have not substituted a broader figure.")
+
+    # A dimension no source gave a role to. Asked only once nothing else has
+    # already settled the outcome.
+    #
+    # A clarification is worth asking when answering it changes what the reader
+    # can get. Where the run would refuse anyway — a contribution the route did
+    # not compute, a statistic it substituted, a population it could not apply —
+    # the refusal names the actual obstacle and the question does not: "which
+    # region contributes most to the weighted average LTV?" answered by a plain
+    # weighted-average spec must say so, not ask whether region was meant as a
+    # breakdown or a filter. Answering that question would change nothing.
+    #
+    # So this runs AFTER the blocking test, not before it. The earlier ordering
+    # pre-empted six refusals with a question, including one carrying the P0
+    # contribution message.
     unresolved = [f for f in receipt.facets
                   if f.kind == KIND_UNRESOLVED_ROLE and f.status != APPLIED]
     if unresolved:
@@ -1749,14 +1790,6 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
             f"{_join([f.label for f in unresolved])}. Did you want the book "
             "split by it, or narrowed to one value of it? I have not answered "
             "over the whole book in the meantime.")
-
-    blocking = [f for f in receipt.facets if _blocks(f)]
-    if blocking:
-        detail = "; ".join(f.disclosure(semantics) for f in blocking)
-        return VERDICT_REFUSE, (
-            f"I understood that you asked for {_join([f.label for f in blocking])}, "
-            f"but that could not be applied to the calculation ({detail}). "
-            "I have not substituted a broader figure.")
 
     if substitution:
         return VERDICT_REFUSE, (
