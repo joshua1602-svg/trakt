@@ -334,6 +334,48 @@ def geographic_values(frame, semantics: dict, *, max_cardinality: int = 60
     return out
 
 
+def book_columns(frame) -> Set[str]:
+    """The columns of the BOOK this frame reports on. THE schema answer, once.
+
+    D6 (B14). A view is chosen by a substring test on the question — the word
+    "forecast" anywhere selects the forecast view — before the question is parsed
+    and before any route claims it. That view is a DERIVED frame of twelve
+    columns where the book carries seventy-six, and every availability check read
+    whichever frame had been loaded. So "what is the forecast run rate for the
+    front book" answered:
+
+        "front book — field is unavailable in this dataset"
+
+    True of the projection and false of the book, which carries
+    `seasoning_segment` for all 11,035 loans. Its sibling, asked about REGION —
+    one of the twelve the projection kept — already said the true thing: the
+    breakdown was not applied. Both refuse; only one was honest about why.
+
+    A frame that IS the book (the funded view) carries no stamp and returns its
+    own columns, so nothing changes there.
+
+    WHAT THIS IS NOT. It answers a SCHEMA question — does the book report this
+    field — and never a VALUE question. `geographic_values` and `dimension_values`
+    must keep reading the LOADED frame, because a value can only be recognised in
+    rows that exist. Confusing the two is how this change would silently become
+    B19 and take the wrong-number class with it.
+    """
+    if frame is None:
+        return set()
+    stamped = None
+    try:
+        stamped = (getattr(frame, "attrs", None) or {}).get("book_columns")
+    except Exception:  # noqa: BLE001 - metadata must never break a query
+        stamped = None
+    if stamped:
+        return {str(c) for c in stamped}
+    # `or ()` would be a bug here: a pandas Index has no truth value, and the
+    # guard's blanket except would have swallowed the ValueError along with the
+    # whole receipt.
+    own = getattr(frame, "columns", None)
+    return {str(c) for c in own} if own is not None else set()
+
+
 def dimension_values(frame, semantics: dict, *, max_cardinality: int = 60
                      ) -> Dict[str, str]:
     """``{lowercased value: semantic field key}`` for EVERY low-cardinality dimension.
@@ -1013,8 +1055,16 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     try:
         from .population import Predicate
         from .seasoning import resolve_population_predicate
-        _columns = (list(frame.columns) if frame is not None
-                    and hasattr(frame, "columns") else None)
+        # D6: the BOOK's columns, not the loaded frame's. The seasoning owner is
+        # answering a SCHEMA question — can this book express `seasoning_segment`
+        # — and `requested_dimension_terms` above asks it the same question with
+        # the book's columns. Reading the frame here made the two disagree on a
+        # projected view: one suppressed the grouping because the owner had taken
+        # the phrase, the other raised no population because the projection lacks
+        # the column, and the field left the receipt entirely. A narrowed question
+        # then returned the whole-book run rate with nothing recorded, which is
+        # worse than the false message D6 set out to fix.
+        _columns = sorted(book_columns(frame)) if frame is not None else None
         _predicate = resolve_population_predicate(question, _columns)
     except Exception:                                          # pragma: no cover
         _predicate = None

@@ -537,7 +537,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             question, semantics, frame=frame,
             requested_dimensions=receipt_mod.requested_dimension_terms(
                 question, semantics,
-                available_columns=set(frame.columns) if frame is not None else None),
+                available_columns=receipt_mod.book_columns(frame)),
             # The parser's resolved filters, so the narrowing owner consumes that
             # answer instead of claiming the same field.
             resolved_filters=set(getattr(getattr(parsed, "spec", None),
@@ -562,7 +562,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         # measurement behind that choice.
         facets = receipt_mod._split_named_dimension_roles(
             facets, getattr(parsed, "spec", None) or {}, semantics,
-            set(frame.columns) if frame is not None else None,
+            receipt_mod.book_columns(frame),
             question=question, settle_unresolved=False)
         granularity = receipt_mod.granularity_facets(question, route)
         # P1L: the material row population the spec carries. Raised from the
@@ -577,7 +577,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                   f"evidence={(routed.get('metadata') or {}).get('populationApplied')}", file=_sd.stderr)
         receipt_mod.reconcile_population(
             population, (routed.get("metadata") or {}).get("populationApplied"),
-            dataset_columns=(set(frame.columns) if frame is not None else None))
+            dataset_columns=receipt_mod.book_columns(frame))
         # A filter naming the population the ANALYTICAL PLAN already resolved
         # from the intent is a no-op, not a loss. "Of the current offer pipeline,
         # how much should convert?" sometimes parsed with an explicit
@@ -631,7 +631,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             population.append(_extra)
             receipt_mod.reconcile_population(
                 [_extra], (routed.get("metadata") or {}).get("populationApplied"),
-                dataset_columns=(set(frame.columns) if frame is not None else None))
+                dataset_columns=receipt_mod.book_columns(frame))
             if (_extra.status != receipt_mod.APPLIED
                     and receipt_mod._analytical_population_satisfies(routed, _extra)):
                 _extra.status, _extra.reason = receipt_mod.APPLIED, ""
@@ -660,7 +660,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         facets = receipt_mod.reconcile_routed_facets(
             [f for f in facets if f.kind != receipt_mod.KIND_POPULATION],
             route=route, semantics=semantics,
-            available_columns=set(frame.columns) if frame is not None else None,
+            available_columns=receipt_mod.book_columns(frame),
             envelope=routed)
         facets = list(facets) + _population
         # A temporal route may have compared a shorter span than the question

@@ -195,3 +195,113 @@ changes, no route changes.** `answer_diff`: **716 identical, 2 moved**, both on
 * the book's columns are carried, not re-loaded;
 * all five surfaces, deterministic arm, both books; seasoning by name;
 * `rt_014` and `rt_017` flip; `rt_018` and `rt_019` hold.
+
+---
+
+# Result, measured against §6
+
+## Against the prediction
+
+| predicted | measured |
+|---|---|
+| two answers move, both only in their REASON | **two moved, `rt_014` and `rt_017`, reason only** |
+| `answer_diff` 716 identical, 2 moved, both `routed_surface` | **718 compared, 716 identical, 2 MOVED, both `routed_surface`** |
+| `rt_018` keeps its `lost` status | **unchanged** |
+| `rt_019` keeps failing | **still declared-failing** |
+| no funded-view answer moves | **none** — 610 corpus questions and both banks |
+| seasoning families unchanged, both books | **Q1 4, Q7 4, Q8 12 all CORRECT** |
+| robustness `32/10/2`, calibration `259/259` | **both** |
+| lexical 693 of 693 | **693 of 693** |
+| a field absent from the BOOK is still unavailable | **still unavailable** |
+
+```
+answer diff      718 compared, 716 identical, 2 MOVED   (surface 5, added at step 3)
+routed surface   21 of 21          (1 declared expected-to-fail: rt_019)
+calibration      249/249 generated; 259/259 curated held, 0 hard fails, 0 gaps
+robustness       32/10/2 both books; seasoning Q1 4, Q7 4, Q8 12
+lexical          693 of 693
+qi tests         349 passed
+```
+
+**No stop condition fired.**
+
+## The sequence worked, and this is what step 3 bought
+
+`answer_diff` reported **2 moved**. Without the fifth surface added at step 3 it
+would have reported **0 of 693 identical** and been correct — the two questions
+that changed are not in any of its other four corpora. That is the third time in
+this programme a change has been invisible to the standing instruments, and the
+first time the instrument was extended **before** the change rather than after.
+
+## The prediction's §6.1 was too weak, and the case written earlier was right
+
+§6.1 predicted `rt_014` would move `grouping_dimension UNAVAILABLE` →
+`grouping_dimension LOST`. It moved to **`row_population seasoning_segment
+LOST`** — the KIND changed too.
+
+With the book's schema in view, `resolve_population_predicate` can express
+`seasoning_segment`, so the seasoning owner takes *"the front book"* as a
+**governed population** rather than leaving it a breakdown. The refusal now names
+the population the forecast could not apply.
+
+The `rt_014` case written back in D7 stated exactly that — `[projection applied,
+row_population lost]` — and my §6.1 table restated it more weakly a commit later.
+**The surface case was more accurate than the prediction summarising it**, which
+is an argument for writing the case first and reading it back, not for trusting
+the prose.
+
+## What the site-by-site verification found, which the headline check missed
+
+The work order moved this into implementation because the check "has now missed
+twice made against a design's headline". It missed a third time, and the
+site-by-site pass caught it **before any surface ran**.
+
+Eleven sites were listed; the pass reclassified two and found one the list had
+described but not connected:
+
+* Sites **6 and 7** (`geographic_values`, `dimension_values`) confirmed as VALUE
+  readers — they keep the loaded frame, and mutating them onto `book_columns`
+  is inert because the column lookup that follows fails closed. Recorded as
+  holding two ways.
+* Site **8**, `resolve_population_predicate`, is called **twice** from two
+  places, and the list treated it as one. `requested_dimension_terms` was moved
+  onto the book; the copy inside `detect_requested_facets` was still reading the
+  frame.
+
+**That produced a wrong number, not a wrong message.** One reader suppressed the
+grouping because the owner had taken the phrase; the other raised no population
+because the projection lacks the column. The field left the receipt entirely and
+*"forecast run rate for the front book"* returned the **whole-book** run rate —
+£16.3m/month, byte-identical to the unqualified question — with **nothing
+recorded**. Strictly worse than the false message D6 set out to fix, and live for
+about four minutes.
+
+Pinned by
+`test_the_seasoning_owner_and_the_dimension_reader_agree_on_a_projection`.
+
+## A helper test is not a wiring test
+
+Mutating away the `_stamp_book_columns` **call site** left all eight tests
+passing: the one that looked like it covered stamping called the helper directly,
+proving the helper works and not that anything applies it.
+
+`test_the_view_resolver_actually_stamps_it` drives `_resolve_query_frame` and
+asserts the returned forecast frame reports more book columns than it carries.
+It fails under that mutation. **A test that constructs the thing it is verifying
+verifies only the constructor** — which is the B20 class arriving in its own
+commit, found by mutation and by nothing else.
+
+## Mutations, and what caught each
+
+| mutation | caught by |
+|---|---|
+| the accessor ignores the stamp | 4 tests, including the boundary and the two-owner agreement |
+| the view resolver does not stamp | `test_the_view_resolver_actually_stamps_it` (added because it did NOT catch it first time) |
+| the seasoning owner reads the frame again | `test_the_seasoning_owner_and_the_dimension_reader_agree_on_a_projection` |
+| value readers moved onto the book | **inert** — the frame lookup fails closed, so the property holds two ways. Recorded rather than counted as coverage |
+
+## B19 unchanged and still open
+
+*"What is the forecast run rate for active loans?"* still answers `ok` with the
+whole-book run rate and no facet. D6 scopes the SCHEMA check; recognising the
+value needs the book's ROWS. `rt_019` holds it open.

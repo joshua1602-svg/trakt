@@ -531,7 +531,14 @@ def run_mi_agent_query(
         result["error"] = "data must be a pandas DataFrame or a path to a CSV"
         return result
 
-    available_columns = set(df.columns)
+    # D6 (B14): the SCHEMA of the book being reported on, which is the frame's
+    # own columns unless this frame is a derived VIEW of a larger book — the
+    # forecast projection keeps twelve of seventy-six. Every availability check
+    # below asks the book, so a field the book carries is never reported as
+    # absent from "this dataset".
+    from . import execution_receipt as _receipt_schema
+
+    available_columns = _receipt_schema.book_columns(df)
 
     # ---- controlled-unsupported guard -------------------------------------
     # If the question asks for a governed concept whose field is NOT in this

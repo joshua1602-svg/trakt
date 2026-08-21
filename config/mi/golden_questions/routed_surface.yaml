@@ -271,24 +271,27 @@ questions:
   # --- Declared before their fixes, per the rt_013 pattern -------------------
   - id: rt_014
     question: What is the forecast run rate for the front book?
-    expected_to_fail: >-
-      D6 / B14 — whether a field is available in the BOOK being asked about.
+    note: >-
+      CLOSED BY D6; re-declared, because leaving it claiming a closed defect
+      would make the surface lie.
 
-      Today: "I understood that you asked for front book, but that could not be
-      applied to the calculation (front book — field is unavailable in this
-      dataset)." That sentence is true of the PIPELINE FRAME the forecast route
-      loaded and false of the book, which carries `seasoning_segment` and 1,177
-      Front Book loans. The frame was chosen from a routing guess made before
-      the question was answered, and four owners read whichever frame was
-      loaded.
+      It said: "front book — field is unavailable in this dataset." True of the
+      12-column forecast PROJECTION the view resolver loaded, false of the
+      76-column book, which carries `seasoning_segment` for all 11,035 loans and
+      1,177 Front Book loans among them. The view was chosen by a SUBSTRING TEST
+      on the question — the word "forecast" anywhere — before parsing and before
+      any route claimed it.
 
-      The correct outcome is a receipt whose reason is true. The seasoning owner
-      takes "the front book" as a governed POPULATION when the book can express
-      it, so the facet is `row_population`, and the forecast route did not apply
-      it, so it is LOST — a refusal naming the real obstacle rather than a
-      wrong claim about the dataset.
+      It now names the real obstacle. And the KIND changed too, which is the
+      part worth keeping: with the book's schema in view the seasoning owner
+      takes "the front book" as a governed POPULATION rather than a breakdown,
+      so the receipt reads `row_population seasoning_segment LOST` — the
+      population the forecast could not apply, rather than a wrong claim about
+      what the dataset reports.
 
-      Fails twice today, on the kind and on the status.
+      What this pins going forward is the KIND as well as the status. A change
+      that made it `grouping_dimension lost` would still refuse, still be
+      honest about availability, and still have lost the population.
     expect_route: forecast_extrapolation
     expect_verdict: refuse
     expect_facets:
@@ -354,8 +357,9 @@ questions:
   # --- D6 / B14: the availability check reads the FRAME, not the book --------
   - id: rt_017
     question: What is the forecast run rate by vintage?
-    expected_to_fail: >-
-      D6 / B14, the second instance and the one that shows it is a CLASS.
+    note: >-
+      CLOSED BY D6; re-declared. The second instance, and the one that showed it
+      was a CLASS rather than a seasoning-vocabulary incident.
 
       `resolve_active_view` picks the frame from a keyword scan of the question —
       the word "forecast" anywhere selects the forecast view — before the
@@ -363,14 +367,15 @@ questions:
       frame of **12 columns**; the book carries **76**. Every availability check
       downstream then reads those 12.
 
-      So `vintage_year`, which the book carries for all 11,035 loans, is reported
+      `vintage_year`, which the book carries for all 11,035 loans, was reported
       as "field is unavailable in this dataset". True of the projection, false of
-      the book.
+      the book. It now says what `rt_018` — the same shape asked about REGION,
+      one of the twelve columns the projection kept — has always said: the
+      breakdown was not applied.
 
-      The correct outcome is the one its own sibling already gets: `rt_018` asks
-      the same shape about REGION, which the forecast frame does carry, and is
-      told the truth — the breakdown was not applied. Both refuse; only one of
-      them is honest about why.
+      Unlike rt_014 the KIND does not change here, and that is the distinction
+      the pair records: "the front book" is a governed population, "by vintage"
+      is a breakdown, and D6 changes only what the availability check READS.
     expect_route: forecast_extrapolation
     expect_verdict: refuse
     expect_facets:
