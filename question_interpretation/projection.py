@@ -176,16 +176,32 @@ def _operation(qi, spec, facet_kinds, AT) -> None:
 
 
 def _subject(qi, spec) -> None:
+    """The subject slot, plus the SPAN the subject may be named in.
+
+    The span comes from the single owner of the subject-side split, so the
+    object now carries the same decision `answer_type.subject_side` returns
+    rather than each consumer re-deriving it.
+    """
+    from .lexical import subject_side_span
+    start, end = subject_side_span(qi.question)
+    span = Span(start, end) if end > start else None
+    raw = qi.question[start:end].strip() or None
+
     metric = getattr(spec, "metric", None)
     if metric:
         qi.subject = SubjectClaim(state=FILLED, candidate_concept=metric,
+                                  raw_text=raw, span=span,
                                   source="parser.metric")
         return
     if getattr(spec, "aggregation", None) in ("count", "count_distinct"):
         qi.subject = SubjectClaim(state=FILLED, candidate_concept="loan_count",
+                                  raw_text=raw, span=span,
                                   source="parser.aggregation=count")
         return
-    qi.notes.append("subject: no source supplies it")
+    qi.subject = SubjectClaim(state=EMPTY, raw_text=raw, span=span,
+                              source="lexical.subject_side_span")
+    qi.notes.append("subject: no source supplies a concept; the subject-side "
+                    "span is carried regardless")
 
 
 def _dimensions(qi, spec, dim_terms, facets) -> None:

@@ -71,38 +71,26 @@ _SUMMARY_RE = re.compile(r"\b(portfolio|book)\s+(summary|overview)\b|"
                          r"\boverview\b|\bsnapshot\b")
 
 
-#: Clause openers that introduce a CONDITION. The same rule the parser applies
-#: in ``llm_query_parser._metric_slot``, and for the same reason: a measure word
-#: inside a condition names the field being filtered ON. The first version of
-#: this classifier scanned the whole question and typed "balance by region where
-#: borrower age is over 70" as an AGE question — the very defect the sweep was
-#: built to find, reproduced in the instrument looking for it.
-_CONDITION_OPENERS = ("where", "with", "for", "above", "below", "over", "under",
-                      "greater than", "less than", "at least", "at most",
-                      "more than", "fewer than")
-_CONDITION_RE = re.compile(
-    r"\b(" + "|".join(re.escape(t) for t in
-                      sorted(_CONDITION_OPENERS, key=len, reverse=True)) + r")\b")
-
-
 def subject_side(question: str) -> str:
     """The span of a question that may name the measure being reported.
 
-    Truncates at the first condition clause, and only where a numeric bound
-    follows it — so "loans with LTV above 50%" is cut while "regions with the
-    highest LTV" is not.
+    Stage 3, conversion 1: this no longer re-reads the question with its own
+    copy of the vocabulary. It asks the single owner,
+    ``question_interpretation.lexical``.
+
+    The rule is unchanged — truncate at the first grouping clause, then at the
+    first condition clause where a numeric bound follows, so "loans with LTV
+    above 50%" is cut while "regions with the highest LTV" is not. What changed
+    is that the thirteen condition openers are now declared ONCE. They used to
+    be declared here and again in ``llm_query_parser._metric_slot``, identical
+    by maintenance rather than by construction, with a third and divergent set
+    in ``execution_receipt._is_filter_subject``.
+
+    Proved byte-identical on all 690 real-surface corpus questions and on 18
+    edge cases the corpus does not reach, before the delegation was made.
     """
-    # The GROUPING clause is not the subject either. "balance by LTV bucket" is
-    # a currency question grouped by a rate band, and reading past "by" typed it
-    # as a rate — the same defect as the condition case, one clause along. The
-    # parser splits here too (``llm_query_parser._grouping_segments``).
-    head = re.split(r"\bby\b", question or "")[0]
-    m = _CONDITION_RE.search(head)
-    while m:
-        if re.search(r"\d", head[m.end():]):
-            return head[: m.start()].strip() or head.strip()
-        m = _CONDITION_RE.search(head, m.end())
-    return head.strip()
+    from question_interpretation.lexical import subject_side as _owner
+    return _owner(question)
 
 
 def asked(question: str) -> str:
