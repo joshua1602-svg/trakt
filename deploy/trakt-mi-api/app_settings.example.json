@@ -1,35 +1,106 @@
 [
-  { "name": "MI_AGENT_PLATFORM_URI", "value": "blob://processed-v2/platform/ERE/latest/platform_canonical_typed.csv" },
-  { "_comment": "Multi-period roots: funded evolution/forecast/compare read >=2 DATED platform cuts under the platform root; weekly pipeline funnel/conversion reads the dated snapshots under the pipeline root. Omit either only if that book is not published.",
-    "name": "MI_AGENT_ONBOARDING_OUTPUT_ROOT", "value": "blob://processed-v2/platform/ERE" },
-  { "name": "MI_AGENT_PIPELINE_ROOT", "value": "blob://processed-v2/pipeline/ERE" },
-  { "name": "TRAKT_BLOB_CONNECTION", "value": "<storage-connection-string>" },
-  { "name": "TRAKT_STORAGE_BACKEND", "value": "blob" },
-  { "name": "TRAKT_PROCESSED_CONTAINER", "value": "processed-v2" },
-
-  { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true" },
-  { "name": "WEBSITES_PORT", "value": "8000" },
-
-  { "name": "MI_API_WORKERS", "value": "2" },
-  { "name": "MI_API_TIMEOUT", "value": "120" },
-  { "name": "MI_AGENT_SCRATCH", "value": "/tmp/trakt/mi_platform" },
-  { "name": "MI_AGENT_CORS_ORIGINS", "value": "https://<your-react-app-host>" },
-
-  { "_comment": "React dashboard authentication. 'swa' (default) accepts ONLY the Static Web Apps X-MS-CLIENT-PRINCIPAL header — the pre-migration shape, so deploying the bearer code with this value changes nothing. 'both' additionally accepts an Entra access token, which is the cutover mode: the MSAL path can be proven while the existing admin login keeps working. 'bearer' stops honouring the header, which is what finally closes the direct-to-API side door. See docs/react_multitenant_auth_migration.md.",
-    "name": "TRAKT_MI_REACT_AUTH_MODE", "value": "swa" },
-  { "_comment": "Audience(s) the dashboard token must name, comma-separated — the Application ID URI of the trakt-mi-api Entra App Registration (optionally also its bare app id GUID). Required once the mode is 'both' or 'bearer'; without it every token is answered 503, not 401.",
-    "name": "TRAKT_MI_ENTRA_AUDIENCE", "value": "api://<trakt-mi-api-app-id>" },
-  { "_comment": "Delegated scope the dashboard token must carry. Defaults to MI.Access when unset; set to an empty string only as a deliberate decision to accept any token naming the audience above. A Copilot scope or an agent app role must never admit a caller here.",
-    "name": "TRAKT_MI_REQUIRED_SCOPE", "value": "MI.Access" },
-  { "_comment": "Named-user licensing, fail closed. Off (default) keeps the Stage 1 posture: a directory with nobody registered in config/principals.yaml is not principal-gated. Turn ON only once every dashboard user has been registered — doing it sooner refuses everyone, including the operator performing the migration.",
-    "name": "TRAKT_MI_REACT_REQUIRE_PRINCIPAL", "value": "false" },
-  { "_comment": "Microsoft 365 Copilot v1 actions (/v1/copilot/*). Default mode is 'entra' and FAILS CLOSED (503) until tenant + audience are set. See docs/copilot_v1_implementation.md.",
-    "name": "TRAKT_COPILOT_AUTH_MODE", "value": "entra" },
-  { "_comment": "One Entra directory GUID, or a comma-separated list of them. A single value is the current single-client shape and needs no change. Directories registered in config/organisations.yaml are accepted in addition to whatever is listed here, so a second organisation does not require editing this setting. NOTE: despite the Copilot-era name, this is the allow-list for EVERY token-authenticated surface — Copilot, the agent tool API and (once TRAKT_MI_REACT_AUTH_MODE is 'both'/'bearer') the React dashboard. One allow-list, deliberately: registering an organisation opens exactly one door.",
-    "name": "TRAKT_COPILOT_ENTRA_TENANT_ID", "value": "<entra-directory-tenant-guid>" },
-  { "name": "TRAKT_COPILOT_ENTRA_AUDIENCE", "value": "api://<trakt-copilot-app-id>" },
-  { "name": "TRAKT_COPILOT_REQUIRED_SCOPE", "value": "Trakt.Copilot" },
-  { "name": "TRAKT_COPILOT_DOWNLOAD_SIGNING_KEY", "value": "<random-32+-char-secret>" },
-  { "name": "TRAKT_COPILOT_DOWNLOAD_TTL_SECONDS", "value": "300" },
-  { "name": "TRAKT_COPILOT_PUBLIC_BASE_URL", "value": "https://trakt-mi-api.azurewebsites.net" }
+  {
+    "name": "MI_AGENT_PLATFORM_URI",
+    "value": "blob://processed-v2/platform/ERE/latest/platform_canonical_typed.csv"
+  },
+  {
+    "_comment": "Multi-period roots: funded evolution/forecast/compare read >=2 DATED platform cuts under the platform root; weekly pipeline funnel/conversion reads the dated snapshots under the pipeline root. Omit either only if that book is not published.",
+    "name": "MI_AGENT_ONBOARDING_OUTPUT_ROOT",
+    "value": "blob://processed-v2/platform/ERE"
+  },
+  {
+    "name": "MI_AGENT_PIPELINE_ROOT",
+    "value": "blob://processed-v2/pipeline/ERE"
+  },
+  {
+    "name": "TRAKT_BLOB_CONNECTION",
+    "value": "<storage-connection-string>"
+  },
+  {
+    "name": "TRAKT_STORAGE_BACKEND",
+    "value": "blob"
+  },
+  {
+    "name": "TRAKT_PROCESSED_CONTAINER",
+    "value": "processed-v2"
+  },
+  {
+    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+    "value": "true"
+  },
+  {
+    "name": "WEBSITES_PORT",
+    "value": "8000"
+  },
+  {
+    "name": "MI_API_WORKERS",
+    "value": "2"
+  },
+  {
+    "name": "MI_API_TIMEOUT",
+    "value": "120"
+  },
+  {
+    "name": "MI_AGENT_SCRATCH",
+    "value": "/tmp/trakt/mi_platform"
+  },
+  {
+    "name": "MI_AGENT_CORS_ORIGINS",
+    "value": "https://<your-react-app-host>"
+  },
+  {
+    "_comment": "React dashboard authentication. 'swa' (default) accepts ONLY the Static Web Apps X-MS-CLIENT-PRINCIPAL header \u2014 the pre-migration shape, so deploying the bearer code with this value changes nothing. 'both' additionally accepts an Entra access token, which is the cutover mode: the MSAL path can be proven while the existing admin login keeps working. 'bearer' stops honouring the header, which is what finally closes the direct-to-API side door. See docs/react_multitenant_auth_migration.md.",
+    "name": "TRAKT_MI_REACT_AUTH_MODE",
+    "value": "swa"
+  },
+  {
+    "_comment": "Audience(s) the dashboard token must name, comma-separated \u2014 the Application ID URI of the trakt-mi-api Entra App Registration (optionally also its bare app id GUID). Required once the mode is 'both' or 'bearer'; without it every token is answered 503, not 401.",
+    "name": "TRAKT_MI_ENTRA_AUDIENCE",
+    "value": "api://<trakt-mi-api-app-id>"
+  },
+  {
+    "_comment": "Delegated scope the dashboard token must carry. Defaults to MI.Access when unset; set to an empty string only as a deliberate decision to accept any token naming the audience above. A Copilot scope or an agent app role must never admit a caller here.",
+    "name": "TRAKT_MI_REQUIRED_SCOPE",
+    "value": "MI.Access"
+  },
+  {
+    "_comment": "Named-user licensing, fail closed. Off (default) keeps the Stage 1 posture: a directory with nobody registered in config/principals.yaml is not principal-gated. Turn ON only once every dashboard user has been registered \u2014 doing it sooner refuses everyone, including the operator performing the migration.",
+    "name": "TRAKT_MI_REACT_REQUIRE_PRINCIPAL",
+    "value": "false"
+  },
+  {
+    "_comment": "Microsoft 365 Copilot v1 actions (/v1/copilot/*). Default mode is 'entra' and FAILS CLOSED (503) until tenant + audience are set. See docs/copilot_v1_implementation.md.",
+    "name": "TRAKT_COPILOT_AUTH_MODE",
+    "value": "entra"
+  },
+  {
+    "_comment": "One Entra directory GUID, or a comma-separated list of them. A single value is the current single-client shape and needs no change. Directories registered in config/organisations.yaml are accepted in addition to whatever is listed here, so a second organisation does not require editing this setting. NOTE: despite the Copilot-era name, this is the allow-list for EVERY token-authenticated surface \u2014 Copilot, the agent tool API and (once TRAKT_MI_REACT_AUTH_MODE is 'both'/'bearer') the React dashboard. One allow-list, deliberately: registering an organisation opens exactly one door.",
+    "name": "TRAKT_COPILOT_ENTRA_TENANT_ID",
+    "value": "<entra-directory-tenant-guid>"
+  },
+  {
+    "name": "TRAKT_COPILOT_ENTRA_AUDIENCE",
+    "value": "api://<trakt-copilot-app-id>"
+  },
+  {
+    "name": "TRAKT_COPILOT_REQUIRED_SCOPE",
+    "value": "Trakt.Copilot"
+  },
+  {
+    "name": "TRAKT_COPILOT_DOWNLOAD_SIGNING_KEY",
+    "value": "<random-32+-char-secret>"
+  },
+  {
+    "name": "TRAKT_COPILOT_DOWNLOAD_TTL_SECONDS",
+    "value": "300"
+  },
+  {
+    "name": "TRAKT_COPILOT_PUBLIC_BASE_URL",
+    "value": "https://trakt-mi-api.azurewebsites.net"
+  },
+  {
+    "_comment": "Entra directory GUIDs the DASHBOARD accepts tokens from, comma-separated. REQUIRED for 'both'/'bearer' unless config/organisations.yaml lists them: with no directory on the allow-list every bearer request answers 503, whatever the audience says.",
+    "name": "TRAKT_MI_ENTRA_TENANT_ID",
+    "value": "<home-directory-guid>,<external-org-directory-guid>"
+  }
 ]

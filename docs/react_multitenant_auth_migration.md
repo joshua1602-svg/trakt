@@ -174,6 +174,30 @@ imports dynamic would remove them from the flag-off build; it was not done here
 because it adds lazy-loading machinery to the sign-in gate, which is the one
 path Phase 4 exists to prove.
 
+### Turning the API on for the dashboard (the 503 every route answers)
+
+`TRAKT_MI_REACT_AUTH_MODE=both` alone is not enough. A bearer request needs BOTH
+halves of the contract, and an empty allow-list is a 503, not a 401:
+
+| App setting | Why |
+|---|---|
+| `TRAKT_MI_ENTRA_TENANT_ID` | the directories the dashboard accepts tokens from. Additive to `config/organisations.yaml` and to the historical `TRAKT_COPILOT_ENTRA_TENANT_ID` |
+| `TRAKT_MI_ENTRA_AUDIENCE` | `api://<trakt-mi-api-app-id>` — the `aud` the SPA's token carries |
+| `TRAKT_MI_REQUIRED_SCOPE` | optional; defaults to `MI.Access` |
+
+Until this change the only app setting that opened a directory for the dashboard
+was named after Copilot, so a deployment with the audience set correctly and no
+Copilot configuration answered 503 to every MI route. `/health` states the
+posture without a token:
+
+```bash
+curl -s https://trakt-mi-api.azurewebsites.net/health | jq '.diagnostics.dashboardAuth'
+# {"mode": "both", "bearerConfigured": true, "requiresRegisteredPrincipal": false}
+```
+
+`bearerConfigured: false` means one of the two settings above is missing, and the
+503 body now names which.
+
 ### One behaviour change to plan for in Phase 3
 
 `/me` returns `isOperator: false` for every bearer-authenticated caller, and the

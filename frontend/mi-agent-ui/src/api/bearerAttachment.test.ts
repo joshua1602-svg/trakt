@@ -101,6 +101,40 @@ describe("with the bearer path on", () => {
     expect(authOf(0)).toBeUndefined();
   });
 
+  it("shows the API's own reason for a refusal, not just the status", async () => {
+    // The deployment that prompted this answered every call with 503 and the
+    // reason in the body; the UI showed only "returned 503".
+    setAccessTokenProvider(async () => "token");
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 503, statusText: "Service Unavailable",
+      clone: () => ({ json: async () => ({ detail: "Missing: TRAKT_MI_ENTRA_TENANT_ID." }) }),
+    }) as unknown as Response));
+
+    await expect(new HttpAgentClient(BASE).getSnapshots())
+      .rejects.toThrow(/TRAKT_MI_ENTRA_TENANT_ID/);
+  });
+
+  it("shows the API's reason on the chat route too", async () => {
+    setAccessTokenProvider(async () => "token");
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 503, statusText: "Service Unavailable",
+      json: async () => ({ detail: "Missing: TRAKT_MI_ENTRA_AUDIENCE." }),
+    }) as unknown as Response));
+
+    await expect(new HttpAgentClient(BASE).ask(request))
+      .rejects.toThrow(/TRAKT_MI_ENTRA_AUDIENCE/);
+  });
+
+  it("falls back to the status line when there is no readable body", async () => {
+    setAccessTokenProvider(async () => "token");
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 502, statusText: "Bad Gateway",
+      clone: () => ({ json: async () => { throw new Error("not json"); } }),
+    }) as unknown as Response));
+
+    await expect(new HttpAgentClient(BASE).getSnapshots()).rejects.toThrow(/502/);
+  });
+
   it("surfaces a 401 as a normal API error, not a crash", async () => {
     setAccessTokenProvider(async () => "expired");
     vi.stubGlobal("fetch", vi.fn(async () =>
