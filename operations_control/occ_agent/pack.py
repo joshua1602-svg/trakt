@@ -488,7 +488,18 @@ def _option_label(f: Optional[Any], value: Any) -> str:
     rather than ``calendar_month_end`` — the same words the platform uses
     everywhere else, rather than a prettifier invented for the pack.
     """
-    if f is None or not getattr(f, "options", None) or value is None:
+    if f is None or value is None:
+        return ""
+    # A product selection declares no ``options``: its vocabulary lives in the
+    # catalogue's regime products, which is where the rest of the platform
+    # reads it from. Without this the confirmation list showed a client
+    # "Reporting products — mi" and asked them to check it.
+    if getattr(f, "type", "") == "product_selection":
+        from . import derive as _derive
+        values = value if isinstance(value, (list, tuple)) else [value]
+        shown = [_derive.product_label(str(v)) for v in values if v]
+        return ", ".join(shown)
+    if not getattr(f, "options", None):
         return ""
     labels = {str(o.get("value")): str(o.get("label") or o.get("value"))
               for o in f.options if isinstance(o, dict)}

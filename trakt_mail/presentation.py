@@ -96,10 +96,23 @@ COVERING_TEXT = "covering_email.txt"
 
 MAX_FILENAME_STEM = 60
 
-#: Side of the answer box, and the height of the REQUIRED/OPTIONAL tag beside
-#: it, in millimetres. One number for both so a checklist row always presents
-#: the same two marks at the same size however much text sits to their right.
-BOX_SIZE = 4.4
+#: Height of the REQUIRED/OPTIONAL tag, in millimetres.
+TAG_HEIGHT = 4.4
+
+#: The answer area under each question, in millimetres: full column width, and
+#: tall enough to write a line into by hand or to type into in a PDF reader.
+#:
+#: It began life as a 4.4mm square to the LEFT of the question — a tick box.
+#: That is the right mark for "have you done this?" and the wrong one entirely
+#: for a document whose whole purpose is for a client to put an ANSWER in it.
+#: A client who prints this has to write the answer somewhere; if the document
+#: gives them nowhere, they write it in an email instead and the structure is
+#: lost. So the mark is a ruled area under the question, not a box beside it.
+ANSWER_HEIGHT = 11.0
+
+#: Width of the answer area. A4 (210mm) less the template's 18mm margins, less
+#: the tag column and the table's own padding.
+ANSWER_WIDTH = 149.0
 
 
 class PresentationError(Exception):
@@ -124,8 +137,8 @@ class Question:
 class Node:
     """One element of the pack, in document order.
 
-    ``kind`` is one of ``heading``, ``subheading``, ``paragraph``, ``question``
-    or ``bullet``.
+    ``kind`` is one of ``heading``, ``subheading``, ``group``, ``paragraph``,
+    ``question`` or ``bullet``.
     """
 
     kind: str
@@ -151,6 +164,11 @@ class PackDocument:
 _H1 = re.compile(r"^#\s+(.*)$")
 _H2 = re.compile(r"^##\s+(.*)$")
 _H3 = re.compile(r"^###\s+(.*)$")
+#: ``document()`` names the group a run of questions belongs to — a repeated
+#: item ("ERM Capital Management") or a section within a step ("Contacts and
+#: distribution") — at the fourth level. Nothing read it, so a document the
+#: client opens carried a literal "#### Contacts and distribution".
+_H4 = re.compile(r"^####\s+(.*)$")
 _MARKED = re.compile(r"^-\s+\[(required|optional)\]\s+(.*)$")
 _BULLET = re.compile(r"^-\s+(.*)$")
 _REFERENCE = re.compile(r"^Reference:\s*(.*)$")
@@ -200,6 +218,12 @@ def parse_pack(markdown: str) -> PackDocument:
             title = _strip_marks(h1.group(1))
             named = _TITLE.match(title)
             doc.client_name = named.group(1).strip() if named else title
+            continue
+
+        h4 = _H4.match(line)
+        if h4:
+            doc.nodes.append(Node("group", _strip_marks(h4.group(1))))
+            seen_heading = True
             continue
 
         h3 = _H3.match(line)
@@ -477,6 +501,8 @@ def render_pdf(doc: PackDocument, *, receipt_id: str = "",
                  textColor=navy)
     s_h3 = style("h3", fontName="Helvetica-Bold", fontSize=10.5, leading=14,
                  textColor=accent, spaceBefore=6, spaceAfter=2)
+    s_h4 = style("h4", fontName="Helvetica-Bold", fontSize=9.5, leading=13,
+                 textColor=slate, spaceBefore=5, spaceAfter=1)
     s_para = style("para", spaceAfter=4)
     s_q = style("q", fontSize=10, leading=13.5)
     s_help = style("help", fontSize=8.5, leading=11.5, textColor=muted)
@@ -511,7 +537,7 @@ def render_pdf(doc: PackDocument, *, receipt_id: str = "",
             tag = "REQUIRED" if question.required else "OPTIONAL"
             tag_cell = Table(
                 [[Paragraph(tag, s_tag)]], colWidths=[16 * mm],
-                rowHeights=[BOX_SIZE * mm],
+                rowHeights=[TAG_HEIGHT * mm],
                 style=rl["TableStyle"]([
                     ("BACKGROUND", (0, 0), (-1, -1),
                      accent if question.required
@@ -527,31 +553,34 @@ def render_pdf(doc: PackDocument, *, receipt_id: str = "",
             if question.current:
                 detail.append(Paragraph(
                     _rich(f"Currently: {question.current}"), s_help))
-            # The answer box is a fixed square in its own nested table, NOT a
-            # border on the outer cell. A bordered outer cell stretches to the
-            # row, so a question carrying help text grew a box twice the height
-            # of one that did not, and a column that should read as a tick-list
-            # read as a ragged set of rectangles. Nested, it is the same size on
-            # every row whatever the row contains.
+            # The answer area is a fixed-size nested table, NOT a border on the
+            # outer cell. A bordered outer cell stretches to the row, so a
+            # question carrying help text would get an area twice the height of
+            # one that did not, and a column that should read as a form would
+            # read as a ragged set of rectangles. Nested, every question offers
+            # the client the same amount of room whatever sits above it.
             #
             # Drawn rather than typed, so it does not depend on a glyph the
             # standard PDF fonts may not carry.
-            box = Table([[""]], colWidths=[BOX_SIZE * mm],
-                        rowHeights=[BOX_SIZE * mm],
-                        style=rl["TableStyle"]([
-                            ("BOX", (0, 0), (-1, -1), 0.7, slate),
-                            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                            ("TOPPADDING", (0, 0), (-1, -1), 0),
-                            ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
-            rows.append([box, tag_cell, detail])
-        table = Table(rows, colWidths=[5 * mm, 18 * mm, None],
+            detail.append(Spacer(1, 1.6 * mm))
+            detail.append(Table(
+                [[""]], colWidths=[ANSWER_WIDTH * mm],
+                rowHeights=[ANSWER_HEIGHT * mm],
+                style=rl["TableStyle"]([
+                    ("BOX", (0, 0), (-1, -1), 0.7, slate),
+                    ("BACKGROUND", (0, 0), (-1, -1), pale),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])))
+            rows.append([tag_cell, detail])
+        table = Table(rows, colWidths=[18 * mm, None],
                       style=rl["TableStyle"]([
                           ("VALIGN", (0, 0), (-1, -1), "TOP"),
                           ("TOPPADDING", (0, 0), (-1, -1), 3.2),
                           ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
                           ("LEFTPADDING", (0, 0), (0, -1), 0),
-                          ("RIGHTPADDING", (1, 0), (1, -1), 4),
+                          ("RIGHTPADDING", (0, 0), (0, -1), 4),
                           ("LINEBELOW", (0, 0), (-1, -2), 0.3, rule),
                       ]))
         story.append(table)
@@ -571,6 +600,8 @@ def render_pdf(doc: PackDocument, *, receipt_id: str = "",
                                  spaceBefore=3, spaceAfter=5)]))
         elif node.kind == "subheading":
             story.append(Paragraph(_rich(node.text), s_h3))
+        elif node.kind == "group":
+            story.append(Paragraph(_rich(node.text), s_h4))
         elif node.kind == "bullet":
             text = f"<b>{_html.escape(node.text, quote=False)}</b>"
             if node.note:
