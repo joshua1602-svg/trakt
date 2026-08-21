@@ -278,6 +278,34 @@ exercise the point-in-time population path. Recorded as backlog B6. The rule:
 a clean surface is evidence about the surface's coverage before it is evidence
 about the product.
 
+## Recorded as implemented and inert — the unresolved-role clarification
+
+Stated plainly so nobody later quotes the three-variant measurement as evidence
+of a behavioural gain, because it is not.
+
+**Implemented** (`1f8078d`). A dimension no source gave a role to becomes a
+question rather than an answer over a set the reader may not have asked for. The
+principle is right: a refusal and a clarification both decline to answer, and
+only one hands the reader the next move.
+
+**Currently inert on these corpora.** 343 of 343 answers identical; robustness
+44/44 on both books; zero new test failures. It classifies 10 facets across 9
+questions on the real tape and the clarification wins on five of them through
+the point-in-time workflow — but on the shipped service path all five are
+claimed by `risk_limits` or an evolution route and never reach
+`reconcile_facets`.
+
+**The measurement that chose it no longer applies.** §2.2 of
+`docs/mi_stage4_unresolved_role_variants.md` recorded clarify converting three
+refusals into three questions. Two rules added while applying it — a
+clarification is only worth asking when answering it changes something, and a
+field the book cannot express has no role worth settling — remove all three,
+because all three are `borrower_type` on a tape that does not carry it.
+
+Anyone citing this work should cite it as: correct, shipped, and not yet
+observable on any available book. Not as an improvement measured on the
+surfaces.
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
