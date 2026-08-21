@@ -8,10 +8,13 @@ import "./index.css";
 
 const root = createRoot(document.getElementById("root")!);
 
-function render(msal: Parameters<typeof AuthBoundary>[0]["msal"] = null) {
+function render(
+  msal: Parameters<typeof AuthBoundary>[0]["msal"] = null,
+  initError?: string,
+) {
   root.render(
     <StrictMode>
-      <AuthBoundary msal={msal}>
+      <AuthBoundary msal={msal} initError={initError}>
         <App />
       </AuthBoundary>
     </StrictMode>,
@@ -30,5 +33,5 @@ if (!authConfig.enabled) {
   // BEFORE the first render, or the app renders signed-out, redirects to
   // Microsoft again and loops. Rendering after the promise resolves is what
   // makes the sign-in land.
-  void bootstrapAuth(authConfig).then(({ msal }) => render(msal));
+  void bootstrapAuth(authConfig).then(({ msal, error }) => render(msal, error));
 }
