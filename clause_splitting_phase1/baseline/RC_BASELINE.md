@@ -6,10 +6,27 @@ contain the release candidate. This document replaces it entirely.
 | | |
 |---|---|
 | Release candidate | `28ece25` — *Honour-or-clarify for populations* |
-| Tag | **`mi-query-agent-rc`** — created here; there was no tag before |
+| Tag | **`mi-query-agent-rc`** — created here; there was no tag before. **Not yet on the remote** — see below |
 | Branch base | `4e051f3` on `claude/mi-analytical-capability-layer-vlkjfw` |
 | Book | real funded tape, 11,035 loans, £1,964.89m — never `build_fixture` |
 | pandas | 2.3.3 (the repo pins `<3.0.0`) |
+
+### The tag is local only
+
+`git push origin refs/tags/mi-query-agent-rc` is refused with **HTTP 403**. The
+agent proxy is healthy and reports no relay failures, and branch pushes to this
+branch succeed, so this is a credential-scope limit on tag refs from this
+session rather than a network fault. The tag exists locally on the right commit
+and needs one command from someone with tag-push rights:
+
+```bash
+git tag -a mi-query-agent-rc 28ece25 -m "MI query agent release candidate"
+git push origin refs/tags/mi-query-agent-rc
+```
+
+Until that runs, "the tagged release candidate" is still a description rather
+than an object on the remote, and every reference here resolves through
+`28ece25` instead.
 
 ---
 
