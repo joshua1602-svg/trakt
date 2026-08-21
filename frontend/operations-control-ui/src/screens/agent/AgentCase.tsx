@@ -18,6 +18,7 @@ import type {
   StreamSummary,
 } from "@/api/agentTypes";
 import type { ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
+import { ClientQuestionsPanel } from "./AgentClientQuestions";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
 import { StatusChip } from "@/components/StatusChip";
@@ -177,14 +178,27 @@ export function AgentCaseScreen() {
       case "pack_issue":
         if (key !== packStage) return null;
         return (
-          <PackPanel
-            status={status}
-            busy={busy}
-            caseId={caseId}
-            onDraft={() => void act(() => client.draftAgentPack(caseId))}
-            onApprove={() => void act(() => client.approveAgentPack(caseId))}
-            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
-          />
+          <>
+            <PackPanel
+              status={status}
+              busy={busy}
+              caseId={caseId}
+              onDraft={() => void act(() => client.draftAgentPack(caseId))}
+              onApprove={() => void act(() => client.approveAgentPack(caseId))}
+              onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+            />
+            {/* Beside the pack, not inside it: the pack is what goes OUT, and
+                this is the operator's own view of what it asks. */}
+            <div className="mt-4">
+              <ClientQuestionsPanel
+                caseId={caseId}
+                version={status.run.version}
+                confirmations={status.pack.confirmations ?? []}
+                busy={busy}
+                onSaved={() => void view.reload({ quiet: true })}
+              />
+            </div>
+          </>
         );
       case "responses":
         return (
