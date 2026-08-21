@@ -5679,3 +5679,104 @@ questions:
   notes: The other side of the same governed pair, with a weighted-average
     measure rather than a sum, so a population applied only for sums would fail
     here.
+- id: b16_001
+  category: unapplied_narrowing
+  question: What is the balance where account status is active?
+  expected_status: refuse
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: null
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 0
+  known_gap: 'B16a. Today this ANSWERS: "Total Balance, grouped by Account Status,
+    2 groups, 11,035 loans", with the breakdown certified. The reader asked for
+    the balance of ACTIVE loans and was given the whole book split by status.
+    B13''s class, and a wrong NUMBER rather than a wrong receipt. The sentence
+    marks account status as a selector and no reader consults the mark, because
+    the lexical predicate machinery is entirely NUMERIC -- is_filter_subject and
+    condition_cut both require a comparator and a number. The correct outcome is
+    the honour-or-clarify refusal: a narrowing was requested, it was not applied,
+    and no whole-book figure stands in for it.'
+  notes: Constructed. No question in any of the four corpora contains this
+    construct, which is why this case exists rather than a corpus finding.
+- id: b16_002
+  category: unapplied_narrowing
+  question: What is the balance for interest roll-up loans?
+  expected_status: refuse
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: null
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 0
+  known_gap: 'B16a, the worse shape. Today this answers "entire funded portfolio,
+    11,035 loans" with NO FACET AT ALL -- the dimension term is never raised, so
+    the receipt makes no claim and nothing blocks. A whole-book figure for a
+    narrowed question, silently. Where b16_001 has a wrong claim to catch, this
+    has none.'
+  notes: Constructed, and the pair matters. A fix that only repaired cases where
+    a grouping facet already exists would satisfy b16_001 and leave this one.
+- id: b16_003
+  category: unapplied_narrowing
+  question: What is the balance by account status?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  expected_filters: []
+  expected_artifact_type: chart
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'THE CAN-FAIL for b16_001. The same field, asked as a genuine breakdown.
+    A change that refused every question naming account status would satisfy
+    b16_001 and destroy this. Passes today and must keep passing.'
+- id: b16_004
+  category: unapplied_narrowing
+  question: What is the balance of the front book?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'THE SECOND CAN-FAIL. A narrowing that IS resolved, by the seasoning
+    owner. A change that recorded every marked selector as lost would refuse this
+    and undo 7c46f81. Duplicates pop_253 deliberately: this one is here to break
+    if B16a reaches past the narrowings nobody resolved.'
