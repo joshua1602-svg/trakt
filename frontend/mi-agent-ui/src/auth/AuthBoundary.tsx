@@ -28,6 +28,8 @@ export interface AuthBoundaryProps {
   config?: AuthConfig;
   /** Why MSAL could not be initialised, when it could not. */
   initError?: string;
+  /** Why the last sign-in attempt did not take, when one was attempted. */
+  signInError?: string;
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
@@ -45,11 +47,21 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** The signed-out screen. */
-function SignInGate({ config }: { config: AuthConfig }) {
+function SignInGate({ config, signInError }: { config: AuthConfig; signInError?: string }) {
   const { instance } = useMsal();
   const several = instance.getAllAccounts().length > 1;
   return (
     <Panel title="Trakt MI">
+      {/* A failed round trip lands back HERE, which without this reads as "the
+          button did nothing". Showing the reason is what separates "press it
+          again" from "this will never work until someone changes the app
+          registration" — an AADSTS code names the fault outright. */}
+      {signInError && (
+        <div data-testid="sign-in-error" className="mb-5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-left">
+          <p className="mb-1 text-sm font-medium text-amber-200">Sign-in did not complete</p>
+          <p className="break-words font-mono text-xs text-amber-100/80">{signInError}</p>
+        </div>
+      )}
       <p className="mb-6 text-sm text-slate-300">
         Sign in with your organisation&rsquo;s Microsoft account.
       </p>
@@ -125,12 +137,14 @@ function InitialisationFailedGate({ reason }: { reason?: string }) {
   );
 }
 
-function Gate({ children, config }: { children: ReactNode; config: AuthConfig }) {
+function Gate({ children, config, signInError }: {
+  children: ReactNode; config: AuthConfig; signInError?: string;
+}) {
   const isAuthenticated = useIsAuthenticated();
-  return isAuthenticated ? <>{children}</> : <SignInGate config={config} />;
+  return isAuthenticated ? <>{children}</> : <SignInGate config={config} signInError={signInError} />;
 }
 
-export function AuthBoundary({ children, msal, config, initError }: AuthBoundaryProps) {
+export function AuthBoundary({ children, msal, config, initError, signInError }: AuthBoundaryProps) {
   const cfg = config ?? resolveAuthConfig();
 
   // The whole feature, switched off in one branch.
@@ -148,7 +162,7 @@ export function AuthBoundary({ children, msal, config, initError }: AuthBoundary
 
   return (
     <MsalProvider instance={msal}>
-      <Gate config={cfg}>{children}</Gate>
+      <Gate config={cfg} signInError={signInError}>{children}</Gate>
     </MsalProvider>
   );
 }

@@ -86,6 +86,29 @@ describe("with the flag on", () => {
     expect(await screen.findByTestId("the-app")).toBeInTheDocument();
   });
 
+  it("shows why the last sign-in did not take, instead of a silent retry", () => {
+    // The reported symptom: authenticate at Microsoft, come back, and land on
+    // the same screen with no explanation, so the only available move is to
+    // press the button again and get the same result.
+    render(
+      <AuthBoundary config={resolveAuthConfig(on)} msal={msalStub([])}
+                    signInError="AADSTS9002326: Cross-origin token redemption is permitted only for the 'Single-Page Application' client-type.">
+        {APP}
+      </AuthBoundary>,
+    );
+
+    expect(screen.getByTestId("sign-in-error")).toHaveTextContent("AADSTS9002326");
+    // The sign-in button stays available — some causes are transient.
+    expect(screen.getByTestId("sign-in")).toBeInTheDocument();
+  });
+
+  it("shows no error banner on a first visit", () => {
+    render(
+      <AuthBoundary config={resolveAuthConfig(on)} msal={msalStub([])}>{APP}</AuthBoundary>,
+    );
+    expect(screen.queryByTestId("sign-in-error")).not.toBeInTheDocument();
+  });
+
   it("offers an account picker only when more than one account is known", () => {
     render(
       <AuthBoundary config={resolveAuthConfig(on)} msal={msalStub([])}>{APP}</AuthBoundary>,
