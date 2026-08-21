@@ -569,7 +569,18 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             if (_facet.status != receipt_mod.APPLIED
                     and receipt_mod._analytical_population_satisfies(routed, _facet)):
                 _facet.status, _facet.reason = receipt_mod.APPLIED, ""
-        facets = list(facets) + population
+        # The population ledger and the detector can now raise the SAME
+        # governed population — the ledger from `spec.filters`, the detector
+        # from the seasoning owner's decision, which is the same decision that
+        # put it in `spec.filters`. Two identical facets meant one stamped
+        # applied and one left lost, and the answer refused itself.
+        #
+        # Deduped on (kind, field, label): the label carries the predicate, so
+        # two facets agreeing on all three ARE the same claim, and keeping the
+        # ledger's is right because it is the one execution evidence stamps.
+        _seen = {(f.kind, f.field_key, f.label) for f in population}
+        facets = [f for f in facets
+                  if (f.kind, f.field_key, f.label) not in _seen] + population
         if not facets and not substitution and not granularity:
             # Nothing to adjudicate, but the answer still states what governed
             # capability produced it and as at when — the receipt is required on

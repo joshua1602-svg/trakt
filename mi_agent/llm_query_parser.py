@@ -3808,7 +3808,7 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
 
 
 def resolve_seasoning_role(spec: MIQuerySpec, question: str,
-                           columns=None) -> Optional[str]:
+                           columns=None) -> Optional[Dict[str, Any]]:
     """Make a named seasoning POPULATION a filter, not a grouping. Returns it.
 
     "What is the average LTV of the back book?" names the population being
@@ -3822,48 +3822,67 @@ def resolve_seasoning_role(spec: MIQuerySpec, question: str,
     is what makes it answerable. Nothing is deleted that could narrow a
     population — the segment moves from the grouping to the filter that
     expresses it, and the receipt then states which population ran.
+
+    What changed, and why
+    ---------------------
+    This used to read `_SEGMENT_PHRASES` through `resolve_segment_population`,
+    which knows front book and back book and nothing finer. "New lending" named
+    no population, so it fell through to the dimension reader and "what is the
+    balance of new lending?" answered over 11,035 loans (B13). The vocabulary
+    that does know it — the governed lending windows — was read only by the
+    analytical intent layer, which runs only for composite plans, so for a
+    simple question nobody took the decision at all.
+
+    The role is now `seasoning.resolve_population_predicate`'s to make, for
+    every reader. This applies its answer to the spec and nothing else.
     """
     from . import seasoning as _seasoning
 
     if spec is None:
         return None
-    available = {str(c) for c in (columns or ())}
-    if available and _seasoning.SEASONING_SEGMENT_FIELD not in available:
-        return None                      # book carries no seasoning: leave it
-    segment = _seasoning.resolve_segment_population(question)
-    if not segment:
+    predicate = _seasoning.resolve_population_predicate(question, columns)
+    if not predicate:
         return None
 
     filters = getattr(spec, "filters", None)
     if not isinstance(filters, dict):
         filters = {}
-    if _seasoning.SEASONING_SEGMENT_FIELD in filters:
-        # Already expressed as a population — but the model spells the value its
-        # own way ("back book", "backbook", "BACK"). The governed values are
-        # "Front Book" / "Back Book", and a value that does not match matches NO
-        # ROWS, which would answer a seasoning question with an empty book. So
-        # the value is canonicalised to the segment it names; anything that names
-        # neither is left alone to fail visibly rather than be guessed at.
-        current = str(filters[_seasoning.SEASONING_SEGMENT_FIELD]).strip().lower()
-        for governed in (_seasoning.FRONT_BOOK, _seasoning.BACK_BOOK):
-            if current.replace(" ", "") == governed.lower().replace(" ", ""):
-                filters[_seasoning.SEASONING_SEGMENT_FIELD] = governed
-                spec.filters = filters
-                break
-        return None
-    filters[_seasoning.SEASONING_SEGMENT_FIELD] = segment
+    for field, value in predicate.items():
+        if field in filters:
+            # Already expressed as a population — but a model spells the value
+            # its own way ("back book", "backbook", "BACK"). The governed values
+            # are "Front Book" / "Back Book", and a value that matches NO ROWS
+            # would answer a seasoning question with an empty book. So it is
+            # canonicalised to what the question named; anything naming neither
+            # is left alone to fail visibly rather than be guessed at.
+            if field == _seasoning.SEASONING_SEGMENT_FIELD:
+                current = str(filters[field]).strip().lower().replace(" ", "")
+                for governed in (_seasoning.FRONT_BOOK, _seasoning.BACK_BOOK):
+                    if current == governed.lower().replace(" ", ""):
+                        filters[field] = governed
+                        break
+            continue
+        filters[field] = value
     spec.filters = filters
 
-    # The segment named the population, so it is not also the axis. Any OTHER
+    # The population named the rows, so it is not also the axis. Any OTHER
     # requested grouping (region, vintage) is untouched.
+    #
+    # The seasoning AXIS is stripped whatever field the predicate is on. "New
+    # lending" narrows on `months_on_book`, but the phrase the reader used is
+    # still seasoning wording, and the parser had already put
+    # `seasoning_segment` on the axis from it. Stripping only the predicate's
+    # own fields left the narrowing correct and the breakdown standing, so
+    # "balance of new lending" came back as £X for months_on_book <= 1 GROUPED
+    # BY seasoning segment — the right rows cut by an axis nobody asked for.
+    strip = set(predicate) | {_seasoning.SEASONING_SEGMENT_FIELD}
     for attr in ("dimensions", "hierarchy"):
         values = getattr(spec, attr, None)
-        if isinstance(values, list) and _seasoning.SEASONING_SEGMENT_FIELD in values:
-            setattr(spec, attr, [d for d in values
-                                 if d != _seasoning.SEASONING_SEGMENT_FIELD])
-    if getattr(spec, "dimension", None) == _seasoning.SEASONING_SEGMENT_FIELD:
+        if isinstance(values, list):
+            setattr(spec, attr, [d for d in values if d not in strip])
+    if getattr(spec, "dimension", None) in strip:
         spec.dimension = None
-    return segment
+    return predicate
 
 
 #: Set by ``parse_with_repair`` so the scope-role check can resolve canonical

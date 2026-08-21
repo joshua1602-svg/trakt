@@ -145,3 +145,94 @@ incident:
 **A comment stating an invariant is not evidence the invariant holds.** Where a
 comment asserts one, the assertion belongs in a test, and until it is in a test
 it is a hypothesis about the code rather than a description of it.
+
+---
+
+# Result, measured against §3
+
+## Against the prediction
+
+| group | predicted | measured |
+|---|---|---|
+| A — one window, no segment phrase | a population replaces the grouping | **yes**, and on more questions than I listed (below) |
+| B — one window that is a segment phrase | population kept, redundant grouping gone, verdicts and numbers unchanged | **yes** |
+| C — two windows | no change at all | **yes**, no movement |
+| D — the asymmetric comparison | no population; a behaviour change and an improvement | **yes** |
+
+**Ten answers moved, all in groups A and D, and only `executionSummary.facets`
+moved on any of them.** No prose, no number, no verdict.
+
+```
+Q1.1 x2   grouping_dimension "new lending"  ->  row_population "months_on_book le 1"
+Q1.2 x2   (no facet)                        ->  row_population "months_on_book le 3"
+Q1.3 x2   (no facet)                        ->  row_population "months_on_book le 3"
+Q1.4 x2   (no facet)                        ->  row_population "months_on_book le 1"
+Q7.1 x2   row_population "Front Book" REMOVED, comparison and grouping kept
+```
+
+## A correction to my own enumeration, not to the prediction
+
+§3.1 named **Q1.1** as group A's member. **Q1.2, Q1.3 and Q1.4 are also group A**
+and I did not list them. The group DEFINITION covers them exactly — each names
+one window (`recent`, `recent`, `new`) and no segment phrase — so the prediction
+held; the list of examples under it did not.
+
+The cause is worth recording because it is a measurement error of a familiar
+shape. I built that list from a scan of **where reader 2 raises a seasoning
+dimension**, and Q1.2–Q1.4 do not raise one. The change is owner-shaped and my
+scoping query was reader-2-shaped, so it enumerated the wrong population of
+questions. **A scoping query built around one reader cannot bound a change that
+replaces the arrangement of readers.**
+
+Reported rather than absorbed: the stop condition said any answer moving outside
+groups A and D stops the work. None did. Had I treated the *list* as the
+prediction rather than the *definition*, three correct movements would have read
+as violations.
+
+## Stop conditions — none fired
+
+* seasoning families: **20 of 20 by name, both books**, unchanged
+* facet kinds outside `grouping_dimension` / `row_population`: none changed
+* stamping matrix: self-test passes, 0 live holes
+* lexical decisions: **693 of 693 identical**
+* answers moving outside groups A and D: none
+
+## The surfaces
+
+```
+robustness       both books 32/10/2; seasoning Q1 4, Q7 4, Q8 12, all CORRECT
+answer text      333 of 343 identical; 10 moved, all executionSummary.facets
+routed surface   13 of 13
+lexical          693 of 693
+MI sweep         zero new failures
+```
+
+## Two consequential edits, both to expectations that pinned a misclassification
+
+* `rt_011` expected `grouping_dimension: lost` on the run-rate question. It is
+  now `row_population: lost` — the refusal names the governed population rather
+  than a breakdown nobody asked for.
+* `test_the_run_rate_question_does_not_acquire_a_seasoning_filter` asserted the
+  literal phrase *"new lending"* in the refusal. That phrase was the old
+  grouping LABEL. It now asserts the property — the governed predicate is named
+  — because asserting the wording pinned the misclassification.
+
+## Acceptance
+
+* **B13 closed.** *"What is the balance of new lending?"* → `Total Balance ·
+  Months on Book <= 1 · 115 loans`. It was 11,035.
+* **B15 closed.** No receipt carries a field as both an applied population and a
+  lost grouping; verified across the ten carriage probes.
+* **B14 not addressed**, as stated in §2. Unchanged and still open.
+
+## One implementation defect found and fixed during the work
+
+Raising the population facet from the owner made the routed path raise it
+**twice** — once from `population_facets(spec)` and once from the detector,
+being the same decision seen from two places — so one was stamped applied, the
+other left lost, and `geo_exposure` and the movement path refused themselves.
+Deduped where the two lists meet, on `(kind, field, label)`.
+
+That is constraint 5 of the diagnosis arriving in practice: *do not duplicate
+what already resolves correctly, or it becomes a fourth reader.* It became one
+for about ten minutes.

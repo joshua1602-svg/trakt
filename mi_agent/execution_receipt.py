@@ -726,8 +726,32 @@ def requested_dimension_terms(question: str, semantics: dict,
     because the term map is keyed on singulars.
     """
     from .llm_query_parser import _explicit_dimensions  # local: avoids a cycle
+    from .seasoning import (SEASONING_SEGMENT_FIELD,
+                            resolve_population_predicate)
 
     q = (question or "").lower()
+    # THE SEASONING ROLE IS NOT DECIDED HERE.
+    #
+    # This reader used to raise `seasoning_segment` as a dimension whenever the
+    # question contained seasoning wording, from the QUESTION TEXT, consulting
+    # neither the spec nor the decision anyone else had taken. Two defects came
+    # out of that, and they were the same defect:
+    #
+    #   B15  the parser resolved "back book" to a population and stripped the
+    #        field from the spec's dimension slots — correctly — and this raised
+    #        a grouping for it anyway, because it never looks at the spec. One
+    #        receipt then carried the field as both an applied population and a
+    #        lost grouping.
+    #   B13  "new lending" named a population no reader on this path knew about,
+    #        so this raised a grouping and the answer covered all 11,035 loans.
+    #
+    # The owner is `seasoning.resolve_population_predicate`. Where it has taken
+    # the phrase as a population, no seasoning dimension is raised here at all.
+    # Where it has not — a comparison naming both sides, or a book that cannot
+    # express the predicate — the dimension stands, because that is exactly when
+    # the grouping is what makes the question answerable.
+    _population = resolve_population_predicate(question, available_columns)
+    _suppress = set(_population or ())
     keys, terms, _ = _explicit_dimensions(q, semantics, available_columns=None)
     by_term: Dict[str, List[str]] = {}
     for key, term in zip(keys, terms):
@@ -739,6 +763,8 @@ def requested_dimension_terms(question: str, semantics: dict,
             by_term.setdefault(term, []).append(key)
     out: List[Tuple[str, str, Tuple[str, ...]]] = []
     for key, term in zip(keys, terms):
+        if key in _suppress or (key == SEASONING_SEGMENT_FIELD and _population):
+            continue
         alts = tuple(dict.fromkeys(k for k in by_term.get(term, []) if k != key))
         out.append((key, term, alts))
     seen = {k for k, _, _ in out}
@@ -749,7 +775,9 @@ def requested_dimension_terms(question: str, semantics: dict,
         s_keys, s_terms, _ = _explicit_dimensions(singular, semantics,
                                                   available_columns=None)
         for key, term in zip(s_keys, s_terms):
-            if key in seen:
+            if key in seen or key in _suppress:
+                continue
+            if key == SEASONING_SEGMENT_FIELD and _population:
                 continue
             if re.search(r"\b" + re.escape(term) + r"s\b", q):
                 out.append((key, term, ()))
@@ -794,6 +822,37 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     q = (question or "").lower()
     if not q.strip():
         return []
+
+    # THE SEASONING POPULATION, RAISED FROM THE OWNER'S DECISION.
+    #
+    # `requested_dimension_terms` no longer raises a seasoning DIMENSION where
+    # the owner has taken the phrase as a population. Suppressing it there and
+    # raising nothing here would answer correctly and record nothing: "balance
+    # of the front book" narrowed to 1,177 loans with an empty receipt, which
+    # trades a wrong claim for no claim.
+    #
+    # Consuming the decision means raising the RIGHT facet, not none. The
+    # population is stated as the governed predicate it is, so the receipt names
+    # `months_on_book le 1` for "new lending" rather than a segment the question
+    # never mentioned.
+    seasoning_population: List[RequestedFacet] = []
+    try:
+        from .population import Predicate
+        from .seasoning import resolve_population_predicate
+        _columns = (list(frame.columns) if frame is not None
+                    and hasattr(frame, "columns") else None)
+        _predicate = resolve_population_predicate(question, _columns)
+    except Exception:                                          # pragma: no cover
+        _predicate = None
+    for _field, _condition in (_predicate or {}).items():
+        if isinstance(_condition, Mapping):
+            _p = Predicate(_field, str(_condition.get("op") or "eq"),
+                           _condition.get("value"))
+        else:
+            _p = Predicate(_field, "eq", _condition)
+        seasoning_population.append(RequestedFacet(
+            kind=KIND_POPULATION, label="the population %s" % _p.describe(),
+            field_key=_field))
     facets: List[RequestedFacet] = []
     facets.extend(_detect_stress(q))
     facets.extend(_detect_thresholds(q))
@@ -861,7 +920,7 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     for key, term, alts in (requested_dimensions or []):
         facets.append(RequestedFacet(kind=KIND_GROUPING, label=term,
                                      field_key=key, alt_keys=alts))
-    return facets
+    return seasoning_population + facets
 
 
 # --------------------------------------------------------------------------- #

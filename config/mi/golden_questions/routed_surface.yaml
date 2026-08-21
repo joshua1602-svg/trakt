@@ -182,10 +182,16 @@ questions:
       Answered the WHOLE BOOK's run rate — first projection point £1.96bn — for
       a question about new lending, with the facet stamped APPLIED. The receipt
       did not merely miss it; it vouched for it.
+
+      The facet was `grouping_dimension` until the seasoning role gained one
+      owner. "New lending" is a governed POPULATION — months_on_book le 1 — and
+      recording it as a breakdown was the misclassification underneath B13. The
+      refusal now names the population it could not apply rather than a
+      breakdown nobody asked for.
     expect_route: forecast_extrapolation
     expect_verdict: refuse
     expect_facets:
-      - [grouping_dimension, lost]
+      - [row_population, lost]
 
   - id: rt_012
     question: What is the completion run rate?

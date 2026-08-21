@@ -377,6 +377,65 @@ def mask_segment_phrases(text: Optional[str]) -> str:
     return "".join(out)
 
 
+def resolve_population_predicate(text: Optional[str],
+                                 columns: Optional[Any] = None,
+                                 config: Optional["SeasoningConfig"] = None
+                                 ) -> Optional[Dict[str, Any]]:
+    """THE governed population a question selects, as a predicate. The one owner.
+
+    Every reader that used to decide this independently now asks here.
+
+    What it takes from where, and why
+    ---------------------------------
+    The VOCABULARY is the lending windows', because that is the only one that
+    knows "new lending" names a population at all. `_SEGMENT_PHRASES` covers
+    front and back book and nothing finer, so "new lending" resolved to no
+    population, fell through to the dimension reader, and "what is the balance
+    of new lending?" answered over 11,035 loans as a two-bar seasoning
+    breakdown (B13).
+
+    The DISCIPLINE is `resolve_seasoning_role`'s. It runs on every parse, it
+    consults the columns the book actually has, and one named window selects
+    while two or more compare. The lending windows' own reader — the analytical
+    intent layer — has the right vocabulary and the wrong trigger: it runs only
+    when a plan is composite, so for every simple question the role decision it
+    is documented as owning is never taken.
+
+    A PREDICATE, not a segment name, because the windows do not share a field:
+
+        new         months_on_book le 1
+        recent      months_on_book le 3
+        front book  seasoning_segment = Front Book
+        back book   seasoning_segment = Back Book
+
+    Returning a segment string could not express the first two, which is the
+    whole of why "new lending" was unnarrowable.
+
+    Returns None — deliberately, and these are not failures — when the question
+    names no window, when it names more than one (a comparison: narrowing to one
+    side answers a different question), or when the book carries no column the
+    predicate would need.
+    """
+    keys = list(lending_windows_named(text or ""))
+    if len(keys) != 1:
+        return None
+    if config is None:
+        try:
+            config = load_seasoning_config()
+        except Exception:                              # pragma: no cover
+            return None
+    window = config.lending_window(keys[0])
+    if window is None:
+        return None
+    predicate = window.predicate() or None
+    if not predicate:
+        return None
+    available = {str(c) for c in (columns or ())}
+    if available and any(field not in available for field in predicate):
+        return None          # the book cannot express it: leave it alone
+    return dict(predicate)
+
+
 def resolve_segment_population(text: Optional[str]) -> Optional[str]:
     """The single seasoning segment a question SELECTS, or None.
 

@@ -410,8 +410,12 @@ def test_the_run_rate_question_does_not_acquire_a_seasoning_filter(ask):
     envelope = ask("What is the run rate of new lending and is it accelerating?")
     assert SEGMENT not in spec_filters(envelope)
     assert envelope["ok"] is False
-    assert "new lending" in str(envelope.get("error") or "")
-    assert "whole population" in str(envelope.get("error") or "")
+    # The refusal must name the GOVERNED POPULATION, not the wording. "New
+    # lending" is months_on_book le 1; the phrase was the old grouping label,
+    # and asserting it pinned a misclassification rather than a property.
+    error = str(envelope.get("error") or "")
+    assert "months_on_book" in error
+    assert "not substituted a broader figure" in error
 
 
 def test_an_unrestricted_run_rate_question_still_answers(ask):
