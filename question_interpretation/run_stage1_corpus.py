@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""question_interpretation/run_stage1_corpus.py — Stage 1 deliverable.
+"""question_interpretation/run_stage1_corpus.py — Stage 1 and 2.
 
 Runs every question in the corpus through the read-only projection and reports
 what does not fit: slots no existing interpreter can fill, and slots two
@@ -101,6 +101,11 @@ def analyse() -> Dict[str, Any]:
             "target_state": d["target"]["state"],
             "spans_missing": sum(1 for x in d["dimensions"] if x["span"] is None)
                              + sum(1 for x in d["filters"] if x["span"] is None),
+            "filter_wording_claims": sum(1 for x in d["filters"] if "wording" in x["provides"]),
+            "filter_wording_located": sum(1 for x in d["filters"]
+                                          if "wording" in x["provides"] and x["span"]),
+            "filter_binding_claims": sum(1 for x in d["filters"] if "field" in x["provides"]),
+            "join_half_built": any("HALF-BUILT" in n for n in d["notes"]),
             "notes": d["notes"],
         })
     return {"rows": rows}

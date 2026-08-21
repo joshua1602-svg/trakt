@@ -971,6 +971,25 @@ def run_mi_agent_query(
             question, semantics, available_columns=available_columns)
         _facets = _receipt_mod.detect_requested_facets(
             question, semantics, frame=df, requested_dimensions=_requested_dims)
+
+        # ---- Stage 2: build the question interpretation and CARRY it --------
+        # Assembled from the spec and the facets that were just produced for
+        # the receipt's own purposes — it re-interprets nothing and decides
+        # nothing. Nothing reads it: it is carried so Stage 3 can convert
+        # consumers onto it one at a time.
+        #
+        # Taken BEFORE reconcile_facets, because the object records LINGUISTIC
+        # claims — what the question said — and reconciliation is where those
+        # become execution claims. Its own try/except: an interpretation that
+        # cannot be built must never cost an answer.
+        try:
+            from question_interpretation.projection import from_parts as _qi_build
+            result["question_interpretation"] = _qi_build(
+                question, spec=spec, facets=list(_facets),
+                dim_terms=_requested_dims, semantics=semantics).as_dict()
+        except Exception as _qi_exc:                       # noqa: BLE001
+            result["question_interpretation"] = {"error": str(_qi_exc)}
+
         _facets = _receipt_mod.reconcile_facets(
             _facets, spec=spec, query_result=qres, semantics=semantics,
             available_columns=available_columns, route=None,

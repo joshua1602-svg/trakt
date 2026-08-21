@@ -73,20 +73,24 @@ def _span_of(question: str, needle: Optional[str]) -> Optional[Span]:
     return Span(m.start(), m.end()) if m else None
 
 
-def project(question: str, *, semantics: dict, frame=None) -> QuestionInterpretation:
-    """Build a QuestionInterpretation by asking the existing interpreters."""
+def from_parts(question: str, *, spec, facets, dim_terms,
+               semantics: dict) -> QuestionInterpretation:
+    """Assemble the object from interpreter output that ALREADY EXISTS.
+
+    This is the Stage 2 entry point. It re-interprets nothing: the spec and the
+    facets are handed in, having been produced by the pipeline for its own
+    reasons, and this only records what they say. `answer_type.asked` and
+    `period_request` are consulted because they are existing interpreters whose
+    readings belong on the object and which nothing else carries — not to form
+    a new opinion.
+
+    Faithful population includes faithfully recording what today's interpreters
+    get WRONG. No role is corrected here; a disagreement is noted, not resolved.
+    """
     from mi_agent import answer_type as AT
-    from mi_agent import execution_receipt as R
     from mi_agent import period_request as PR
-    from mi_agent.llm_query_parser import _deterministic_parse
 
     qi = QuestionInterpretation(question=question)
-    spec, _meta = _deterministic_parse(question, semantics)
-
-    cols = list(frame.columns) if frame is not None and hasattr(frame, "columns") else None
-    dim_terms = R.requested_dimension_terms(question, semantics, cols)
-    facets = R.detect_requested_facets(question, semantics, frame=frame,
-                                       requested_dimensions=dim_terms)
     facet_kinds = {f.kind for f in facets}
 
     _operation(qi, spec, facet_kinds, AT)
@@ -96,7 +100,46 @@ def project(question: str, *, semantics: dict, frame=None) -> QuestionInterpreta
     _time(qi, spec, PR)
     _target(qi, spec, facets)
     _population(qi, spec, facets)
+    _note_join_state(qi)
     return qi
+
+
+def _note_join_state(qi: QuestionInterpretation) -> None:
+    """Say whether the filter clause is whole, and name the half that is not.
+
+    The facet layer now emits offsets; the parser does not, because emitting
+    them means changing how `_parse_filters` rewrites the question, which would
+    forfeit Stage 2's byte-identical guarantee. So the join is HALF-BUILT, and
+    the object says so rather than implying a link it cannot make.
+    """
+    wording = [f for f in qi.filters if WORDING in f.provides]
+    binding = [f for f in qi.filters if {BOUND, FIELD} & set(f.provides)]
+    if not wording or not binding:
+        return
+    located = sum(1 for f in wording if f.has_span)
+    qi.notes.append(
+        "filter join HALF-BUILT: %d wording claim(s), %d of them located by "
+        "span; %d binding claim(s), none located — the parser half supplies no "
+        "offsets, so clause_id stays None"
+        % (len(wording), located, len(binding)))
+
+
+def project(question: str, *, semantics: dict, frame=None) -> QuestionInterpretation:
+    """Build a QuestionInterpretation by asking the existing interpreters.
+
+    The read-only Stage 1 path: runs the interpreters itself, then assembles.
+    Production uses `from_parts`, which assembles from output already computed.
+    """
+    from mi_agent import execution_receipt as R
+    from mi_agent.llm_query_parser import _deterministic_parse
+
+    spec, _meta = _deterministic_parse(question, semantics)
+    cols = list(frame.columns) if frame is not None and hasattr(frame, "columns") else None
+    dim_terms = R.requested_dimension_terms(question, semantics, cols)
+    facets = R.detect_requested_facets(question, semantics, frame=frame,
+                                       requested_dimensions=dim_terms)
+    return from_parts(question, spec=spec, facets=facets, dim_terms=dim_terms,
+                      semantics=semantics)
 
 
 # --------------------------------------------------------------------------- #
@@ -200,8 +243,12 @@ def _filters(qi, spec, facets) -> None:
     for f in facets:
         if f.kind not in _FILTER_FACET_KINDS:
             continue
+        # The detector's own offsets where it has them — the label is a
+        # RE-RENDERING of the words ("£250k" becomes 250), so locating it by
+        # substring search fails on exactly the cases the join needs.
+        span = Span(*f.span) if getattr(f, "span", None) else _span_of(qi.question, f.label)
         qi.filters.append(FilterClaim(
-            state=FILLED, raw_text=f.label, span=_span_of(qi.question, f.label),
+            state=FILLED, raw_text=f.label, span=span,
             # The facet supplies the WORDING of the clause. Every threshold
             # facet carries field_key=None, so it supplies neither field nor
             # bound — recorded, not inferred from which attributes are None.
