@@ -32,6 +32,7 @@ import type {
 } from "@/domain";
 import { isArtifact } from "@/domain";
 import { AgentError, type AgentClient } from "./AgentClient";
+import { authorizationHeaders } from "@/auth/tokenProvider";
 
 interface ApiResponse {
   ok: boolean;
@@ -126,10 +127,27 @@ export class HttpAgentClient implements AgentClient {
     return `MI Agent API returned ${res.status} ${res.statusText} for ${path}`;
   }
 
+  /**
+   * The credential for one request, resolved at request time.
+   *
+   * Every fetch in this class goes through here, so there is exactly one place
+   * where the MI API is told who is calling. Resolving per request (rather than
+   * holding a token on the instance) is what makes expiry a non-event: MSAL
+   * serves a cached token while it is valid and silently renews it when it is
+   * not — see src/auth/msalTokenProvider.ts.
+   *
+   * Returns `{}` on a build with `VITE_MI_BEARER_AUTH` off, because no provider
+   * is registered. The request then goes out exactly as it does today, and the
+   * Static Web Apps session cookie remains the credential.
+   */
+  private async authHeaders(): Promise<Record<string, string>> {
+    return authorizationHeaders();
+  }
+
   private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}${path}`, { signal });
+      res = await fetch(`${this.baseUrl}${path}`, { signal, headers: await this.authHeaders() });
     } catch (err) {
       if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
       throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
@@ -283,6 +301,28 @@ export class HttpAgentClient implements AgentClient {
   }
 
   /**
+   * The same deck, fetched with the caller's credential attached.
+   *
+   * An `<a href>` download is a browser navigation: it carries cookies, so it
+   * works behind the Static Web Apps session, and it carries NO Authorization
+   * header, so under bearer auth it comes back 401. Fetching the bytes here is
+   * the only way the token reaches that route.
+   */
+  async downloadDeck(portfolioId: string, period?: string | null,
+                     signal?: AbortSignal): Promise<Blob> {
+    const url = this.deckDownloadUrl(portfolioId, period);
+    let res: Response;
+    try {
+      res = await fetch(url, { signal, headers: await this.authHeaders() });
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") throw new AgentError("Request aborted", err);
+      throw new AgentError(`Could not reach the MI Agent API at ${this.baseUrl}.`, err);
+    }
+    if (!res.ok) throw new AgentError(this.describeStatus(res, "/mi/decks/download"));
+    return res.blob();
+  }
+
+  /**
    * Request a deck. The API answers 202 with a job, so a non-2xx here means the
    * request itself was refused (not authorised, no data for that period, the
    * deployment does not offer on-demand packs) — surface the API's own reason
@@ -296,7 +336,7 @@ export class HttpAgentClient implements AgentClient {
     try {
       res = await fetch(`${this.baseUrl}/mi/decks/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
         body: JSON.stringify(request),
         signal,
       });
@@ -363,7 +403,7 @@ export class HttpAgentClient implements AgentClient {
     try {
       res = await fetch(`${this.baseUrl}/mi/query`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
         body: JSON.stringify({
           question: request.question,
           portfolio: request.portfolio,

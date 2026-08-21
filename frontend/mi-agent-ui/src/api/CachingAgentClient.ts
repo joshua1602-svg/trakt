@@ -208,6 +208,10 @@ export function withCache(
       resource(`geoExposure|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getGeoExposure(portfolioId, portfolioContext, signal)),
     deckDownloadUrl: (portfolioId, period) => client.deckDownloadUrl(portfolioId, period),
+    // Uncached like the other deck commands: bytes, not a cacheable resource.
+    downloadDeck: client.downloadDeck
+      ? (portfolioId, period, signal) => client.downloadDeck!(portfolioId, period, signal)
+      : undefined,
     // Deliberately uncached, both of them: generation is a command, and its job
     // state is the one thing in this client that is expected to change between
     // two identical calls.

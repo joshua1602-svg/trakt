@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, FileDown, Loader2, Presentation, Sparkles } from "lucide-react";
 import type { AgentClient } from "@/api";
 import type { DeckGenerationJob, DeckIndex } from "@/domain";
+import { isBearerAuthEnabled } from "@/auth/msalConfig";
 
 function formatPeriod(period?: string | null): string {
   if (!period) return "Latest";
@@ -131,16 +132,47 @@ export function DeckDownloadMenu({
   const download = useCallback((period: string | null, key: string) => {
     const url = client.deckDownloadUrl(portfolioId, period);
     if (!url) return;
+
+    const finish = () => {
+      setDone(key);
+      setTimeout(() => setDone((d) => (d === key ? null : d)), 1400);
+      setOpen(false);
+    };
+
+    // Click a link at `href`, then hand the same element back so an object URL
+    // can be revoked once the browser has taken the bytes.
+    const clickThrough = (href: string) => {
+      const a = document.createElement("a");
+      a.href = href;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+
+    // Under bearer auth the plain URL is not enough: a navigation carries
+    // cookies but no Authorization header, so /mi/decks/download answers 401.
+    // Fetch the bytes with the credential attached and hand the browser a blob
+    // instead. With the flag off this branch does not run and the download is
+    // the same navigation it has always been.
+    if (isBearerAuthEnabled() && client.downloadDeck) {
+      void client
+        .downloadDeck(portfolioId, period)
+        .then((blob) => {
+          const objectUrl = URL.createObjectURL(blob);
+          clickThrough(objectUrl);
+          // Revoke after the click has been dispatched; revoking synchronously
+          // can race the browser's read of the URL.
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+          finish();
+        })
+        .catch(() => setGenError("The investor pack could not be downloaded."));
+      return;
+    }
+
     // Navigate to the download endpoint (Content-Disposition: attachment).
-    const a = document.createElement("a");
-    a.href = url;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setDone(key);
-    setTimeout(() => setDone((d) => (d === key ? null : d)), 1400);
-    setOpen(false);
+    clickThrough(url);
+    finish();
   }, [client, portfolioId]);
 
   const generate = useCallback(() => {
