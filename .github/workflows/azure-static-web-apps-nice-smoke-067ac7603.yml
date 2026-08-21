@@ -37,6 +37,29 @@ jobs:
       # existing tooltip rather than erroring.
       VITE_MI_ENHANCED_HOVERS: "true"
       VITE_MI_WEEKLY_BRIEF: "true"
+
+      # --- Phase 3: Entra bearer authentication (MSAL), OFF by default ---------
+      #
+      # Vite inlines VITE_* at BUILD time, so these live here and nowhere else:
+      # setting them on the App Service or in the Static Web App's configuration
+      # cannot change a bundle that has already been compiled.
+      #
+      # They are REPOSITORY VARIABLES, not secrets, and deliberately so — a client
+      # id, an authority and an `api://…/MI.Access` scope are public identifiers
+      # that ship inside every SPA bundle by design. This is a public client using
+      # Authorization Code + PKCE; there is no secret to hold, and
+      # `scripts/check-bundle-secrets.mjs` fails the build if one appears.
+      #
+      # With VITE_MI_BEARER_AUTH unset or false, MSAL is never constructed, no
+      # token is requested, no Authorization header is attached, and the Static
+      # Web Apps Easy Auth path below is exactly as it was. Set the variable to
+      # `true` in repository settings to switch the new path on for the next
+      # build; unset it to roll back.
+      VITE_MI_BEARER_AUTH: ${{ vars.VITE_MI_BEARER_AUTH || 'false' }}
+      VITE_AAD_CLIENT_ID: ${{ vars.VITE_AAD_CLIENT_ID }}
+      VITE_MI_API_SCOPE: ${{ vars.VITE_MI_API_SCOPE }}
+      # Optional; defaults to https://login.microsoftonline.com/organizations.
+      VITE_AAD_AUTHORITY: ${{ vars.VITE_AAD_AUTHORITY }}
     
     steps:
       - uses: actions/checkout@v3

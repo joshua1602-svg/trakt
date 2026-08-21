@@ -169,6 +169,16 @@ export interface AgentClient {
    * or `null` when the client cannot serve decks (e.g. the mock). */
   deckDownloadUrl(portfolioId: string, period?: string | null): string | null;
 
+  /** Fetch an investor deck as a blob, WITH the caller's credential attached.
+   *
+   *  Optional, and it exists because a bearer token cannot ride on a browser
+   *  navigation: `<a href>` sends cookies but no Authorization header, so under
+   *  Entra bearer auth the URL form above answers 401. Clients that can attach a
+   *  credential implement this; the UI prefers it when the bearer path is on and
+   *  keeps using the plain URL otherwise. */
+  downloadDeck?(portfolioId: string, period?: string | null,
+                signal?: AbortSignal): Promise<Blob>;
+
   /** Ask the API to generate an investor pack. Resolves as soon as the work is
    *  accepted — generation takes seconds — so the caller polls
    *  {@link getDeckGeneration}.

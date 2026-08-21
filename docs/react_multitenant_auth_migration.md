@@ -145,6 +145,35 @@ directory nobody has enumerated. It defaults **off** because turning it on befor
 the registry is populated refuses everyone, including whoever is performing the
 migration. Turn it on in Phase 8, once every dashboard user is registered.
 
+## Phase 3 — MSAL in the SPA (landed, flag off)
+
+| File | Role |
+|---|---|
+| `src/auth/msalConfig.ts` | env → config, the flag, the `/organizations` authority, the scope requests |
+| `src/auth/msalTokenProvider.ts` | `acquireTokenSilent` → interactive fallback; account selection |
+| `src/auth/tokenProvider.ts` | the one place a credential is attached to a request |
+| `src/auth/bootstrap.ts` | `initialize()` → `handleRedirectPromise()` → active account → register provider |
+| `src/auth/AuthBoundary.tsx` | sign-in gate; renders children untouched when the flag is off |
+| `src/main.tsx` | renders after bootstrap when the flag is on, immediately when off |
+| `src/api/HttpAgentClient.ts` | `authHeaders()` on every fetch, plus a credentialed deck download |
+| `scripts/check-bundle-secrets.mjs` | run by `npm run build`; fails on credential material in `dist/` |
+
+**Two things worth knowing.**
+
+*The deck download changed shape under bearer auth.* `<a href>` is a browser
+navigation: it carries cookies, so it works behind Easy Auth, and it carries no
+`Authorization` header, so under bearer auth `/mi/decks/download` answers 401.
+With the flag on, the menu fetches the bytes with the token attached and hands
+the browser a blob instead. With the flag off it is the same navigation it
+always was.
+
+*MSAL ships in both builds.* The imports are static, so the library is in the
+bundle even when the flag is off — no MSAL object is constructed and no code
+path runs, but the bytes are there (index chunk ≈396 KB gzipped). Making the
+imports dynamic would remove them from the flag-off build; it was not done here
+because it adds lazy-loading machinery to the sign-in gate, which is the one
+path Phase 4 exists to prove.
+
 ### One behaviour change to plan for in Phase 3
 
 `/me` returns `isOperator: false` for every bearer-authenticated caller, and the
