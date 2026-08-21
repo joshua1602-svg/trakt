@@ -323,6 +323,26 @@ The rule that follows: **a clean surface is evidence about that surface's
 coverage before it is evidence about the product.** Quote none of them without
 its blind column.
 
+## Standing rule — a comment stating an invariant is not evidence it holds
+
+Three instances, so it is a pattern rather than three accidents. In each the
+comment was accurate about intent and wrong about behaviour, and in each the
+gap survived review because the comment read as a description.
+
+1. The region resolver's docstring claimed a `None` return made validation fail
+   clearly. It did not.
+2. A P1A test's assertion documented the very defect it was taken to guard
+   against.
+3. The comment delegating the seasoning ROLE decision to the analytical intent
+   layer — "the only place that context exists". That layer runs only when a
+   plan is composite, so for every simple question the decision it claims to own
+   is never taken. B13 is the whole of that gap.
+
+The rule: **where a comment asserts an invariant, the assertion belongs in a
+test.** Until it is in one it is a hypothesis about the code, not a description
+of it — and it is worse than no comment, because it stops the next reader
+looking.
+
 ## Backlog
 
 ### B1 — Route the categorical filter regex through the profiled allowlist
