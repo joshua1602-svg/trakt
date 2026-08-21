@@ -57,9 +57,22 @@ def test_the_rule_is_unchanged(question, expected):
 
 def test_the_finest_unit_wins():
     """Ordered finest first, so a question naming two units returns the finer.
-    A series that cannot express weeks cannot answer a weekly question."""
+    A series that cannot express weeks cannot answer a weekly question.
+
+    The second assertion pinned the literal `"week"` as the first entry, and
+    went stale the moment `day` was added — a finer unit, correctly placed
+    ahead of it. Asserting the PROPERTY instead cannot go stale: whatever the
+    finest unit is, it must be first, and every entry must be ordered.
+    """
     assert lexical.requested_unit("weekly balance by quarter") == "week"
-    assert lexical.UNIT_PATTERNS[0][0] == "week"
+    assert lexical.requested_unit("daily balance by month") == "day"
+
+    order = [lexical.UNIT_ORDER[unit] for unit, _pattern in lexical.UNIT_PATTERNS]
+    assert order == sorted(order), (
+        "UNIT_PATTERNS must run finest first, or a question naming two units "
+        "returns the coarser: %s" % [u for u, _ in lexical.UNIT_PATTERNS])
+    assert set(lexical.UNIT_ORDER) == {u for u, _ in lexical.UNIT_PATTERNS}, (
+        "every unit must be both matchable and orderable")
 
 
 def test_finer_than_orders_the_units():

@@ -538,7 +538,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             requested_dimensions=receipt_mod.requested_dimension_terms(
                 question, semantics,
                 available_columns=set(frame.columns) if frame is not None else None))
-        granularity = receipt_mod.granularity_disclosure(question, route)
+        granularity = receipt_mod.granularity_facets(question, route)
         # P1L: the material row population the spec carries. Raised from the
         # governed spec, proven from execution evidence the route reports — a
         # route that reports nothing leaves these LOST and the answer refuses,
@@ -570,7 +570,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                     and receipt_mod._analytical_population_satisfies(routed, _facet)):
                 _facet.status, _facet.reason = receipt_mod.APPLIED, ""
         facets = list(facets) + population
-        if not facets and not substitution and granularity is None:
+        if not facets and not substitution and not granularity:
             # Nothing to adjudicate, but the answer still states what governed
             # capability produced it and as at when — the receipt is required on
             # every successful substantive answer, not only contested ones.
@@ -587,8 +587,8 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         # outcome is decided before execution cannot record a request that
         # SUCCEEDED, and a rule can only be enforced on a request that is
         # represented.
-        if granularity is not None:
-            facets = list(facets) + [granularity]
+        if granularity:
+            facets = list(facets) + list(granularity)
         _population = [f for f in facets if f.kind == receipt_mod.KIND_POPULATION]
         facets = receipt_mod.reconcile_routed_facets(
             [f for f in facets if f.kind != receipt_mod.KIND_POPULATION],
@@ -600,6 +600,10 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         # named ("since inception" answered as one month). Verified against the
         # periods the route itself declares.
         facets = receipt_mod.check_period_grain(facets, routed)
+        # And the WINDOW, separately from the grain. A series at the right level
+        # over fewer periods than the question named is a different defect from
+        # a series at the wrong level, owed a different sentence.
+        facets = receipt_mod.check_window_coverage(facets, routed, question, route)
         receipt = receipt_mod.build_routed_receipt(
             route=route, envelope=routed, facets=facets)
         verdict, message = receipt_mod.assess(receipt, substitution=substitution)

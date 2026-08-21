@@ -198,6 +198,24 @@ def metric_slot(text: str) -> str:
 
 #: Ordered FINEST FIRST, so the finest unit a question names is the one returned.
 UNIT_PATTERNS: Tuple[Tuple[str, str], ...] = (
+    # `day` was missing until Stage 5's baseline went looking for it. "show me
+    # daily funded balance" read as naming NO time unit at all and was answered
+    # as a single whole-book KPI — the most complete of the three silent
+    # substitutions on the time axis, because no time axis survived to be
+    # disclosed.
+    #
+    # Matched only in GRAIN constructions, never on the bare noun. Drafted as
+    # `\bdays?\b` first, it moved five corpus questions and every one was
+    # arrears — "more than 90 days in arrears", "number of days in arrears by
+    # broker" — where "days" is part of a MEASURE, not a reporting level. Zero
+    # were daily-series requests. In this domain the bare noun is overwhelmingly
+    # a duration, which is not true of the other units' bare nouns, so `day`
+    # needs the construction and they do not.
+    #
+    # No corpus question exercises this reading in either direction. It is
+    # generated coverage under Note 2, and its tests say so.
+    ("day", r"\bdaily\b|\bday[- ]by[- ]day\b|\bper day\b|\beach day\b"
+            r"|\bby day\b|\bdaily basis\b"),
     ("week", r"\bweeks?\b|\bweekly\b|\bfortnight\b"),
     ("month", r"\bmonths?\b|\bmonthly\b"),
     ("quarter", r"\bquarters?\b|\bquarterly\b"),
@@ -205,7 +223,7 @@ UNIT_PATTERNS: Tuple[Tuple[str, str], ...] = (
 )
 
 #: Coarsest last, so a request's unit can be compared to a series'.
-UNIT_ORDER = {"week": 0, "month": 1, "quarter": 2, "year": 3}
+UNIT_ORDER = {"day": 0, "week": 1, "month": 2, "quarter": 3, "year": 4}
 
 _UNIT_RES = tuple((unit, re.compile(pattern)) for unit, pattern in UNIT_PATTERNS)
 

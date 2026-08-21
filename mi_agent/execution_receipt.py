@@ -2578,6 +2578,36 @@ def time_axis_disclosure(unit: Optional[str], route: Optional[str]
                           concepts=(unit, grain))
 
 
+def granularity_facets(question: str, route: Optional[str]
+                       ) -> List[RequestedFacet]:
+    """Every reporting GRAIN this question names, spatial and temporal.
+
+    THE ONE PLACE THE GRAIN IS READ.
+
+    The inventory found eleven distinct entry points reading the raw question,
+    and the subject-side clause split implemented three times from vocabularies
+    that agreed by maintenance rather than construction. The remedy is not a
+    better copy: `requested_unit` is called here, once, and every route inherits
+    the result through the facet it produces. Duplicating the call into
+    `evolution` — the obvious short path to making time-series questions work —
+    would be a twelfth reader and would defeat the premise.
+
+    `period_request.requested_unit` delegates to the single lexical owner, so
+    the vocabulary has one definition too.
+    """
+    from . import period_request as _period_request
+
+    out: List[RequestedFacet] = []
+    spatial = granularity_disclosure(question, route)
+    if spatial is not None:
+        out.append(spatial)
+    temporal = time_axis_disclosure(_period_request.requested_unit(question),
+                                    route)
+    if temporal is not None:
+        out.append(temporal)
+    return out
+
+
 def granularity_disclosure(question: str, route: Optional[str]
                            ) -> Optional[RequestedFacet]:
     """A facet for the reporting GRAIN this question names, or None.
@@ -2782,6 +2812,85 @@ def _months_between(opening: str, closing: str) -> Optional[int]:
             return None
     start, end = parsed
     return (end.year - start.year) * 12 + (end.month - start.month)
+
+
+def declared_series_periods(envelope: Dict[str, Any]) -> Optional[int]:
+    """How many reporting periods the route's OWN series contains.
+
+    Read from the periods the artifacts carry, which is the route reporting what
+    it delivered — never from the prose, which would be the receipt checking the
+    answer's sentence against the question's.
+    """
+    if not isinstance(envelope, dict):
+        return None
+    for artifact in envelope.get("artifacts") or []:
+        periods = {str(row.get("period"))
+                   for row in (artifact.get("rows") or [])
+                   if isinstance(row, Mapping) and row.get("period")}
+        if periods:
+            return len(periods)
+    return None
+
+
+def check_window_coverage(facets: Sequence[RequestedFacet],
+                          envelope: Dict[str, Any], question: str,
+                          route: Optional[str]) -> List[RequestedFacet]:
+    """Downgrade a period facet the route answered over a SHORTER WINDOW than asked.
+
+    The coverage limit, kept distinct from the grain substitution
+    ---------------------------------------------------------------
+    These two look alike and are not the same defect. A grain substitution
+    measured a DIFFERENT LEVEL — weeks asked, months delivered. A coverage limit
+    measured the right level over FEWER PERIODS than the question named, because
+    the book carries no more: "over the last 12 months" against three governed
+    snapshots.
+
+    They are owed different sentences, which is why they are read, measured and
+    reported apart. `period_request.clarification` names the window and what
+    would be needed; `granularity_clarification` names the level. Telling a
+    reader their weekly request was answered monthly does not tell them their
+    twelve-month window was three, and vice versa.
+
+    They are NOT owed different verdicts, and that correction is worth stating
+    because the Stage 5 pre-registration predicted otherwise. A coverage limit
+    was expected to be a disclosure. This tree had already settled the opposite
+    for every other route that checks one — `period_movement` returns
+    ``ok=False`` with the clarification, and this function's older half stamps
+    UNSUPPORTED — and the reasoning is `clarification`'s own: *offering the
+    narrower window as the answer is the substitution this guard exists to
+    prevent*. A shorter window IS a different window. So: apart in cause, apart
+    in message, together in verdict.
+
+    Acts only on the route's own declaration of the periods it delivered, so a
+    route that reports nothing is never refused on an unverifiable basis.
+    """
+    span = _period_request_module().requested_span(question)
+    if span is None or not route_time_grain(route):
+        return list(facets)
+    have = declared_series_periods(envelope)
+    if have is None or have >= span.periods:
+        return list(facets)
+    for facet in facets:
+        if facet.kind != KIND_COMPARISON_PERIOD or facet.status != APPLIED:
+            continue
+        facet.status = UNSUPPORTED
+        facet.reason = (
+            f"you asked about {span.label}, which spans {span.periods} "
+            f"reporting period(s); this answer covers {have}, which is all this "
+            f"book carries")
+        return list(facets)
+    # No period facet to downgrade — the question named a window and nothing in
+    # the receipt represents it. Raise one, or the shortfall goes unsaid.
+    return list(facets) + [RequestedFacet(
+        kind=KIND_COMPARISON_PERIOD, label=span.label, status=UNSUPPORTED,
+        reason=(f"you asked about {span.label}, which spans {span.periods} "
+                f"reporting period(s); this answer covers {have}, which is all "
+                f"this book carries"))]
+
+
+def _period_request_module():
+    from . import period_request
+    return period_request
 
 
 def check_period_grain(facets: Sequence[RequestedFacet],

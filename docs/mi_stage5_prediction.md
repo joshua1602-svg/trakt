@@ -172,3 +172,112 @@ Recorded here as a prediction to test: **change 2 alone will not resolve T3**,
 because the facet layer and the spec are different objects and only the spec is
 validated. If it does resolve, the reason will be stated; if it does not, what
 would is logged.
+
+---
+
+# Stage 5 results — measured against §5
+
+Changes 5, 2 and 1 applied in `bf287ea`, `502b831` and this commit. Change 4
+stays respecified and unbuilt.
+
+## Against the pre-registered prediction
+
+| # | predicted | measured |
+|---|---|---|
+| 1 | the two owed sentences appear | **partly.** Coverage 0 → 2 of 3; grain 0 → 2 of 3. The two that remain are both on the point-in-time path (§below). |
+| 2 | S1 refuses rather than answering | **yes.** It carries both defects and now refuses, naming both. |
+| 3 | seasoning families do not move | **yes.** 20 of 20 by name, both books, at every step. |
+| 4 | no other facet kind changes | **yes.** Zero new failures across the MI sweep. |
+| 5 | B5 unreachable, matrix 0 live holes | **yes.** `granularity` stamped on both adjudicators; 17 holes, all designed. |
+
+None of the four stop conditions fired.
+
+### The measured effect
+
+```
+                     before   after
+COVERAGE LIMITS       0 / 3    2 / 3
+GRAIN SUBSTITUTIONS   0 / 3    2 / 3
+```
+
+| id | question | before | after |
+|---|---|---|---|
+| C1 | balance by month over the last 12 months | ok, "over 3 period(s)" | **refuse** — *"you asked about the last 12 months, which spans 12 reporting period(s); this answer covers 3, which is all this book carries"*, and `granularity: applied` for the month grain it did honour |
+| S1 | balance by week over the last 6 months | ok, `comparison_period` **applied** | **refuse**, naming both defects separately |
+| S2 | funded balance by week | ok, no facet at all | **refuse** — *"week — this answer is reported at month level, not by week"* |
+
+## A correction to §2, from the measurement
+
+§2 predicted a coverage limit is owed a **disclosure** and a grain substitution
+**honour-or-clarify**. The first half is wrong, and the tree had already settled
+it: `period_movement` returns `ok=False` with the clarification, and
+`check_period_grain`'s older half stamps UNSUPPORTED. The reasoning is
+`clarification`'s own — *offering the narrower window as the answer is the
+substitution this guard exists to prevent*. A shorter window is a different
+window.
+
+So the two are **apart in cause, apart in message, together in verdict.** The
+distinction the brief asked to preserve is real and load-bearing, and it governs
+what the reader is told rather than whether they are told. Both refuse; one names
+the window and what would be needed, the other names the level actually
+delivered. Telling a reader their weekly request was answered monthly does not
+tell them their twelve-month window was three.
+
+## What is not closed, and why not
+
+**C2 — "funded balance over the last 6 months"** takes the point-in-time path,
+which publishes no series, so `check_window_coverage` correctly declines to act
+on an unverifiable basis. It already refuses; only the message is the generic
+`comparison_period` one rather than the coverage sentence.
+
+**S3 — "show me daily funded balance"** takes the point-in-time path too, and
+still returns a whole-book KPI. `time_axis_disclosure` returns nothing when the
+route publishes no series, which is right in general — a KPI route must not be
+told it failed to honour a grain nobody could expect of it — and wrong here,
+because the question asked for a series and received a point.
+
+Closing both means deciding that **a point-in-time answer to a series question
+is itself a substitution.** That is defensible and probably correct, and it
+would refuse a class of questions this stage has not measured — every "by month"
+question that falls through to the point-in-time path. Not done on the strength
+of two cases. Logged as **B9**.
+
+## T3, checked as asked
+
+**Change 2 does not resolve it, exactly as pre-registered.** "funded balance by
+quarter" reaches not one of the nine instrumented sites: it fails at parser
+validation — *"bar chart requires a dimension (or x)"* — before any facet is
+built. The facet layer and the spec are different objects, only the spec is
+validated, and validation runs first. Giving the facet layer a time axis cannot
+help a spec that has nowhere to put one.
+
+What would resolve it is a parser change: a time grain needs somewhere to live
+on the spec, which is the respecified change 4 — the route honouring a requested
+grain, with the spec able to carry it. Logged against that.
+
+## Both standing surfaces are unmoved, again
+
+343 of 343 answers identical; robustness 44/44 on both books. **Every question
+this stage changes is in neither bank.** That is B6 for the third time, and the
+reason the reachability check was run first: without it this would read as a
+change that did nothing, when in fact it converts three silently-wrong answers
+into three refusals that name what went wrong.
+
+## Instrument corrections — instances 13 to 16
+
+Four in one instrument, all the same shape: a detector matching something the
+output happens to contain rather than the thing being claimed.
+
+1. looked for `"period(s)"`, which *"over 3 period(s)"* satisfies. Stating what
+   was USED is not disclosing what was ASKED.
+2. looked for the period count as a substring — `"the last 6 months"` matched
+   the 6 in `"latest £1.96bn"`.
+3. read a 200-character truncation of the answer, and the disclosure sentence
+   lands past it — so a correctly disclosed limit read as undisclosed.
+4. the one-reader test matched its own docstring, the same defect a Stage 3
+   source check had when it matched a comment. Rewritten to parse call sites
+   with `ast`: a test that reads prose is not reading the program.
+
+And a fifth of a different kind: `test_the_finest_unit_wins` pinned the literal
+`"week"` as `UNIT_PATTERNS[0]` and went stale the moment `day` was added ahead
+of it. Rewritten to assert the ordering property, which cannot go stale.

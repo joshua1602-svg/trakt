@@ -126,14 +126,20 @@ def observe(question: str) -> Dict[str, Any]:
     meta = res.get("metadata") or {}
     guard = meta.get("semantic_guard") or res.get("semanticGuard") or {}
     answer = str(res.get("answer") or res.get("error") or "")
+    # The FULL text is kept for the disclosure checks and truncated only for
+    # display. It was truncated at 200 characters for both, and the sentence a
+    # disclosure adds lands after that — so a correctly disclosed coverage limit
+    # read as undisclosed. Instance 15 of the standing pattern, and the third in
+    # this one instrument: every one has been a detector reading something other
+    # than the thing being claimed.
     return {
         "route": meta.get("route") or "(none — point-in-time)",
         "ok": res.get("ok"),
         "verdict": guard.get("verdict"),
         "facets": sorted((f.get("kind"), f.get("status"))
                          for f in (guard.get("facets") or [])),
-        "answer": answer[:200],
-        "warnings": [str(w)[:120] for w in (res.get("warnings") or [])],
+        "answer": answer,
+        "warnings": [str(w) for w in (res.get("warnings") or [])],
     }
 
 
@@ -166,12 +172,19 @@ def _coverage_disclosed(observed: Dict[str, Any], span) -> bool:
 
 
 def _grain_disclosed(observed: Dict[str, Any], unit: Optional[str]) -> bool:
-    """Is the reader told the GRAIN they asked for could not be expressed?"""
+    """Is the reader told the GRAIN they asked for could not be expressed?
+
+    Tightened to the two sentences that legitimately disclose one, rather than
+    loosened until the output passes: the requested unit must be NAMED, and the
+    level actually delivered must be STATED. "Reported at month level, not by
+    week" and "the finest window it can express is one month" both qualify;
+    naming the unit alone does not, since the question's own words can appear in
+    an answer that honoured nothing.
+    """
     if not unit:
         return False
     blob = _blob(observed)
-    return unit in blob and ("finest" in blob or "cannot" in blob
-                             or "not answered" in blob)
+    return unit in blob and ("reported at" in blob or "finest" in blob)
 
 
 def run(available_periods: int = 3) -> List[Dict[str, Any]]:
