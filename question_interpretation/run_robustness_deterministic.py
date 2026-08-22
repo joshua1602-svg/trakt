@@ -18,7 +18,7 @@ everywhere it is reported. It is not a substitute for the LLM arm; it is the
 part of standing condition 1 that is honourable without a key.
 
 Frozen artefacts are IMPORTED, never modified: `nl_bank.bank` supplies the
-questions and `nl_score.grade` supplies the verdict, so this runner cannot
+questions and `nl_score_extended.grade` supplies the verdict, so this runner cannot
 grade more leniently than the recorded harness did.
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ SEASONING_INTENTS = ("Q1", "Q7", "Q8")
 
 
 def _capture(response: Dict[str, Any]) -> Dict[str, Any]:
-    """The subset of `nl_harness.capture` that `nl_score.grade` reads.
+    """The subset of `nl_harness.capture` that `nl_score_extended.grade` reads.
 
     Deliberately a subset: anything else would invite grading on a field the
     recorded harness did not record.
@@ -134,7 +134,16 @@ def _client_for(book: str):
 
 def run(book: str = "alderbridge") -> Dict[str, Any]:
     import nl_bank
-    import nl_score
+    # THE EXTENDED SCORER, deliberately not the frozen one.
+    #
+    # `nl_score.py` is pinned in the evidence manifest as "FROZEN — scores
+    # baseline and V1 alike", and that guarantee is what makes the recorded A/B
+    # mean anything: one scorer graded both sides. The figure check and the
+    # refusal split live in `nl_score_extended.py` so the frozen scorer stays
+    # byte-identical to its pin. The 32/6/4/2 figures this runner produces come
+    # from the EXTENDED scorer and must never be quoted against the frozen
+    # comparison.
+    import nl_score_extended as nl_score
 
     client, portfolio = _client_for(book)
     captured: List[Dict[str, Any]] = []

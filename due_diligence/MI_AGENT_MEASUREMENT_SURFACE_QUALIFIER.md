@@ -177,6 +177,28 @@ the 44 read `CORRECT 32 · UNHELPFUL_REFUSAL 6 · SAFE_REFUSAL 4 · DISCLOSED 2`
 both books — six of the ten refusals were avoidable, and the four that remain
 are Q9, where all four phrasings refuse.
 
+### WHICH FIGURE CAME FROM WHICH SCORER — read this before attributing any of them
+
+There are **two** scorers and they are not interchangeable.
+
+| scorer | status | the figures it produced |
+|---|---|---|
+| `nl_score.py` | **FROZEN**, pinned in the evidence manifest | the baseline/V1 A/B, the **187-to-zero** claim, and the historical **91.0%** |
+| `nl_score_extended.py` | extension, added after that comparison | **CORRECT 32 · UNHELPFUL 6 · SAFE 4 · DISCLOSED 2** |
+
+**Never quote a number from one against a comparison run by the other.**
+
+The frozen scorer's guarantee — *"scores baseline and V1 alike"* — is the entire
+basis of the A/B: 187-to-zero means something only because **one scorer graded
+both sides**. During this programme the frozen file was extended in place. The
+figures did not move, but **the guarantee was gone the moment the bytes changed,
+whether or not anything moved** — a frozen instrument that has been edited can no
+longer certify that two runs were graded alike.
+
+It has been restored to its pinned bytes (sha256 `aade1417…`, verified) and the
+extension moved to a separate named scorer. The robustness runner reads the
+extended one and says so at the import.
+
 ### THE SECOND QUALIFIER, to be attached wherever `CORRECT 32` is quoted
 
 > **`CORRECT 32` means 32 answers arrived correctly SHAPED, of which 8 labelled

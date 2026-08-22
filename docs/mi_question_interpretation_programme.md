@@ -687,6 +687,31 @@ publishes. A receipt change on the analytical path, not a grader change.
 
 **Not now.** Recorded so the size is known before anyone decides.
 
+### "compare" read as a measure — the same shape, a seventh time
+
+*"How does the front book compare with the back book?"* is **refused**, while
+*"Compare direct and acquired balances"* answers correctly. Found while writing
+the capability summary.
+
+**The mechanism, named:** the word `compare` is resolved as a MEASURE. The
+refusal is the measure-substitution guard doing its job — *"'compare' is not a
+governed measure in this dataset; no substitute was used"* — on a word that is
+not naming a measure at all. It is the verb of the sentence.
+
+That is the same shape as the four closed this week: **a word outside the measure
+position taken as the measure.** Item 2 fixed two instances of it (a field word
+in an axis clause, and the drill-through branch overriding a named measure) and
+recorded that `_detect_metric` masks nothing and depends on its caller
+pre-cutting. This is a third instance, with the additional wrinkle that the word
+is not a field word at all.
+
+Note the corpus does not catch it: the robustness bank's front-versus-back family
+scores 4 of 4 correct on both books, because none of its four phrasings uses the
+bare verb "compare" against two named populations. **A phrasing that appears to
+work while another carries the defect** — the `split by` rule, again.
+
+**Recorded, not fixed.**
+
 ### Item 1 follow-ons — recorded during the fix, deliberately not opened inside it
 
 * **The bare `N+` threshold is applied but never disclosed.** *"how many

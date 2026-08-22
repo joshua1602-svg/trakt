@@ -223,6 +223,12 @@ check a single number. Proven by taking answers the grader called correct and
 loan counts trebled and dates mangled. Every figure derived from that bank
 carries this qualifier.
 
+**Two scorers, and their figures must not be mixed.** The historical 91.0% and
+the 187-to-zero A/B were produced by a FROZEN scorer whose whole value is that
+one instrument graded both sides. The 32/6/4/2 figures below come from a
+separate, extended scorer. A number from one must never be quoted against a
+comparison run by the other.
+
 **"32 correct" means 32 answers correctly shaped, of which 8 are figure-verified.**
 Under the extended grader the 44-question bank reads 32 correct, 6 avoidable
 refusals, 4 honest refusals, 2 disclosed-limitation. Of those, **8 labelled
@@ -256,7 +262,33 @@ instead, and no question of that kind has been measured.**
 
 ---
 
-## 5. Known gaps
+## 5. What this book does not contain — disclose before the first question
+
+These are properties of the DATA, not defects in the product. They are listed
+here so a client hears them from us rather than discovering them in a refusal.
+
+**No negative-equity guarantee (NNEG) data.** Verified directly: **zero of the
+book's 76 columns** carry an NNEG, no-negative-equity or guarantee field. No NNEG
+question can be answered, and none should be promised. For an equity-release
+book this is the most consequential absence on the list, and it is a data-supply
+question rather than something the agent can close.
+
+**No broker identity.** The book carries an origination channel but no broker
+field, so broker concentration and broker league tables cannot be produced. The
+agent refuses these by name rather than substituting channel.
+
+**Three reporting periods.** Any question spanning a longer window is refused
+with the arithmetic stated — a six-month question is told the book carries three
+governed periods.
+
+**No pipeline source on this book.** Forecast-balance questions refuse. Run-rate
+and milestone questions are unaffected because they extrapolate from funded
+growth.
+
+---
+
+## 6. Known gaps
+
 
 1. **Concentration limits are partially configured.** Three of twelve tests
    report unavailable on this book. Broker concentration cannot be evaluated at
@@ -264,18 +296,18 @@ instead, and no question of that kind has been measured.**
 2. **No segmented time series.** A measure over time can be scoped to one
    population but cannot be broken down by a dimension. The product discloses
    this rather than silently returning the ungrouped series.
-3. **NNEG is absent from the data.** Zero of the book's 76 columns carry a
-   no-negative-equity-guarantee field, so no NNEG question can be answered.
-4. **Forecasting is gated on a pipeline source.** Forecast-balance questions
+3. **Forecasting is gated on a pipeline source.** Forecast-balance questions
    refuse on books without one. Run-rate and milestone questions are unaffected.
-5. **Receipt and disclosure backlog** — each recorded, none a wrong number:
+4. **Receipt and disclosure backlog** — each recorded, none a wrong number:
    - a bare "70+" threshold is applied correctly but not disclosed;
    - the analytical path publishes no population figure, so the automated
      population check cannot run against it;
    - a threshold with no currency marker can bind to the wrong column when a
      different measure is named earlier in the sentence;
    - *"How does the front book compare with the back book?"* is refused because
-     "compare" is read as a measure.
+     the word "compare" is resolved as a MEASURE, and the measure-substitution
+     guard then correctly declines a measure the registry does not govern. The
+     same comparison asked as *"Compare direct and acquired balances"* answers.
 
 ---
 
