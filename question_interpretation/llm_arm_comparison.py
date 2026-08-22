@@ -144,7 +144,17 @@ def _observe(question: str) -> Dict[str, Any]:
             "population": summary.get("population"),
             "filters": sorted(str(f) for f in (summary.get("filtersApplied") or ())),
             "dimensions": sorted(str(d) for d in (summary.get("dimensionsApplied") or ())),
-            "parser_mode": meta.get("parser_mode")}
+            # camelCase, and that is not a detail: the first run of this harness
+            # read `parser_mode` (snake_case), got None for both arms, and so
+            # reported "15 of 15 identical" WITH NO EVIDENCE THE MODEL HAD RUN
+            # AT ALL. A counter wrapped around `_invoke` proved it had — one
+            # call per question — but the record did not show it. An instrument
+            # that cannot tell you whether it observed anything is the failure
+            # mode this programme has hit six times; here it was caught before
+            # the number was quoted.
+            "parser_mode": meta.get("parserMode"),
+            "parser_detail": meta.get("parserModeDetail"),
+            "llm_used": bool(meta.get("llm"))}
 
 
 def _key(seen: Dict[str, Any]) -> str:
@@ -231,6 +241,20 @@ def report(result: Dict[str, Any]) -> int:
         print("  establish, and it is the part that answers whether a")
         print("  deterministic fix reaches a user at all.")
         return 2
+
+    # DID THE ARM OBSERVE ANYTHING? Asserted before any comparison is quoted.
+    llm_modes = Counter(r["llm"]["parser_mode"] for r in result["rows"])
+    det_modes = Counter(r["deterministic"]["parser_mode"] for r in result["rows"])
+    print("PARSER MODE ACTUALLY USED")
+    print("-" * 78)
+    print("   deterministic arm : %s" % dict(det_modes))
+    print("   LLM arm           : %s" % dict(llm_modes))
+    reached = sum(1 for r in result["rows"] if r["llm"]["llm_used"])
+    print("   questions where the LLM arm reports an LLM parse: %d of %d"
+          % (reached, len(result["rows"])))
+    if not reached:
+        print("   *** THE LLM ARM OBSERVED NOTHING — the comparison below is void")
+    print()
 
     print("PER QUESTION  (repeats: %d)" % result["repeats"])
     print("-" * 78)
