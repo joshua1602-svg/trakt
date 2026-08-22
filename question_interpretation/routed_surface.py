@@ -95,6 +95,16 @@ def observe(ask, question: str,
     summary = res.get("executionSummary") or {}
     return {
         "route": meta.get("route"),
+        # THE VIEW, added for B21 because nothing in the estate asserted it.
+        #
+        # `resolve_active_view` decides which FRAME the question is answered
+        # against, before parsing. Every `datasetContext` anywhere else — in the
+        # differ, the robustness runner, the perf harness — is a request
+        # PARAMETER being sent, never an assertion on what came back. So a wrong
+        # view was unfalsifiable: on this book a forecast question answered on
+        # the funded frame returns the identical number, and a pipeline question
+        # answered on the wrong frame returns the identical refusal.
+        "view": meta.get("datasetContext"),
         "ok": bool(res.get("ok")),
         "verdict": guard.get("verdict"),
         "facets": sorted((str(f.get("kind")), str(f.get("status")))
@@ -124,6 +134,8 @@ def check(case: Dict[str, Any], seen: Dict[str, Any]) -> List[str]:
         want = sorted((str(k), str(v)) for k, v in case["expect_facets"])
         if want != seen["facets"]:
             fails.append("facets %s != expected %s" % (seen["facets"], want))
+    if "expect_view" in case and case["expect_view"] != seen["view"]:
+        fails.append("view %r != expected %r" % (seen["view"], case["expect_view"]))
     if "expect_population" in case and case["expect_population"] != seen["population"]:
         fails.append("population %r != expected %r"
                      % (seen["population"], case["expect_population"]))
@@ -186,13 +198,14 @@ def self_test() -> int:
     failures: List[str] = []
     seen = {"route": "evolution", "ok": True, "verdict": "ok",
             "facets": [("granularity", "applied")], "answer": "a sentence",
-            "population": 11035, "filters": []}
+            "population": 11035, "filters": [], "view": "funded"}
     probes = [
         ({"expect_route": "not_a_route"}, "route"),
         ({"expect_ok": False}, "ok"),
         ({"expect_verdict": "refuse"}, "verdict"),
         ({"expect_facets": [["grouping_dimension", "lost"]]}, "facets"),
         ({"expect_answer_contains": "a phrase that is absent"}, "answer"),
+        ({"expect_view": "a view that was not used"}, "view"),
         ({"expect_population": 999}, "population"),
         ({"expect_filters": ["a filter that was not applied"]}, "filters"),
     ]
@@ -204,7 +217,8 @@ def self_test() -> int:
                "expect_verdict": "ok",
                "expect_facets": [["granularity", "applied"]],
                "expect_answer_contains": "sentence",
-               "expect_population": 11035, "expect_filters": []}
+               "expect_population": 11035, "expect_filters": [],
+               "expect_view": "funded"}
     if check(correct, seen):
         failures.append("the checker rejected a correct expectation")
     # Silence is not an assertion.
