@@ -1097,3 +1097,79 @@ All 252 `expected_answer_type` values were derived from `answer_type.asked()`.
 Regenerating the bank during this programme would rewrite those expectations
 from a classifier the programme is changing, and a bank that moves with the code
 it grades has stopped being a control.
+
+## Standing rule — a declaration without a proof is how an instrument gets talked out of a finding
+
+Adopted verbatim as a standing rule during P0, from the one case where an
+instrument was right and its finding was going to be answered with a sentence.
+
+`stamp_coverage` reported `KIND_SERIES_AXIS` as a **live hole** in sixteen
+(route, kind) cells: a facet kind that can be raised where nothing can confirm
+it. The finding was correct. The resolution was also correct — the facet is
+raised *after* execution from the rendered rows, arrives `LOST` with its reason
+already set, and goes straight to `assess`, so a reconciler branch would have
+nothing to read. That is precisely what the instrument's `DESIGNED_HOLES`
+provision exists for.
+
+But "correct resolution" and "an entry in a dict saying so" are not the same
+thing, and the second is available whether or not the first is true. A designed
+hole declared by assertion is an instrument being *told* it is wrong.
+
+**The rule.** Any future entry in `DESIGNED_HOLES` carries a proof of the same
+shape, and the shape is not optional:
+
+1. **The raiser's output is already adjudicated.** Exercised through the real
+   raiser, not a hand-built facet — the facet must arrive with its status and
+   its reason already set, so a reconciler genuinely has nothing to add.
+2. **The construction sites are enumerated and bounded.** Counted from the
+   source, with the count asserted. A second raiser — especially one running
+   *before* execution — puts the kind into a reconciler's list and the hole
+   stops being designed. The declaration's truth depends on that count, so the
+   count is checked rather than assumed.
+3. **The declaration cannot outlive the kind it covers.** If the kind is renamed
+   or removed, the entry must fail rather than linger as a stale exemption for
+   something that no longer exists.
+
+Each clause answers a way the declaration could become false without anybody
+noticing. `mi_agent/tests/test_p0_temporal_honouring.py` holds the three for
+`KIND_SERIES_AXIS` and is the template.
+
+This is the companion to the standing rule above it — *an instrument tends to
+carry the defect it was built to find*. That one says instruments go blind. This
+one says a sighted instrument can still be overruled, and the overruling is
+cheaper than the finding.
+
+## Backlog — the registry records its source as an ABSOLUTE path
+
+**A finding, not a fix.** Found while comparing estate failures by name between
+two checkouts during P0. Unrelated to P0, not authorised there, and recorded
+here with the mechanism named because it will mislead somebody else.
+
+`mi_agent/tests/test_registry_governance.py::test_checked_in_registry_matches_generator`
+regenerates the field registry and requires the result to match the checked-in
+YAML. The checked-in YAML records:
+
+    source_registry: /home/user/trakt/config/system/fields_registry.yaml
+
+an **absolute path**, and the generator writes whatever path the tree is checked
+out at. So the metadata assertion fails in **any checkout not located at
+`/home/user/trakt`** — a git worktree, a second clone, another developer's
+machine, a CI runner with a different workspace root.
+
+What makes it worth recording is how it reads when it fires. The failure message
+is the one authored for genuine drift:
+
+> *mi_semantics_field_registry.yaml has drifted from
+> build_mi_semantics_registry.py. Update CURATION in the build script and
+> regenerate — never hand-edit the YAML.*
+
+It says the registry has drifted. It has not. The `fields` block matches entry
+for entry and both input files are byte-identical; only `source_registry`
+differs, and only because of where the checkout sits. Acting on the message —
+regenerating and committing — would write the new machine's path into the YAML
+and move the failure to everybody else.
+
+**The mechanism:** provenance metadata that varies with the environment is being
+compared as if it were content. Either the path is stored relative to the repo
+root, or `source_registry` joins `generated_at` in the skip set. Not decided
+here.
