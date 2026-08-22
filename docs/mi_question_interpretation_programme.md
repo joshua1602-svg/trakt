@@ -632,6 +632,29 @@ masking. So:
 > **consumers of the unified list have been exercised across its full range** —
 > longest and shortest phrase, every direction, every consumer.
 
+### A phrasing that appears to work while carrying the defect masks the mechanism
+
+Item 2's axis vocabulary had four consumers; two knew only `by`. But `split by`,
+`broken down by` and `grouped by` all **passed those two consumers** — not
+because they were handled, but because each phrase CONTAINS the word `by`. Only
+`per` and `across` failed visibly.
+
+`"balance split by region"` looked correct and was not: the cut landed at offset
+14 instead of 8, and `answer_type.subject_side` read the measure as
+`"balance split"`. It answered, it answered with the right number, and the word
+`split` sat inside the span that may name the measure the whole time. Four
+corpus questions were in exactly that state and no surface reported them.
+
+> **A vocabulary gap is not bounded by the cases that fail.** The phrasings that
+> appear to work are where it hides, and they hide it best when they overlap the
+> vocabulary that is present. Enumerate the whole vocabulary against every
+> consumer; do not infer the gap's size from the failures you can see.
+
+This is why item 2's prediction of "no lexical decision moves" was wrong: it
+assumed the consolidation could only touch `per` and `across`, the two markers
+that visibly failed. Four decisions moved, all corrections, all in phrasings that
+had been passing.
+
 ### `test_the_detectors_stay_separate` guards a property nobody would notice losing
 
 Kept prominent deliberately. `execution_receipt._detect_thresholds` reads the
