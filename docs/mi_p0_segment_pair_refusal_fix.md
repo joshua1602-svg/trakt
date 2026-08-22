@@ -136,6 +136,14 @@ not an incidental one.
 
 ---
 
+## Recorded as a standing pattern
+
+This is the **fourth instance** of two mechanisms answering one question with
+different logic, where the weaker gated the route and the stronger drove the
+refusal. See `docs/mi_dual_mechanism_pattern.md`, which carries the standing
+constraint: **an instance of this pattern is not closed by adding a phrase to the
+weak list.**
+
 ## A limit of the fix, recorded
 
 `names_both_sides_of_a_pair` recognises the governed binary pairs by their own
@@ -151,3 +159,10 @@ That is a real lender phrasing and it is not covered. It is recorded rather than
 patched, because covering it well means parsing coordination properly rather than
 adding another vocabulary entry — which is how this defect arose in the first
 place.
+
+**This limit must not be closed with a vocabulary entry.** Adding
+`"front and back books"` to a list closes the example and leaves the mechanism
+intact; the next elision fails identically and the pattern gains a fifth
+instance. The constraint is recorded in `docs/mi_dual_mechanism_pattern.md` and
+any change that closes it by adding a phrase should be rejected in review on the
+strength of it.
