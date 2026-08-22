@@ -365,6 +365,107 @@ def finer_than(requested: Optional[str], available: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# P0 — "does this sentence ask the answer to VARY OVER TIME?"
+# --------------------------------------------------------------------------- #
+# THE ONE OWNER of that question, and deliberately a COMPOSITION rather than a
+# new vocabulary. Two readings already exist and both are already owned here:
+#
+#   AXIS_MARKER_RE   where a grouping clause starts ("by", "per", "across",
+#                    "split by", "broken down by", "grouped by")
+#   requested_unit   what counts as a time unit (day / week / month / quarter /
+#                    year), including B11's exclusion of the age compounds
+#
+# "By month" is the first followed immediately by the second. Writing a fresh
+# list of unit words here would have been the twelfth interpreter this contract
+# exists to prevent, and it would have gone wrong in a specific, checkable way:
+# a hand-written list drafted for this rule included `vintage` and `snapshot`,
+# which would have fired on rt_017 ("forecast run rate by vintage") and rt_028
+# ("balance by vintage, ignoring the forecast") — two routed-surface answers
+# that are correct today. A vintage is a loan ATTRIBUTE, the grouping owner
+# already handles it, and `requested_unit` had always said so. Asking the owner
+# instead of retyping its vocabulary is what excluded them.
+#
+# What is genuinely new is the grain-agnostic phrasing: "over time" names no
+# unit at all, so no unit vocabulary could ever hold it, and nothing else owned
+# it either. That list — and only that list — is declared below.
+
+#: Series wordings that name a time axis WITHOUT naming a grain. No existing
+#: vocabulary can hold these, because there is no unit in them to hold.
+SERIES_PHRASES: Tuple[str, ...] = (
+    "over time", "through time", "time series",
+    "over the period", "over the periods",
+    "across periods", "across the periods",
+    "over successive periods",
+    "month by month", "quarter by quarter", "period by period",
+)
+
+_SERIES_PHRASE_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(p) for p in
+                        sorted(SERIES_PHRASES, key=len, reverse=True)) + r")\b",
+    re.I)
+
+#: Determiners and qualifiers that may sit between an axis marker and its noun
+#: without changing what the noun is: "by each month", "by the reporting period".
+_AXIS_FILLER_RE = re.compile(r"^(?:the|each|every|a|calendar|governed)\s+", re.I)
+
+#: "period" is a time axis word that is NOT a unit — it names the axis while
+#: leaving its grain to the book. `UNIT_PATTERNS` correctly does not carry it
+#: (there is no `UNIT_ORDER` position for "whatever the book reports at"), so it
+#: is matched separately rather than by widening a vocabulary that means
+#: something else.
+_PERIOD_NOUN_RE = re.compile(r"^(?:reporting\s+|governed\s+)?periods?\b", re.I)
+
+
+def time_axis_request(question: Optional[str]) -> Optional[str]:
+    """The wording by which this sentence asked the answer to vary over time.
+
+    Returns the matched wording — "by month", "over the periods" — so a refusal
+    can quote the reader's own words back, or ``None``.
+
+    Two forms, and the asymmetry between them is the point:
+
+    * a SERIES PHRASE names the axis and no grain ("balance over time");
+    * an AXIS MARKER followed by a time unit names both ("balance by month").
+
+    The unit must be the very next word after the marker, allowing only
+    determiners. That adjacency is what separates "balance by month" from
+    "balance by region for loans under 12 months old" — the second names a
+    month, but not as an axis, and reading a unit from anywhere in the sentence
+    would have turned a filter into a series request.
+    """
+    q = str(question or "")
+    match = _SERIES_PHRASE_RE.search(q)
+    if match:
+        return match.group(0)
+    for marker in AXIS_MARKER_RE.finditer(q):
+        rest = q[marker.end():]
+        offset = len(rest) - len(rest.lstrip())
+        tail = rest.lstrip()
+        while True:
+            filler = _AXIS_FILLER_RE.match(tail)
+            if not filler:
+                break
+            offset += filler.end()
+            tail = tail[filler.end():]
+        period = _PERIOD_NOUN_RE.match(tail)
+        if period:
+            return q[marker.start():marker.end() + offset + period.end()]
+        word = re.match(r"[A-Za-z]+", tail)
+        if not word:
+            continue
+        # THE OWNER IS ASKED ABOUT THE MARKER AND THE NOUN TOGETHER, not about
+        # the noun alone. `UNIT_PATTERNS` holds `day` as PHRASES — "by day",
+        # "per day", "daily" — and never as the bare word, because "the day the
+        # loan completed" is not a reporting grain. Handing it "day" therefore
+        # returned None and "balance by day" read as no time axis at all.
+        # Handing it the whole candidate span is both correct and the only form
+        # that keeps this a composition rather than a second unit vocabulary.
+        if requested_unit("%s %s" % (marker.group(0), word.group(0))):
+            return q[marker.start():marker.end() + offset + word.end()]
+    return None
+
+
+# --------------------------------------------------------------------------- #
 # Clause splitting.
 #
 # "<age> 70+ with LTV above 50" is two independent thresholds, and a threshold
