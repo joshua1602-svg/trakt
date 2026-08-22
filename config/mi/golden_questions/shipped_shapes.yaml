@@ -1,0 +1,108 @@
+meta:
+  name: Shipped shapes — three question shapes nobody was measuring
+  description: >-
+    Driven through `execute_governed_mi_query` with routing exactly as shipped.
+
+    The 44 variations in `nl_bank.py` were always the right QUESTIONS. What was
+    wrong was what the runner did with the answers: `nl_score.grade` reads an
+    outcome LABEL, so a question that returns a complete, well-formatted, WRONG
+    number grades CORRECT as long as it did not refuse. Several defects closed
+    this month were live on this exact path while that bank read clean.
+
+    These three shapes are ordinary management questions with no coverage at
+    all. Each is scored four ways — correct, wrong answer, honest refusal,
+    unhelpful refusal — against ground truth computed from the book directly,
+    never from the answer.
+
+  scoring:
+    correct: >-
+      answered, and every figure asserted below matches the book.
+    wrong_answer: >-
+      answered — completely and plausibly — with a figure that does not match
+      the book, or presented as complete while missing something the shape
+      requires. THE ONLY OUTCOME THAT REACHES A READER AS FACT.
+    honest_refusal: >-
+      declined, and the thing it says it cannot do is genuinely not available.
+    unhelpful_refusal: >-
+      declined while holding everything needed to answer, or asked for a
+      clarification the sentence already supplies.
+
+  ground_truth_source: >-
+    `mi_agent_api.data_source.get_dataframe()` — the same funded tape the
+    service answers from, read with pandas. Recomputed on every run, never
+    pinned to a literal, so a book change moves the truth and the expectation
+    together.
+
+shapes:
+
+  # ------------------------------------------------------------------------ #
+  - id: A
+    name: portfolio summary
+    intent: >-
+      Basic facts about the book. The most ordinary question a new reader asks.
+    why: >-
+      kpi_028-031 in the calibration bank cover these four words and assert
+      `expected_metric: null`, `expected_metrics: null`,
+      `expected_columns_include: []`, `expected_min_columns: 1`. The note says
+      "Whole-book summary (count + balance)" and NOTHING CHECKS THAT THE BALANCE
+      IS THERE. All four pass on an answer with no balance in it.
+    must_contain: [loan_count, total_balance]
+    questions:
+      - id: A1
+        question: Please provide a portfolio summary
+      - id: A2
+        question: Give me a summary of the portfolio
+      - id: A3
+        question: Can you summarise the book for me?
+      - id: A4
+        question: What are the headline numbers for the portfolio?
+      - id: A5
+        question: Tell me the basics about this book
+
+  # ------------------------------------------------------------------------ #
+  - id: B
+    name: a value in a filter position
+    intent: >-
+      A measure, narrowed by a threshold on a different field. The word
+      "tickets" names the thing being thresholded, not an axis to split by.
+    why: >-
+      The shape behind three wrong-number defects this month. The failure is
+      always the same: the narrowing is dropped and the whole-book figure is
+      returned looking complete.
+    measure: current_loan_to_value
+    filter: current_outstanding_balance > 150000
+    questions:
+      - id: B1
+        question: What is the LTV for loan tickets above £150k?
+      - id: B2
+        question: What is the average LTV on loans over £150k?
+      - id: B3
+        question: Show me the LTV for loans with a balance above £150,000
+      - id: B4
+        question: For tickets larger than £150k, what is the LTV?
+      - id: B5
+        question: What LTV are we running on loans bigger than £150k?
+
+  # ------------------------------------------------------------------------ #
+  - id: C
+    name: two groupings at once
+    intent: >-
+      One measure across two dimensions simultaneously — a cross-tab, rendered
+      as a chart and a table carrying both dimensions.
+    why: >-
+      No surface in the estate asserts that a SECOND grouping survives. A
+      breakdown that silently drops one dimension returns a correct-looking
+      table of the wrong shape.
+    measure: current_outstanding_balance
+    dimensions: [ltv_bucket, ticket_bucket]
+    questions:
+      - id: C1
+        question: Show me balance by LTV by ticket size
+      - id: C2
+        question: Balance broken down by LTV band and ticket size
+      - id: C3
+        question: What is the balance by ticket size and LTV bucket?
+      - id: C4
+        question: Give me a breakdown of balance across LTV and ticket size
+      - id: C5
+        question: Show balance split by LTV bucket, then by ticket size
