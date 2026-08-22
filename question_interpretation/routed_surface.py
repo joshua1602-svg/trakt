@@ -84,6 +84,15 @@ def observe(ask, question: str,
     res = ask(question, filters)
     meta = res.get("metadata") or {}
     guard = meta.get("semantic_guard") or res.get("semanticGuard") or {}
+    # THE POPULATION, added for B22 because this surface could not see it.
+    #
+    # rt_023, rt_025 and rt_027 were declared expected-to-fail against a live
+    # defect — the lens silently narrowing to 3,909 of 11,035 loans — and this
+    # surface reported all three FIXED, because it asserted the route, the
+    # verdict and the facet kinds and none of those move when a population is
+    # silently narrowed. A surface reporting a live defect as closed is worse
+    # than one that is silent about it.
+    summary = res.get("executionSummary") or {}
     return {
         "route": meta.get("route"),
         "ok": bool(res.get("ok")),
@@ -91,6 +100,8 @@ def observe(ask, question: str,
         "facets": sorted((str(f.get("kind")), str(f.get("status")))
                          for f in (guard.get("facets") or [])),
         "answer": str(res.get("answer") or res.get("error") or ""),
+        "population": summary.get("population"),
+        "filters": sorted(str(f) for f in (summary.get("filtersApplied") or ())),
     }
 
 
@@ -113,6 +124,13 @@ def check(case: Dict[str, Any], seen: Dict[str, Any]) -> List[str]:
         want = sorted((str(k), str(v)) for k, v in case["expect_facets"])
         if want != seen["facets"]:
             fails.append("facets %s != expected %s" % (seen["facets"], want))
+    if "expect_population" in case and case["expect_population"] != seen["population"]:
+        fails.append("population %r != expected %r"
+                     % (seen["population"], case["expect_population"]))
+    if case.get("expect_filters") is not None:
+        want = sorted(str(f) for f in case["expect_filters"])
+        if want != seen["filters"]:
+            fails.append("filtersApplied %s != expected %s" % (seen["filters"], want))
     needle = case.get("expect_answer_contains")
     if needle and str(needle).lower() not in seen["answer"].lower():
         fails.append("answer does not contain %r" % needle)
@@ -167,13 +185,16 @@ def self_test() -> int:
     doc = bank()
     failures: List[str] = []
     seen = {"route": "evolution", "ok": True, "verdict": "ok",
-            "facets": [("granularity", "applied")], "answer": "a sentence"}
+            "facets": [("granularity", "applied")], "answer": "a sentence",
+            "population": 11035, "filters": []}
     probes = [
         ({"expect_route": "not_a_route"}, "route"),
         ({"expect_ok": False}, "ok"),
         ({"expect_verdict": "refuse"}, "verdict"),
         ({"expect_facets": [["grouping_dimension", "lost"]]}, "facets"),
         ({"expect_answer_contains": "a phrase that is absent"}, "answer"),
+        ({"expect_population": 999}, "population"),
+        ({"expect_filters": ["a filter that was not applied"]}, "filters"),
     ]
     for case, what in probes:
         if not check(case, seen):
@@ -182,7 +203,8 @@ def self_test() -> int:
     correct = {"expect_route": "evolution", "expect_ok": True,
                "expect_verdict": "ok",
                "expect_facets": [["granularity", "applied"]],
-               "expect_answer_contains": "sentence"}
+               "expect_answer_contains": "sentence",
+               "expect_population": 11035, "expect_filters": []}
     if check(correct, seen):
         failures.append("the checker rejected a correct expectation")
     # Silence is not an assertion.

@@ -4,7 +4,7 @@ meta:
     The third measurement surface. Drives execute_governed_mi_query, so a
     question is claimed by whichever route claims it in production, and the
     answer is adjudicated by the guard that actually adjudicates it.
-  count: 23
+  count: 28
   entry_point: mi_agent_api.mi_service.execute_governed_mi_query
   enforced_by: question_interpretation/routed_surface.py
 
@@ -493,3 +493,105 @@ questions:
     expect_verdict: refuse
     expect_facets:
       - [row_population, lost]
+
+  # --- B22: a bare substring must not silently narrow the population --------
+  - id: rt_023
+    question: What is the balance for loans purchased at auction?
+    expected_to_fail: >-
+      B22. Answers over the ACQUIRED cohort — 3,909 of 11,035 loans — for a
+      question about how a property was bought. A complete, correctly formatted
+      answer over 35% of the book.
+
+      EVIDENCE THIS EXPECTATION RESTS ON, measured at cd4a005:
+      `portfolio_lens.resolve_lens` returns the Acquired lens; the receipt reads
+      `filtersApplied: ["Source Portfolio in alp_acquired"], population: 3909`;
+      and `portfolio_lens.scope_phrase_spans` on the same sentence returns
+      `()` — no governed scope phrase is present. The module's own test says
+      this is not a scope reference and the decision that owns the vocabulary
+      does not ask it.
+
+      Correct outcome: the whole book, 11,035 loans, no source-portfolio filter.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 11035
+    expect_filters: []
+    expect_facets: []
+
+  - id: rt_024
+    question: What is the balance of the acquired book?
+    note: >-
+      THE CAN-FAIL. The same word, doing the job the decision assumes.
+
+      EVIDENCE: `scope_phrase_spans` returns `"of the acquired book"`, and the
+      receipt reads `filtersApplied: ["Source Portfolio in alp_acquired"],
+      population: 3909`. Both measured at cd4a005.
+
+      A fix that stopped the lens narrowing at all would satisfy rt_023 and
+      rt_025 and destroy this.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 3909
+    expect_filters: ['Source Portfolio in alp_acquired']
+
+  - id: rt_025
+    question: What is the balance where the borrower acquired the property recently?
+    expected_to_fail: >-
+      B22, the second instance, and the one that shows the vocabulary is ordinary
+      English rather than a near-miss. The sentence is about the BORROWER
+      acquiring a PROPERTY; nothing in it names a book.
+
+      EVIDENCE: `scope_phrase_spans` returns `()`; `resolve_lens` returns
+      Acquired; the receipt reads `population: 3909`. Measured at cd4a005.
+
+      Correct outcome: 11,035 loans, no source-portfolio filter.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 11035
+    expect_filters: []
+    expect_facets: []
+
+  - id: rt_026
+    question: What is the balance excluding the acquired book?
+    expected_to_fail: >-
+      B22's worst case, and the one that proves qualification alone is not the
+      whole fix.
+
+      This answers over the acquired book — 3,909 loans — for a question that
+      EXCLUDES it. The reader asked for everything else and received only the
+      thing they ruled out.
+
+      EVIDENCE, and it is why the disclaiming guard is a separate component:
+      `scope_phrase_spans` DOES find `"the acquired book"` here, so the
+      qualified-mention test that fixes rt_023 and rt_025 leaves this untouched.
+      `resolve_lens` returns Acquired; the receipt reads `population: 3909`.
+      Measured at cd4a005.
+
+      Correct outcome, under the ruling that a disclaiming construction DECLINES
+      rather than selecting the opposite: the lens does not select, and the
+      exclusion is recorded as a narrowing that was requested and not applied, so
+      the answer does not silently widen to the whole book either. Inferring
+      "therefore the direct book" would be a guess about scope, and a guess about
+      scope is a substitution.
+    expect_route: null
+    expect_ok: false
+    expect_verdict: refuse
+
+  - id: rt_027
+    question: Show balance by region for directly held collateral.
+    expected_to_fail: >-
+      The DIRECT half of the same vocabulary, so the fix cannot be a special case
+      for one family.
+
+      EVIDENCE: `scope_phrase_spans` returns `()`; `resolve_lens` returns Direct;
+      the receipt reads `filtersApplied: ["Source Portfolio in alp_origination"],
+      population: 7126`. Measured at cd4a005.
+
+      Correct outcome: a regional breakdown over 11,035 loans.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 11035
+    expect_filters: []
