@@ -503,6 +503,32 @@ export const copy = {
     packSteps: "Steps",
     packRequired: "required",
     packOptional: "optional",
+    // The operator's own view of the client questions: readable, answerable
+    // here on the client's behalf, and honest about what is NOT editable.
+    questionsHeading: "The client questions",
+    questionsShow: "Open them",
+    questionsHide: "Close",
+    questionsClosed:
+      "Read every question this client is asked, and record answers here if you already " +
+      "hold them.",
+    questionsSave: "Save answers",
+    questionsDiscard: "Discard changes",
+    questionsSaved: "Saved. The answers are on the case.",
+    questionsHint:
+      "Answers are recorded exactly as typed, against the same keys a client's own " +
+      "submission would use.",
+    questionsPending: (n: number) =>
+      n === 1 ? "1 answer not yet saved" : `${n} answers not yet saved`,
+    questionsRequired: "Required",
+    questionsOptional: "Optional",
+    questionsUnanswered: "— not answered —",
+    questionsLocked: "Not open yet, and will appear once the case says so:",
+    questionsKnownHeading: "Already known — not asked again",
+    questionsKnownHelp:
+      "Trakt worked these out or was told them. To correct one, say so in the " +
+      "conversation: the change is read, put to you, and recorded with who said it.",
+    yes: "Yes",
+    no: "No",
     packConfirmHeading: "Already known — check these are right",
     packConfirmNote:
       "Trakt worked these out or was told them. They are pre-populated, not asked again.",

@@ -71,9 +71,9 @@ export function Architecture() {
           <li key={step.title} className="relative">
             <Reveal delay={index * 60} className="h-full">
               <Card className="h-full">
-                <h3 className="text-[15px] font-semibold text-ink-100">{step.title}</h3>
+                <h3 className="text-subhead font-semibold text-ink-100">{step.title}</h3>
                 {step.copy ? (
-                  <p className="mt-2 text-sm leading-relaxed text-ink-400">{step.copy}</p>
+                  <p className="mt-2 text-body leading-relaxed text-ink-400">{step.copy}</p>
                 ) : null}
               </Card>
             </Reveal>
@@ -89,8 +89,8 @@ export function Architecture() {
         <li>
           <Reveal delay={120} className="h-full">
             <Card className="h-full">
-              <h3 className="text-[15px] font-semibold text-ink-100">Every output</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-400">
+              <h3 className="text-subhead font-semibold text-ink-100">Every output</h3>
+              <p className="mt-2 text-body leading-relaxed text-ink-400">
                 Portfolio, control, reporting, investigation and delivery.
               </p>
             </Card>
@@ -122,7 +122,7 @@ export function ForwardControls() {
           eyebrow="Risk & controls"
           title="Turn portfolio requirements into live controls."
         />
-        <p className="mt-4 max-w-[72ch] text-lg font-medium leading-relaxed text-ink-100">
+        <p className="mt-4 max-w-[72ch] text-subhead font-medium leading-relaxed text-ink-100">
           Know what is breached today — and what the portfolio is moving toward.
         </p>
         {/* Carried here from the deleted delivery section. It is the one
@@ -132,7 +132,7 @@ export function ForwardControls() {
             that produces the finding rather than in a list of channels. The
             claim is the Teams outbox (`trakt_notifications/`), not Copilot.
             Asserted to appear exactly once on the page. */}
-        <p className="mt-3 max-w-[72ch] text-sm leading-relaxed text-ink-400">
+        <p className="mt-3 max-w-[72ch] text-body leading-relaxed text-ink-400">
           Approved risk findings are pushed to Teams.
         </p>
       </Reveal>
@@ -145,7 +145,7 @@ export function ForwardControls() {
             poster="/controls-demo-poster.png"
             webmSrc="/controls-demo.webm"
             mp4Src="/controls-demo.mp4"
-            description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the expected forecast and the full pipeline, ending on a projected breach horizon."
+            description="Demonstration: clauses in a portfolio covenant schedule extract are identified and structured into proposed controls, reviewed and activated by a person, then monitored against the funded book, the base forecast and the downside forecast, ending on a projected breach horizon."
             caption="From documented requirement to live monitoring."
             fallback={<ControlPreview />}
             plateId="controls"
@@ -166,8 +166,8 @@ export function ForwardControls() {
  */
 const CONTROL_STATES = [
   { label: "Funded book", value: 24.1, status: "Pass", tone: "mint" },
-  { label: "Expected forecast", value: 28.7, status: "Warning", tone: "amber" },
-  { label: "Including full pipeline", value: 31.4, status: "Projected breach", tone: "rose" },
+  { label: "Base forecast", value: 28.7, status: "Warning", tone: "amber" },
+  { label: "Downside forecast", value: 31.4, status: "Projected breach", tone: "rose" },
 ] as const;
 
 const CONTROL_SCALE = 36;
@@ -195,18 +195,18 @@ export function ControlPreview() {
       data-state-colour="control-preview"
       className="rounded-2xl border border-line bg-navy-900/80 p-4 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.9)] sm:p-5"
       role="img"
-      aria-label="Preview of a concentration control evaluated against the funded book, the expected forecast and the full pipeline"
+      aria-label="Preview of a concentration control evaluated against the funded book, the base forecast and the downside forecast"
     >
-      <p className="border-b border-line pb-3 text-xs font-medium text-ink-300">
+      <p className="border-b border-line pb-3 text-small font-medium text-ink-300">
         Concentration controls
       </p>
 
       <div className="pt-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-[13px] font-semibold text-ink-100">
+          <h3 className="text-body font-semibold text-ink-100">
             Geographic concentration — any single region
           </h3>
-          <p className="shrink-0 text-[11px] text-ink-400">
+          <p className="shrink-0 text-small text-ink-400">
             Limit ≤ {CONTROL_LIMIT}% of balance
           </p>
         </div>
@@ -215,10 +215,10 @@ export function ControlPreview() {
           {CONTROL_STATES.map((state) => (
             <div key={state.label}>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-[11px] text-ink-300">{state.label}</dt>
+                <dt className="text-small text-ink-300">{state.label}</dt>
                 <dd
                   className={cx(
-                    "shrink-0 text-[12px] font-semibold tabular-nums",
+                    "shrink-0 text-small font-semibold tabular-nums",
                     TONE_TEXT[state.tone],
                   )}
                 >
@@ -240,7 +240,7 @@ export function ControlPreview() {
           ))}
         </dl>
 
-        <p className="mt-4 border-t border-line-soft pt-2.5 text-[11px] text-ink-300">
+        <p className="mt-4 border-t border-line-soft pt-2.5 text-small text-ink-300">
           Projected breach horizon: <span className="font-semibold text-ink-100">Nov 2026</span>
         </p>
       </div>
@@ -303,7 +303,7 @@ export function Governance() {
           eyebrow="Governance"
           title="Deterministic underneath. Governed throughout."
         />
-        <p className="mt-4 max-w-[72ch] text-lg font-medium leading-relaxed text-ink-100">
+        <p className="mt-4 max-w-[72ch] text-subhead font-medium leading-relaxed text-ink-100">
           Every figure is reconciled by construction rather than by comparison.
         </p>
       </Reveal>
@@ -319,8 +319,8 @@ export function Governance() {
           <li key={property.title}>
             <Reveal delay={index * 60} className="h-full">
               <Card className="flex h-full flex-col">
-                <h3 className="text-[15px] font-semibold text-ink-100">{property.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-400">{property.copy}</p>
+                <h3 className="text-subhead font-semibold text-ink-100">{property.title}</h3>
+                <p className="mt-2 text-body leading-relaxed text-ink-400">{property.copy}</p>
               </Card>
             </Reveal>
           </li>
@@ -330,7 +330,7 @@ export function Governance() {
       {/* One line, answering the extensibility objection. The agentic
           direction is cut: the Delivery Model tiles show it, in grey. */}
       <Reveal delay={120}>
-        <p className="mt-8 max-w-[72ch] text-sm leading-relaxed text-ink-500">
+        <p className="mt-8 max-w-[72ch] text-body leading-relaxed text-ink-500">
           New asset classes are added through configuration, not a rebuild.
         </p>
       </Reveal>

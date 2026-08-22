@@ -81,6 +81,10 @@ class Field:
     evidence_required: bool = False
     sensitive: bool = False
     amendable: bool = True
+    #: Each mention of this field in one sentence is a separate answer rather
+    #: than a competing value for one slot. Only ``sources.dataset`` declares
+    #: it today: a book named twice is two source registrations.
+    repeated_mentions: bool = False
     regime_code: str = ""
     product: str = ""            # set for regime fields
 
@@ -126,6 +130,12 @@ class Section:
     #: exists, stated here rather than in code. Non-empty means the section is
     #: not part of the initial pack, and the text says what has to happen first.
     deferred_until: str = ""
+    #: True when a client may leave the whole section blank. Declared here
+    #: rather than inferred from every field being optional: "no field in this
+    #: section is required" and "this section is offered, not asked" are
+    #: different statements, and only the second should change how a client is
+    #: addressed.
+    optional_context: bool = False
     fields: List[Field] = field(default_factory=list)
     #: True when the section's fields come from the regime products rather than
     #: from the catalogue itself.
@@ -443,6 +453,7 @@ def load(path: Path = CATALOGUE_PATH,
             help=raw.get("help", ""),
             repeatable=bool(raw.get("repeatable")),
             deferred_until=str(raw.get("deferred_until") or "").strip(),
+            optional_context=bool(raw.get("optional_context")),
             repeatable_key=raw.get("repeatable_key", ""),
             item_label_field=raw.get("item_label_field", ""),
             min_items=int(raw.get("min_items") or 0),

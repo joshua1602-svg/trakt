@@ -37,7 +37,20 @@ from ..onboarding.catalogue import Catalogue, Field, Section, catalogue
 
 #: Confidence for a value bound by an explicit cue, versus one recognised by
 #: shape alone (an LEI in a sentence that never says "LEI").
+#: A value whose SHAPE proves it. An LEI, an email, a date, or one of a
+#: closed option list: the catalogue's own pattern or vocabulary decides
+#: whether the value is that field's, so a cued match is certain.
 CUED = 1.0
+
+#: A value with no shape of its own, bound by a cue. The FIELD is certain — the
+#: cue named it — but the value's extent is a judgement: free text runs until
+#: something ends it, and "something" is a rule rather than a proof. This is
+#: the class "the client needs weekly pipeline" fell into, where the cue was
+#: right and the value was three words of verb phrase. Graded below certainty
+#: so it reaches a human as a proposal rather than a silent write.
+INFERRED = 0.8
+
+#: A value recognised by shape alone, in a sentence that never named the field.
 SHAPE_ONLY = 0.6
 
 
@@ -55,6 +68,9 @@ class FieldRef:
     option_labels: Tuple[str, ...]
     repeatable: bool
     product: str = ""
+    #: Each mention is its own answer rather than a competing value for one
+    #: slot. The catalogue declares it; see ``sources.dataset``.
+    repeated_mentions: bool = False
 
     @property
     def path(self) -> str:
@@ -232,6 +248,58 @@ def cues_for(section: Section, f: Field) -> List[str]:
 # The catalogue, flattened
 # --------------------------------------------------------------------------- #
 
+#: Prose cues that genuinely NAME something rather than saying what a sentence
+#: is ABOUT. The rest of the prose map — "client", "lender", "book" — are topic
+#: markers, and a topic marker must not bind a value that has no shape.
+_NAMING_PROSE = frozenset({"called", "named", "they are called"})
+
+
+def label_cues(section: Section, f: Field) -> set:
+    """The cues derived from this field's OWN label and key.
+
+    These always name the field, however short they are: "Logo", "Disclaimer"
+    and "Name" are one word each and perfectly unambiguous, because they ARE
+    the field's name. Only the prose map's additions need judging.
+    """
+    out = {section.label.lower() + " " + f.label.lower(), f.label.lower(),
+           f.key.replace("_", " ").lower()}
+    a = acronym(f.label)
+    if a:
+        out.add(a.lower())
+    return {c for c in out if len(c) >= 2}
+
+
+def cue_names(section: Section, f: Field, cue: str, typed: bool) -> bool:
+    """Whether ``cue`` may bind a value that has no shape of its own.
+
+    A TYPED field can be cued by anything, because its own pattern proves the
+    value: "the client LEI is 8945…" cannot bind the wrong thing. A FREE-TEXT
+    field has no such proof — whatever follows the cue becomes the value — so
+    the cue itself has to be trustworthy.
+
+    Trustworthy means: it comes from the field's own label or key; or the prose
+    map added it as a phrase ("their reporting contact"); or it is one of the
+    few single words that genuinely announce a name.
+
+    Untrustworthy means a bare noun the prose map adds so an operator's
+    sentence reads naturally — "client", "lender", "book". Those say what a
+    sentence is ABOUT.
+
+    This is the defect it removes. "The client needs weekly pipeline" carries
+    the cue ``client``, and with nothing to constrain the value the client's
+    name became "needs weekly pipeline". The same instruction also said "a
+    mortgage lender called ERM Capital", which ``called`` reads correctly — but
+    the bare cue claimed the field first.
+
+    A sentence that names a client with no cue at all ("Onboard Northstar
+    Lending") is still read: by :mod:`.interpretation`'s shape rules, which
+    require a capitalised name run and so cannot swallow a verb phrase.
+    """
+    lowered = cue.strip().lower()
+    return (typed or " " in lowered or lowered in _NAMING_PROSE
+            or lowered in label_cues(section, f))
+
+
 @dataclass(frozen=True)
 class Candidate:
     ref: FieldRef
@@ -242,6 +310,9 @@ class Candidate:
     #: question asked two ways. A cue that names the group binds to whichever
     #: sibling the VALUE fits.
     siblings: Tuple[Tuple[FieldRef, str], ...] = ()
+    #: Whether this cue may bind a free-text value. Decided once, at
+    #: construction, by :func:`cue_names`.
+    names: bool = True
 
     @property
     def typed(self) -> bool:
@@ -264,7 +335,7 @@ def _group(key: str) -> str:
 def _candidates(version: int) -> Tuple[Candidate, ...]:
     cat = catalogue()
     refs: Dict[str, Tuple[FieldRef, Section, Field]] = {}
-    pairs: List[Tuple[FieldRef, str, Optional[str]]] = []
+    pairs: List[Tuple[FieldRef, str, Optional[str], bool]] = []
     for section in cat.sections:
         for f in section.fields:
             if not f.collected:
@@ -282,10 +353,14 @@ def _candidates(version: int) -> Tuple[Candidate, ...]:
                 label=f.label, type=f.type, validation=f.validation,
                 options=tuple(v for v, _l in options),
                 option_labels=tuple(l for _v, l in options),
-                repeatable=section.repeatable, product=f.product)
+                repeatable=section.repeatable, product=f.product,
+                repeated_mentions=bool(getattr(f, "repeated_mentions", False)))
             refs[ref.path] = (ref, section, f)
+            pattern = _value_pattern(f)
+            typed = bool(pattern) or bool(ref.options)
             for cue in cues_for(section, f):
-                pairs.append((ref, cue, _value_pattern(f)))
+                pairs.append((ref, cue, pattern,
+                              cue_names(section, f, cue, typed)))
     by_group: Dict[Tuple[str, str], List[Tuple[FieldRef, str]]] = {}
     for ref, _section, f in refs.values():
         pattern = _value_pattern(f)
@@ -293,12 +368,12 @@ def _candidates(version: int) -> Tuple[Candidate, ...]:
             by_group.setdefault((ref.section, _group(ref.key)), []).append(
                 (ref, pattern))
 
-    out = [Candidate(ref=ref, cue=cue, pattern=pattern,
+    out = [Candidate(ref=ref, cue=cue, pattern=pattern, names=names,
                      siblings=tuple(
                          s for s in by_group.get(
                              (ref.section, _group(ref.key)), [])
                          if s[0].path != ref.path))
-           for ref, cue, pattern in pairs]
+           for ref, cue, pattern, names in pairs]
     # Longest cue first, so "reporting contact email" beats "reporting
     # contact"; then typed before free text, so a shape-constrained field
     # claims a value a text field would otherwise swallow whole.
@@ -456,6 +531,9 @@ def _read_clause(clause: str, cat: Catalogue) -> List[Extracted]:
     for candidate in candidates(cat):
         if candidate.ref.path in claimed:
             continue
+        if not candidate.names:
+            # A topic marker, not a naming cue. See Candidate.names.
+            continue
         for cue_start in _cue_positions(lower, candidate.cue):
             after = clause[cue_start + len(candidate.cue):]
             hit = _value_after(after, candidate)
@@ -469,8 +547,16 @@ def _read_clause(clause: str, cat: Catalogue) -> List[Extracted]:
             if _overlaps(taken, (start, end)):
                 continue
             taken.append((start, end))
-            claimed.add(ref.path)
-            out.append(Extracted(ref=ref, value=value, confidence=CUED,
+            graded = CUED if candidate.typed else INFERRED
+            if not ref.repeated_mentions:
+                # A field whose every mention is its own answer is NOT finished
+                # once one cue has read it. "They send a funded book and a
+                # pipeline" has the cue "book" claim `pipeline`, and claiming
+                # the path here dropped `funded` entirely — one registration
+                # instead of two. The option pass below picks up the rest, and
+                # the span just taken keeps it from re-reading this one.
+                claimed.add(ref.path)
+            out.append(Extracted(ref=ref, value=value, confidence=graded,
                                  cue=candidate.cue, span=(start, end)))
             break
 
@@ -572,7 +658,9 @@ def _by_option(clause: str, cat: Catalogue, taken: List[Tuple[int, int]],
                claimed: set) -> List[Extracted]:
     out: List[Extracted] = []
     for ref in collected_fields(cat):
-        if not ref.options or ref.path in claimed:
+        if not ref.options:
+            continue
+        if ref.path in claimed and not ref.repeated_mentions:
             continue
         picked: List[str] = []
         spans: List[Tuple[int, int]] = []
@@ -587,12 +675,21 @@ def _by_option(clause: str, cat: Catalogue, taken: List[Tuple[int, int]],
                 continue
             picked.append(value)
             spans.append((m.start(), m.end()))
-            if ref.type not in MULTI_VALUED:
+            if ref.type not in MULTI_VALUED and not ref.repeated_mentions:
                 break
         if not picked:
             continue
         taken.extend(spans)
         claimed.add(ref.path)
+        if ref.repeated_mentions and ref.type not in MULTI_VALUED:
+            # One reading per mention, each keeping its own span. A list would
+            # say "this field holds several values"; these are several separate
+            # answers that happen to share a field, and the interpretation
+            # turns each into its own source registration.
+            out.extend(Extracted(ref=ref, value=one, confidence=CUED,
+                                 cue="", span=span)
+                       for one, span in zip(picked, spans))
+            continue
         value: Any = picked if ref.type in MULTI_VALUED else picked[0]
         out.append(Extracted(ref=ref, value=value, confidence=CUED,
                              cue="", span=spans[0]))

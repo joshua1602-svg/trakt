@@ -30,10 +30,10 @@ export function RefusalSection({ meta }: { meta: DemoMetaResponse }) {
 
   return (
     <div className="mt-6 max-w-4xl border-t border-line-soft pt-6">
-      <h3 className="text-balance text-xl font-semibold tracking-tight text-ink-100 sm:text-2xl">
+      <h3 className="text-balance text-headline font-semibold text-ink-100">
         Trakt declines what it cannot derive.
       </h3>
-      <p className="mt-3 max-w-[72ch] text-[15px] leading-relaxed text-ink-300">
+      <p className="mt-3 max-w-[72ch] text-body leading-relaxed text-ink-300">
         Ask either of these and watch it refuse, with the reason.
       </p>
       <ul className="mt-5 flex flex-wrap gap-2.5">
@@ -46,7 +46,7 @@ export function RefusalSection({ meta }: { meta: DemoMetaResponse }) {
                   new CustomEvent(ASK_EVENT, { detail: { id: example.id, label: example.label } }),
                 );
               }}
-              className="rounded-full border border-line bg-navy-850 px-4 py-2 text-left text-sm text-ink-100 transition-colors hover:border-peri-500"
+              className="rounded-full border border-line bg-navy-850 px-4 py-2 text-left text-body text-ink-100 transition-colors hover:border-peri-500"
             >
               {example.label}
             </button>

@@ -26,6 +26,7 @@ export function DemoPlayer({
   caption,
   fallback,
   plateId,
+  platePosition = "center",
 }: {
   /** The play-overlay button text, e.g. "Watch controls demo". */
   overlayLabel: string;
@@ -46,6 +47,19 @@ export function DemoPlayer({
    * plate at once and the guard would measure whichever came first.
    */
   plateId: string;
+  /**
+   * Where the play plate sits in the frame.
+   *
+   * `center` is the default and is what the controls poster is drawn for — its
+   * monitoring card is lifted into the upper third so a centred plate clears
+   * it. `lower` exists for the A2A player, whose poster is a real frame of the
+   * film (frame 1210) rather than a composition arranged around the plate. The
+   * film draws everything above 65% of the frame height, so the plate drops
+   * into the empty band beneath it and the still can be the genuine article.
+   * Getting a poster that the film never shows was the alternative, and it is
+   * what shipped for one pass.
+   */
+  platePosition?: "center" | "lower";
 }) {
   const [state, setState] = useState<PlayerState>("idle");
   const [failed, setFailed] = useState(false);
@@ -105,19 +119,40 @@ export function DemoPlayer({
              poster is drawn for a centred plate, with the concentration card
              lifted into the upper third so the three rows and the breach
              horizon stay clear (demo-video/src/landing/ControlsPoster.tsx). */
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div
+            className={cx(
+              "absolute flex justify-center",
+              platePosition === "lower"
+                ? /* Anchored by FRACTION of the frame, not by padding from the
+                     bottom. The plate is a fixed height while the frame scales
+                     with viewport width, so a percentage inset from the bottom
+                     pushed the plate's top edge up to 56% of a 280px frame at
+                     390 — back over the findings the move was meant to clear.
+                     Fixing the top edge at 68% holds at every width, and the
+                     plate still lands inside the frame at the narrowest. */
+                  "inset-x-0 top-[66%]"
+                : "inset-0 items-center",
+            )}
+          >
             {/* The hook sits on the visible plate, not the full-size
                 positioning container — measuring the container told the guard
                 the plate filled the frame. */}
             <div
               data-plate={plateId}
-              className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-navy-950 px-6 py-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]"
+              className={cx(
+                "flex flex-col items-center rounded-2xl border border-line bg-navy-950 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.95)]",
+                /* The lower plate is tighter because it has to fit in what the
+                   poster leaves: at 390 the frame is only 280px tall and the
+                   band below the film's content is under 100px. The centred
+                   plate has the whole frame and keeps its original padding. */
+                platePosition === "lower" ? "gap-1.5 px-5 py-3" : "gap-2 px-6 py-5",
+              )}
             >
               <button type="button" onClick={play} className={buttonStyles.primary}>
                 <PlayGlyph /> {overlayLabel}
               </button>
               {durationLabel ? (
-                <span className="text-[12px] font-medium text-ink-300">{durationLabel}</span>
+                <span className="text-small font-medium text-ink-300">{durationLabel}</span>
               ) : null}
             </div>
           </div>
@@ -184,7 +219,7 @@ export function DemoPlayer({
       )}
 
       {caption ? (
-        <figcaption className="mt-3 text-[11px] leading-relaxed text-ink-500">
+        <figcaption className="mt-3 text-small leading-relaxed text-ink-500">
           {caption}
         </figcaption>
       ) : null}

@@ -281,13 +281,13 @@ compressed all of this into the words "limit monitoring".
 | Copy | Class | Evidence |
 |---|---|---|
 | "Structure covenant and concentration requirements once. Trakt monitors them against the funded book, forecast and pipeline — showing today's position and emerging breaches." | Evidenced | `mi_agent/risk_monitor/schedule8_extractor.py` — deterministic extraction of structured limits (category, value, direction, unit, source snippet, confidence, `needs_review`) from a concentration-limit schedule; committed output `config/clients/client_001/risk_limits_extracted.yaml` (15 limits, 1 flagged for review); tested by `tests/concentration_tests/test_schedule_8.py`. Review/approval before activation: operator-approved `ActiveConfiguration` (`mi_agent/concentration_tests/store.py`, `tests/concentration_tests/test_governance.py`) and the OCC approval workflow (`operations_control/engine.py`). **Deliberate wording:** "structures … for review", never "AI reads your contracts" — extraction is deterministic, text-based and human-reviewed; PDF/DOCX parsing is a placeholder. |
-| "Every active control is evaluated three ways — against the funded book, against the expected forecast, and against the full pipeline" | Evidenced | `mi_agent/concentration_tests/forward.py` evaluates each approved test in three explicitly-labelled states: `funded`, `expected_forecast` (pipeline weighted by governed completion probability), `full_pipeline` (labelled a stress, never a prediction). Surfaced in `frontend/mi-agent-ui/src/components/risk/ConcentrationDetailPanel.tsx`, `mi_agent_pptx/concentration.py` and the Teams insight cards. |
+| "Every active control is evaluated three ways — against the funded book, against the base forecast, and against the downside forecast" | Evidenced | `mi_agent/concentration_tests/forward.py` evaluates each approved test in three explicitly-labelled states: `funded`, `expected_forecast` (pipeline weighted by governed completion probability), `full_pipeline` (labelled a stress, never a prediction). Surfaced in `frontend/mi-agent-ui/src/components/risk/ConcentrationDetailPanel.tsx`, `mi_agent_pptx/concentration.py` and the Teams insight cards. |
 | "…with the projected breach horizon when a limit is approaching." | Evidenced | `expected_breach_horizon` and `pipeline_drivers` in `mi_agent/concentration_tests/forward.py`; `identify_emerging_risks`. |
 | "Know what is breached today — and what the portfolio is moving toward." | Positioning | The commercial statement of the three-state evaluation above. Carries the green accent as the page's key forward-risk claim. |
 | The requirement → reviewed → active lifecycle | Evidenced | The extractor → review → approved-configuration → evaluation chain above. **Pass 4 removed the static path-chips row**: the lifecycle is carried inside the demo itself (its review/activation scene), so it is not stated twice. Activation remains visibly a human decision in the film. |
 | Demo heading: "See a portfolio requirement become a live control." · caption "From documented requirement to live monitoring. Figures illustrative." | Positioning / Illustrative | The demo component's own label ("Risk & controls demo") and caption; the illustrative provenance stays in DOM text as well as in the film's burned-in stamp. |
 | **Demo behaviour: user-started, never autoplaying, never looping** | Demonstration | `DemoPlayer.tsx`: poster + "Watch controls demo" overlay (`~18 sec`), play/pause/restart controls, a progress bar, and "Watch again" on completion. `preload="none"` — the asset costs nothing until requested. Reduced-motion visitors see no motion they did not ask for; the static `ControlPreview` renders only if no source is playable. **Pass 11 moved the transport out of the frame.** It had been pinned across the bottom of the picture for the whole run, and the A2A film draws to the frame edge, so its closing lines were covered from the moment play was pressed; the completion state was worse, putting a scrim and a centred button over the last frame — which, for a demo that ends on its assessment, is the frame most worth reading. Auto-hiding was rejected: on a phone there is no hover, so the controls would return only by tapping the thing you are trying to watch. Cost is ~40px of layout below the frame while playing. **Guarded by measurement** — the progress bar's box must not overlap the video's. |
-| Control preview: Geographic concentration ≤ 30% — Funded 24.1% Pass · Expected forecast 28.7% Warning · Including full pipeline 31.4% Projected breach · horizon Nov 2026 · Single obligor 6.2% Pass | Illustrative | The **workflow** depicted is live (rows above); the **figures** are not engine output and the card is labelled "Illustrative" on the page. This is the single sanctioned exception to "every number on the page comes from the engine" — see the Excluded list. Inside this product depiction the product's RAG semantics apply (mint pass / amber warning / rose projected breach) — documented in `app/globals.css`. |
+| Control preview: Geographic concentration ≤ 30% — Funded 24.1% Pass · Base forecast 28.7% Warning · Downside forecast 31.4% Projected breach · horizon Nov 2026 · Single obligor 6.2% Pass | Illustrative | The **workflow** depicted is live (rows above); the **figures** are not engine output and the card is labelled "Illustrative" on the page. This is the single sanctioned exception to "every number on the page comes from the engine" — see the Excluded list. Inside this product depiction the product's RAG semantics apply (mint pass / amber warning / rose projected breach) — documented in `app/globals.css`. |
 
 ### The demo loop (`/controls-demo.webm` + `/controls-demo.mp4`)
 
@@ -307,7 +307,18 @@ same end state.
 | "6 controls identified · 1 flagged for review" | Evidenced (shape) | Mirrors the shipped extractor output shape — `config/clients/client_001/risk_limits_extracted.yaml` carries 15 limits with 1 `needs_review`. The counts on screen are illustrative. |
 | Closing line: "Know where the portfolio stands today — and what it's moving toward." | Positioning | Set in the page's heading tone (`ink-100`), not the accent — the final frame reads as product UI, and the risk colours stay inside the statuses and bars. The section's own accent line above the loop is unchanged. |
 | Identified → Reviewed → Activated, with "Human review before activation — nothing goes live unapproved" | Evidenced | Operator-approved `ActiveConfiguration` (`mi_agent/concentration_tests/store.py`, `tests/concentration_tests/test_governance.py`); OCC approval workflow (`operations_control/engine.py`). Nothing in the loop activates itself. |
-| Funded book / expected forecast / full pipeline evaluation with projected breach horizon | Evidenced (capability), Illustrative (figures) | `mi_agent/concentration_tests/forward.py` — the three labelled states and `expected_breach_horizon`. The 24.1 / 28.7 / 31.4 / Nov 2026 figures are illustrative, stated in the caption ("Figures illustrative") and the burned-in stamp. |
+| Funded book / base forecast / downside forecast evaluation with projected breach horizon | Evidenced (capability), Illustrative (figures) | `mi_agent/concentration_tests/forward.py` — the three labelled states and `expected_breach_horizon`. The 24.1 / 28.7 / 31.4 / Nov 2026 figures are illustrative, stated in the caption ("Figures illustrative") and the burned-in stamp. |
+
+
+**Renamed in Pass 16.** The rows were "Expected forecast" and "Including full
+pipeline". Those named *what was included* — the expected pipeline, then the
+whole pipeline — which is how the engine thinks about it and not how a credit
+committee does. "Base forecast" and "Downside forecast" name the *scenario*,
+which is the vocabulary the reader already has, and the three rows now read as
+one escalating series rather than as two inclusion rules and a verdict. The
+figures, the limit and the RAG states are unchanged; only the labels moved. The
+film and its poster were re-rendered, because the labels are burned into every
+frame.
 | **"Illustrative · synthetic data", burned into every frame — RETAINED DELIBERATELY** | Illustrative | Do not remove this in a later pass; it was proposed for removal as duplicative caveat noise and deliberately kept. It is **not** the same claim as the query demo's amber "Synthetic data" pill. The pill says the *portfolio* is synthetic while the figures are genuine engine output; this stamp says the *figures themselves* (24.1 / 28.7 / 31.4 / Nov 2026) are invented for the film. On a page whose claims are deterministic, traceable and reconciled by construction, presenting invented numbers as system output would be a real honesty cost. The `ControlPreview` fallback badge was redundant with it and is gone; this one stays. |
 | **Not depicted / not claimed** | — | No autonomous activation, no legal interpretation, no guaranteed extraction of every covenant type, no real-time refresh, no PDF/DOCX parsing (the document is shown as an extract, not a file format), no client data. |
 
@@ -544,6 +555,79 @@ deployment arrangement.
 
 ---
 
+## The type scale — a standing rule
+
+Adopted in Pass 15 after an audit of the **rendered** page — computed sizes on
+real elements, not classes read from source — found **twelve distinct sizes in
+twenty-one size-and-weight combinations**: 48, 30, 24, 18, 17, 16, 15, 14, 13,
+12, 11, 10. Fourteen pixels appeared on 41 elements and twelve on 30, each
+doing several unrelated jobs. Nothing chose those sizes; they accumulated one
+component at a time, which is why the page read as noisy rather than dense.
+
+Five tokens replace them, declared in `app/globals.css`:
+
+| Token | Size | Job |
+|---|---|---|
+| `text-display` | clamp 36 → 44 | The hero headline. Nothing else. |
+| `text-headline` | clamp 24 → 28 | Every section heading, the refusal heading, and the demo's KPI figures. |
+| `text-subhead` | 18 | Claim lines, card titles, agent names, the wordmark, the sponsor total. |
+| `text-body` | 14 | All running copy, navigation, tile bodies, list items. |
+| `text-small` | 12 | Eyebrows, captions, table labels, disclosures. |
+
+**Display and headline clamp rather than taking an `sm:` step.** The old pairs
+(`text-4xl sm:text-5xl`, `text-2xl sm:text-3xl`) were two tokens wearing one
+name, and they are why the audit counted 48 *and* 36 as separate sizes. A clamp
+is one token that happens to be smaller on a phone. Measured: 44/28 from 834 up,
+36/24 at 390.
+
+**Weight is deliberately not part of the scale.** A token fixes the size;
+`font-medium` and `font-semibold` stay component decisions. A scale owning both
+would need twenty tokens to say what five plus two utilities already say.
+
+**The base size is a token too.** `body { font-size: var(--text-body) }`,
+because the browser default leaked 16px through five elements that carried no
+class — the platform diagram's arrow glyphs and the lead form's honeypot label
+— and the audit counted a sixth size no component had asked for.
+
+**Enforced, and the enforcement was tested.** `npm run lint` now runs
+`scripts/lint-type.mjs`, which fails on an arbitrary value (`text-[15px]`), on
+Tailwind's own scale (`text-sm`, `text-2xl`), and on a token-shaped typo
+(`text-subhed`) that would otherwise render at the inherited size with nothing
+looking wrong. All three were reintroduced and watched to fail before the
+result was trusted; the file passes with 49 files and five tokens.
+
+### What visibly changed
+
+| Element | Was | Now |
+|---|---|---|
+| Card titles — capability, governance, platform, agent tiles | 15 / 16 | **18** |
+| Section headings | 30 | 28 |
+| The refusal heading | 24 | 28 |
+| Hero headline | 48 | 44 |
+| Section intros, tile bodies, nav | 15 / 14 / 13 | 14 |
+| Eyebrows, captions, the "sold" tag, table labels | 12 / 11 / 10 | 12 |
+
+Card titles moving up is the largest single change and was signed off as such.
+The page is 5,728px at 1440 against 5,753px before — the scale is not the thing
+that changes page length.
+
+### The reveal bug the scale exposed
+
+Growing the agent section past a viewport height made an existing fault
+reproducible: `Reveal` uses an `IntersectionObserver`, and an observer only
+reports when intersection **changes**. An element jumped over rather than
+scrolled through — an anchor, a restored scroll position, find-in-page — went
+from not-intersecting-below to not-intersecting-above without ever reporting,
+and stayed at opacity 0 for the rest of the session. The existing failsafe could
+not help: the observer's first callback had already cancelled it.
+
+Fixed by expanding the observer's root upward without limit
+(`rootMargin: "999999px 0px 10% 0px"`), so everything behind the reader is
+inside the root and the jump is a change the observer does report. A first
+attempt — revealing when `boundingClientRect.bottom <= 0` inside the callback —
+did not work, and could not: there was no callback to check.
+
+---
 ## The colour system — a standing rule
 
 Adopted in Pass 9 after an audit found **green doing six unrelated jobs**:

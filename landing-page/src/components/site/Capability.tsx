@@ -116,12 +116,12 @@ export function Capability() {
           >
             <Reveal delay={index * 60} className="h-full">
               <Card className="h-full">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-peri-400">
+                <h3 className="text-small font-semibold uppercase tracking-[0.16em] text-peri-400">
                   {group.label}
                 </h3>
                 <ul className="mt-4 space-y-2">
                   {group.items.map((item) => (
-                    <li key={item} className="text-sm leading-snug text-ink-300">
+                    <li key={item} className="text-body leading-snug text-ink-300">
                       {item}
                     </li>
                   ))}

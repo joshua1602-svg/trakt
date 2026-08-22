@@ -371,6 +371,14 @@ class OccAgentService:
         if interpretation.delivery:
             plan.cadence = str(interpretation.delivery.get("cadence") or "")
             plan.steps["_delivery"] = dict(interpretation.delivery)
+        if interpretation.stream_delivery:
+            plan.stream_cadence = {
+                stream: str(payload.get("cadence") or "")
+                for stream, payload in interpretation.stream_delivery.items()
+                if payload.get("cadence")}
+            plan.steps["_stream_delivery"] = {
+                stream: dict(payload) for stream, payload
+                in interpretation.stream_delivery.items()}
         return plan
 
     def answer_from_instruction(self, agent_case: AgentCase, *,
@@ -397,6 +405,7 @@ class OccAgentService:
         run = agent_case.run
         case = agent_case.case
         delivery = dict((plan.steps or {}).pop("_delivery", {}) or {})
+        per_stream = dict((plan.steps or {}).pop("_stream_delivery", {}) or {})
         written: List[str] = []
         for step in STEPS:
             payload = (plan.steps or {}).get(step)
@@ -416,8 +425,9 @@ class OccAgentService:
                 case = self.onboarding.add_pipeline_source(
                     case_id=case.case_id, portfolio_id=pid, by=actor)
                 written.append("pipeline_book")
-        if delivery:
-            case = self._apply_delivery(case, delivery, actor)
+        if delivery or per_stream:
+            case = self._apply_delivery(case, delivery, actor,
+                                        per_stream=per_stream)
             written.append("sources")
         if plan.reporting_period:
             run.reporting_period = plan.reporting_period
@@ -517,6 +527,13 @@ class OccAgentService:
                       for stream in plan.streams]
         if plan.reporting_period:
             lines.append(f"- Reporting period: {plan.reporting_period}")
+        uncertain = plan.uncertain
+        if uncertain:
+            # Named separately from what was read with certainty. An operator
+            # scanning a wall of "Recorded:" lines has no way to tell which one
+            # Trakt guessed at, and the guess is the line worth reading.
+            lines.append("Read, but not certain — please check:")
+            lines += [f"- {change.sentence()}" for change in uncertain]
         if plan.unrecognised:
             lines.append("I could not read:")
             lines += [f"- \"{fragment}\"" for fragment in plan.unrecognised]
@@ -529,11 +546,21 @@ class OccAgentService:
         return "\n".join(lines) or "Nothing changed."
 
     def _apply_delivery(self, case: OnboardingCase, values: Dict[str, Any],
-                        actor: str) -> OnboardingCase:
-        """Apply delivery answers to every delivery Trakt has derived.
+                        actor: str, *,
+                        per_stream: Optional[Dict[str, Any]] = None
+                        ) -> OnboardingCase:
+        """Apply delivery answers to the deliveries Trakt has derived.
 
         Deliveries are derived from the portfolios, so "they send monthly by
-        SFTP" is a statement about all of them, not about one.
+        SFTP" is a statement about all of them, not about one — and that is
+        what ``values`` carries.
+
+        ``per_stream`` is what a single registration said about ITSELF: "a
+        weekly pipeline" answers for the pipeline and for nothing else. It is
+        applied after the blanket and overrides it, because a statement about
+        one book is more specific than a statement about every book. Before
+        this existed, one cadence field held both answers and every
+        registration got whichever was read last.
         """
         sources = [dict(s) for s in case.items("sources")]
         if not sources:
@@ -541,11 +568,17 @@ class OccAgentService:
         # A source's identity — which book, which dataset — is never a blanket
         # answer. "They deliver monthly" applies to every registration;
         # "a funded book" names ONE stream and is handled as one.
-        values = {k: v for k, v in values.items()
-                  if k not in ("dataset", "portfolio_id", "source_key")}
+        blanket = {k: v for k, v in (values or {}).items()
+                   if k not in ("dataset", "portfolio_id", "source_key")}
         for source in sources:
-            source.update({k: v for k, v in values.items() if v not in
+            source.update({k: v for k, v in blanket.items() if v not in
                            (None, "", [])})
+            own = (per_stream or {}).get(str(source.get("dataset") or ""))
+            if own:
+                source.update({k: v for k, v in own.items()
+                               if k not in ("dataset", "portfolio_id",
+                                            "source_key")
+                               and v not in (None, "", [])})
         return self.onboarding.save_step(case_id=case.case_id, step="sources",
                                          payload={"sources": sources}, by=actor)
 
@@ -577,6 +610,50 @@ class OccAgentService:
                     decision_basis="the outstanding client checklist was "
                                    "turned into an information request",
                     detail={"items": len(chosen)})
+        return agent_case
+
+    def clarifications_available(self, agent_case: AgentCase
+                                 ) -> Dict[str, Any]:
+        """Phase two: what a delivered file has now made askable.
+
+        Read-only. Returns the deferred questions that are still outstanding,
+        with the evidence to put them against, plus a short account of what was
+        analysed. Empty until a file has arrived.
+        """
+        from . import clarification as _clarification
+        artefacts = agent_case.run.received_artefacts
+        items = _clarification.outstanding(agent_case.case, artefacts,
+                                           cat=self.onboarding.catalogue)
+        return {"items": items,
+                "summary": _clarification.summary(items, artefacts)}
+
+    def request_clarifications(self, agent_case: AgentCase, *, actor: str,
+                               note: str = "", due_date: str = "") -> AgentCase:
+        """Ask the deferred questions, now that there is a file to ask about.
+
+        Deliberately routed through :meth:`request_client_information` rather
+        than creating a request of its own: the deferred questions are ordinary
+        information requests, and they get the same record, the same status
+        transitions and the same audit as an operator's. There is no second
+        channel to a client, and no gate is skipped.
+        """
+        available = self.clarifications_available(agent_case)
+        items = available["items"]
+        if not items:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_CLARIFY",
+                "There is nothing to clarify yet. Trakt asks these once it has "
+                "a file to ask about, and either no file has arrived or it "
+                "answered everything itself.", http_status=409)
+        agent_case = self.request_client_information(
+            agent_case, actor=actor, items=items, due_date=due_date,
+            note=note or "Clarification after the first delivery.")
+        self._audit(agent_case.run, "clarifications_requested",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis="the questions the catalogue defers until a "
+                                   "representative file has been analysed",
+                    detail=available["summary"])
         return agent_case
 
     def send_request_by_email(self, agent_case: AgentCase, *,
@@ -1000,6 +1077,47 @@ class OccAgentService:
                     detail={"intended_live_uri": artefact.intended_live_uri,
                             "execution_status": "simulated_only",
                             "sha256": artefact.sha256})
+        return agent_case
+
+    def generate_synthetic_answers(self, agent_case: AgentCase, *,
+                                   actor: str) -> AgentCase:
+        """Answer THIS case's own outstanding client questions, synthetically.
+
+        The counterpart to :meth:`generate_synthetic_response`, which makes up
+        files. At "receive client responses" an operator is looking at a
+        checklist of unanswered questions, and generating a loan tape does
+        nothing for it — the two are different acts and this is the second one.
+
+        The answers are derived from the served form's own declarations and
+        then submitted through :meth:`submit_client_response`, so they take the
+        identical validated path a real client's answers take: authoritative
+        keys, checked against the form actually served, written by
+        ``OnboardingService.save_step`` exactly as submitted. Nothing here
+        writes to a case directly, and no validation is skipped.
+        """
+        from . import fixtures as _fixtures
+
+        # Deliberately NOT gated on the run's state. A client may answer at any
+        # point, so `submit_client_response` is ungated too — and this must not
+        # be harder to reach than the path it stands in for. `ACTION_ANSWER` is
+        # a different thing: answering an EXCEPTION raised during a run.
+        form = self.client_form(agent_case)
+        answers = _fixtures.generate_answers(
+            form, client_name=self.facts(agent_case).client_name)
+        if not answers:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_ANSWER",
+                "There is nothing outstanding for Trakt to answer on this "
+                "case.", http_status=409)
+        agent_case = self.submit_client_response(
+            agent_case, actor=actor, response=answers)
+        self._audit(agent_case.run, "synthetic_answers_generated",
+                    actor_type=ACTOR_AGENT, actor=actor,
+                    classification=EXEC_SYNTHETICALLY_EXECUTED,
+                    decision_basis="answers derived from the served form's own "
+                                   "declared types and options; submitted "
+                                   "through the ordinary client-response path",
+                    detail={"answers": len(answers)})
         return agent_case
 
     def generate_synthetic_response(self, agent_case: AgentCase, *,

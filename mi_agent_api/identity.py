@@ -4,10 +4,16 @@ The one place a verified platform identity becomes a trusted context. Domain and
 application code never see a header, a token or a FastAPI ``Request``; they see
 an :class:`~trakt_core.context.ExecutionContext`.
 
-Two identity mechanisms exist today and both land here:
+Three identity mechanisms exist today and all land here:
 
-  * **React** — Azure Static Web Apps / App Service Easy Auth performs the login
-    and injects ``X-MS-CLIENT-PRINCIPAL``. ``auth.parse_principal`` decodes it.
+  * **React (Static Web Apps)** — Azure Static Web Apps / App Service Easy Auth
+    performs the login and injects ``X-MS-CLIENT-PRINCIPAL``.
+    ``auth.parse_principal`` decodes it. This path carries no ``tid``, so it
+    resolves no organisation; it is the one being migrated away from.
+  * **React (Entra bearer)** — the SPA signs the user in against
+    ``/organizations`` with MSAL and sends an access token for the MI API, which
+    ``react_auth`` validates. Carries a verified ``tid``/``oid``, so it resolves
+    an organisation and a named individual like every other verified channel.
   * **Copilot** — a Microsoft Entra bearer token validated against the directory
     JWKS by ``copilot_auth``.
 
@@ -57,7 +63,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Tuple
 
 from trakt_core.context import (
     ACTOR_SERVICE,
@@ -99,11 +105,28 @@ AZURE_AUTH_ENABLED_ENV = "WEBSITE_AUTH_ENABLED"
 #: the principal header. Only consulted in Azure; never a way to disable auth.
 TRUST_PLATFORM_AUTH_ENV = "MI_AGENT_TRUST_PLATFORM_AUTH"
 
+#: Named-user licensing for the dashboard bearer path: when set, a signed-in user
+#: with no registration in ``config/principals.yaml`` is refused even if their
+#: directory has never been enumerated. Default off, because turning it on before
+#: the registry is populated refuses everyone — see
+#: :func:`context_from_react_principal`.
+REQUIRE_PRINCIPAL_ENV = "TRAKT_MI_REACT_REQUIRE_PRINCIPAL"
+
 _TRUE = ("1", "true", "yes", "on")
 
 
 def _flag(name: str) -> bool:
     return (os.environ.get(name) or "").strip().lower() in _TRUE
+
+
+def requires_registered_principal() -> bool:
+    """Whether the dashboard bearer path demands a registered named user.
+
+    See :data:`REQUIRE_PRINCIPAL_ENV`. Exposed as a function (rather than read at
+    import) so a deployment can flip it without a restart, and so ``/health`` can
+    state the posture.
+    """
+    return _flag(REQUIRE_PRINCIPAL_ENV)
 
 
 def platform_auth_status() -> dict:
@@ -363,6 +386,87 @@ def context_from_agent_principal(
     )
 
 
+def _resolve_who_is_asking(
+    microsoft_tenant_id: Optional[str],
+    microsoft_object_id: Optional[str],
+    *,
+    request_id: Optional[str],
+    organisation_registry: Optional[OrganisationRegistry],
+    entitlement_store: Optional[EntitlementStore],
+    principal_registry: Optional[PrincipalRegistry],
+    require_registered_principal: bool = False,
+) -> Tuple[Optional[OrganisationRecord], Optional[PrincipalBinding],
+           Optional[ResolvedEntitlements]]:
+    """Organisation, principal binding and entitlements for one verified identity.
+
+    Shared by every channel that carries a **signature-verified** directory — the
+    Copilot bearer path and the React bearer path — because the order of these
+    checks is the security decision and must not exist twice. Callers differ only
+    in what they do with the result and in ``require_registered_principal``.
+
+    ``require_registered_principal`` closes the one gap the per-directory opt-in
+    leaves for a named-user product: by default a directory with no registered
+    individuals is not principal-gated at all (Stage 1 behaviour, preserved so
+    registering nobody cannot lock a directory out), and with this set an
+    unregistered individual is refused even in a directory nobody has enumerated.
+    """
+    # WHICH PERSON. Checked only for a directory that has registered
+    # individuals, so a directory nobody has enumerated behaves exactly as it
+    # did in Stage 1. A disabled individual is refused HERE — before an
+    # organisation is resolved — so a departed employee cannot reach their
+    # (still entitled) employer's grants.
+    binding = resolve_principal(
+        microsoft_tenant_id, microsoft_object_id,
+        registry=principal_registry, request_id=request_id)
+
+    if binding is None and require_registered_principal:
+        # Named-user licensing, fail closed: being able to sign in to an accepted
+        # Microsoft directory is not entitlement to Trakt. ``resolve_principal``
+        # already refused an unregistered user in a GATED directory; this refuses
+        # one in a directory that has simply never been enumerated.
+        raise TraktError(
+            ErrorCode.PRINCIPAL_NOT_REGISTERED,
+            "This account is not registered as a Trakt user.",
+            request_id=request_id,
+            details={"microsoft_tenant_id": microsoft_tenant_id})
+
+    organisation = resolve_organisation(
+        microsoft_tenant_id, registry=organisation_registry, request_id=request_id)
+
+    # A binding is the more specific statement of who is asking, so where one
+    # exists it decides the organisation. It can only ever CONFIRM or NARROW:
+    # a binding naming a different organisation from the directory's is a
+    # contradiction in server-side config, and contradictory config is refused
+    # rather than resolved in either direction.
+    if binding is not None:
+        if organisation is not None and \
+                binding.organisation_id != organisation.organisation_id:
+            logger.error(
+                "principal %s is bound to organisation %s but its directory "
+                "maps to %s", binding.microsoft_object_id,
+                binding.organisation_id, organisation.organisation_id)
+            raise TraktError(
+                ErrorCode.PRINCIPAL_NOT_REGISTERED,
+                "This user's Trakt registration is inconsistent and cannot be "
+                "used until an administrator corrects it.",
+                request_id=request_id)
+        if organisation is None:
+            organisation = (organisation_registry
+                            or load_organisation_registry()).get(
+                                binding.organisation_id)
+
+    # MAY THEY. Resolved once, here, and frozen onto the context — so no
+    # capability downstream can widen its own authority, and nothing has to
+    # remember to look grants up again. ``None`` whenever there is no
+    # organisation or no entitlement config, which is every deployment today.
+    entitlements: Optional[ResolvedEntitlements] = None
+    if organisation is not None:
+        entitlements = resolve_entitlements(organisation.organisation_id,
+                                            store=entitlement_store)
+
+    return organisation, binding, entitlements
+
+
 def context_from_copilot_principal(
     principal: Any,
     *,
@@ -399,48 +503,14 @@ def context_from_copilot_principal(
     # nothing downstream has to remember to check.
     microsoft_tenant_id = normalise_directory_id(getattr(principal, "tenant_id", None))
 
-    # WHICH PERSON. Checked only for a directory that has registered
-    # individuals, so a directory nobody has enumerated behaves exactly as it
-    # did in Stage 1. A disabled individual is refused HERE — before an
-    # organisation is resolved — so a departed employee cannot reach their
-    # (still entitled) employer's grants.
-    binding = resolve_principal(
-        microsoft_tenant_id, normalise_object_id(getattr(principal, "subject", None)),
-        registry=principal_registry, request_id=request_id)
-
-    organisation = resolve_organisation(
-        microsoft_tenant_id, registry=organisation_registry, request_id=request_id)
-
-    # A binding is the more specific statement of who is asking, so where one
-    # exists it decides the organisation. It can only ever CONFIRM or NARROW:
-    # a binding naming a different organisation from the directory's is a
-    # contradiction in server-side config, and contradictory config is refused
-    # rather than resolved in either direction.
-    if binding is not None:
-        if organisation is not None and \
-                binding.organisation_id != organisation.organisation_id:
-            logger.error(
-                "principal %s is bound to organisation %s but its directory "
-                "maps to %s", binding.microsoft_object_id,
-                binding.organisation_id, organisation.organisation_id)
-            raise TraktError(
-                ErrorCode.PRINCIPAL_NOT_REGISTERED,
-                "This user's Trakt registration is inconsistent and cannot be "
-                "used until an administrator corrects it.",
-                request_id=request_id)
-        if organisation is None:
-            organisation = (organisation_registry
-                            or load_organisation_registry()).get(
-                                binding.organisation_id)
-
-    # MAY THEY. Resolved once, here, and frozen onto the context — so no
-    # capability downstream can widen its own authority, and nothing has to
-    # remember to look grants up again. ``None`` whenever there is no
-    # organisation or no entitlement config, which is every deployment today.
-    entitlements: Optional[ResolvedEntitlements] = None
-    if organisation is not None:
-        entitlements = resolve_entitlements(organisation.organisation_id,
-                                            store=entitlement_store)
+    organisation, _binding, entitlements = _resolve_who_is_asking(
+        microsoft_tenant_id,
+        normalise_object_id(getattr(principal, "subject", None)),
+        request_id=request_id,
+        organisation_registry=organisation_registry,
+        entitlement_store=entitlement_store,
+        principal_registry=principal_registry,
+    )
 
     return ExecutionContext(
         tenant_id=tenant_id,
@@ -451,6 +521,94 @@ def context_from_copilot_principal(
         request_id=request_id or new_request_id(),
         correlation_id=correlation_id,
         actor_label=getattr(principal, "name", None),
+        organisation_id=organisation.organisation_id if organisation else None,
+        microsoft_tenant_id=microsoft_tenant_id,
+        entitlements=entitlements,
+    )
+
+
+def context_from_react_principal(
+    principal: Any,
+    *,
+    tenant_id: str,
+    channel: str = CHANNEL_REACT,
+    request_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+    organisation_registry: Optional[OrganisationRegistry] = None,
+    entitlement_store: Optional[EntitlementStore] = None,
+    principal_registry: Optional[PrincipalRegistry] = None,
+    require_registered_principal: Optional[bool] = None,
+) -> ExecutionContext:
+    """Build a context from a validated **dashboard** bearer principal.
+
+    The React counterpart to :func:`context_from_copilot_principal`, and the
+    reason :func:`context_from_principal` exists alongside it: that function
+    serves the Static Web Apps header, which carries no ``tid`` and therefore no
+    organisation identity. A dashboard user arriving with an Entra access token
+    does carry one — verified by ``react_auth`` — so this path resolves who is
+    asking exactly as every other verified-directory channel does.
+
+    Three properties are deliberate:
+
+    * **not** subject to :func:`require_trustworthy_platform_auth`. The token is
+      validated in-process against the issuing directory's published keys, so
+      trust does not depend on an upstream gateway stripping a header. That is
+      what makes it safe to serve this API on its own hostname.
+    * ``actor_type=ACTOR_USER`` and ``channel=CHANNEL_REACT`` — the same channel
+      the header path reports, because it is the same product surface. An audit
+      line says a person asked, through the dashboard, whichever credential they
+      presented.
+    * scopes are :data:`DEFAULT_MI_SCOPES`, as for any human on this surface —
+      *not* derived from grants. Derivation is right for a machine
+      (:func:`scopes_from_entitlements`) whose whole authority is its grants;
+      a person's scope set is fixed for the surface, and narrowing per resource
+      is the entitlement layer's job, not the scope set's.
+
+    ``require_registered_principal`` defaults to the
+    ``TRAKT_MI_REACT_REQUIRE_PRINCIPAL`` app setting (default off). Off is the
+    Stage 1 posture — a directory with no registered individuals is not gated —
+    which is what lets the bearer path be proven before the registries exist.
+    Turning it on makes named-user licensing fail closed and is the intended end
+    state once every dashboard user has been registered; doing it before that
+    locks everyone out, which is why it is a deliberate switch rather than a
+    default.
+    """
+    if principal is None:
+        raise TraktError(ErrorCode.AUTHENTICATION_REQUIRED,
+                         "A validated bearer token is required.")
+
+    microsoft_tenant_id = normalise_directory_id(
+        getattr(principal, "directory_id", None))
+    microsoft_object_id = normalise_object_id(getattr(principal, "subject", None))
+
+    if require_registered_principal is None:
+        require_registered_principal = _flag(REQUIRE_PRINCIPAL_ENV)
+
+    organisation, binding, entitlements = _resolve_who_is_asking(
+        microsoft_tenant_id,
+        microsoft_object_id,
+        request_id=request_id,
+        organisation_registry=organisation_registry,
+        entitlement_store=entitlement_store,
+        principal_registry=principal_registry,
+        require_registered_principal=bool(require_registered_principal),
+    )
+
+    # The actor is the OBJECT ID, never the display name or email: the audit
+    # trail has to survive a rename or a mailbox reassignment, and the same value
+    # is what a principal registration is written against.
+    actor_id = microsoft_object_id or "unknown-principal"
+
+    return ExecutionContext(
+        tenant_id=tenant_id,
+        actor_id=str(actor_id),
+        actor_type=ACTOR_USER,
+        channel=channel,
+        scopes=DEFAULT_MI_SCOPES,
+        request_id=request_id or new_request_id(),
+        correlation_id=correlation_id,
+        actor_label=(getattr(binding, "display_name", None)
+                     or getattr(principal, "name", None)),
         organisation_id=organisation.organisation_id if organisation else None,
         microsoft_tenant_id=microsoft_tenant_id,
         entitlements=entitlements,

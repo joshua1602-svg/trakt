@@ -96,6 +96,27 @@ from . import concentration_routes  # noqa: E402  (router needs `app` above)
 app.include_router(concentration_routes.router)
 
 
+def _outbound_mail(storage: Any):
+    """How an approved pack reaches a client, or ``None``.
+
+    ``None`` means the OCC Agent keeps its own ``RecordOnlyAdapter``, which
+    states plainly that nothing was sent. That is the answer whenever outbound
+    mail is not explicitly configured — and, deliberately, also whenever the
+    mail package cannot be imported at all: a transport that is absent from a
+    deployment package must degrade the receipt, never unmount the OCC Agent.
+
+    The pack workflow, its human approval gate and every state transition are
+    identical either way. Only the receipt differs.
+    """
+    try:
+        from trakt_mail import outbound_adapter
+    except Exception:  # noqa: BLE001 — see above; never fail the mount
+        logger.exception("outbound mail is unavailable; packs will be recorded "
+                         "as issued rather than sent")
+        return None
+    return outbound_adapter(storage)
+
+
 def mount_occ_agent(application: FastAPI) -> bool:
     """Mount the OCC Agent tab's routes, when the feature is switched on.
 
@@ -112,7 +133,9 @@ def mount_occ_agent(application: FastAPI) -> bool:
         from apps.blob_trigger_app.storage import open_storage
         from ..occ_agent import api as occ_agent_api
         from ..occ_agent.service import OccAgentService
-        occ_agent_api.configure(OccAgentService(open_storage()))
+        storage = open_storage()
+        occ_agent_api.configure(
+            OccAgentService(storage, communication=_outbound_mail(storage)))
         application.include_router(occ_agent_api.router)
         logger.info("OCC Agent (synthetic) routes mounted")
         return True

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
 import { MockOpsClient } from "@/api/MockOpsClient";
+import { OpsError } from "@/api/OpsClient";
 import { copy } from "@/lib/copy";
 
 /**
@@ -459,5 +460,156 @@ describe("OCC Agent tab — the operating loop", () => {
       name: new RegExp(copy.nav.onboarding),
     });
     expect(link.getAttribute("href")).toMatch(/^\/onboarding\/ONB-\d{4}-\d{4}$/);
+  });
+});
+
+describe("OCC Agent tab — confirming a proposal", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Confirming used to re-send the PROPOSAL'S SUMMARY rather than the
+   * operator's own words. The server re-reads the message to decide what to
+   * apply, and a summary is prose ABOUT a change, not an instruction to make
+   * one — so "Answer the onboarding." came back as "Trakt could not tell what
+   * to do with that", with the proposal still on screen describing exactly
+   * what it could no longer do.
+   *
+   * The mock's own summaries happen to contain the verbs its router matches on
+   * ("Submit the onboarding for approval." still reads as "submit"), which is
+   * why the defect survived: the mock never exercised the failing case. So
+   * this asserts what the COMPONENT sends, which is where the defect lived.
+   */
+  it("re-sends the operator's own words, never the proposal summary", async () => {
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+    const sent = vi.spyOn(MockOpsClient.prototype, "instructAgent");
+    const user = userEvent.setup();
+    renderApp("/agent");
+
+    const box = await screen.findByLabelText(copy.agent.newCaseHeading);
+    await user.type(box, "Onboard Northstar Lending. Monthly management information.");
+    await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
+    await screen.findByText(copy.agent.conversationHeading);
+
+    const said = "submit for approval";
+    const message = screen.getByLabelText(copy.agent.conversationHeading);
+    await user.type(message, `${said}{Enter}`);
+
+    const confirmButton = await screen.findByRole("button", {
+      name: copy.agent.proposalConfirm,
+    });
+    await user.click(confirmButton);
+
+    await waitFor(() => expect(sent.mock.calls.length).toBeGreaterThanOrEqual(2));
+    const [, proposeText, proposeConfirm] = sent.mock.calls[0];
+    const [, confirmText, confirmConfirm] = sent.mock.calls[1];
+    expect(proposeConfirm).toBeFalsy();
+    expect(proposeText).toBe(said);
+    expect(confirmConfirm).toBe(true);
+    // The whole point: the same words, not a restatement of them.
+    expect(confirmText).toBe(said);
+  });
+});
+
+describe("OCC Agent tab — the client questions", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * An operator could see that a pack contained "22 questions" and could not
+   * read them, could not change one, and could not correct a value Trakt had
+   * already decided. Every capability existed and was tested; no screen
+   * rendered any of them.
+   */
+  async function openCase() {
+    const user = userEvent.setup();
+    renderApp("/agent");
+    const box = await screen.findByLabelText(copy.agent.newCaseHeading);
+    await user.type(
+      box,
+      "Onboard Northstar Lending. UK equity release. Monthly management information.",
+    );
+    await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
+    await screen.findByText(copy.agent.conversationHeading);
+    return user;
+  }
+
+  it("lets an operator read every question the client is asked", async () => {
+    const user = await openCase();
+
+    // Closed by default: the case page is a workflow, not a form.
+    expect(screen.queryByText(copy.agent.questionsRequired)).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
+
+    // Real catalogue questions, with their obligation shown.
+    expect(await screen.findByLabelText(/Reporting email/)).toBeInTheDocument();
+    expect(screen.getAllByText(copy.agent.questionsRequired).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(copy.agent.questionsOptional).length).toBeGreaterThan(0);
+  });
+
+  it("records an answer against the authoritative catalogue key", async () => {
+    const submitted = vi.spyOn(MockOpsClient.prototype, "submitAgentClientForm");
+    const user = await openCase();
+    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
+
+    const email = await screen.findByLabelText(/Reporting email/);
+    await user.type(email, "dana@northstar.example");
+    await user.click(screen.getByRole("button", { name: copy.agent.questionsSave }));
+
+    await waitFor(() => expect(submitted).toHaveBeenCalled());
+    const [, answers] = submitted.mock.calls[0];
+    expect(answers).toEqual({
+      "contacts.reporting_contact_email": "dana@northstar.example",
+    });
+  });
+
+  it("saves nothing until something is changed", async () => {
+    const submitted = vi.spyOn(MockOpsClient.prototype, "submitAgentClientForm");
+    const user = await openCase();
+    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
+    await screen.findByLabelText(/Reporting email/);   // the form has loaded
+
+    const save = screen.getByRole("button", { name: copy.agent.questionsSave });
+    expect(save).toBeDisabled();
+    await user.click(save);
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about already-known values when there are none", async () => {
+    const user = await openCase();
+    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
+    await screen.findByLabelText(/Reporting email/);
+
+    // A heading over an empty list is noise. Nothing is known until the pack
+    // has been built from the case.
+    expect(screen.queryByText(copy.agent.questionsKnownHeading)).not.toBeInTheDocument();
+  });
+
+  it("surfaces a refused answer instead of swallowing it", async () => {
+    vi.spyOn(MockOpsClient.prototype, "submitAgentClientForm").mockRejectedValue(
+      new OpsError("That is not a question Trakt puts to a client.", "OCC_AGENT_X"),
+    );
+    const user = await openCase();
+    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
+
+    const email = await screen.findByLabelText(/Reporting email/);
+    await user.type(email, "dana@northstar.example");
+    await user.click(screen.getByRole("button", { name: copy.agent.questionsSave }));
+
+    expect(
+      await screen.findByText(/not a question Trakt puts to a client/),
+    ).toBeInTheDocument();
   });
 });

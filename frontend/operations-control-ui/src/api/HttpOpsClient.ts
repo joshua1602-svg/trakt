@@ -664,6 +664,13 @@ export class HttpOpsClient implements OpsClient {
     );
   }
 
+  async generateAgentAnswers(caseRef: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/responses/generate`,
+      {},
+    );
+  }
+
   async generateAgentResponse(caseRef: string): Promise<AgentStatus> {
     return this.post<AgentStatus>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/artefacts/generate`,

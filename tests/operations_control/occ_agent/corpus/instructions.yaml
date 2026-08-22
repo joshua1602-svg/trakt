@@ -1,0 +1,191 @@
+# The instruction corpus — real sentences, and what Trakt must read out of them.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# Every reading defect so far was found the same way: in production, one
+# screenshot at a time, after a client-facing document had already been built
+# from a wrong answer. The fixes were structural; the PROCESS was reactive, and
+# a rule-based reader without a corpus has no way to tell you that today's fix
+# broke yesterday's sentence.
+#
+# So this is the regression suite for natural language. Every entry is a
+# sentence somebody actually typed, or a phrasing a defect taught us to check.
+#
+# HOW TO ADD ONE
+# --------------
+# Paste the instruction, say why it is here, and assert only what you care
+# about. Everything is optional: an entry that only pins `client_name` is a
+# perfectly good entry, and is far better than not adding the sentence at all.
+# No Python is involved.
+#
+#   - name: a-short-slug
+#     why: what this sentence is here to protect
+#     instruction: >-
+#       The sentence, verbatim.
+#     expect:
+#       client_name: Northstar Lending      # client.client_name
+#       jurisdiction: GB                    # client.jurisdiction
+#       asset_class: equity_release         # portfolios[0].asset_class
+#       products: [mi]                      # reporting.products
+#       legal_name: Northstar Lending       # entities[0].legal_name
+#       portfolio_name: ...                 # portfolios[0].display_name
+#       portfolio_id: direct_101            # portfolios[0].portfolio_id
+#       streams: [pipeline]                 # order-insensitive
+#       cadence: monthly                    # the BLANKET cadence
+#       stream_cadence: {pipeline: weekly}  # per-stream cadences
+#       reporting_period: "2026-06-30"
+#       unrecognised: []                    # clauses read as nothing
+#       uncertain: [client.client_name]     # paths read below CERTAIN, sorted
+#     reject:
+#       # Substrings that must NOT appear in a read value. This is how a defect
+#       # is pinned: name the wrong answer, not just the right one.
+#       client_name: ["needs", "lender called"]
+#
+# A key left out is not asserted. `expect: {}` means "this must parse without
+# raising", which is itself worth pinning for an awkward sentence.
+
+- name: northstar-opening
+  why: >-
+    The plainest opening instruction there is, and the shape most of the test
+    suite is written around. If this breaks, everything breaks.
+  instruction: >-
+    Onboard Northstar Lending. UK equity release. Monthly portfolio MI.
+    Portfolio id direct_101.
+  expect:
+    client_name: Northstar Lending
+    jurisdiction: GB
+    asset_class: equity_release
+    products: [mi]
+    portfolio_id: direct_101
+    cadence: monthly
+    stream_cadence: {}
+    unrecognised: []
+    # "UK" names the jurisdiction without the sentence ever naming the FIELD,
+    # so it is read by shape alone and shown to the operator. The asset class,
+    # the cadence and the product all come from closed vocabularies and are
+    # certain. This entry exists partly to keep that distinction honest,
+    # and the portfolio NAME is Trakt's own suggestion ("<client> portfolio")
+    # rather than anything the operator said — the other thing worth a look.
+    uncertain: [client.jurisdiction, portfolios.display_name]
+
+- name: erm-capital-two-cadences
+  why: >-
+    The production case that exposed per-stream cadence. Both registrations
+    recorded Weekly, and the client was asked to confirm a weekly funded book
+    they had never mentioned.
+  instruction: >-
+    Onboard ERM Capital Mgt. It is a UK equity release lender. The need weekly
+    pipeline, monthly MI and Annex 2 regime reporting.
+  expect:
+    client_name: ERM Capital Mgt
+    jurisdiction: GB
+    asset_class: equity_release
+    products: [esma_annex2]
+    streams: [pipeline]
+    cadence: monthly
+    stream_cadence: {pipeline: weekly}
+  reject:
+    client_name: ["needs", "weekly", "pipeline"]
+
+- name: erm-capital-named-by-called
+  why: >-
+    The sentence that named a client "needs weekly pipeline". Two clauses both
+    carry the topic cue "client"; only the one with "called" names anybody.
+  instruction: >-
+    The client is a UK-equity release mortgage lender called ERM Capital. The
+    client needs weekly pipeline and monthly management information and ESMA
+    Annex 2 reporting.
+  expect:
+    client_name: ERM Capital
+    jurisdiction: GB
+    streams: [pipeline]
+    # The name is read from free text, so Trakt is NOT certain where the value
+    # ended — the operator is shown it rather than it being written silently.
+    # The jurisdiction is read from "UK" with no cue at all, which is less
+    # certain still.
+    uncertain: [client.client_name, client.jurisdiction]
+  reject:
+    client_name: ["needs", "mortgage lender", "a UK"]
+
+- name: mortgage-capital-residential
+  why: >-
+    A different asset class, and the case the client-facing pack was designed
+    against.
+  instruction: >-
+    Onboard Mortgage Capital. UK residential mortgages. Monthly portfolio MI.
+    Portfolio id direct_201.
+  expect:
+    client_name: Mortgage Capital
+    jurisdiction: GB
+    products: [mi]
+    portfolio_id: direct_201
+    cadence: monthly
+
+- name: two-books-two-cadences-one-sentence
+  why: >-
+    An order-based pairing rule read this as {pipeline: monthly} and silently
+    dropped the funded book. Nobody typed this in production — it was found by
+    testing a phrasing the screenshots had not shown.
+  instruction: >-
+    Onboard Harbourpoint Credit. UK equity release. They send a funded book
+    monthly and a pipeline weekly.
+  expect:
+    client_name: Harbourpoint Credit
+    streams: [funded, pipeline]
+    stream_cadence: {funded: monthly, pipeline: weekly}
+    cadence: ""
+
+- name: stream-before-its-cadence
+  why: The stream can be named before its cadence as easily as after it.
+  instruction: >-
+    Onboard Kestrel Mutual. UK equity release. The pipeline is delivered
+    weekly.
+  expect:
+    client_name: Kestrel Mutual
+    streams: [pipeline]
+    stream_cadence: {pipeline: weekly}
+
+- name: blanket-cadence-for-every-book
+  why: >-
+    A cadence that names no stream must still answer for all of them —
+    per-stream reading must not swallow the blanket case.
+  instruction: >-
+    Onboard Aldermere Finance. UK equity release. They send a funded book and a
+    pipeline. Everything monthly.
+  expect:
+    client_name: Aldermere Finance
+    streams: [funded, pipeline]
+    cadence: monthly
+    stream_cadence: {}
+
+- name: product-is-not-a-stream
+  why: >-
+    "MI" is a product. Inferring the funded book from it would attach a cadence
+    to a registration the client never mentioned.
+  instruction: >-
+    Onboard Brackenfield. UK equity release. Monthly MI.
+  expect:
+    client_name: Brackenfield
+    cadence: monthly
+    stream_cadence: {}
+    streams: []
+
+- name: reporting-period-on-the-instruction
+  why: >-
+    The reporting period is a delivery fact, not a catalogue answer, and lives
+    on the run rather than the case.
+  instruction: >-
+    Onboard Silverbeck. UK equity release. Monthly MI. First reporting date
+    2026-06-30.
+  expect:
+    client_name: Silverbeck
+    reporting_period: "2026-06-30"
+
+- name: annex2-regime-product
+  why: The regime product is read from the declaration, not from a word list.
+  instruction: >-
+    Onboard Thornbury Lending. UK equity release. They need ESMA Annex 2
+    reporting.
+  expect:
+    client_name: Thornbury Lending
+    products: [esma_annex2]

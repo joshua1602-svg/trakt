@@ -68,6 +68,12 @@ def item_label(section: Section, item: Dict[str, Any], index: int) -> str:
     return ident or f"item {index + 1}"
 
 
+#: Anything read below this is put to a human before it is written. Not a
+#: tuning knob: it is the line between "the catalogue proved this value" and
+#: "a rule decided where the value ended", and only the first is certain.
+CERTAIN = 1.0
+
+
 # --------------------------------------------------------------------------- #
 # One proposed value
 # --------------------------------------------------------------------------- #
@@ -101,7 +107,7 @@ class ProposedFieldChange:
         """
         if self.action == UNCHANGED:
             return False
-        if self.confidence is not None and self.confidence < 1.0:
+        if self.confidence is not None and self.confidence < CERTAIN:
             return True
         return _present(self.before) and self.before != self.after
 
@@ -145,7 +151,13 @@ class ApplicationPlan:
     unrecognised: List[str] = field(default_factory=list)
     #: Delivery facts, which are the run's rather than the case's.
     reporting_period: str = ""
+    #: The blanket cadence: what every registration gets unless it stated its
+    #: own.
     cadence: str = ""
+    #: ``{stream: cadence}`` for the streams that DID state their own. A weekly
+    #: pipeline beside a monthly funded book is two answers, and one field
+    #: could only ever carry one of them.
+    stream_cadence: Dict[str, str] = field(default_factory=dict)
     #: Operational data streams the instruction declared ("funded",
     #: "pipeline"), each becoming its own source registration on apply.
     streams: List[str] = field(default_factory=list)
@@ -161,6 +173,7 @@ class ApplicationPlan:
             "unrecognised": list(self.unrecognised),
             "reporting_period": self.reporting_period,
             "cadence": self.cadence,
+            "stream_cadence": dict(self.stream_cadence),
             "streams": list(self.streams),
             "expected_artefacts": list(self.expected_artefacts),
             "provenance": dict(self.provenance),
@@ -177,12 +190,33 @@ class ApplicationPlan:
     @property
     def empty(self) -> bool:
         return not (self.change_count or self.reporting_period or self.cadence
+                    or self.stream_cadence
                     or self.streams or self.expected_artefacts
                     or self.questions)
 
     @property
+    def uncertain(self) -> List[ProposedFieldChange]:
+        """Changes read with less than certainty.
+
+        Reported in their own right, because "Trakt read this and is sure" and
+        "Trakt read this and is guessing at where the value ended" are
+        different claims, and only one of them needs checking. Burying the
+        second among the first is how a client ends up named after a verb
+        phrase.
+        """
+        return [c for c in self.understood
+                if c.action != UNCHANGED and c.confidence is not None
+                and c.confidence < CERTAIN]
+
+    @property
     def complete(self) -> bool:
-        """Whether the whole instruction was read."""
+        """Whether the whole instruction was read.
+
+        Deliberately NOT affected by confidence. An uncertain read is
+        something Trakt DID read and can show you; an unrecognised clause is
+        something it could not read at all. Folding the first into the second
+        would make every ordinary instruction look like a failure.
+        """
         return not self.unrecognised and not self.questions
 
     @property
@@ -210,6 +244,8 @@ class ApplicationPlan:
             parts.append(f"Reporting period: {self.reporting_period}")
         if self.cadence:
             parts.append(f"Expected cadence: {self.cadence}")
+        for stream, cadence in sorted(self.stream_cadence.items()):
+            parts.append(f"Expected cadence ({stream}): {cadence}")
         return ". ".join(parts) + "." if parts else "Nothing to change."
 
     def disclosure(self) -> Dict[str, Any]:
@@ -220,6 +256,8 @@ class ApplicationPlan:
                           + [f"A {s} stream will be registered"
                              for s in self.streams],
             "proposed": self.summary(),
+            "uncertain": [f"{c.sentence()} — read, but not certain"
+                          for c in self.uncertain],
             "questions": [q.question for q in self.questions],
             "unrecognised": list(self.unrecognised),
         }

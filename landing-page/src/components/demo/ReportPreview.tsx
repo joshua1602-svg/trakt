@@ -31,7 +31,7 @@ export function ReportPreview({
   if (payload.status === "limit_reached") {
     return (
       <article className="animate-rise rounded-xl border border-peri-500/40 bg-peri-400/[0.06] p-4 sm:p-5">
-        <p className="text-sm leading-relaxed text-ink-100">{payload.answer}</p>
+        <p className="text-body leading-relaxed text-ink-100">{payload.answer}</p>
         <a href="#book-a-demo" className={cx(buttonStyles.primary, "mt-4")}>
           Book a portfolio walkthrough
         </a>
@@ -42,7 +42,7 @@ export function ReportPreview({
   if (!page) {
     return (
       <article className="animate-rise rounded-xl border border-line bg-navy-950/60 p-4">
-        <p className="text-sm text-ink-100">
+        <p className="text-body text-ink-100">
           {payload.answer ?? "This preview is unavailable."}
         </p>
       </article>
@@ -51,7 +51,7 @@ export function ReportPreview({
 
   return (
     <article className="animate-rise rounded-xl border border-line bg-navy-950/60 p-4 sm:p-5">
-      <p className="text-sm leading-relaxed text-ink-100">{payload.answer}</p>
+      <p className="text-body leading-relaxed text-ink-100">{payload.answer}</p>
 
       <section
         aria-label={`${payload.documentTitle} preview`}
@@ -59,19 +59,19 @@ export function ReportPreview({
       >
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-ink-100">{payload.documentTitle}</p>
-            <p className="mt-0.5 break-words text-[11px] text-ink-400">{payload.documentSubtitle}</p>
+            <p className="text-body font-semibold text-ink-100">{payload.documentTitle}</p>
+            <p className="mt-0.5 break-words text-small text-ink-400">{payload.documentSubtitle}</p>
           </div>
           <Badge tone="synthetic">Synthetic preview</Badge>
         </header>
 
         {/* A fixed minimum height keeps page switching from shifting the layout. */}
         <div className="min-h-[300px] px-4 py-4">
-          <h4 className="text-[13px] font-semibold uppercase tracking-wider text-peri-300">
+          <h4 className="text-body font-semibold uppercase tracking-wider text-peri-300">
             {page.title}
           </h4>
           {page.subtitle ? (
-            <p className="mt-1 text-[11px] text-ink-400">{page.subtitle}</p>
+            <p className="mt-1 text-small text-ink-400">{page.subtitle}</p>
           ) : null}
 
           <div className="mt-4 space-y-5">
@@ -81,7 +81,7 @@ export function ReportPreview({
           </div>
 
           {page.note ? (
-            <p className="mt-5 border-t border-line-soft pt-3 text-[11px] leading-relaxed text-ink-500">
+            <p className="mt-5 border-t border-line-soft pt-3 text-small leading-relaxed text-ink-500">
               {page.note}
             </p>
           ) : null}
@@ -98,7 +98,7 @@ export function ReportPreview({
               aria-current={index === pageIndex ? "page" : undefined}
               onClick={() => setPageIndex(index)}
               className={cx(
-                "rounded-md px-2.5 py-1 text-[11px] transition-colors",
+                "rounded-md px-2.5 py-1 text-small transition-colors",
                 index === pageIndex
                   ? "bg-peri-400 font-semibold text-navy-950"
                   : "border border-line text-ink-400 hover:text-ink-100",
@@ -108,7 +108,7 @@ export function ReportPreview({
               {index + 1}
             </button>
           ))}
-          <span className="ml-1 text-[11px] text-ink-500">
+          <span className="ml-1 text-small text-ink-500">
             Page {pageIndex + 1} of {pages.length} · preview only, no document is produced
           </span>
         </nav>
@@ -125,7 +125,7 @@ export function ReportPreview({
                     ? onReport(followUp.id, followUp.label)
                     : onFollowUp(followUp.id, followUp.label)
                 }
-                className="rounded-full border border-line px-3 py-1 text-xs text-ink-300 transition-colors hover:border-peri-500 hover:text-ink-100"
+                className="rounded-full border border-line px-3 py-1 text-small text-ink-300 transition-colors hover:border-peri-500 hover:text-ink-100"
               >
                 {followUp.label}
               </button>

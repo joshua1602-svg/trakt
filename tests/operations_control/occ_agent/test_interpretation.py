@@ -372,3 +372,84 @@ def test_every_action_the_interpreter_can_name_is_a_lifecycle_action():
     from operations_control.occ_agent.interpretation import _ALL_ACTIONS
     known = set(_states.ONBOARDING_ACTIONS) | set(_states.EXECUTION_ACTIONS)
     assert _ALL_ACTIONS == known
+
+
+# --------------------------------------------------------------------------- #
+# Naming a client, and correcting the name
+# --------------------------------------------------------------------------- #
+
+from operations_control.occ_agent import extraction as _extraction  # noqa: E402
+from operations_control.occ_agent.interpretation import (  # noqa: E402
+    DeterministicInterpreter as _Interp, InterpretationError as _IError,
+)
+from operations_control.occ_agent.run import SyntheticRun as _Run  # noqa: E402
+from operations_control.onboarding.case import OnboardingCase as _Case  # noqa: E402
+from operations_control.onboarding.catalogue import catalogue as _cat  # noqa: E402
+
+#: The instruction from a real practice case. Two clauses both carry the cue
+#: "client"; only one of them names anybody.
+ERM = ("The client is a UK-equity release mortgage lender called ERM Capital. "
+       "The client needs weekly pipeline and monthly management information "
+       "and ESMA Annex 2 reporting.")
+
+
+def _interp():
+    return _Interp(cat=_cat())
+
+
+def test_a_topic_cue_never_becomes_a_name():
+    """"The client needs weekly pipeline" named the client "needs weekly
+    pipeline". A bare topic cue must not bind a free-text value."""
+    steps = _interp().interpret_instruction(ERM).steps
+    assert steps["client"]["client_name"] == "ERM Capital"
+
+
+def test_the_naming_cue_is_what_reads_the_name():
+    found = {e.ref.path: e for e in _extraction.read(ERM, cat=_cat()).found}
+    name = found["client.client_name"]
+    assert name.value == "ERM Capital"
+    assert name.cue == "called"
+
+
+def test_the_masked_facts_are_read_once_the_name_is_not_swallowing_them():
+    """The bad binding consumed the clause, so what it also said was lost."""
+    read = _extraction.read(ERM, cat=_cat())
+    values = {(e.ref.path, str(e.value)) for e in read.found}
+    assert ("sources.dataset", "pipeline") in values
+    assert ("client.jurisdiction", "GB") in values
+
+
+def test_a_client_is_still_named_without_a_naming_cue():
+    """The shape rules still read an ordinary opening instruction."""
+    steps = _interp().interpret_instruction(
+        "Onboard Northstar Lending. UK equity release. Monthly portfolio MI. "
+        "Portfolio id direct_101.").steps
+    assert steps["client"]["client_name"] == "Northstar Lending"
+
+
+@pytest.mark.parametrize("said", [
+    "Client name is ERM Capital",
+    "The client name is ERM Capital",
+    "the client is called ERM Capital",
+])
+def test_an_operator_can_correct_the_client_name_in_conversation(said):
+    """The correction an operator most needs, which used to be refused."""
+    run = _Run(case_ref="ONB-2026-0006", tenant="t", initiating_user="Op")
+    case = _Case(case_id="ONB-2026-0006", kind="new_client")
+    case.answers = {"client": {"client_name": "needs weekly pipeline"}}
+    change = _interp().interpret_action(said, run, case)
+    proposed = change.payload["interpretation"]["steps"]
+    assert proposed["client"]["client_name"] == "ERM Capital"
+    # Material, so a human still confirms it before it is applied.
+    assert change.material and change.requires_confirmation
+
+
+@pytest.mark.parametrize("said", ["send it to Northstar", "Northstar Lending"])
+def test_a_bare_name_on_a_follow_up_is_still_refused(said):
+    """The false positive the old guard existed for. Now refused earlier, by
+    the extractor declining to bind a free-text value on a topic cue."""
+    run = _Run(case_ref="ONB-2026-0006", tenant="t", initiating_user="Op")
+    case = _Case(case_id="ONB-2026-0006", kind="new_client")
+    case.answers = {"client": {"client_name": "Existing Client"}}
+    with pytest.raises(_IError):
+        _interp().interpret_action(said, run, case)

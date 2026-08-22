@@ -129,7 +129,7 @@ export function Nav() {
             <li key={link.href}>
               <a
                 href={link.href}
-                className="text-sm text-ink-300 transition-colors hover:text-ink-100"
+                className="text-body text-ink-300 transition-colors hover:text-ink-100"
               >
                 {link.label}
               </a>
@@ -145,7 +145,7 @@ export function Nav() {
           <a
             href="#book-a-demo"
             onClick={() => track("book_demo_click", { source: "nav" })}
-            className={cx(buttonStyles.primary, "px-4 py-2 text-[13px]")}
+            className={cx(buttonStyles.primary, "px-4 py-2 text-body")}
           >
             Demo on your portfolio
           </a>
@@ -163,7 +163,7 @@ export function Nav() {
               return !value;
             })
           }
-          className="rounded-lg border border-line px-3 py-2 text-sm text-ink-200 lg:hidden"
+          className="rounded-lg border border-line px-3 py-2 text-body text-ink-200 lg:hidden"
         >
           <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
           <span aria-hidden="true">{open ? "✕" : "☰"}</span>
@@ -185,7 +185,7 @@ export function Nav() {
                     setOpen(false);
                     toggleRef.current?.focus();
                   }}
-                  className="block border-b border-line-soft py-3 text-sm text-ink-200"
+                  className="block border-b border-line-soft py-3 text-body text-ink-200"
                 >
                   {link.label}
                 </a>
@@ -198,7 +198,7 @@ export function Nav() {
                   track("book_demo_click", { source: "nav_mobile" });
                   setOpen(false);
                 }}
-                className="block py-3 text-sm font-semibold text-peri-300"
+                className="block py-3 text-body font-semibold text-peri-300"
               >
                 Demo on your portfolio
               </a>

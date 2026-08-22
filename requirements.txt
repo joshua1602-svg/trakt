@@ -27,3 +27,9 @@ python-multipart>=0.0.9
 # Entra ID bearer-token validation for the Microsoft 365 Copilot action routes
 # (mi_agent_api/copilot_auth.py). [crypto] pulls the RS256 signature backend.
 PyJWT[crypto]>=2.8
+
+# --- Client-facing document rendering (trakt_mail/presentation.py) ---
+# The onboarding checklist a client receives as a PDF attachment. Pure Python,
+# no system libraries, so it installs under Oryx on App Service without a build
+# step. Markdown remains the internal source artefact; this renders it.
+reportlab>=4.0,<6

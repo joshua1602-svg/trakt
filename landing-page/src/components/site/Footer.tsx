@@ -7,7 +7,7 @@ export function Footer() {
         <div className="flex items-center gap-2.5">
           <TraktWordmark size={22} />
         </div>
-        <div className="max-w-lg space-y-2 text-xs leading-relaxed text-ink-500">
+        <div className="max-w-lg space-y-2 text-small leading-relaxed text-ink-500">
           {/* Aligned with the strapline's first half so the site runs one
               product description, not two. The audience list is the part the
               strapline does not carry, which is why it stays. */}

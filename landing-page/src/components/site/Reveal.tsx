@@ -21,6 +21,10 @@ import { cx } from "@/components/ui";
  * element; receiving one is proof the observer works, and cancels the
  * failsafe so the scroll reveal can happen whenever the reader arrives.
  * If that callback never comes, the failsafe reveals the content anyway.
+ *
+ * A second failsafe covers the case the first cannot: an element that is
+ * jumped PAST rather than scrolled through. It reveals on contact or on being
+ * left behind, so nothing the reader has already gone by stays hidden.
  */
 
 type RevealState = "static" | "pending" | "revealed";
@@ -84,7 +88,17 @@ export function Reveal({
           // Any callback at all proves the observer is live.
           cancelFailsafe();
           for (const entry of entries) {
-            if (entry.isIntersecting) {
+            // Revealed on contact, and ALSO if the reader has already gone
+            // past it. An instant scroll — an anchor jump, a restored scroll
+            // position, find-in-page — moves an element from below the
+            // viewport to above it in a single frame, so it never intersects
+            // and, before this, stayed hidden for the rest of the session.
+            // Content the reader has scrolled past must never be invisible;
+            // that is the whole point of the failsafe, and this is the case
+            // the failsafe missed, because the observer's first callback had
+            // already cancelled it.
+            const scrolledPast = entry.boundingClientRect.bottom <= 0;
+            if (entry.isIntersecting || scrolledPast) {
               reveal();
               observer?.disconnect();
             }
@@ -95,7 +109,16 @@ export function Reveal({
         // viewport's lower edge is readable but not "intersecting", so it
         // stays hidden. Threshold 0 for the same reason — any contact
         // reveals. The stagger supplies the polish; the threshold must not.
-        { threshold: 0, rootMargin: "0px 0px 10% 0px" },
+        //
+        // The TOP is expanded without limit, which is what makes "already
+        // scrolled past" reveal. An observer only reports when intersection
+        // CHANGES, so an element jumped over — an anchor, a restored scroll
+        // position, find-in-page — went from not-intersecting-below to
+        // not-intersecting-above without ever reporting, and stayed hidden
+        // for the rest of the session. With the root running up past the top
+        // of the document, everything behind the reader is inside it, so the
+        // jump is a change the observer does report.
+        { threshold: 0, rootMargin: "999999px 0px 10% 0px" },
       );
       observer.observe(node);
     } catch {

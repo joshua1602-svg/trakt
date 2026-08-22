@@ -80,6 +80,11 @@ STEPS: Tuple[Dict[str, Any], ...] = (
     {"key": "access", "label": "Who needs access",
      "help": "People at your end who need Trakt, or who receive reports.",
      "sections": ("access",)},
+    {"key": "anything_else", "label": "Anything else we need to know",
+     "help": "Anything specific to your business, your asset class or this "
+             "portfolio that would help Trakt read your data correctly. "
+             "Leave it blank if nothing comes to mind.",
+     "sections": ("additional_context",)},
     {"key": "meaning", "label": "What your numbers mean",
      "help": "The conventions behind your figures. Trakt works out the FORMAT "
              "of a file itself; what it cannot work out is what you mean by a "

@@ -52,6 +52,13 @@ REQUIRED_SCRIPTS = (
     "engine/gate_5_delivery/xml_builder_annex2.py",
 )
 
+#: Imported at runtime but NOT at application import time, so a missing one
+#: would not fail the import check above. ``trakt_mail`` is loaded when the OCC
+#: Agent mounts, and its absence is deliberately non-fatal there (a pack is
+#: recorded rather than sent) — which is exactly why it has to be asserted here
+#: instead. A silently mail-less deployment is the failure this catches.
+REQUIRED_LAZY_MODULES = ("trakt_mail.adapter", "trakt_mail.presentation")
+
 EXPECTED_TITLE = "Trakt Operations Control API"
 
 
@@ -102,6 +109,28 @@ def main() -> None:
     if missing_router:
         fail("application is missing included-router route(s): "
              + ", ".join(missing_router))
+
+    import importlib
+    for module in REQUIRED_LAZY_MODULES:
+        try:
+            importlib.import_module(module)
+        except Exception as exc:  # noqa: BLE001 — report, do not raise
+            fail(f"could not import {module}, which the OCC Agent loads at "
+                 f"runtime ({type(exc).__name__}: {exc})")
+
+    # The PDF renderer is imported ON USE, so importing the module above does
+    # not prove reportlab is installed. Render one, from the artefact.
+    try:
+        from trakt_mail import presentation as _pres
+        _pdf = _pres.render_pdf(_pres.parse_pack(
+            "# Onboarding — Package check\n\nReference: ONB-0000-0000\n\n"
+            "- [required] **A question**\n"), receipt_id="com_pkgcheck")
+        if not _pdf.startswith(b"%PDF-"):
+            fail("the client checklist renderer did not produce a PDF")
+    except Exception as exc:  # noqa: BLE001 — report, do not raise
+        fail("the client checklist renderer does not work in this artefact "
+             f"({type(exc).__name__}: {exc}); check reportlab is in "
+             "requirements.txt")
 
     print(f"artefact OK: {app.title} — {len(served)} served paths, "
           f"{len(REQUIRED_FILES)} governed config files, "

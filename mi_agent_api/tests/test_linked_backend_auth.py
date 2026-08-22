@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -260,34 +261,79 @@ class TestDeploymentContract:
 # =========================================================================== #
 # 4. No MSAL / no client-side token acquisition
 # =========================================================================== #
-class TestNoClientSideTokenAcquisition:
-    """Option A deliberately does NOT add MSAL: the platform performs the
-    sign-in and forwards the principal. A token library appearing in the SPA
-    would mean a second, divergent authentication path."""
+class TestExactlyOneCredentialPath:
+    """One place acquires a token, one place attaches it.
+
+    This class used to assert the opposite — that the SPA contained no MSAL and
+    attached no credential of its own — because under Option A the platform did
+    the sign-in and forwarded the principal. Phase 3 of the multitenant
+    migration deliberately reverses that: the SPA signs the user in against
+    Entra `/organizations` and calls the API with an access token, because a
+    Static Web Apps session cannot be issued to a user from a directory the site
+    has no invitation into.
+
+    What has NOT changed is the reason the original rule existed: two
+    independent ways to authenticate is how one of them silently stops being
+    enforced. So the rule is now about SHAPE rather than absence — token
+    acquisition lives in src/auth, attachment lives in the API client, and no
+    screen assembles an Authorization header of its own.
+    """
 
     FRONTEND = _REPO_ROOT / "frontend" / "mi-agent-ui"
 
-    def test_no_msal_or_identity_dependency(self):
+    @staticmethod
+    def _code(text: str) -> str:
+        """The source with comments removed.
+
+        These rules are about what the code DOES, and this file's own subject
+        matter means the auth modules discuss `Authorization: Bearer` and
+        `acquireTokenSilent` in prose constantly. Scanning raw text makes the
+        documentation the violation, which teaches the next person to write less
+        of it.
+        """
+        no_block = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+        return re.sub(r"^\s*//.*$", "", no_block, flags=re.MULTILINE)
+
+    def _sources(self):
+        for path in (self.FRONTEND / "src").rglob("*.ts*"):
+            if ".test." in path.name:
+                continue
+            yield path, self._code(path.read_text(encoding="utf-8"))
+
+    def test_token_acquisition_lives_only_in_the_auth_layer(self):
+        offenders = [
+            str(path.relative_to(_REPO_ROOT))
+            for path, text in self._sources()
+            if ("acquireToken" in text or "PublicClientApplication" in text)
+            and path.parent.name != "auth"
+        ]
+        assert not offenders, (
+            "MSAL token acquisition outside src/auth — a second acquisition site "
+            f"is a second policy to keep in step: {offenders}")
+
+    def test_only_the_shared_helper_builds_an_authorization_header(self):
+        offenders = [
+            f"{path.relative_to(_REPO_ROOT)}"
+            for path, text in self._sources()
+            if "Bearer " in text and path.name != "tokenProvider.ts"
+        ]
+        assert not offenders, (
+            "a hand-rolled Authorization header — every request must go through "
+            f"authorizationHeaders() so there is one place to audit: {offenders}")
+
+    def test_no_confidential_client_library_reaches_the_browser(self):
         pkg = json.loads((self.FRONTEND / "package.json").read_text())
         deps = {**(pkg.get("dependencies") or {}), **(pkg.get("devDependencies") or {})}
-        for name in deps:
-            assert "msal" not in name.lower(), f"{name} adds a second auth path"
-            assert not name.startswith("@azure/identity")
+        # msal-node performs the confidential-client flows (client secret,
+        # certificate). In a SPA bundle those credentials would be public.
+        assert "@azure/msal-node" not in deps
+        assert "@azure/identity" not in deps
 
-    def test_the_client_sends_no_hand_rolled_credential(self):
-        src = self.FRONTEND / "src"
-        offenders = []
-        for path in src.rglob("*.ts*"):
-            if path.name.endswith(".test.ts") or path.name.endswith(".test.tsx"):
-                continue
-            text = path.read_text(encoding="utf-8")
-            for needle in ("acquireTokenSilent", "acquireTokenPopup",
-                           "Authorization: `Bearer", 'Authorization": "Bearer'):
-                if needle in text:
-                    offenders.append(f"{path.relative_to(_REPO_ROOT)}: {needle}")
-        assert not offenders, (
-            "the SPA must not attach its own credential — the Static Web App "
-            f"forwards the verified principal instead: {offenders}")
+    def test_the_spa_holds_no_client_secret(self):
+        for path, text in self._sources():
+            assert "clientSecret" not in text and "client_secret" not in text, (
+                f"{path.relative_to(_REPO_ROOT)} names a client secret; the SPA "
+                "is a public client using Authorization Code + PKCE")
 
 
 if __name__ == "__main__":

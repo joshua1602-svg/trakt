@@ -580,6 +580,13 @@ sections:
         type: enum
         required: true
         options_from: dataset
+        # Each MENTION of a book is its own answer, not a competing value for
+        # one slot: "a funded book and a pipeline" declares TWO source
+        # registrations. Every other enum in the catalogue answers one question
+        # once, so a reader that stops at the first match is right for them and
+        # wrong only for this — which is why it is declared here rather than
+        # assumed in code.
+        repeated_mentions: true
         consumers: [Source registration, intake routing]
         writes_to: source_registry:dataset
         amendable: false
@@ -721,6 +728,9 @@ sections:
   # masquerade as done (enforced structurally in onboarding/validation.py).
   # -----------------------------------------------------------------------
   - key: risk_limits
+    # Client-declared limits. Useful when they exist and harmless when they do
+    # not, so this is offered rather than asked.
+    optional_context: true
     label: Concentration tests and covenants
     help: >-
       The portfolio-level tests the funded book is monitored against. Supplied
@@ -807,6 +817,10 @@ sections:
 
   # -----------------------------------------------------------------------
   - key: presentation
+    # Branding and disclaimer preferences. Genuinely optional: every one has a
+    # Trakt default that is fine, so this must not be presented to a client as
+    # something they have to complete.
+    optional_context: true
     label: Report presentation
     help: >-
       How reports look, and the standing conventions behind the numbers. None of
@@ -904,8 +918,59 @@ sections:
 # questions.
 # ---------------------------------------------------------------------------
   # -----------------------------------------------------------------------
+  # -----------------------------------------------------------------------
+  - key: additional_context
+    # The one open question in the pack. Everything else Trakt asks is a
+    # declared field with a destination; this is deliberately not, because the
+    # thing a client most wants to tell you at the start is usually the thing
+    # no catalogue anticipated — an asset-class quirk, a servicing arrangement,
+    # a transition mid-period. Offered, never required.
+    optional_context: true
+    label: Anything else we need to know
+    help: >-
+      Anything specific to your business, your asset class or this portfolio
+      that would help Trakt read your data correctly. Leave it blank if nothing
+      comes to mind — it is not a gate on anything.
+    fields:
+
+      - key: client_context_note
+        label: Anything else we should know
+        help: >-
+          For example: an unusual servicing or sub-servicing arrangement, a
+          portfolio acquired mid-period, a product feature that behaves
+          differently from the rest of the book, or terminology used in your
+          files that is specific to you.
+        scope: client
+        source: client_supplied
+        type: multiline
+        required: false
+        max_length: 4000
+        consumers: [Onboarding record]
+        writes_to: onboarding_record
+        amendable: true
+
   - key: data_semantics
     label: What your numbers mean
+    # Deferred by the CATALOGUE, not by code — the same mechanism, and the same
+    # principle, as data_definitions below.
+    #
+    # Trakt does not ask a client to map their fields to ours: it reads a
+    # representative file and proposes the mapping. Asking generically what a
+    # balance means, or what an account status means, is the same request in a
+    # different costume — it asks the client to write a data dictionary for a
+    # file Trakt has not looked at yet, and it reads as though Trakt cannot tell
+    # a gross figure from a net one.
+    #
+    # The questions themselves are NOT removed. They remain declared, required
+    # of the onboarding record, and asked — but once there is a file, against
+    # what was actually found in it: "we found Current Balance and Accrued
+    # Interest as separate columns and assumed the first excludes the second,
+    # please confirm" rather than "what does balance mean?". Evidence first,
+    # then the exceptions, which is far less work for the client and a far
+    # better answer for Trakt.
+    deferred_until: >-
+      the client has sent a representative file, so each question can be put
+      against what Trakt actually found in it rather than asked in the abstract
     help: >-
       The business conventions behind the figures. These are properties of how
       the CLIENT runs their book, not of any particular file, so they are asked

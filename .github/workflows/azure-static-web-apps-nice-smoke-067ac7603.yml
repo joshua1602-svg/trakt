@@ -37,12 +37,157 @@ jobs:
       # existing tooltip rather than erroring.
       VITE_MI_ENHANCED_HOVERS: "true"
       VITE_MI_WEEKLY_BRIEF: "true"
+
+      # --- Phase 3: Entra bearer authentication (MSAL), OFF by default ---------
+      #
+      # Vite inlines VITE_* at BUILD time, so these live here and nowhere else:
+      # setting them on the App Service or in the Static Web App's configuration
+      # cannot change a bundle that has already been compiled.
+      #
+      # They are REPOSITORY VARIABLES, not secrets, and deliberately so — a client
+      # id, an authority and an `api://…/MI.Access` scope are public identifiers
+      # that ship inside every SPA bundle by design. This is a public client using
+      # Authorization Code + PKCE; there is no secret to hold, and
+      # `scripts/check-bundle-leaks.mjs` fails the build if one appears.
+      #
+      # With VITE_MI_BEARER_AUTH unset or false, MSAL is never constructed, no
+      # token is requested, no Authorization header is attached, and the Static
+      # Web Apps Easy Auth path below is exactly as it was. Set the variable to
+      # `true` in repository settings to switch the new path on for the next
+      # build; unset it to roll back.
+      VITE_MI_BEARER_AUTH: ${{ vars.VITE_MI_BEARER_AUTH || 'false' }}
+      VITE_AAD_CLIENT_ID: ${{ vars.VITE_AAD_CLIENT_ID }}
+      VITE_MI_API_SCOPE: ${{ vars.VITE_MI_API_SCOPE }}
+      # Optional; defaults to https://login.microsoftonline.com/organizations.
+      VITE_AAD_AUTHORITY: ${{ vars.VITE_AAD_AUTHORITY }}
     
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
           lfs: false
+      # The build-time inputs MSAL needs, checked before anything is compiled.
+      #
+      # Vite inlines VITE_* at build time and silently accepts an empty string,
+      # so a repository Variable that is unset — or set as a Secret, or defined
+      # on an environment this job does not use — produces a bundle that looks
+      # fine and cannot sign anyone in. This step makes that a failed build with
+      # a named cause instead.
+      #
+      # Values are masked. They are public identifiers, not credentials, but a
+      # log line is the wrong place to publish anything by default; the length
+      # and last four characters are enough to tell "arrived" from "empty" and
+      # to spot a value pasted with a stray space or quote.
+      - name: Verify the MSAL build inputs
+        run: |
+          set -euo pipefail
+
+          mask() {
+            local value="$1"
+            local length=${#value}
+            if [ "${length}" -le 4 ]; then printf '(%d chars)' "${length}";
+            else printf '…%s (%d chars)' "${value: -4}" "${length}"; fi
+          }
+
+          if [ "${VITE_MI_BEARER_AUTH}" != "true" ]; then
+            echo "VITE_MI_BEARER_AUTH is '${VITE_MI_BEARER_AUTH}' — Easy Auth build, MSAL inputs not required."
+            exit 0
+          fi
+
+          missing=""
+          [ -n "${VITE_AAD_CLIENT_ID:-}" ] || missing="${missing} VITE_AAD_CLIENT_ID"
+          [ -n "${VITE_MI_API_SCOPE:-}" ]  || missing="${missing} VITE_MI_API_SCOPE"
+          if [ -n "${missing}" ]; then
+            echo "::error::VITE_MI_BEARER_AUTH=true but these are empty in this job:${missing}"
+            echo "They must exist as repository VARIABLES (Settings → Secrets and variables"
+            echo "→ Actions → Variables). A Secret of the same name does not reach \${{ vars.* }},"
+            echo "and an Actions *environment* variable does not reach a job with no environment."
+            exit 1
+          fi
+
+          # A client id that is not a GUID is accepted by Vite, inlined happily,
+          # and then throws inside MSAL's constructor — which surfaces in the
+          # browser as "sign-in could not start", nowhere near this build.
+          if ! printf '%s' "${VITE_AAD_CLIENT_ID}" \
+               | grep -Eqi '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "::error::VITE_AAD_CLIENT_ID is not a GUID $(mask "${VITE_AAD_CLIENT_ID}") — an Entra"
+            echo "application (client) id always is. Check for a stray space, quote or newline."
+            exit 1
+          fi
+
+          # The scope must be the API's delegated scope, not the app id on its
+          # own: a bare GUID yields a token for the wrong audience and the API
+          # answers 401 on `aud`.
+          case "${VITE_MI_API_SCOPE}" in
+            api://*/*) : ;;
+            *) echo "::error::VITE_MI_API_SCOPE should look like api://<mi-api-app-id>/MI.Access"
+               echo "          got: $(mask "${VITE_MI_API_SCOPE}")"
+               exit 1 ;;
+          esac
+
+          echo "MSAL build inputs present:"
+          echo "  VITE_AAD_CLIENT_ID : $(mask "${VITE_AAD_CLIENT_ID}")"
+          echo "  VITE_MI_API_SCOPE  : api://…/${VITE_MI_API_SCOPE##*/} (${#VITE_MI_API_SCOPE} chars)"
+          echo "  VITE_AAD_AUTHORITY : ${VITE_AAD_AUTHORITY:-(default) https://login.microsoftonline.com/organizations}"
+          if [ "${VITE_MI_API_SCOPE##*/}" != "MI.Access" ]; then
+            echo "::warning::the scope does not end in /MI.Access — confirm it matches the scope exposed on trakt-mi-api"
+          fi
+
+      # Which hosting-layer configuration this build ships.
+      #
+      # Static Web Apps enforces its routes BEFORE any JavaScript runs, so the
+      # default config's catch-all (`/*` → allowedRoles: ["authenticated"]) plus
+      # its 401 override means an anonymous browser asking for `/` is redirected
+      # to /.auth/login/aad and never receives index.html. MSAL cannot start a
+      # sign-in from a page that was never served — which is why a bearer-mode
+      # build was still landing on the Easy Auth authorize URL
+      # (redirect_uri=…/.auth/login/aad/callback, scope=openid profile email)
+      # instead of asking for api://…/MI.Access.
+      #
+      # So the bearer build ships a different config: the SHELL is anonymous,
+      # and access control moves to MSAL + the bearer token + trakt-mi-api,
+      # which stays fail-closed (react_auth.py) and is the only thing standing
+      # in front of MI data either way. The default file is never edited in the
+      # repository — rollback is unsetting VITE_MI_BEARER_AUTH.
+      - name: Select the Static Web Apps configuration
+        working-directory: frontend/mi-agent-ui
+        run: |
+          set -euo pipefail
+          if [ "${VITE_MI_BEARER_AUTH}" = "true" ]; then
+            cp staticwebapp.bearer.json staticwebapp.config.json
+            echo "MODE: bearer — the SPA shell is served anonymously; MSAL and trakt-mi-api enforce access."
+          else
+            echo "MODE: Static Web Apps Easy Auth — unchanged."
+          fi
+
+          # Assert the shipped file matches the mode. A build that says bearer
+          # and ships the gate would fail the same way this step exists to fix,
+          # and would do it silently.
+          python3 - "${VITE_MI_BEARER_AUTH}" <<'PY'
+          import json, sys
+          bearer = sys.argv[1] == "true"
+          cfg = json.load(open("staticwebapp.config.json"))
+          routes = {r.get("route"): r for r in cfg.get("routes", [])}
+          catch_all = set(routes.get("/*", {}).get("allowedRoles") or [])
+          override = (cfg.get("responseOverrides") or {}).get("401") or {}
+          redirects_to_easy_auth = ".auth/login" in (override.get("redirect") or "")
+
+          if bearer:
+              assert "anonymous" in catch_all, f"catch-all is not anonymous: {catch_all}"
+              assert not redirects_to_easy_auth, "a 401 still redirects to Easy Auth"
+              assert not (set(routes.get("/api/*", {}).get("allowedRoles") or []) & {"client", "operator"}), \
+                  "/api/* still requires a Static Web Apps role"
+              print("OK: anonymous shell, no Easy Auth interception, no SWA role gate.")
+          else:
+              assert catch_all == {"authenticated"}, f"catch-all is not authenticated: {catch_all}"
+              assert redirects_to_easy_auth, "the Easy Auth 401 redirect is missing"
+              print("OK: Easy Auth behaviour preserved.")
+
+          # True in BOTH modes, or a deep link 404s and the headers are lost.
+          assert (cfg.get("navigationFallback") or {}).get("rewrite") == "/index.html"
+          assert cfg.get("globalHeaders", {}).get("X-Content-Type-Options") == "nosniff"
+          PY
+
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1

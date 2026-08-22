@@ -142,11 +142,11 @@ export default function Page() {
               <div className="lg:col-span-6">
                 <h2
                   id="book-a-demo-heading"
-                  className="text-balance text-2xl font-semibold tracking-tight text-ink-100 sm:text-3xl"
+                  className="text-balance text-headline font-semibold text-ink-100"
                 >
                   See your portfolio through one governed view.
                 </h2>
-                <p className="mt-4 max-w-[72ch] text-[15px] leading-relaxed text-ink-300">
+                <p className="mt-4 max-w-[72ch] text-body leading-relaxed text-ink-300">
                   We will demonstrate Trakt against your own portfolios, funding
                   requirements and Microsoft 365 environment.
                 </p>

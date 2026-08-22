@@ -426,73 +426,103 @@ TECHNICAL_DEFINITIONS = (
 )
 
 
-def test_the_split_is_declared_in_the_catalogue():
-    """Two sections, and the deferral is the catalogue's own declaration."""
+def test_both_kinds_of_definition_are_deferred_by_the_catalogue():
+    """Meaning and file detail both wait for a file — and the catalogue says so.
+
+    Trakt does not ask a client to map their fields; asking them in the
+    abstract what a balance means is the same request wearing a different hat.
+    Both are answered from the file, then confirmed. Neither section is
+    deleted: every field is still declared, and still collected.
+    """
     cat = catalogue()
     business = cat.section("data_semantics")
     technical = cat.section("data_definitions")
     assert business is not None and technical is not None
-    assert business.deferred_until == "", \
-        "business meaning is asked during onboarding, not deferred"
+    assert business.deferred_until, \
+        "business meaning must wait for a file, so it can be asked about one"
     assert technical.deferred_until, \
         "file-specific detail must be deferred by the catalogue"
+    # Deferred, not dropped.
     assert {f.key for f in business.fields} == set(BUSINESS_DEFINITIONS)
     assert {f.key for f in technical.fields} == set(TECHNICAL_DEFINITIONS)
 
 
 def test_the_deferral_is_not_hardcoded():
-    """``deferred_sections`` reads the catalogue rather than holding a list."""
+    """``deferred_sections`` reads the catalogue rather than holding a list.
+
+    This is the property that made the change a configuration edit: no code
+    names ``data_semantics``, so which questions wait is a catalogue decision.
+    """
     cat = catalogue()
     deferred = _classification.deferred_sections(cat)
     assert deferred == {s.key: s.deferred_until for s in cat.sections
                         if s.deferred_until}
     assert "data_definitions" in deferred
-    assert "data_semantics" not in deferred
+    assert "data_semantics" in deferred
 
 
-def test_business_definitions_appear_in_the_initial_pack(opened, service):
-    """1 — what the numbers MEAN is asked during onboarding."""
+def test_no_generic_semantic_question_reaches_the_first_communication(opened,
+                                                                     service):
+    """1 — the six a client should never be asked cold, and the rest with them.
+
+    "What does a balance mean?" asks the client to write a data dictionary for
+    a file Trakt has not looked at. None of these may appear before one has
+    arrived.
+    """
     form = _client_form.build(opened.case, cat=service.onboarding.catalogue)
     keys = set(form.keys())
-    for always in ("balance_definition", "gross_net_convention",
-                   "units_and_currency", "cut_off_convention",
-                   "measure_basis", "redemption_definition",
-                   "status_definitions"):
-        assert f"data_semantics.{always}" in keys, always
-    step = next(s for s in form.steps if s.key == "meaning")
-    assert step.question_count == 10
-    # Asked, not demanded: making these block approval would stop an existing
-    # client being brought in on records that never captured them. Whether any
-    # should become mandatory is a governance decision taken separately.
-    assert step.required_count == 0
+    for never in BUSINESS_DEFINITIONS:
+        assert f"data_semantics.{never}" not in keys, never
+    assert not [s for s in form.steps if s.key == "meaning"], \
+        "the meaning step has no place in the initial client form"
 
 
-def test_business_definitions_are_conditional_where_applicable(service):
-    """1 — "where applicable" is the catalogue's condition, not a constant."""
+def test_the_deferred_questions_are_reported_not_silently_dropped(opened,
+                                                                  service):
+    """6 — internal completeness survives the simplification.
+
+    Every deferred field is still classified, still carries the reason it is
+    absent, and is still named to the client — so "why am I not being asked
+    that?" has an answer, and nothing falls out of the catalogue unnoticed.
+    """
+    built = service.build_pack(opened)
+    reported = {row["key"]: row for row in built.not_asked}
+    for key in BUSINESS_DEFINITIONS:
+        path = f"data_semantics.{key}"
+        assert path in reported, f"{key} vanished instead of being reported"
+        assert reported[path]["reason"], f"{key} must say why it is not asked"
+    # Those that apply to this client are deferred to the first file; the rest
+    # are out of scope for its products, which is a different answer and is
+    # given as one.
+    deferred = [k for k in BUSINESS_DEFINITIONS
+                if reported[f"data_semantics.{k}"]["category"]
+                == "first_delivery"]
+    assert deferred, "the applicable semantics must be deferred, not dropped"
+    assert "representative file" in \
+        reported[f"data_semantics.{deferred[0]}"]["reason"]
+
+
+def test_the_conditions_on_deferred_questions_are_kept_for_later(service):
+    """1 — deferring is not deleting: the applicability rules still stand.
+
+    ``asked_when`` decides whether a question applies at all. It has to survive
+    the deferral, because the post-ingestion clarification needs it to know
+    which questions are even relevant to this client.
+    """
     cat = service.onboarding.catalogue
     conditional = ("valuation_basis", "cashflow_basis",
                    "accrued_interest_treatment")
     for key in conditional:
         assert cat.field("data_semantics", key).asked_when, key
 
-    # A client who receives MI is asked them.
+    # And no product selection brings them forward into the first ask.
     with_mi = service.create_case(
         tenant=TENANT_A, initiating_user=ACTOR,
         instruction="Onboard Northstar Lending. UK equity release. Monthly "
                     "portfolio MI. Portfolio id direct_101.")
     asked = set(_client_form.build(with_mi.case, cat=cat).keys())
     for key in conditional:
-        assert f"data_semantics.{key}" in asked, key
-
-    # A client who has selected no product yet is not.
-    without = service.create_case(
-        tenant=TENANT_A, initiating_user=ACTOR,
-        instruction="Onboard Kestrel Mutual. UK equity release. Portfolio id "
-                    "direct_601.")
-    assert "mi" not in without.case.products
-    quiet = set(_client_form.build(without.case, cat=cat).keys())
-    for key in conditional:
-        assert f"data_semantics.{key}" not in quiet, key
+        assert f"data_semantics.{key}" not in asked, key
 
 
 def test_technical_file_detail_stays_deferred(opened, service):
@@ -545,18 +575,32 @@ def test_the_pack_stays_progressive_rather_than_flat(opened, service):
         assert [r for r in rows if r.category == category], category
 
 
-def test_answering_a_business_definition_removes_it_from_the_pack(opened,
-                                                                  service):
+def test_answering_a_question_removes_it_from_the_pack(opened, service):
     """3 — progressive in the other direction: answered questions go away."""
     cat = service.onboarding.catalogue
     before = _client_form.build(opened.case, cat=cat).question_count
     answered = service.submit_client_response(
         opened, actor=ACTOR,
-        response={"data_semantics.units_and_currency": "Units, GBP.",
-                  "data_semantics.measure_basis": "point_in_time"})
+        response={"contacts.reporting_contact_name": "Dana Fox",
+                  "contacts.reporting_contact_email": "dana@northstar.example"})
     after = _client_form.build(answered.case, cat=cat)
     assert after.question_count == before - 2
-    assert "data_semantics.units_and_currency" not in set(after.keys())
+    assert "contacts.reporting_contact_email" not in set(after.keys())
+
+
+def test_a_deferred_definition_can_still_be_recorded_when_it_is_answered(
+        opened, service):
+    """6 — the requirement is deferred, never removed.
+
+    The onboarding record still has somewhere for every one of these to go, so
+    the post-ingestion clarification writes through the SAME governed path the
+    initial pack would have used.
+    """
+    cat = service.onboarding.catalogue
+    for key in BUSINESS_DEFINITIONS:
+        declared = cat.field("data_semantics", key)
+        assert declared is not None, key
+        assert declared.writes_to, f"{key} must still have a destination"
 
 
 # --------------------------------------------------------------------------- #

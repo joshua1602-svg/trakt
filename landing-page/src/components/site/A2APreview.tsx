@@ -20,16 +20,16 @@ export function A2APreview() {
       role="img"
       aria-label="The Alderbridge enterprise agent delegates a securitisation-readiness objective to a Trakt agent and receives an evidence-backed assessment"
     >
-      <p className="border-b border-line pb-3 text-xs font-medium text-ink-300">
+      <p className="border-b border-line pb-3 text-small font-medium text-ink-300">
         Agent-to-agent delegation
       </p>
-      <p className="pt-4 text-[13px] leading-relaxed text-ink-200">
+      <p className="pt-4 text-body leading-relaxed text-ink-200">
         The Alderbridge enterprise agent discovers the Trakt Securitisation Readiness
         Agent, delegates the objective “assess this portfolio for securitisation
         readiness”, and receives a structured, evidence-backed assessment. Trakt
         chooses what to investigate.
       </p>
-      <p className="mt-3 text-[13px] leading-relaxed text-ink-300">
+      <p className="mt-3 text-body leading-relaxed text-ink-300">
         One recorded run against a synthetic portfolio: 30 governed queries, six
         material findings, eight diligence items and four declared gaps — including
         the 31% regional concentration that passes a warehouse limit, breaches a

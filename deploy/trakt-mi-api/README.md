@@ -24,10 +24,22 @@ onboarding / regime logic is changed.
 | File | Purpose |
 |---|---|
 | `startup.sh` (repo root) | App Service **Startup Command**: `gunicorn mi_agent_api.app:app -k uvicorn_worker.UvicornWorker` |
-| `requirements.txt` (repo root) | Oryx install set — repo runtime deps **+** `fastapi` / `uvicorn[standard]` / `gunicorn` |
+| `deploy/trakt-mi-api/requirements.txt` | **the Oryx install set for this App Service.** Only what `mi_agent_api.app` imports |
+| `deploy/trakt-mi-api/package_contents.txt` | what the deployment artefact contains — the paths the workflow stages |
+| `.github/workflows/deploy-mi-api.yml` | stages that artefact and deploys it (`package:`), rather than the whole checkout |
+| `requirements.txt` (repo root) | the **repository's** dependency set — Function App, Streamlit, ESMA delivery engine, mail. Not this App Service's contract |
 | `mi_agent_api/requirements.txt` | the server deps on their own (local dev) |
 | `deploy/trakt-mi-api/provision.sh` | one-shot `az` provision + deploy |
 | `deploy/trakt-mi-api/app_settings.example.json` | the app settings |
+
+> **Why a staged artefact.** Deploying the repo root made Oryx read the root
+> `requirements.txt` as the runtime contract, so every deploy installed
+> scikit-learn, scipy, streamlit, pyarrow and 24 other packages the API never
+> imports — 88 resolved packages instead of 60. That is what left the build on
+> `Running uv pip install...` for 20+ minutes, and an unfinished build leaves
+> `antenv` without `gunicorn`, which is how `bash startup.sh` exits **127**.
+> `tests/test_mi_api_appservice_packaging.py` recomputes the API's import closure
+> and fails if either file drifts from what the app actually needs.
 
 ## App settings (production)
 
@@ -120,7 +132,17 @@ must exist (run/approve a funded pack first).
 - The platform canonical is downloaded to scratch on resolution (no TTL cache);
   for very large tapes prefer mounting the `latest/` dir and using
   `MI_AGENT_PLATFORM_DIR` instead of `MI_AGENT_PLATFORM_URI`.
-- The repo root `requirements.txt` carries the server deps so a single Oryx build
-  serves this App Service; the Function App ignores them.
+- **Do not save app settings, change the startup command, or restart the app
+  while a deployment is running.** Each of those is a management operation that
+  recycles the SCM container, and Azure kills the in-flight build with
+  *"Deployment has been stopped due to SCM container restart"* — the deployment
+  fails after ~10 minutes with nothing applied. Settings first, then deploy, or
+  wait for the run to go green. The workflow queues its own runs
+  (`concurrency: deploy-trakt-mi-api`) so two deploys cannot collide, and retries
+  once after 3 minutes, but it cannot see a portal edit.
+- Code deploys go through `.github/workflows/deploy-mi-api.yml`, which stages the
+  artefact described above. `provision.sh` still `az webapp up`s the repo root —
+  fine for first-time provisioning, but re-run the workflow afterwards so the App
+  Service is left building the API's contract rather than the repository's.
 - No auth/RBAC is added here (matches the existing API); put the App Service
   behind your gateway / Easy Auth as needed.

@@ -911,6 +911,43 @@ test.describe("Trakt landing page", () => {
    * and must sit inside that clear band. Asserted at all three widths because
    * it has twice been checked by eye and twice been wrong.
    */
+  /**
+   * The A2A poster is a real frame of the film — frame 1210, where the three
+   * verdicts have resolved — rather than a composition arranged around a
+   * centred play control. That was the previous arrangement and it bought a
+   * still the film never shows: press play and the picture changes entirely.
+   *
+   * The trade is that the plate has to move instead. Frame 1210 draws
+   * everything above 65% of the frame height, so the plate is anchored low and
+   * this asserts it stays out of the picture.
+   */
+  test("the A2A play plate sits below everything its poster draws", async ({ page }) => {
+    for (const width of [1440, 834, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator("#agents").scrollIntoViewIfNeeded();
+
+      const frame = await page.locator("#agents video").boundingBox();
+      const plate = await page.locator('[data-plate="a2a"]').boundingBox();
+      expect(frame, `no video frame at ${width}`).not.toBeNull();
+      expect(plate, `no play plate at ${width}`).not.toBeNull();
+      if (!frame || !plate) continue;
+
+      expect(
+        plate.y,
+        `the A2A plate covers the assessment at ${width}px`,
+      ).toBeGreaterThanOrEqual(frame.y + frame.height * 0.65);
+      expect(
+        plate.y + plate.height,
+        `the A2A plate overhangs the frame at ${width}px`,
+      ).toBeLessThanOrEqual(frame.y + frame.height + 1);
+      // Not centred — that is the controls plate's geometry, and asserting it
+      // here would pass silently if the two players' positions were swapped.
+      const centred =
+        Math.abs(plate.y + plate.height / 2 - (frame.y + frame.height / 2)) <= 4;
+      expect(centred, `the A2A plate is centred at ${width}px`).toBe(false);
+    }
+  });
+
   test("the play plate never covers the control rows or the breach horizon", async ({
     page,
   }) => {
