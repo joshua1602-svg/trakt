@@ -433,8 +433,17 @@ _METRIC_TERMS = (
     ("weighted average ltv", "ltv"),
     ("loan to value", "ltv"),
     ("ltv", "ltv"),
+    # Plurals, in the same convention the redemption/recovery entries already
+    # follow. A lender types "how have direct and acquired BALANCES moved";
+    # without these the question resolved NO metric, could not compose an
+    # analytical plan, fell through to a whole-book series and was refused with
+    # a message naming the product's limit rather than a missing plural.
+    # Longer forms first, as everywhere in this table.
+    ("outstanding balances", "balance"),
     ("outstanding balance", "balance"),
+    ("balances", "balance"),
     ("balance", "balance"),
+    ("exposures", "balance"),
     ("exposure", "balance"),
     # "size" is a MEASURE noun when it is what is being averaged and a bucket
     # DIMENSION when it is what the answer is grouped by. The dimension reading
@@ -646,11 +655,28 @@ def _registry_metric_terms(semantics: dict) -> Dict[str, str]:
             if name:
                 phrases.append(str(name))
         phrases.append(key.replace("_", " "))
+        # A LENDER TYPES PLURALS. The registry carries singular business terms
+        # ("balance", "exposure"), so "how have direct and acquired BALANCES
+        # moved" resolved no metric at all — and a question with no metric
+        # cannot compose an analytical plan, so it fell through to a route that
+        # returned a whole-book series and was then refused. The refusal named
+        # the product's limit; the actual limit was a missing plural.
+        #
+        # Registered through the SAME ambiguity mechanism as the singular, so a
+        # plural that collides with another field's term is dropped rather than
+        # guessed, and the generic-token filter applies to both forms.
+        for phrase in list(phrases):
+            p = str(phrase).strip().lower()
+            if p and not p.endswith("s"):
+                phrases.append(p + "s")
         for phrase in phrases:
             p = str(phrase).strip().lower()
             if len(p) < 3:
                 continue
             if " " not in p and p in _GENERIC_METRIC_TOKENS:
+                continue
+            # The plural of a generic token is just as generic.
+            if " " not in p and p.endswith("s") and p[:-1] in _GENERIC_METRIC_TOKENS:
                 continue
             existing = out.get(p)
             if existing is not None and existing != key:

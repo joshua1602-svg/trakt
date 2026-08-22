@@ -268,7 +268,19 @@ def _asker(client_id: str, llm: bool):
         MiQueryRequest(question=q), ctx).result or {})
 
 
-def run(book: str, llm: bool) -> Dict[str, Any]:
+def _bank(name: str) -> List[Tuple[str, str, str, List[str]]]:
+    """The phrasings to measure. The declared 29, the widened 32, or both."""
+    from question_interpretation.mi_phrasing_bank import (
+        combined_phrasings, widened_phrasings)
+    if name == "declared":
+        return [(sid, nm, q, list(w))
+                for sid, nm, qs, w in SHAPES for q in qs]
+    if name == "widened":
+        return widened_phrasings()
+    return combined_phrasings()
+
+
+def run(book: str, llm: bool, bank: str = "declared") -> Dict[str, Any]:
     problems = preflight(book)
     if problems:
         return {"book": book, "blocked": problems}
@@ -280,24 +292,23 @@ def run(book: str, llm: bool) -> Dict[str, Any]:
     domains = dimension_domains(all_frags)
 
     rows: List[Dict[str, Any]] = []
-    for sid, name, phrasings, want in SHAPES:
-        for q in phrasings:
-            res = ask(q)
-            ok = bool(res.get("ok"))
-            census = full_census(res.get("artifacts") or [])
-            rating, why, evidence = rate_content(ok, want, census, domains)
-            rows.append({
-                "shape": sid, "shape_name": name, "question": q, "want": want,
-                "ok": ok, "route": (res.get("metadata") or {}).get("route"),
-                "rating_content": rating, "why_content": why,
-                "evidence": evidence,
-                "status": (DELIVERS if rating == PROVEN
-                           else REFUSED if not ok else INCOMPLETE),
-                "columns": sorted(census["columns"]),
-                "movement_pair": census["movement_pair"],
-                "answer": str(res.get("answer") or res.get("error") or "")[:220],
-            })
-    return {"book": book, "llm": llm, "rows": rows,
+    for sid, name, q, want in _bank(bank):
+        res = ask(q)
+        ok = bool(res.get("ok"))
+        census = full_census(res.get("artifacts") or [])
+        rating, why, evidence = rate_content(ok, want, census, domains)
+        rows.append({
+            "shape": sid, "shape_name": name, "question": q, "want": want,
+            "ok": ok, "route": (res.get("metadata") or {}).get("route"),
+            "rating_content": rating, "why_content": why,
+            "evidence": evidence,
+            "status": (DELIVERS if rating == PROVEN
+                       else REFUSED if not ok else INCOMPLETE),
+            "columns": sorted(census["columns"]),
+            "movement_pair": census["movement_pair"],
+            "answer": str(res.get("answer") or res.get("error") or "")[:220],
+        })
+    return {"book": book, "llm": llm, "bank": bank, "rows": rows,
             "domains": {k: sorted(v)[:20] for k, v in domains.items()}}
 
 
@@ -421,8 +432,9 @@ def report(result: Dict[str, Any]) -> int:
     rows = result["rows"]
     sib = sibling_analysis(result)
     print("=" * 96)
-    print("CAPABILITY RECORD RE-RATED FROM CONTENTS — %s (%s arm)"
-          % (result["book"], "LLM" if result["llm"] else "deterministic"))
+    print("CAPABILITY RECORD RE-RATED FROM CONTENTS — %s (%s arm, %s bank, %d phrasings)"
+          % (result["book"], "LLM" if result["llm"] else "deterministic",
+             result.get("bank", "declared"), len(result["rows"])))
     print("=" * 96)
     print()
     print("SHAPE RATINGS")
@@ -470,9 +482,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--book", default="alderbridge",
                     choices=("alderbridge", "kestrelmoor"))
     ap.add_argument("--llm", action="store_true", help="run the LLM arm instead")
+    ap.add_argument("--bank", default="declared",
+                    choices=("declared", "widened", "combined"),
+                    help="which phrasing bank to measure")
     ap.add_argument("--json", metavar="PATH")
     args = ap.parse_args(argv)
-    result = run(args.book, args.llm)
+    result = run(args.book, args.llm, args.bank)
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=2, default=str),
                                    encoding="utf-8")

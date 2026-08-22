@@ -1,5 +1,18 @@
 # Phrasing reachability — are the absences capability gaps or routing gaps?
 
+> **UPDATE — superseded in two places.**
+> **(1)** The third routing gap below (the P0 refusal) is FIXED — see
+> `docs/mi_p0_segment_pair_refusal_fix.md`. On the declared 29 the strict count
+> is now **2**, not 3, and T8 is PROVEN.
+> **(2)** The phrasing bank has been widened from 29 to 61 before P1 scoping, as
+> the caveat at the foot of this document recommended. The wider measurement
+> found **more** work, not less: 14 of 61 deliver, 8 strict routing gaps, 39
+> capability gaps, and T3–T6 stand at **0 of 30**. See
+> `docs/mi_phrasing_bank_widened.md`.
+>
+> The reasoning below — and the strict-vs-loose distinction, now a standing
+> definition in `docs/mi_sibling_rule.md` — is unchanged and still governs.
+
 **The question this answers:** of the 29 time-series phrasings, how many that
 fail have a **working sibling** — the same request, reachable under a different
 wording? That number decides whether P1 is building a capability or fixing a

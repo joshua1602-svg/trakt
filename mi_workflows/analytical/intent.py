@@ -430,7 +430,44 @@ def is_comparative(question: Optional[str]) -> bool:
     vocabulary — which is how the same question came to resolve two different
     ways depending on which of the two lists happened to contain its wording.
     """
-    return _any(normalise(question), _COMPARISON_TERMS)
+    text = normalise(question)
+    return _any(text, _COMPARISON_TERMS) or names_both_sides_of_a_pair(text)
+
+
+def names_both_sides_of_a_pair(text: str) -> bool:
+    """Whether the sentence names BOTH values of one governed binary dimension.
+
+    NAMING BOTH SIDES *IS* THE COMPARISON. A comparison verb adds nothing to
+    "direct and acquired" — there is no other thing two values of one dimension
+    coordinated by "and" could be asking for once a measure is attached.
+
+    Requiring a verb made this layer disagree with the guard that reads the same
+    sentence. "How have direct and acquired balances moved over the periods?"
+    carries no verb in `_COMPARISON_TERMS`, so no comparison signal was raised,
+    `_plan_population_movement_comparison` declined, and the question fell
+    through to a route returning a whole-book series —
+    `execution_receipt.segments_named_in` then read the SAME sentence against
+    the SAME governed values, found `direct` and `acquired`, and refused
+    "Direct and Acquired tracked separately … could not be applied". True of
+    the route, false of the product: the identical request with the word
+    "compare" in it composes and answers.
+
+    Deliberately narrow. It asks only about the two GOVERNED BINARY dimensions
+    whose vocabularies are owned elsewhere — the portfolio lens (direct /
+    acquired) and seasoning (front book / back book). It says nothing about two
+    DIMENSIONS coordinated by "and": "balance by month by region and LTV band"
+    names no value of either pair, raises no signal here, and keeps its P0
+    refusal.
+    """
+    try:
+        from mi_agent import portfolio_lens as _lens
+    except Exception:  # noqa: BLE001 - recognition must never break on an import
+        return False
+    both_provenance = (_lens._contains_any(text, _lens._DIRECT_TERMS)
+                       and _lens._contains_any(text, _lens._ACQUIRED_TERMS))
+    if both_provenance:
+        return True
+    return " front book " in text and " back book " in text
 
 
 # --------------------------------------------------------------------------- #
@@ -544,7 +581,11 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     matched: List[str] = []
     signals: List[str] = []
 
-    comparative = _any(text, _COMPARISON_TERMS)
+    # Through the SHARED definition, not a second copy of the vocabulary —
+    # which is the drift `is_comparative`'s own docstring warns about, and which
+    # is how this line and the planner came to answer the same question two
+    # different ways.
+    comparative = _any(text, _COMPARISON_TERMS) or names_both_sides_of_a_pair(text)
     changing = _any(text, _CHANGE_TERMS)
     # A comparison against a PAST period is a change question, whether or not
     # the sentence contains a change verb.

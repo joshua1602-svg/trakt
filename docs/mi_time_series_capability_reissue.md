@@ -1,5 +1,15 @@
 # Time-series capability — REISSUED, rated from artifact contents
 
+> **UPDATE — shape 8 is now PROVEN, not PARTIAL.** The P0 refusal on
+> `How have direct and acquired balances moved over the periods?` was a routing
+> defect, not an absence, and was fixed before P1 — see
+> `docs/mi_p0_segment_pair_refusal_fix.md`. All **3 of 3** declared T8 phrasings
+> now deliver on both books. The table below reads PARTIAL for T8 because that
+> is what it measured before the fix; the corrected row is here.
+>
+> **Under a wider phrasing bank the ratings look worse, not better** — T1 falls
+> to PARTIAL on lender-voice phrasings. See `docs/mi_phrasing_bank_widened.md`.
+
 **This supersedes the table in `docs/mi_time_series_capability_report.md`.**
 That report is not withdrawn — its measurements were correct for the instrument
 and the product version it ran against. It is superseded because both have since

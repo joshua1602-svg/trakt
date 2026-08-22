@@ -138,13 +138,37 @@ def resolve_population_pair(question: str, frame=None, semantics=None
     if len(lenses) >= 2:
         return (pops.provenance_population(lenses[0].name),
                 pops.provenance_population(lenses[1].name))
-    if _is_comparative(text):
-        has_direct = _portfolio_lens._contains_any(text, _portfolio_lens._DIRECT_TERMS)
-        has_acquired = _portfolio_lens._contains_any(text,
-                                                     _portfolio_lens._ACQUIRED_TERMS)
-        if has_direct and has_acquired:
-            return (pops.provenance_population(_portfolio_lens.LENS_DIRECT),
-                    pops.provenance_population(_portfolio_lens.LENS_ACQUIRED))
+    # NAMING BOTH VALUES OF ONE GOVERNED DIMENSION *IS* THE COMPARISON. A
+    # comparison VERB is not additionally required, and requiring one made this
+    # layer disagree with the guard that reads the same sentence.
+    #
+    # "How have direct and acquired balances moved over the periods?" carries no
+    # verb in `_COMPARISON_TERMS`, so this strategy declined, no composite plan
+    # was built, and the question fell through to `cohort_progression` — which
+    # returned a whole-book series. `execution_receipt.segments_named_in` then
+    # read the SAME sentence against the SAME governed values, found `direct`
+    # and `acquired`, and refused: "Direct and Acquired tracked separately …
+    # could not be applied to the calculation."
+    #
+    # That statement was true of the route and FALSE of the product: "Compare
+    # balance over time for direct and acquired" — the identical request with a
+    # comparison verb — composes and answers completely. Two mechanisms were
+    # deciding "did the user ask for these split?" by different logic, and the
+    # weaker one (a verb vocabulary) gated the route while the stronger one
+    # (governed value matching) drove the refusal.
+    #
+    # This does NOT weaken the P0 guard. The guard still refuses a whole-book
+    # series returned for a segmented request; it stops firing here because the
+    # route now produces the segmented series it was protecting. The two P0
+    # time-axis refusals ("by region and LTV band") name no provenance value at
+    # all, so they cannot reach this branch: they coordinate two DIMENSIONS,
+    # not two VALUES of one dimension, and remain refusals.
+    has_direct = _portfolio_lens._contains_any(text, _portfolio_lens._DIRECT_TERMS)
+    has_acquired = _portfolio_lens._contains_any(text,
+                                                 _portfolio_lens._ACQUIRED_TERMS)
+    if has_direct and has_acquired:
+        return (pops.provenance_population(_portfolio_lens.LENS_DIRECT),
+                pops.provenance_population(_portfolio_lens.LENS_ACQUIRED))
 
     # 2. Seasoning — the governed lending windows, of which the binary
     #    front/back partition is two. Ordered by position in the question, so
