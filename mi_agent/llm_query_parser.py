@@ -26,6 +26,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from question_interpretation import lexical as _lexical
+
 from .mi_query_spec import MAX_MEASURES, MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
 from . import statistic as _statistic
@@ -853,8 +855,10 @@ _COUNT_MEASURE_RE = re.compile(
 #: names axes, not measures — "balance by region and age bucket" measures one
 #: thing across two, and reading "age" there as a second measure would turn a
 #: governed two-dimensional breakdown into a spurious multi-measure request.
+#: Same owner as the splitter above. This list happened to be complete; reading
+#: the owner is what stops it drifting apart from the splitter again.
 _GROUPING_CLAUSE_RE = re.compile(
-    r"\b(?:split\s+by|grouped\s+by|broken\s+down\s+by|by|per|across)\b", re.I)
+    r"\b(?:" + _lexical.axis_marker_alternation() + r")\b", re.I)
 
 #: Where a grouping clause ends and ordinary sentence resumes.
 _GROUPING_CLAUSE_END_RE = re.compile(
@@ -1482,8 +1486,6 @@ def _det_meta(confidence: str, explicit: bool, terms: List[str],
 # thousands commas, optional decimal, an optional k/m/bn multiplier and an
 # optional trailing %.  Captures (number, suffix).  Examples it accepts:
 #   "40", "40%", "200000", "100,000", "£100k", "£0.2m", "$1.5bn", "£200K"
-from question_interpretation import lexical as _lexical  # noqa: E402
-
 _VALUE = r"(?:£|\$|€)?\s*(-?\d[\d,]*(?:\.\d+)?)\s*(k|m|bn|b|K|M|BN|B)?\s*%?"
 _MULTIPLIER = {"k": 1e3, "m": 1e6, "b": 1e9, "bn": 1e9}
 
@@ -1787,7 +1789,16 @@ def _grouping_segments(q: str) -> Tuple[str, List[str]]:
 
     Handles both ``by X by Y`` and ``by X and Y`` / ``X, Y`` separators.
     """
-    parts = re.split(r"\bby\b", q)
+    # Item 2 — THE MARKERS COME FROM `question_interpretation.lexical`, which
+    # owns them. This split was `\bby\b` and nothing else, so "balance ACROSS
+    # LTV and ticket size" was never cut: `_detect_metric` (which masks nothing
+    # and relies on the caller pre-cutting) then saw the whole sentence and read
+    # `ltv` from the AXIS clause as the measure. A two-dimension breakdown of
+    # balance became a one-dimension breakdown of LTV, and the substitution
+    # guard refused. `split by` / `broken down by` / `grouped by` passed
+    # incidentally — they contain the word "by" — so only `per` and `across`
+    # ever showed the gap.
+    parts = re.split(r"\b(?:" + _lexical.axis_marker_alternation() + r")\b", q)
     metric_part = parts[0].strip()
     segments: List[str] = []
     for chunk in parts[1:]:
@@ -2704,7 +2715,28 @@ def _deterministic_parse(question: str, semantics: dict,
         if bstruct is not None:
             d_filters.update(bstruct[0])
         if d_filters:
-            rmetric = _balance_metric(semantics, available_columns)
+            # Item 2B — THE MEASURE THE QUESTION NAMED, not always the balance.
+            #
+            # This branch hard-coded `_balance_metric`, so "Show me the LTV for
+            # loans with a balance above £150,000" returned a balance column and
+            # the substitution guard refused: "the answer reports balance, but
+            # the question asked about ltv". The trigger was never the measure
+            # position — it was the WORDS show/list/display/drill plus "loans".
+            # "What is the LTV for loans with a balance above £150,000" resolved
+            # LTV correctly, and so did the same sentence with "accounts".
+            #
+            # `_measure_hits` is the owner and already discriminates: it masks
+            # grouping regions AND filter subjects, so "show me loans with LTV
+            # above 50%" names no measure (LTV is the condition) and keeps the
+            # balance, while "show me the LTV for loans with a balance above
+            # £150k" names one. Reading it here rather than re-deriving is what
+            # stops this branch disagreeing with the guard about the same
+            # sentence.
+            _named = [key for _s, _e, key, _agg in
+                      _measure_hits(q, semantics, available_columns)
+                      if key != "loan_count"]
+            rmetric = (_named[0] if len(_named) == 1
+                       else _balance_metric(semantics, available_columns))
             spec = MIQuerySpec(
                 intent="table", chart_type="none", metric=rmetric,
                 aggregation="loan_level", ranking_mode="loan_level", sort_by=rmetric,

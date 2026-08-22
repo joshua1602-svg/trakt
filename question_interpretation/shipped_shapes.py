@@ -336,6 +336,23 @@ def grade_B(seen: Dict[str, Any], t: Dict[str, Any]) -> Tuple[str, str]:
     if seen["population"] not in (None, t["big_count"]):
         return WRONG_ANSWER, ("answered over %s loans; the narrowing selects %d"
                               % (seen["population"], t["big_count"]))
+    # A LOAN-LEVEL answer is an answer. "Show me the LTV for loans over £150k"
+    # asks to SEE them, and a table of the right 5,857 loans carrying an LTV
+    # column answers it — there is no aggregate for this grader to match because
+    # the reader did not ask for one.
+    #
+    # The fourth time this grader has failed to see where the product put its
+    # answer, and the fourth time it did so in the direction of marking the
+    # product wrong for being right. The population check above is what keeps
+    # this from being leniency: a loan-level table over the WHOLE BOOK is still
+    # a wrong answer, and B5's defect could not pass through here.
+    if seen["population"] == t["big_count"]:
+        for art in seen["artifacts"]:
+            if art["type"] == "table" and art["rows"] and (
+                    "current_loan_to_value" in (art["columns"] or ())):
+                return CORRECT, (
+                    "loan-level over the %d loans over £150k, carrying the LTV "
+                    "column" % t["big_count"])
     return WRONG_ANSWER, "answered without stating an LTV this surface can match"
 
 
@@ -512,6 +529,13 @@ def self_test() -> int:
     expect("B wrong population",
            grade_B(seen(kpi_values=[99.0], population=77), t), WRONG_ANSWER)
     expect("B refusal", grade_B(seen(ok=False), t), UNHELPFUL_REFUSAL)
+    _loan_table = [{"type": "table", "title": "t", "rows": 50,
+                    "columns": ["loan_identifier", "current_loan_to_value"],
+                    "kpis": [], "sample": []}]
+    expect("B loan-level, right population",
+           grade_B(seen(population=50, artifacts=_loan_table), t), CORRECT)
+    expect("B loan-level, WHOLE BOOK",
+           grade_B(seen(population=100, artifacts=_loan_table), t), WRONG_ANSWER)
 
     # C — two dimensions, a table carrying both, and reconciliation
     expect("C both", grade_C(seen(dimensions_applied=["a", "b"], artifacts=both,

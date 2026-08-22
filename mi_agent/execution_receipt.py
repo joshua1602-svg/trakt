@@ -898,7 +898,10 @@ def named_measure_concepts(question: str) -> List[str]:
             # measures: a measure word introduced by a grouping preposition is
             # the axis, not the thing being measured.
             preceding = q[max(0, match.start() - 8):match.start()]
-            if re.search(r"\b(?:by|per|across|split by|grouped by)\s+$", preceding):
+            # Item 2 — the markers come from the owner. This list was missing
+            # "broken down by", which no case had reached.
+            if re.search(r"\b(?:" + _lexical.axis_marker_alternation()
+                         + r")\s+$", preceding, re.I):
                 continue
             if _is_filter_subject(q, match.start(), match.end()):
                 continue

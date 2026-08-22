@@ -48,7 +48,6 @@ _CONDITION_RE = re.compile(
     r"\b(" + "|".join(re.escape(t) for t in
                       sorted(CONDITION_OPENERS, key=len, reverse=True)) + r")\b")
 
-_BY_RE = re.compile(r"\bby\b")
 _DIGIT_RE = re.compile(r"\d")
 
 
@@ -75,7 +74,7 @@ def grouping_cut(text: str) -> Optional[int]:
     reading past "by" typed it as a rate — the condition defect, one clause
     along.
     """
-    match = _BY_RE.search(text or "")
+    match = AXIS_MARKER_RE.search(text or "")
     return match.start() if match else None
 
 
@@ -215,6 +214,36 @@ SELECTOR_OPENERS: Tuple[str, ...] = (
 AXIS_MARKERS: Tuple[str, ...] = (
     "by", "per", "across", "split by", "broken down by", "grouped by",
 )
+
+
+def axis_marker_alternation() -> str:
+    """A regex alternation of every grouping marker, longest first.
+
+    Item 2 — THE READ OWNER for "where does the grouping clause start?".
+    Four consumers were asking it and two hard-coded `\bby\b`:
+    `llm_query_parser._grouping_segments`, which SPLITS the sentence, and
+    `grouping_cut` below, which returns an OFFSET. `split by`, `broken down by`
+    and `grouped by` passed them INCIDENTALLY — those phrases contain the word
+    "by" — so only `per` and `across` exposed the gap, and a question grouped
+    "across LTV and ticket size" never had its grouping clause cut. The axis
+    field then stayed visible to `_detect_metric`, which masks nothing, and was
+    read as the MEASURE: a two-dimension breakdown of balance became a
+    one-dimension breakdown of LTV, and the substitution guard refused.
+
+    The declared list above was already correct. Nobody read it.
+
+    Longest first so `broken down by` is not shadowed by `by`. Each consumer
+    keeps its own implementation — split, region, suffix, offset — because
+    those are genuinely four different jobs over one fact.
+    """
+    return "|".join(re.escape(m) for m in
+                    sorted(AXIS_MARKERS, key=len, reverse=True))
+
+
+#: The marker as a standalone word/phrase. Built from the owner, never retyped.
+AXIS_MARKER_RE = re.compile(r"\b(?:" + "|".join(
+    re.escape(m) for m in sorted(AXIS_MARKERS, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE)
 
 _SELECTOR_BEFORE_RE = re.compile(
     r"\b(?:" + "|".join(sorted((re.escape(t) for t in SELECTOR_OPENERS),
