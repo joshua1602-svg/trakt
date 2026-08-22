@@ -4023,6 +4023,36 @@ def _names_end(column: str, end: str) -> bool:
     return col == end or col.startswith(end + "_") or col.endswith("_" + end)
 
 
+def _time_points(rows: Sequence[Mapping[str, Any]]
+                 ) -> Optional[Tuple[str, int]]:
+    """``(evidence, whole_book_rows)`` for one row set, or ``None``.
+
+    ``whole_book_rows`` is how many rows an answer of this SHAPE would carry if
+    it were not cut at all, which is what makes the segment test structural:
+
+      * a series puts each point in its own row, so an uncut one has as many
+        rows as it has points;
+      * a movement table puts its two points in a COLUMN PAIR, so an uncut one
+        has exactly one row — one row is one entity's movement.
+
+    Getting the second of those wrong is not academic. With both shapes read as
+    "as many rows as points", the two `analytical_composition` answers that
+    correctly track front book against back book — two rows, prior and current —
+    were refused for not being cut, which is the opposite of true.
+    """
+    columns = [str(c) for c in rows[0].keys()]
+    for column in columns:
+        if any(frag in column.lower() for frag in _ARTIFACT_TIME_FRAGMENTS):
+            count = _distinct_values(rows, column)
+            if count > 1:
+                return "%d distinct values in %s" % (count, column), count
+    for first, second in _ARTIFACT_END_PAIRS:
+        if (any(_names_end(c, first) for c in columns)
+                and any(_names_end(c, second) for c in columns)):
+            return "columns naming %s and %s" % (first, second), 1
+    return None
+
+
 def artifact_time_axis(artifacts: Optional[Iterable[Mapping[str, Any]]]
                        ) -> Optional[str]:
     """The evidence that the SHIPPED ROWS carry more than one point in time.
@@ -4031,21 +4061,97 @@ def artifact_time_axis(artifacts: Optional[Iterable[Mapping[str, Any]]]
     rendered object only.
     """
     for rows in _artifact_rows(artifacts):
-        columns = [str(c) for c in rows[0].keys()]
-        for column in columns:
-            if any(frag in column.lower() for frag in _ARTIFACT_TIME_FRAGMENTS):
-                count = _distinct_values(rows, column)
-                if count > 1:
-                    return "%d distinct values in %s" % (count, column)
-        for first, second in _ARTIFACT_END_PAIRS:
-            if (any(_names_end(c, first) for c in columns)
-                    and any(_names_end(c, second) for c in columns)):
-                return "columns naming %s and %s" % (first, second)
+        seen = _time_points(rows)
+        if seen:
+            return seen[0]
     return None
 
 
+def artifact_segment_cut(artifacts: Optional[Iterable[Mapping[str, Any]]]
+                         ) -> Optional[str]:
+    """The evidence that the series which shipped was cut into more than one.
+
+    STRUCTURAL, and deliberately carries no vocabulary at all.
+
+        a whole-book series has ONE row per point in time;
+        a segmented one has one row per (segment, point).
+
+    So the proof is that the row set carrying the time axis has more rows than
+    an UNCUT answer of its shape would. `_time_points` owns that count, because
+    the two shapes differ: a series carries one row per point, a movement table
+    carries one row full stop.
+
+    The first draft of this asked whether any column that was neither a time nor
+    a measure varied, against a list of measure words. It reported a cut on the
+    exact answer it exists to catch: `cohort_progression` ships a second table
+    carrying `wa_ltv` and `wa_interest_rate` beside the whole-book series, and
+    neither word was on the list. A blacklist of measure words can never be
+    complete, and the SHAPE of the rendered object does not need one.
+
+    WHAT THIS PROVES, AND WHAT IT DOES NOT
+    --------------------------------------
+    It proves the answer was cut. It does NOT prove it was cut by the segments
+    the sentence named — routes label their columns for a reader (`population`,
+    `category`, `area`) and never by canonical field, which is why D7 removed
+    the rung that guessed a field from a display column. Matching VALUES instead
+    would refuse answers that are correct today: "direct and acquired" is
+    honoured by a `population` column reading "Direct"/"Acquired" on one route
+    and "ALP Origination Book"/"ALP Acquired Back Book" on another.
+
+    So the bar is the P0 bar and no higher: nothing is silently discarded. "Cut
+    by the right thing" belongs to the grouping-evidence owner, and where that
+    owner cannot see a route's axis the residue is the segmented-series backlog,
+    which this stage does not open.
+    """
+    for rows in _artifact_rows(artifacts):
+        seen = _time_points(rows)
+        if not seen:
+            continue
+        _evidence, whole_book_rows = seen
+        if len(rows) > whole_book_rows:
+            return "%d rows where an uncut answer of this shape carries %d" % (
+                len(rows), whole_book_rows)
+    return None
+
+
+def segments_named_in(question: Optional[str],
+                      values: Optional[Mapping[str, str]]) -> List[str]:
+    """The governed values this sentence names, longest first, deduped by span.
+
+    LIMB 2 ASKS THE BOOK RATHER THAN A VOCABULARY, and that is the whole design.
+    "How have direct and acquired balances moved over the periods?" raises
+    nothing from any existing facet detector, and both refusals are correct:
+    `selector_mark` says the pair is a SUBJECT and not a selector, and
+    `_COMPARISON_MARKERS` finds no comparison verb. Adding a reading to either
+    would have changed what they mean everywhere else. `dimension_values`
+    already knows this book carries `direct` on `origination_channel` and
+    `acquired` on `source_portfolio_type`, so the segment signal costs no new
+    words at all: two or more distinct governed values named in one sentence.
+
+    Longest first with span exclusion, as `_detect_lost_narrowing` does, so
+    "east" inside "south east" is not counted a second time.
+    """
+    if not values:
+        return []
+    text = " %s " % str(question or "").lower()
+    taken: List[Tuple[int, int]] = []
+    found: List[Tuple[int, str]] = []
+    for value in sorted(values, key=len, reverse=True):
+        for match in re.finditer(r"\b" + re.escape(value) + r"\b", text):
+            span = (match.start(), match.end())
+            if any(s <= span[0] and span[1] <= e for s, e in taken):
+                continue
+            taken.append(span)
+            found.append((span[0], value))
+    # Matched longest-first so a contained value is excluded, but RETURNED in
+    # the order the sentence says them, so a refusal quotes "direct and
+    # acquired" the way it was asked rather than alphabetically.
+    return [value for _start, value in sorted(found)]
+
+
 def temporal_honouring_facets(question: Optional[str],
-                              artifacts: Optional[Iterable[Mapping[str, Any]]]
+                              artifacts: Optional[Iterable[Mapping[str, Any]]],
+                              values: Optional[Mapping[str, str]] = None
                               ) -> List[RequestedFacet]:
     """Every axis this sentence asked the answer to vary over and did not get.
 
@@ -4063,14 +4169,31 @@ def temporal_honouring_facets(question: Optional[str],
         return []
     if not (artifacts or ()):
         return []
-    if artifact_time_axis(artifacts):
+    if not artifact_time_axis(artifacts):
+        return [RequestedFacet(
+            kind=KIND_SERIES_AXIS, label="a series %s" % wording,
+            # No em-dash in the reason: `disclosure()` already joins the label
+            # to it with one, and a sentence carrying two reads as three
+            # clauses.
+            reason=("the answer that was produced carries no time axis; it "
+                    "reports a single position and cannot show movement"))]
+    # LIMB 2. The axis is proven; the SEGMENTS the sentence asked to see it for
+    # may still have gone. A whole-book series returned for a segmented request
+    # is the same substitution as a whole-book figure returned for a narrowed
+    # one — "how have direct and acquired balances moved" answered "Funded
+    # balance for Total: tracked across 3 reporting period(s)".
+    named = list(dict.fromkeys(segments_named_in(question, values)))
+    if len(named) < 2:
+        return []
+    if artifact_segment_cut(artifacts):
         return []
     return [RequestedFacet(
-        kind=KIND_SERIES_AXIS, label="a series %s" % wording,
-        # No em-dash in the reason: `disclosure()` already joins the label to it
-        # with one, and a sentence carrying two reads as three clauses.
-        reason=("the answer that was produced carries no time axis; it reports "
-                "a single position and cannot show movement"))]
+        kind=KIND_SERIES_AXIS,
+        # Title-cased as `_detect_lost_narrowing` renders a governed value, so
+        # the reader sees "Direct and Acquired" and not a lowercased key.
+        label="%s tracked separately" % _join([v.title() for v in named]),
+        reason=("the answer that was produced is a single whole-book series; it "
+                "is not split by the segments you named"))]
 
 
 def detect_unranked_superlative(question: str, *, spec, query_result) -> Optional[str]:

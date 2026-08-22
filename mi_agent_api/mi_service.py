@@ -788,7 +788,8 @@ def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
     return result
 
 
-def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str
+def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str,
+                              semantics: Dict[str, Any], frame
                               ) -> Dict[str, Any]:
     """P0 — TEMPORAL HONOURING, enforced on the object that is about to ship.
 
@@ -818,8 +819,14 @@ def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str
     try:
         from mi_agent import execution_receipt as receipt_mod
 
+        # The book's own value map, so limb 2 costs no new vocabulary: the
+        # segment signal is two or more governed values named in one sentence.
+        # `dimension_values` is the existing owner of what values this book
+        # carries, and it is asked here rather than a word list being written.
         facets = receipt_mod.temporal_honouring_facets(
-            question, envelope.get("artifacts"))
+            question, envelope.get("artifacts"),
+            receipt_mod.dimension_values(frame, semantics)
+            if frame is not None else None)
         if not facets:
             return envelope
         # THE REFUSAL SENTENCE IS NOT WRITTEN HERE. It is produced by `assess`
@@ -992,7 +999,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                                       semantics=semantics, frame=df,
                                       parsed=parsed)
         # P0 SITE 1 OF 2 — temporal honouring, on the rendered routed envelope.
-        routed = _guard_temporal_honouring(routed, question=req.question)
+        routed = _guard_temporal_honouring(routed, question=req.question,
+                                          semantics=semantics, frame=df)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
@@ -1053,7 +1061,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # confident current-position figure that answers something else.
     result = _fail_closed_analytical(result, question=req.question, view=view)
     # P0 SITE 2 OF 2 — temporal honouring, on the rendered point-in-time result.
-    result = _guard_temporal_honouring(result, question=req.question)
+    result = _guard_temporal_honouring(result, question=req.question,
+                                       semantics=semantics, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))

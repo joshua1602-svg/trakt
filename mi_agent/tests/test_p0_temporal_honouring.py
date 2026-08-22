@@ -187,3 +187,142 @@ def test_both_paths_reach_the_temporal_guard():
     assert "_guard_temporal_honouring(result" in source
     whole = inspect.getsource(mi_service)
     assert whole.count("_guard_temporal_honouring(") == 3  # two calls + the def
+
+
+# --------------------------------------------------------------------------- #
+# Limb 2 — the segments the sentence named must survive
+# --------------------------------------------------------------------------- #
+#: A whole-book series: one row per point in time, nothing else.
+WHOLE_BOOK = _art([{"period": "2026-04", "funded_balance": 1},
+                   {"period": "2026-05", "funded_balance": 2},
+                   {"period": "2026-06", "funded_balance": 3}], "chart")
+#: The table `cohort_progression` ships BESIDE that series. Its `wa_ltv` and
+#: `wa_interest_rate` vary across the periods, which is what defeated the first
+#: draft's measure-word blacklist.
+WHOLE_BOOK_WITH_MEASURES = WHOLE_BOOK + _art(
+    [{"period": "2026-04", "loan_count": 11035, "funded_balance": 1,
+      "wa_ltv": 43.1, "wa_interest_rate": 6.4, "nneg_headroom_pct": 11.0},
+     {"period": "2026-05", "loan_count": 11040, "funded_balance": 2,
+      "wa_ltv": 43.5, "wa_interest_rate": 6.5, "nneg_headroom_pct": 11.2},
+     {"period": "2026-06", "loan_count": 11035, "funded_balance": 3,
+      "wa_ltv": 45.4, "wa_interest_rate": 6.6, "nneg_headroom_pct": 11.4}])
+#: A segmented series: one row per (segment, point).
+SEGMENTED = _art([{"period": p, "population": g, "value": 1}
+                  for p in ("2026-04", "2026-05", "2026-06")
+                  for g in ("Direct", "Acquired")], "chart")
+
+VALUES = {"direct": "origination_channel", "acquired": "source_portfolio_type",
+          "front book": "seasoning_segment", "back book": "seasoning_segment",
+          "london": "collateral_geography", "south east": "collateral_geography",
+          "east": "collateral_geography"}
+ASKS_FOR_BOTH = "How have direct and acquired balances moved over the periods?"
+
+
+def test_a_whole_book_series_proves_no_cut():
+    assert R.artifact_segment_cut(WHOLE_BOOK) is None
+
+
+def test_a_measure_that_varies_is_not_a_cut():
+    """The defect that killed the first draft, pinned as a test.
+
+    A blacklist of measure words can never be complete. The shape of the object
+    does not need one: three rows over three points is uncut whatever the
+    columns are called.
+    """
+    assert R.artifact_segment_cut(WHOLE_BOOK_WITH_MEASURES) is None
+
+
+def test_a_segmented_series_proves_a_cut():
+    assert R.artifact_segment_cut(SEGMENTED) == (
+        "6 rows where an uncut answer of this shape carries 3")
+
+
+def test_a_movement_table_is_uncut_at_one_row_and_cut_above_it():
+    """Form B counts differently, and the difference is load-bearing.
+
+    A movement table holds both points in a column pair, so ONE row is the
+    uncut shape. Counting its rows against its points instead refused the two
+    `analytical_composition` answers that correctly track front book against
+    back book.
+    """
+    one = _art([{"measure": "Balance", "population": "Total",
+                 "prior": 1, "current": 2, "change": 1}])
+    assert R.artifact_segment_cut(one) is None
+    assert R.artifact_segment_cut(MOVEMENT) == (
+        "2 rows where an uncut answer of this shape carries 1")
+
+
+def test_the_segments_are_read_from_the_book_not_from_a_word_list():
+    assert R.segments_named_in(ASKS_FOR_BOTH, VALUES) == ["direct", "acquired"]
+    assert R.segments_named_in(ASKS_FOR_BOTH, None) == []
+    assert R.segments_named_in("What is the total balance?", VALUES) == []
+
+
+def test_a_value_inside_a_longer_value_is_not_a_second_segment():
+    """"south east" contains "east"; naming one region is not a comparison."""
+    assert R.segments_named_in("balance over time for the South East",
+                               VALUES) == ["south east"]
+
+
+def test_the_segments_are_returned_in_the_order_the_sentence_says_them():
+    assert R.segments_named_in("acquired and direct over time", VALUES) == [
+        "acquired", "direct"]
+
+
+def test_one_segment_named_is_a_scope_and_not_a_comparison():
+    """"over time for the front book" is a POPULATION, already owned elsewhere.
+    It must not be read as a request to track two things."""
+    assert R.temporal_honouring_facets(
+        "How has balance moved over time for the front book?",
+        WHOLE_BOOK, VALUES) == []
+
+
+def test_two_segments_named_and_a_whole_book_series_refuses():
+    facets = R.temporal_honouring_facets(ASKS_FOR_BOTH, WHOLE_BOOK_WITH_MEASURES,
+                                         VALUES)
+    assert [f.kind for f in facets] == [R.KIND_SERIES_AXIS]
+    assert facets[0].label == "Direct and Acquired tracked separately"
+
+
+def test_two_segments_named_and_a_segmented_series_stands():
+    assert R.temporal_honouring_facets(ASKS_FOR_BOTH, SEGMENTED, VALUES) == []
+
+
+def test_two_segments_named_and_a_two_row_movement_stands():
+    assert R.temporal_honouring_facets(
+        "Compare balance over time for direct and acquired", MOVEMENT,
+        VALUES) == []
+
+
+def test_limb_two_never_runs_before_limb_one():
+    """A missing time axis is the FIRST loss, and the reader is owed that one.
+
+    Told "your segments were dropped" about an answer that has no time axis at
+    all, a reader would fix the wrong half of the question.
+    """
+    facets = R.temporal_honouring_facets(
+        "balance by month for direct and acquired", HEATMAP, VALUES)
+    assert len(facets) == 1
+    assert facets[0].label == "a series by month"
+
+
+def test_limb_two_would_notice_a_cut_reader_that_always_proves(monkeypatch):
+    monkeypatch.setattr(R, "artifact_segment_cut", lambda _a: "anything at all")
+    assert R.temporal_honouring_facets(ASKS_FOR_BOTH, WHOLE_BOOK, VALUES) == []
+
+
+def test_limb_two_would_notice_a_cut_reader_that_never_proves(monkeypatch):
+    monkeypatch.setattr(R, "artifact_segment_cut", lambda _a: None)
+    assert R.temporal_honouring_facets(
+        "Compare balance over time for direct and acquired", MOVEMENT, VALUES)
+
+
+def test_both_limbs_ship_the_same_kind_because_it_is_one_property():
+    """One property, one kind, one refusal shape. The label says which axis."""
+    lost_time = R.temporal_honouring_facets("balance by month", HEATMAP, VALUES)
+    lost_cut = R.temporal_honouring_facets(ASKS_FOR_BOTH, WHOLE_BOOK, VALUES)
+    assert {f.kind for f in lost_time + lost_cut} == {R.KIND_SERIES_AXIS}
+    for facets in (lost_time, lost_cut):
+        verdict, message = R.assess(R.ExecutionReceipt(facets=facets))
+        assert verdict == R.VERDICT_REFUSE
+        assert message.endswith("I have not substituted a broader figure.")
