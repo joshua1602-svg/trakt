@@ -73,6 +73,26 @@ def _capture(response: Dict[str, Any]) -> Dict[str, Any]:
         "artifacts": [{"type": a.get("type"), "rows": len(a.get("rows") or [])}
                       for a in (response.get("artifacts") or [])],
         "warnings": response.get("warnings") or [],
+        # THE FIGURES, added because the grader was not being given one.
+        #
+        # `nl_score` could not compare an answer to the book, and the reason was
+        # here rather than there: this record carried the route, the plan and
+        # the prose, and dropped `executionSummary` — so for B5 the service knew
+        # population=11035, filtersApplied=[] and the grader saw neither. A
+        # mutation test settled it: trebling every figure in a CORRECT answer
+        # left it CORRECT. "What may the grader see?" and "what does the grader
+        # conclude?" are ONE decision, and it lives across two files.
+        "executionSummary": {
+            k: (response.get("executionSummary") or {}).get(k)
+            for k in ("measure", "aggregation", "filtersApplied",
+                      "dimensionsApplied", "population", "populationTotal",
+                      "groupCount")},
+        "kpiValues": [
+            {"field": kpi.get("field"), "rawValue": kpi.get("rawValue")}
+            for art in (response.get("artifacts") or [])
+            for kpi in (art.get("kpis") or ())],
+        "guardVerdict": ((response.get("metadata") or {})
+                         .get("semantic_guard") or {}).get("verdict"),
     }
 
 
@@ -117,19 +137,34 @@ def run(book: str = "alderbridge") -> Dict[str, Any]:
     import nl_score
 
     client, portfolio = _client_for(book)
-    rows: List[Dict[str, Any]] = []
+    captured: List[Dict[str, Any]] = []
     for entry in nl_bank.bank(book):
         response = client.post("/mi/query", json={
             "question": entry["question"], "portfolioId": portfolio,
             "datasetContext": "funded"}).json()
-        run_record = _capture(response)
-        outcome, causes, note = nl_score.grade(entry["intent"], run_record)
+        captured.append((entry, _capture(response)))
+
+    # TWO PASSES, because one of the refusal tests is about the intent's OTHER
+    # phrasings: four variations of a question answering while the fifth refuses
+    # is a phrasing gap, not a capability limit. That cannot be decided while
+    # still walking the bank, so the bank is walked first and graded second.
+    answered_intents = {entry["intent"] for entry, rec in captured if rec["ok"]}
+
+    rows: List[Dict[str, Any]] = []
+    for entry, run_record in captured:
+        outcome, causes, note = nl_score.grade(
+            entry["intent"], run_record, question=entry["question"],
+            siblings_answered=entry["intent"] in answered_intents)
+        summary = run_record.get("executionSummary") or {}
         rows.append({
             "book": book, "intent": entry["intent"],
             "variation": entry["variation"], "question": entry["question"],
             "outcome": outcome, "causes": list(causes), "note": note,
             "route": run_record["route"], "ok": run_record["ok"],
             "analytical_intent": run_record["intent"],
+            "population": summary.get("population"),
+            "population_total": summary.get("populationTotal"),
+            "filters_applied": summary.get("filtersApplied"),
         })
     return {"book": book, "arm": "deterministic", "rows": rows}
 

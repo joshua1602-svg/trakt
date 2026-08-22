@@ -75,6 +75,102 @@ here.
 
 ---
 
+## WHAT THE 91.0% MEASURED — a qualifier for every figure derived from the robustness bank
+
+**The robustness bank was always on the shipped path. What was wrong was the
+grading.**
+
+`/mi/query` (`mi_agent_api/app.py:1737`) calls `execute_governed_mi_query`, the
+same entry point every other surface uses. The 44 variations in `nl_bank.py` were
+the right questions, asked the right way, of the right code. The defect was in
+`nl_score.grade`, and it had two halves.
+
+### It could not compare a figure to the book
+
+Proved by mutation, not by argument. Take a bank question the grader calls
+CORRECT and treble every figure in its answer:
+
+```
+Q1.1  How has the profile of our new lending changed over the last few months?
+
+  original -> CORRECT
+     New lending (last 1 month): 143 loans at 2026-04-30 against 115 loans at
+     2026-06-30. Current Outstanding Balance £21.4m against £18.3m; ...
+
+  EVERY FIGURE TREBLED -> CORRECT
+     New lending (last 3.00 month): 429.00 loans at 6,078.00-12.00-90.00 against
+     345.00 loans at 6,078.00-18.00-90.00. Current Outstanding Balance £64.20m ...
+```
+
+Three of three mutated answers graded **CORRECT, unchanged** — loan counts
+trebled, dates mangled into `6,078.00-12.00-90.00`.
+
+The cause was upstream of the grader: `_capture` handed it ten keys and
+`executionSummary` was not among them. For the LTV question that returns the
+whole book, the service knew `population=11035, filtersApplied=[]` and **the
+record dropped both before grading**. It was not a grader that declined to check
+the number; it was a grader that was never given one.
+
+### "Safe" meant the refusal sentence was longer than forty characters
+
+```python
+if not ok:
+    if len(answer) > 40:
+        return SAFE_REFUSAL, [], "refused with a stated reason"
+```
+
+That was the whole test. A refusal that declined **while holding the answer** —
+filter applied, 5,857 loans, correct measure, then a question about how the
+reader meant the word "ticket" — graded identically to a refusal that was right
+to decline.
+
+### THE QUALIFIER, to be attached to every figure derived from this bank
+
+> **91.0% measured that answers ARRIVED and were SHAPED PLAUSIBLY — that a route
+> claimed the question, that the planned capabilities matched the contract, and
+> that any refusal was more than forty characters long. It did not measure that
+> a single figure was correct, and it could not distinguish a refusal that was
+> right to decline from one that declined while holding the answer.**
+
+This applies to the 91.0%/9.0% split in `MI_AGENT_CLIENT_READINESS.md` §6.5, to
+the 752-run A/B that reported 0 differences, and to every downstream statement
+resting on either.
+
+### What the extension does and does not now verify
+
+The grader now carries the figures and checks **one** of them: the population an
+answer covers, and whether a narrowing the sentence states reached it. Under it
+the 44 read `CORRECT 32 · UNHELPFUL_REFUSAL 6 · SAFE_REFUSAL 4 · DISCLOSED 2` on
+both books — six of the ten refusals were avoidable, and the four that remain
+are Q9, where all four phrasings refuse.
+
+**Six of the nine intents ask for a forward figure, a run rate or a limit
+headroom, and those figures are still unverified.** There is no expression for
+the right answer to *"when will we reach £100m?"*, and a grader claiming to check
+it would be this same defect wearing a better label. The qualifier narrows; it
+does not lift.
+
+### The same failure mode, found in a surface built to avoid it
+
+The shipped-shapes grader — written specifically to compare figures to the book —
+got three of its first seven verdicts wrong, in the product's favour to state
+plainly: it marked the product WRONG for being RIGHT.
+
+* It read only the prose when the figure was in the KPI card, so "What are the
+  headline numbers?" was called a summary with no balance in it. The card
+  carried `current_outstanding_balance_sum = 1964886258.21`.
+* Its pandas ground truth used a plain `groupby`, which **drops the two loans
+  with a null LTV bucket and £337,343.21 with them**. The product surfaces those
+  rows as `Unknown / Missing` and its cross-tab reconciles to the book exactly.
+  The grader called that a defect in four cases.
+
+**A grader that marks the product wrong for being right is this surface's own
+failure mode, and it is the reason the qualifier matters.** Both directions cost
+the same thing — a number nobody can trust — and neither is visible without
+probing the grader itself. `shipped_shapes --self-test` now exercises every
+grader in both directions, and `_capture` carries the figures rather than the
+prose alone.
+
 ## A LIMITATION ON EVERY CORPUS-DERIVED FIGURE IN THIS PACK
 
 ### The mechanism
