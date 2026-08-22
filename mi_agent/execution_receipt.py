@@ -1095,6 +1095,31 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     # the narrowing is not lost and the role owner reclassifies it into a
     # population downstream. Without this the two owners claimed the same field
     # and the population facet vanished — the D2 carriage tests caught it.
+    # B22. A governed scope the question RULED OUT, which no owner can express.
+    #
+    # "What is the balance excluding the acquired book?" answered over the
+    # acquired book — the reader ruled out a cohort and received only that
+    # cohort. The lens now DECLINES rather than selecting the opposite, because
+    # inferring "therefore the direct book" is a guess about scope and a guess
+    # about scope is a substitution.
+    #
+    # Declining alone would silently widen the answer to include the excluded
+    # cohort, which is the fail-open direction honour-or-clarify forbids. So the
+    # exclusion is recorded as the narrowing it is, in B16a's kind, unchanged.
+    #
+    # The PHRASE and the fact both come from `portfolio_lens`, which owns the
+    # scope vocabulary. This raises the facet; it decides nothing.
+    try:
+        from .portfolio_lens import disclaimed_scope_phrase as _disclaimed
+        _ruled_out = _disclaimed(question)
+    except Exception:                                          # pragma: no cover
+        _ruled_out = None
+    if _ruled_out:
+        facets.append(RequestedFacet(
+            kind=KIND_LOST_NARROWING, label=_ruled_out,
+            reason=("this scope was ruled out of the question and no governed "
+                    "capability can express an exclusion, so the figure covers "
+                    "it rather than leaving it out")))
     facets.extend(_detect_lost_narrowing(
         q, dimension_values(frame, semantics),
         taken=set(_predicate or ()) | set(resolved_filters or ()) | {

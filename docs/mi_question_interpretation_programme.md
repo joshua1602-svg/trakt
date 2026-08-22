@@ -597,7 +597,31 @@ Given a new id, the differ reported it correctly: one case gone, one arrived.
 
 ## Backlog
 
-### B21, B22 — the two text-driven data-visibility decisions  ·  **FIRST IN LINE**
+### B24 — should `resolve_active_view` run before parsing at all?
+
+**Open, recorded as its own item, and deliberately not settled inside B21.**
+
+The view is chosen by a substring test on the raw question before anything has
+parsed it. B21 fixes the test; it does not ask whether the decision belongs
+there. That is a larger question — it touches when the frame is loaded, what a
+route may assume about it, and whether a view is a property of the question or of
+the workspace — and settling it inside a fix to the test would decide it by
+accident.
+
+### B21 — the view resolver  ·  **NEXT**, and it must close before real client data
+
+Higher severity than B22 despite changing no number on this book, and the reason
+is a property of the book rather than the code: `build_forecast_view_frame` puts
+the forecast CONTRIBUTION into `current_outstanding_balance` — same column name,
+different meaning — and with no pipeline data the two coincide exactly at
+£1,964,886,258.21. **On any book carrying a pipeline they diverge, and it becomes
+a wrong figure under the same field name, disclosed nowhere.** A defect waiting
+for a live portfolio rather than one this book exposes.
+
+### B22 — the lens resolver  ·  **CLOSED**
+
+Closed by the qualified-mention test and the disclaiming guard. Full record in
+`mi_b22_qualified_mention_prediction.md`.
 
 **Diagnosed together in `mi_b21_b22_b23_diagnosis.md`; reported in
 `mi_view_selection_report.md`. B23 collapses into B21 — it is that decision's

@@ -497,7 +497,10 @@ questions:
   # --- B22: a bare substring must not silently narrow the population --------
   - id: rt_023
     question: What is the balance for loans purchased at auction?
-    expected_to_fail: >-
+    note: >-
+      CLOSED BY B22; re-declared. It answered over the ACQUIRED cohort
+      closed it; the wording below is the record of what it was.
+
       B22. Answers over the ACQUIRED cohort — 3,909 of 11,035 loans — for a
       question about how a property was bought. A complete, correctly formatted
       answer over 35% of the book.
@@ -537,7 +540,10 @@ questions:
 
   - id: rt_025
     question: What is the balance where the borrower acquired the property recently?
-    expected_to_fail: >-
+    note: >-
+      CLOSED BY B22; re-declared. The second instance, and the one that
+      closed it; the wording below is the record of what it was.
+
       B22, the second instance, and the one that shows the vocabulary is ordinary
       English rather than a near-miss. The sentence is about the BORROWER
       acquiring a PROPERTY; nothing in it names a book.
@@ -555,7 +561,10 @@ questions:
 
   - id: rt_026
     question: What is the balance excluding the acquired book?
-    expected_to_fail: >-
+    note: >-
+      CLOSED BY B22; re-declared. B22's worst case, and the one that
+      closed it; the wording below is the record of what it was.
+
       B22's worst case, and the one that proves qualification alone is not the
       whole fix.
 
@@ -581,7 +590,10 @@ questions:
 
   - id: rt_027
     question: Show balance by region for directly held collateral.
-    expected_to_fail: >-
+    note: >-
+      CLOSED BY B22; re-declared. The DIRECT half of the same
+      closed it; the wording below is the record of what it was.
+
       The DIRECT half of the same vocabulary, so the fix cannot be a special case
       for one family.
 

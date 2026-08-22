@@ -179,3 +179,143 @@ argument `lens_term` and receives it from a spec field.
   nor silently widens;
 * all five surfaces, deterministic arm, both books; seasoning by name;
 * the constructed-coverage position in §1 restated in the commit and the pack.
+
+---
+
+# Result, measured against §6
+
+## Against the prediction
+
+| predicted | measured |
+|---|---|
+| `rt_023`, `rt_025`, `rt_027` → Total, 11,035, no filter | **all three** |
+| `rt_026` → refuses, the exclusion recorded | **refuses**, `lost_narrowing` on `"excluding the acquired book"` |
+| `rt_024` unchanged | **unchanged**, Acquired, 3,909 |
+| `answer_diff` 4 moved, all `routed_surface` | **725 compared, 721 identical, 4 MOVED, all `routed_surface`** |
+| no corpus answer moves | **none** |
+| `test_p1i_scope_resolution` passes unchanged | **60 passed** |
+| seasoning families unchanged, both books | **Q1 4, Q7 4, Q8 12 all CORRECT** |
+| robustness `32/10/2`; calibration `259/259` | **both** |
+| lexical 693 of 693 | **693 of 693** |
+
+**No stop condition fired.**
+
+## The confidence to place in this — restated, because §1 is the point
+
+Nothing above is evidence that B22 is closed for questions I did not write.
+
+* **721 of 725 identical** means the fix did not reach the corpora. It cannot
+  mean more: the lens narrows none of those questions, so they would read the
+  same whether the change were correct, inert, or wrong in a direction the
+  constructed cases do not probe.
+* **The claim rests on twelve sentences** — five defects, seven governed phrases
+  — plus the seasoning family held out. That the seven still resolve is the
+  strongest part of it, because they were not mine: three came from a
+  pre-existing test and are the reason the first draft was wrong.
+* **The class beyond those twelve is argued, not measured.** "Ordinary English
+  about lending" is not a set I can enumerate, and the qualification rule is a
+  claim about it.
+
+## §4.1 was wrong, and a pre-existing test is why
+
+The pre-registration said `resolve_lens` would call `scope_phrase_spans`,
+because `_SCOPE_QUALIFIERS` "already contains `direct`, `acquired`, `purchased`
+and `funded`". It does — and it does **not** contain `bought`, `acquisition` or
+`organic`, and `_SCOPE_NOUNS` does not contain `lending`.
+
+The first draft did exactly what §4.1 said and broke three cases in
+`tests/test_p1j1_vintage_seasoning.py`:
+
+```
+"the bought book"        -> Total, expected acquired
+"the acquisition book"   -> Total, expected acquired
+"organic lending"        -> Total, expected direct
+```
+
+**The two vocabularies overlap; they are not the same vocabulary**, and I read
+"contains the words I checked" as "contains the vocabulary". The diagnosis
+measured six sentences and all six happened to use words in both lists.
+
+Ruling 1 still holds and is now honoured properly: `_qualified_span_re` is the
+**one** implementation of the qualified-mention test, parameterised by
+vocabulary; `scope_phrase_spans` and `lens_phrase_spans` are its two callers.
+Duplicating the test would have created a second owner; hard-coding one
+vocabulary silently dropped three governed phrases.
+
+**A third instance of a declared expectation resting on an unstated assumption**
+— and the first where the assumption was about a data structure rather than a
+route's capability. The evidence rule earns its place again: §4.1 said *"already
+contains `direct`, `acquired`, `purchased` and `funded`"*, which is exactly the
+evidence, and exactly four of the eight words the lens uses.
+
+### And it was wrong a second time
+
+Adding `lending` to the noun set fixed those three and broke two more, in a file
+the first sweep had not selected:
+
+```
+"directly originated loans"   -> Total, expected direct   (noun: loans)
+"the purchased back book"     -> Total, expected acquired (an adjective between
+                                                           qualifier and noun)
+```
+
+So the noun set gained `loans`/`loan`, and the pattern gained one optional short
+word between the qualifier and the noun — bounded, with a noun still required,
+which is what keeps *"purchased at auction"* (qualifier, two words, no noun) out.
+
+**The vocabulary is the fragile part of this fix.** It was wrong twice and both
+corrections came from tests written years earlier for earlier provenance
+defects. Nine governed phrases are now pinned; **I would not have found five of
+them.**
+
+That is the recording-a-defect rule arriving from the other side. Its usual form
+is *a recorded defect protects the class, including against the person who
+recorded it*. Here the protection came from people who are not me, against a
+change they could not have anticipated, and it worked twice in one afternoon.
+
+## One consequence of the fix that needed holding down
+
+`organic lending` forced `lending` into the lens noun set. That brings the
+**seasoning** vocabulary — "new lending", "new originations" — within reach of
+the same pattern, and P1J-1 exists because a seasoning phrase resolving to
+provenance is a defect that has already happened once.
+
+Held by `test_a_seasoning_phrase_is_never_provenance`, over five phrases, in the
+new file as well as the old one.
+
+## Mutations, and what caught each
+
+| mutation | caught by |
+|---|---|
+| qualification not required | 5 tests, including both unqualified families |
+| disclaiming selects instead of declining | `test_a_disclaimed_scope_declines`, all four phrasings |
+| the lens vocabulary falls back to the scope one | `test_a_qualified_mention_still_selects` on the three words it lacks |
+| the adjective gap removed | `test_one_adjective_may_sit_between_the_qualifier_and_the_noun` |
+| term callers routed through the question entry point | `test_a_term_caller_needs_no_qualification`, `test_the_term_entry_point_is_not_the_question_one` |
+| the declined exclusion is not recorded | the routed surface, 27 of 28 |
+
+## The site-by-site pass
+
+Fifteen call sites, all classified. Two were term-callers and were rewired to
+`lens_from_term`:
+
+* `mi_workflows/analytical/populations.py:112` — `provenance_population(lens_term)`
+* `mi_workflows/analytical/planner.py:641` — `resolve_lens(key)`, guarded two
+  lines above by `if key in ("direct", "the direct book", …)`
+
+And one was neither, and is the reason the distinction was found:
+`populations.resolve_lens(spec)` builds `f"the {spec.lens_term} book"` **by
+hand**. That call site already knew a bare term would not read as a book name.
+Left as it is, now documented: it satisfies the same test honestly rather than by
+accident.
+
+## B21 next, and why it does not wait
+
+B21 changes no number on this book only because the forecast frame reuses
+`current_outstanding_balance` for the forecast contribution and, with no pipeline
+data, the two coincide **exactly** at £1,964,886,258.21. On any book carrying a
+pipeline they diverge, and it becomes a wrong figure under the same field name,
+disclosed nowhere.
+
+**That is a defect waiting for a live portfolio rather than one this book
+exposes.** It must close before real client data arrives.

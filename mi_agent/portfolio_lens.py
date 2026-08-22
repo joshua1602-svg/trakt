@@ -172,6 +172,67 @@ _SELECTED_SCOPE_RE = re.compile(
     re.IGNORECASE)
 
 
+#: The lens vocabulary's own nouns. `_SCOPE_NOUNS` is narrower — no "lending",
+#: no "loans" — and "organic lending" and "directly originated loans" are both
+#: governed provenance language.
+#:
+#: This list was wrong twice before it was right, and both corrections came from
+#: tests written years before this change: `_SCOPE_NOUNS` alone dropped "organic
+#: lending", and adding "lending" alone still dropped "directly originated
+#: loans" and "the purchased back book". **The vocabulary is the fragile part of
+#: this fix**, and the only thing that found its edges was coverage someone else
+#: had recorded.
+_LENS_NOUNS = _SCOPE_NOUNS + ("lending", "originations", "origination",
+                              "loans", "loan")
+
+#: Every provenance word, as a QUALIFIER of one of those nouns. Built from the
+#: lens families rather than from `_SCOPE_QUALIFIERS`, which is narrower: it has
+#: no `bought`, `acquisition` or `organic`, and three pre-existing cases in
+#: `test_p1j1_vintage_seasoning` proved it — "the bought book", "the acquisition
+#: book" and "organic lending" are all governed provenance phrases that the
+#: scope vocabulary does not contain.
+_LENS_QUALIFIERS = tuple(dict.fromkeys(
+    [t for term in _DIRECT_TERMS + _ACQUIRED_TERMS
+     for t in (term, term.split()[0])]))
+
+
+def _qualified_span_re(qualifiers, nouns):
+    """The qualified-mention test, ONCE, over whichever vocabulary is passed.
+
+    B22. One helper, two callers: the scope resolver and the lens resolver ask
+    the same question — *is this word qualifying a book noun, or is it ordinary
+    English?* — of different vocabularies. Duplicating the test would create a
+    second owner of the decision B22 exists to consolidate; hard-coding one
+    vocabulary would have silently dropped three governed provenance phrases.
+    """
+    return re.compile(
+        r"\b(?:(?:for|in|of|across|within|on)\s+)?(?:the\s+|our\s+|my\s+|this\s+)?"
+        r"(?:" + "|".join(re.escape(q) for q in
+                          sorted(qualifiers, key=len, reverse=True)) + r")\s+"
+        # One optional adjective between the qualifier and the noun, because
+        # "the purchased BACK book" is governed provenance language. Bounded to
+        # a single short word and a NOUN is still required, so "purchased at
+        # auction" — qualifier, two words, no noun — does not match.
+        r"(?:\w{1,8}\s+)?"
+        r"(?:" + "|".join(re.escape(n) for n in
+                          sorted(nouns, key=len, reverse=True)) + r")\b",
+        re.IGNORECASE)
+
+
+_LENS_PHRASE_RE = _qualified_span_re(_LENS_QUALIFIERS, _LENS_NOUNS)
+
+
+def lens_phrase_spans(text: Optional[str]):
+    """``((start, end), ...)`` for every governed PROVENANCE phrase in ``text``.
+
+    The lens half of the qualified-mention test. `resolve_lens` consults this;
+    nothing else decides whether a provenance word is naming a book.
+    """
+    if not text:
+        return ()
+    return tuple((m.start(), m.end()) for m in _LENS_PHRASE_RE.finditer(str(text)))
+
+
 def scope_phrase_spans(text: Optional[str]):
     """``((start, end), ...)`` for every governed scope phrase in ``text``.
 
@@ -271,17 +332,114 @@ def _contains_any(text: str, terms) -> bool:
     return any(t in text for t in terms)
 
 
-def resolve_lens(text: Optional[str]) -> PortfolioLens:
-    """Resolve a single portfolio lens from free-text. Defaults to *total*.
+#: Constructions that DISCLAIM a scope rather than selecting it.
+#:
+#: B22. "What is the balance excluding the acquired book?" answered over the
+#: acquired book — the reader ruled out a cohort and received only that cohort.
+#: The mention is QUALIFIED, so the scope-phrase test that settles the other
+#: cases does not touch this one.
+#:
+#: A disclaiming mention DECLINES; it does not select the opposite. "Excluding
+#: the acquired book" states what is not wanted, not what is, and inferring
+#: "therefore the direct book" is a guess about scope — which this programme
+#: treats as a substitution.
+_DISCLAIMERS = (
+    "excluding", "exclude", "excluded", "ignoring", "ignore", "other than",
+    "apart from", "aside from", "setting aside", "net of", "without",
+    "not including", "leaving out", "outside of", "before any", "except",
+)
 
-    Precedence: explicit cohort id > acquired/direct keyword > total. An
-    explicit "total/whole book" phrase forces *total* even if other words
+_DISCLAIMED_SCOPE_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(d) for d in
+                        sorted(_DISCLAIMERS, key=len, reverse=True)) + r")\b"
+    r"[^.;?!]{0,24}?"
+    r"(?:" + "|".join(re.escape(q) for q in _SCOPE_QUALIFIERS) + r")\s+"
+    r"(?:" + "|".join(re.escape(n) for n in _SCOPE_NOUNS) + r")\b",
+    re.IGNORECASE)
+
+
+def disclaimed_scope_phrase(text: Optional[str]) -> Optional[str]:
+    """The governed scope the text RULES OUT, or ``None``.
+
+    THE single source of truth, so a reader that wants to RECORD the declined
+    narrowing gets both the fact and its wording from one place rather than
+    re-deriving either. `resolve_lens` uses it to decline; nothing else decides
+    it.
+    """
+    if not text:
+        return None
+    match = _DISCLAIMED_SCOPE_RE.search(str(text))
+    return match.group(0).strip() if match else None
+
+
+def disclaims_scope(text: Optional[str]) -> bool:
+    """True when the text RULES OUT a governed scope rather than selecting it."""
+    return disclaimed_scope_phrase(text) is not None
+
+
+def lens_from_term(term: Optional[str]) -> PortfolioLens:
+    """Resolve a lens from a TERM already known to name a book.
+
+    The caller has established that — a registry key, a spec field, a planner
+    branch that has already matched "direct"/"acquired". No qualification is
+    required and none is checked.
+
+    Separated from `resolve_lens` in B22 because that function now requires a
+    QUALIFIED mention, and a caller holding a bare book name would otherwise be
+    told it holds none. `populations.resolve_lens` had already worked around the
+    absence of this entry point by building `f"the {spec.lens_term} book"` by
+    hand — the distinction was real before it was named.
+    """
+    if not term:
+        return total_lens()
+    return _lens_from_text(" " + str(term).strip().lower() + " ")
+
+
+def resolve_lens(text: Optional[str]) -> PortfolioLens:
+    """Resolve a single portfolio lens from a QUESTION. Defaults to *total*.
+
+    Precedence: explicit cohort id > a QUALIFIED acquired/direct mention > total.
+    An explicit "total/whole book" phrase forces *total* even if other words
     appear.
+
+    B22 — the mention must QUALIFY A BOOK NOUN. `_DIRECT_TERMS` and
+    `_ACQUIRED_TERMS` are ordinary English about lending: `purchased`,
+    `acquired`, `direct`, `organic`. Read as bare substrings they answered "the
+    balance for loans purchased at auction" over the acquired cohort — 3,909 of
+    11,035 loans, a complete and correctly formatted answer over 35% of the book
+    for a question about how a property was bought.
+
+    The test for that is `scope_phrase_spans`, in this module, over a
+    `_SCOPE_QUALIFIERS` list that already contains `direct`, `acquired`,
+    `purchased` and `funded`. It states the doctrine — "Only QUALIFIED phrases
+    count. A bare 'current' or 'entire' is ordinary English" — and was called by
+    the filter and dimension parsers to protect them FROM this vocabulary, and
+    never by the decision that owns it. One helper, two callers; duplicating the
+    test would create a second owner of the decision this fix consolidates.
+
+    A term caller wants `lens_from_term`.
     """
     if not text:
         return total_lens()
+    if disclaims_scope(text):
+        # DECLINES, and does not select the opposite. What the answer then owes
+        # the reader — a whole-book figure is not it — is recorded by the facet
+        # layer through `disclaims_scope`, not decided here.
+        return total_lens()
     low = " " + str(text).strip().lower() + " "
+    if not lens_phrase_spans(text) and not _COHORT_ID_RE.search(low):
+        return total_lens()
 
+    return _lens_from_text(low)
+
+
+def _lens_from_text(low: str) -> PortfolioLens:
+    """The resolution itself, shared by both entry points.
+
+    Neither qualification nor disclaiming is checked here: `resolve_lens` has
+    done that for a question, and `lens_from_term` has established it is holding
+    a book name.
+    """
     # Exact cohort id always wins (most specific).
     m = _COHORT_ID_RE.search(low)
     if m:

@@ -124,6 +124,23 @@ same shape one step removed: the family was enumerated from the SEGMENT names a
 config declares, so the months-on-book windows that name the same population a
 different way were unreachable, and the whole-book answer sat behind them.
 
+### The strongest form: a decision with no corpus coverage at all
+
+The portfolio lens — which cohort of loans an answer covers — **narrows zero of
+the 697 corpus questions.** Not few: none. Every question naming both provenance
+families resolves to the whole book through a comparison guard, and none names
+one alone. Its only coverage anywhere is two unit-test files.
+
+That decision was silently answering *"the balance for loans purchased at
+auction"* over 3,909 of 11,035 loans — a complete, correctly formatted figure
+over 35% of the book, for a question about how a property was bought. **No
+corpus number in this pack moved when that was true, and none moved when it was
+fixed.**
+
+Where a figure in this pack rests on constructed cases rather than corpus
+coverage, the confidence it carries is bounded by whether the right sentences
+were imagined, and that is stated at the point the figure is given.
+
 ### What follows for reading this pack
 
 1. **A count of "N of 693 affected" is a lower bound**, and where the construct

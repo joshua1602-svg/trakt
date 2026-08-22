@@ -638,7 +638,9 @@ def _population_from_name(name: str) -> Optional[pops.PopulationSpec]:
     if len(segments) == 1:
         return pops.seasoning_population(segments[0])
     if key in ("direct", "the direct book", "acquired", "the acquired book"):
-        lens = _portfolio_lens.resolve_lens(key)
+        # B22: `key` has already been matched against the book names two
+        # lines above, so it is a TERM and needs no qualification.
+        lens = _portfolio_lens.lens_from_term(key)
         if lens.name in (_portfolio_lens.LENS_DIRECT, _portfolio_lens.LENS_ACQUIRED):
             return pops.provenance_population(lens.name)
     return None

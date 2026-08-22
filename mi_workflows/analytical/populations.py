@@ -109,7 +109,8 @@ def lending_window_population(key: str) -> Optional[PopulationSpec]:
 
 def provenance_population(lens_term: str) -> PopulationSpec:
     """A direct or acquired population, resolved through the portfolio lens."""
-    lens = _portfolio_lens.resolve_lens(lens_term)
+    # B22: a TERM the caller has already established names a book.
+    lens = _portfolio_lens.lens_from_term(lens_term)
     return PopulationSpec(key=lens.name, label=lens.label,
                           kind=KIND_PROVENANCE, lens_term=lens_term)
 
@@ -168,6 +169,12 @@ def resolve_lens(spec: PopulationSpec):
     That matters here more than anywhere: a comparative question names BOTH
     sides, so resolving from the question would pick one of them (or neither)
     and both sides of the comparison would end up covering the same book.
+
+    B22: the `f"the {…} book"` below is not decoration. This call site already
+    knew a bare term would not be read as a book name and qualified it by hand,
+    years before the qualification was required — which is how the term/question
+    distinction was found. Left as it is: it now satisfies the same test
+    `resolve_lens` applies, honestly rather than by accident.
     """
     from mi_agent_api import chat_routing as _routing
 
