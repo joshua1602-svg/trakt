@@ -113,12 +113,16 @@ questions:
 
   - id: rt_005b
     question: Show regional concentration evolution over time.
-    expected_to_fail: >-
-      B9, the actual member — the one question of 90 that asks for a series and
-      SHIPS a point. `geo_exposure` answers with a current concentration
-      snapshot and says nothing about the series that was asked for. The
-      expectation below is the CORRECT outcome, so this case fails until B9 is
-      ruled on and closed, and passes the moment it is.
+    note: >-
+      Was declared expected-to-fail on B9 — the one question of 90 that asks for
+      a series and SHIPS a point. `geo_exposure` answered with a current
+      concentration snapshot and said nothing about the series that was asked
+      for. B9 was never opened as a work item. It closed as a CONSEQUENCE of the
+      P0 temporal honouring property, which refuses any answer whose shipped
+      rows cannot prove a time axis the sentence asked for, whatever route
+      produced it. Re-declared as the ordinary passing case it now is, because a
+      case still claiming a defect that is closed makes the surface lie — the
+      same reasoning rt_005 above records in the other direction.
     expect_route: geo_exposure
     expect_verdict: refuse
 
