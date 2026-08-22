@@ -189,3 +189,115 @@ Corrected before the table was written down, not after. The count moved from
 lists disagree, and where both are blind the answer is silent — survived both
 versions. **This is the fourth time a restatement has needed its own check, and
 the second time the check found something.**
+
+---
+
+# MEASURED — appended after implementation; prediction above left as written
+
+## 7. The success criterion
+
+Stated: *"the three failing phrasings return the narrowed population, and 'over
+£150k' continues to."*
+
+```
+bigger than £150k    ok=True   5,857 loans   ['Balance > 150000']
+larger than £150k    ok=True   5,857 loans   ['Balance > 150000']
+higher than £150k    ok=True   5,857 loans   ['Balance > 150000']
+over £150k           ok=True   5,857 loans   ['Balance > 150000']   (control)
+above / more than    ok=True   5,857 loans   ['Balance > 150000']   (controls)
+```
+
+**Met.** And the vocabulary now agrees on **29 of 30** phrases, up from 16, with
+**zero silent** and **zero direction ambiguities**.
+
+## 8. It was not met by the vocabulary alone, and that is the finding
+
+Unifying the lists moved the three phrasings from **silent wrong number** to
+**refusal** — safer, and not the criterion. The reason:
+
+```
+No loans in this book match that filter (current_loan_to_value), so there is
+nothing to calculate. I have not returned a whole-book figure in its place.
+```
+
+The threshold was binding to **`current_loan_to_value`** instead of the balance.
+`_filter_field_of` decides which column a threshold attaches to, and it probed a
+**fixed twelve characters** after the comparator for a currency sign:
+
+```
+"over "        5 chars   £ inside the window   -> balance
+"more than "  10 chars   £ inside the window   -> balance
+"bigger than " 12 chars  £ ONE CHARACTER OUTSIDE -> falls through to LTV
+"smaller than "13 chars   £ outside              -> falls through to LTV
+```
+
+Every phrase the old vocabulary held was short enough. **Item 1 added the longer
+phrases and the fixed window became the binding constraint** — a hard-coded span
+around a variable-length vocabulary, which is this programme's recurring shape
+one layer below the lists themselves. The caller knows where the value ends, so
+it now says so, and the window is the match rather than a guess.
+
+That the guard REFUSED rather than answering is the honour-or-clarify contract
+working: a filter matching zero rows is not silently replaced by the whole book.
+The intermediate state was safe. It was still wrong.
+
+## 9. Results against §5
+
+| declared | measured | |
+|---|---|---|
+| 5 silent phrasings → applied + disclosed | all 5, narrowed populations | ✅ |
+| 7 accidentally-safe → applied + disclosed | all 7 | ✅ |
+| 2 applied-but-undisclosed → disclosed | **1 of 2** — see §10 | ❌ |
+| controls unchanged | `over`, `above`, `less than`, `at least`, `at most`, `between`, `older than`, `younger than` all unmoved | ✅ |
+| shipped shapes 10 / 0 / 0 / 5 | **10 / 0 / 0 / 5** — B5 correct, zero wrong answers | ✅ |
+| B4 still an unhelpful refusal | yes: threshold now applies (5,857), "ticket" still unresolved — item 2 | ✅ |
+| corpus answers unmoved | **answer_diff 729 of 729 identical, 0 moved** | ✅ |
+| the 44, both books | `CORRECT 32 · UNHELPFUL 6 · SAFE 4 · DISCLOSED 2`, identical on both | ✅ |
+| calibration 259/259 | 259/259, 0 hard failures, 0 known gaps | ✅ |
+| routed surface 32/32 | 32 passed, 0 failed | ✅ |
+| seasoning by name, both books | Q1 4, Q7 4, Q8 12 | ✅ |
+| no lexical decision moves | 688/690; the 2 moves pre-date this work | ✅ |
+| estate | 60 failures, **zero new, zero fixed** vs `a046de7` | ✅ |
+
+## 10. The half of the prediction that was wrong
+
+§5.1 said both "applied but not disclosed" rows would close. **One did not.**
+
+The bare `N+` form — *"how many borrowers are 70+"* — applies its filter
+correctly (`Borrower Age >= 70`, 6,862 loans) and raises **no threshold facet**.
+The receipt's postfix pattern ends `(?:\+|\s+or (?:above|over|...))\b`, and a
+`\b` after `\+` can never match: `+` is a non-word character and what follows is
+a space or end-of-string. **A branch that cannot fire** — the same class as the
+dead guard found in B16a, and it belongs to the B20 mutation pass over the guard
+set rather than to item 1's vocabulary.
+
+It is a disclosure gap, not a wrong number: the narrowing is applied and the
+figure is right; the receipt does not mention it. **Recorded, not fixed.**
+
+## 11. Also recorded and not fixed: subject binding without a currency marker
+
+```
+"loans no more than £150k"   -> Balance <= 150000    5,178   correct
+"loans no more than 150000"  -> Current LTV <= 150000  11,033  wrong column
+```
+
+With a currency sign the window fix binds it correctly. Without one, the nearest
+-subject heuristic picks the measure named earlier in the sentence. That is
+`_filter_field_of`'s precedence rule, a genuinely separate decision from the
+vocabulary, and **it is not opened here** — the B24 precedent.
+
+## 12. Constructed coverage, in the established form
+
+> **729 of 729 identical means the fix did not reach the corpora — nothing
+> more.** 2 of 676 corpus questions contain a newly-covered comparator with a
+> number, and both are cases this work constructed. The corpora would read the
+> same whether the change were correct, inert, or wrong in a direction the
+> constructed cases do not probe. The claim rests on the 48 tests in
+> `test_item1_threshold_vocabulary.py`, the 30-phrase vocabulary probe, and the
+> shipped-shapes surface, where B5 moves from wrong answer to correct while B2
+> holds.
+
+The one figure that did move for a reader: **45.40% weighted LTV over 5,857
+loans** where **43.15% over 11,035** was returned before, for five phrasings of
+the question. That is a real correction to a credit-risk headline, and it is
+measured on this book rather than constructed.

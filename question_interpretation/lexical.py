@@ -409,3 +409,94 @@ def clause_spans(text: str,
         cursor = match.end()
     spans.append((cursor, len(text)))
     return spans
+
+
+# --------------------------------------------------------------------------- #
+# THE COMPARATOR VOCABULARY — one fact about English, two consumers
+# --------------------------------------------------------------------------- #
+#: Item 1. "Is this phrase a comparator, and in which direction?" had TWO
+#: owners with different word lists: `llm_query_parser._FILTER_COMPARATORS`,
+#: which builds the predicate that narrows rows, and
+#: `execution_receipt._THRESHOLD_PATTERNS`, which records that the SENTENCE
+#: asked for a narrowing. They agreed on 16 of 30 phrases. Where both were
+#: blind — `bigger than`, `larger than`, `higher than`, `smaller than`,
+#: `lower than` — the narrowing vanished, no facet was raised, the
+#: honour-or-clarify guard had nothing to honour, and the whole book came back
+#: as fact: 43.15% weighted LTV over 11,035 loans for a question about the
+#: 5,857 loans over £150k.
+#:
+#: WHAT IS SHARED IS THE VOCABULARY, NOT THE OWNER, and that is deliberate.
+#: The two consumers must keep detecting INDEPENDENTLY: if the receipt derived
+#: its facet from the parser's output, a threshold the parser missed would
+#: never be raised and the guard could never catch it. That independence is
+#: what makes `exceeding`, `in excess of`, `minimum of`, `beneath`, `up to`,
+#: `maximum of` and `capped at` refuse today rather than answer wrongly — the
+#: receipt sees a threshold the parser does not. Collapsing them into one owner
+#: would convert those seven from safe to silent.
+#:
+#: This is the INVERSE of `portfolio_lens._qualified_span_re`, which shares an
+#: implementation across genuinely different vocabularies. The precedent is not
+#: "always parameterise the implementation" — it is SHARE WHAT IS ONE FACT AND
+#: SEPARATE WHAT IS TWO. There, hard-coding one noun list dropped five governed
+#: phrases; here, keeping two comparator lists dropped five comparators.
+#:
+#: Ordering is load-bearing: longest phrase first, so `greater than or equal
+#: to` is not shadowed by `greater than`, and `no more than` is not read as
+#: `more than` with the negation discarded — which would invert the filter.
+
+#: op -> the word a receipt uses for it. The receipt renders the OPERATOR; it
+#: does not keep a second list of phrases mapping to words.
+COMPARATOR_WORD = {
+    "gt": "over", "ge": "at least", "lt": "under", "le": "at most",
+    "eq": "exactly", "between": "between",
+}
+
+#: (phrase, op). THE list. Sorted longest-first at import so a caller building
+#: an alternation cannot reintroduce the shadowing bug by reordering.
+COMPARATOR_PHRASES: "Tuple[Tuple[str, str], ...]" = tuple(sorted(
+    (
+        # --- between ---------------------------------------------------- #
+        ("between", "between"),
+        # --- >= : the negated and explicit forms MUST precede `gt` ------- #
+        ("greater than or equal to", "ge"), ("no less than", "ge"),
+        ("not less than", "ge"), ("at least", "ge"), ("minimum of", "ge"),
+        ("a minimum of", "ge"), ("or above", "ge"), ("or over", "ge"),
+        ("or more", "ge"), ("or older", "ge"), ("or greater", "ge"),
+        # --- <= : likewise before `lt` ----------------------------------- #
+        ("less than or equal to", "le"), ("no more than", "le"),
+        ("not more than", "le"), ("at most", "le"), ("maximum of", "le"),
+        ("a maximum of", "le"), ("capped at", "le"), ("up to", "le"),
+        ("or below", "le"), ("or under", "le"), ("or less", "le"),
+        ("or younger", "le"), ("or fewer", "le"),
+        # --- > ------------------------------------------------------------ #
+        ("greater than", "gt"), ("more than", "gt"), ("bigger than", "gt"),
+        ("larger than", "gt"), ("higher than", "gt"), ("older than", "gt"),
+        ("longer than", "gt"), ("in excess of", "gt"), ("exceeding", "gt"),
+        ("exceeds", "gt"), ("over", "gt"), ("above", "gt"),
+        # --- < ------------------------------------------------------------ #
+        ("less than", "lt"), ("fewer than", "lt"), ("smaller than", "lt"),
+        ("lower than", "lt"), ("younger than", "lt"), ("shorter than", "lt"),
+        ("under", "lt"), ("below", "lt"), ("beneath", "lt"),
+        # --- = ------------------------------------------------------------ #
+        ("equal to", "eq"), ("equals", "eq"), ("exactly", "eq"),
+    ),
+    key=lambda pair: (-len(pair[0]), pair[0])))
+
+
+def comparator_alternation(ops: "Tuple[str, ...]" = ()) -> str:
+    """A regex alternation of every phrase meaning one of ``ops``.
+
+    Longest-first, always. A caller that wants only the `gt` phrases passes
+    ``("gt",)``; a caller that wants all of them passes nothing. Both consumers
+    build their own pattern around this — the parser needs a captured value and
+    a suffix, the receipt needs a number and a span — but neither keeps its own
+    idea of which words are comparators.
+    """
+    wanted = tuple(ops or ())
+    phrases = [p for p, op in COMPARATOR_PHRASES if not wanted or op in wanted]
+    return "|".join(re.escape(p) for p in phrases)
+
+
+def comparator_ops() -> "Tuple[str, ...]":
+    """Every operator the vocabulary can express, in a stable order."""
+    return tuple(dict.fromkeys(op for _, op in COMPARATOR_PHRASES))

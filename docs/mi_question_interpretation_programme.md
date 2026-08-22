@@ -597,6 +597,21 @@ Given a new id, the differ reported it correctly: one case gone, one arrived.
 
 ## Backlog
 
+### Item 1 follow-ons — recorded during the fix, deliberately not opened inside it
+
+* **The bare `N+` threshold is applied but never disclosed.** *"how many
+  borrowers are 70+"* narrows correctly (`Borrower Age >= 70`, 6,862 loans) and
+  raises no threshold facet, because the receipt's postfix pattern ends
+  `(?:\+|...)\b` and a `\b` after `\+` can never match. **A branch that cannot
+  fire** — the same class as the dead guard found in B16a. Belongs to B20's
+  mutation pass over the guard set. A disclosure gap, not a wrong number.
+* **Subject binding without a currency marker.** *"loans no more than 150000"*
+  binds the threshold to `current_loan_to_value`, not the balance, because with
+  no `£` the nearest-subject rule picks the measure named earlier in the
+  sentence. With a currency sign it is correct. `_filter_field_of`'s precedence
+  is a genuinely separate decision from the comparator vocabulary.
+
+
 ### B24 — should `resolve_active_view` run before parsing at all?
 
 **Open, recorded as its own item, and deliberately not settled inside B21.**

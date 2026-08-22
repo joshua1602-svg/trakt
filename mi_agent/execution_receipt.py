@@ -42,6 +42,8 @@ from typing import (
     Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple,
 )
 
+from question_interpretation import lexical as _lexical
+
 from . import statistic as _statistic
 
 # --------------------------------------------------------------------------- #
@@ -218,12 +220,29 @@ _GEO_STOPWORDS = {
 
 #: Comparison markers that, together with a number, mean the user stated a
 #: threshold. Deliberately explicit — a bare number is never a threshold.
+#: Item 1 — THE PHRASES COME FROM `question_interpretation.lexical`, the same
+#: owner the parser reads. This list used to name its own words and they agreed
+#: on 16 of 30; where both were blind the narrowing vanished and nothing was
+#: raised for the guard to honour.
+#:
+#: DETECTION STAYS HERE, and that is the point of the design rather than an
+#: oversight. This reads the SENTENCE, not the parser's output — so a threshold
+#: the parser fails to apply is still raised, execution cannot honour it, and
+#: the guard refuses instead of answering the whole book. Deriving this facet
+#: from the applied filters would delete exactly that protection.
+def _threshold_pattern(op: str) -> str:
+    return (r"\b(?<!\bno )(?<!\bnot )(?<!\bor )(?:"
+            + _lexical.comparator_alternation((op,))
+            + r")\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?")
+
+
 _THRESHOLD_PATTERNS: Tuple[Tuple[str, str], ...] = (
-    (r"\b(?:over|above|more than|greater than|exceeding|in excess of)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "over"),
-    (r"\b(?:under|below|less than|fewer than|beneath|younger than)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "under"),
-    (r"\bolder than\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "over"),
-    (r"\b(?:at least|no less than|minimum of)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "at least"),
-    (r"\b(?:at most|no more than|up to|maximum of|capped at)\s+£?\s*(\d[\d,\.]*)\s*(%|percent)?", "at most"),
+    # The word is the OPERATOR rendered for a reader, from the one mapping in
+    # the owning module — not a second list of phrases mapping to words.
+    (_threshold_pattern("gt"), _lexical.COMPARATOR_WORD["gt"]),
+    (_threshold_pattern("lt"), _lexical.COMPARATOR_WORD["lt"]),
+    (_threshold_pattern("ge"), _lexical.COMPARATOR_WORD["ge"]),
+    (_threshold_pattern("le"), _lexical.COMPARATOR_WORD["le"]),
     (r"\bbetween\s+£?\s*(\d[\d,\.]*)\s*%?\s+and\s+£?\s*\d[\d,\.]*", "between"),
     (r"(\d[\d,\.]*)\s*(?:\+|\s+or (?:above|over|older|more|greater))\b", "or above"),
     (r"[<>]=?\s*£?\s*(\d[\d,\.]*)\s*(%|percent)?", "comparison"),
@@ -1841,8 +1860,6 @@ def dimension_role(facet: RequestedFacet, *, question: Optional[str],
     either way. Left an axis, so the KIND_GROUPING branch stamps it UNAVAILABLE
     and the reader is told the thing they can act on.
     """
-    from question_interpretation import lexical as _lexical
-
     candidates = list(facet.satisfied_by())
     filter_key = next((k for k in candidates if k in (filters or {})), None)
     if filter_key is not None:

@@ -1482,6 +1482,8 @@ def _det_meta(confidence: str, explicit: bool, terms: List[str],
 # thousands commas, optional decimal, an optional k/m/bn multiplier and an
 # optional trailing %.  Captures (number, suffix).  Examples it accepts:
 #   "40", "40%", "200000", "100,000", "£100k", "£0.2m", "$1.5bn", "£200K"
+from question_interpretation import lexical as _lexical  # noqa: E402
+
 _VALUE = r"(?:£|\$|€)?\s*(-?\d[\d,]*(?:\.\d+)?)\s*(k|m|bn|b|K|M|BN|B)?\s*%?"
 _MULTIPLIER = {"k": 1e3, "m": 1e6, "b": 1e9, "bn": 1e9}
 
@@ -1498,13 +1500,44 @@ def _amount(num: str, suffix: Optional[str]) -> float:
 # (regex, op).  Each non-``between`` pattern captures (number, suffix); ``between``
 # captures (n1, s1, n2, s2).  Order matters: the two-word operators come first so
 # "greater than or equal to" is not shadowed by "greater than".
+#: Item 1 — THE PHRASES COME FROM `question_interpretation.lexical`, which owns
+#: the comparator vocabulary. This list used to name its own words, and
+#: `execution_receipt._THRESHOLD_PATTERNS` named a different set; they agreed on
+#: 16 of 30. Where both were blind — "bigger than", "larger than", "higher
+#: than", "smaller than", "lower than" — the narrowing vanished, no facet was
+#: raised, and the whole book came back as fact.
+#:
+#: The symbol operators stay here: `>=`, `<=`, `>`, `<`, `=` are notation, not
+#: English, and the receipt has its own reason to treat them separately.
+def _comparator_pattern(op: str, symbols: str = "") -> str:
+    alternation = _lexical.comparator_alternation((op,))
+    if symbols:
+        alternation = alternation + "|" + symbols
+    # A NEGATED comparator is a different operator, and its phrase CONTAINS the
+    # un-negated one: "no more than 150000" holds "more than 150000". Without
+    # this guard the `gt` pattern matches inside the `le` phrase and the filter
+    # can invert — the narrowing runs the wrong way and the answer is confidently
+    # backwards. The negated forms are carried explicitly by the `ge`/`le`
+    # entries in the owning vocabulary, so refusing to match after "no"/"not"
+    # loses nothing.
+    # `or ` for the same reason one step along: "greater than or equal to"
+    # contains "equal to", and the compound is already carried as a `ge` phrase.
+    return (rf"(?<!\bno )(?<!\bnot )(?<!\bor )"
+            rf"(?:{alternation})\s*{_VALUE}")
+
+
 _FILTER_COMPARATORS: List[Tuple[str, str]] = [
+    # `between` keeps its own shape: it is the one operator taking two values.
     (rf"between\s+{_VALUE}\s+and\s+{_VALUE}", "between"),
-    (rf"(?:greater than or equal to|at least|no less than|>=)\s*{_VALUE}", "ge"),
-    (rf"(?:less than or equal to|at most|no more than|<=)\s*{_VALUE}", "le"),
-    (rf"(?:more than|greater than|older than|over|above|>)\s*{_VALUE}", "gt"),
-    (rf"(?:less than|younger than|under|below|fewer than|<)\s*{_VALUE}", "lt"),
-    (rf"(?:equal to|equals|exactly|=)\s*{_VALUE}", "eq"),
+    # Order is load-bearing and now guaranteed by the owner: the vocabulary is
+    # sorted longest-first, so "greater than or equal to" is not shadowed by
+    # "greater than" and "no more than" is not read as "more than" with the
+    # negation discarded — which would invert the filter.
+    (_comparator_pattern("ge", ">="), "ge"),
+    (_comparator_pattern("le", "<="), "le"),
+    (_comparator_pattern("gt", ">"), "gt"),
+    (_comparator_pattern("lt", "<"), "lt"),
+    (_comparator_pattern("eq", "="), "eq"),
 ]
 
 
@@ -1555,7 +1588,8 @@ def _resolve_subject(kind: str, semantics: dict, available_columns=None):
 
 
 def _filter_field_of(q: str, semantics: dict, available_columns=None,
-                     anchor: Optional[int] = None) -> Optional[str]:
+                     anchor: Optional[int] = None,
+                     value_end: Optional[int] = None) -> Optional[str]:
     """Resolve the field a numeric threshold applies to from the question text.
 
     When ``anchor`` (the comparator's position) is supplied, the subject NEAREST
@@ -1567,7 +1601,22 @@ def _filter_field_of(q: str, semantics: dict, available_columns=None,
     if anchor is not None:
         head = q[:anchor]
         # A currency amount is a balance threshold regardless of earlier nouns.
-        if re.search(r"£\s*$|£\s*\d", q[max(0, anchor - 2):anchor + 12]):
+        #
+        # THE WINDOW IS THE MATCH, NOT A GUESS. This probed a fixed twelve
+        # characters after the comparator, which was wide enough for every
+        # phrase the old vocabulary held — "over " is five, "more than " is ten.
+        # Item 1 added the phrases both owners were missing, and "bigger than "
+        # is exactly twelve: the £ fell one character outside the window, the
+        # currency test failed, and the threshold bound to `current_loan_to_value`
+        # instead of the balance. No loan has an LTV over 150,000, so the answer
+        # became a refusal — safer than the whole-book figure it used to return,
+        # and still not the answer.
+        #
+        # The caller knows where the value ends, so it says so. A fixed span
+        # around a variable-length vocabulary is the same hard-coding this
+        # programme keeps finding, one layer down from the lists themselves.
+        probe_end = value_end if value_end is not None else anchor + 12
+        if re.search(r"£\s*$|£\s*\d", q[max(0, anchor - 2):probe_end]):
             balance = _balance_metric(semantics, available_columns)
             if balance:
                 return balance
@@ -2142,7 +2191,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
             # Re-resolve against THIS comparator's position: the subject nearest
             # before the operator is the one the predicate is about.
             field = _filter_field_of(clause, semantics, available_columns,
-                                     anchor=m.start()) or field
+                                     anchor=m.start(),
+                                     value_end=m.end()) or field
             if field:
                 filters[field] = {"op": op, "value": _amount_from_match(m, op)}
                 if spans is not None:
