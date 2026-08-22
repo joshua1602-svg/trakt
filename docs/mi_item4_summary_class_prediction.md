@@ -120,3 +120,56 @@ predicted to move corpus answers, and the movement IS the settlement.
   becoming a summary;
 * the CPR/WAL capability explanations disappearing;
 * calibration falling below 259.
+
+---
+
+# MEASURED
+
+## 4. Results against §3
+
+| declared | measured | |
+|---|---|---|
+| A5 → the governed summary | **answered, `portfolio_summary`, 6 KPIs, chart(8), table** | ✅ |
+| `book overview`, `key metrics`, headline numbers → the summary | all three, identical answer | ✅ |
+| CPR / contractual WAL unchanged | capability explanations intact (435 / 389 chars) | ✅ |
+| risk-limit summary unchanged | still `risk_limits` | ✅ |
+| `summarise the portfolio by region` unchanged | still a stratification | ✅ |
+| shipped shapes **15 / 0 / 0 / 0** | **15 / 0 / 0 / 0** | ✅ |
+| calibration 259/259 | 259/259, 0 hard failures, 0 known gaps | ✅ |
+| the 44, both books | `32/6/4/2`; seasoning Q1 4, Q7 4, Q8 12 | ✅ |
+| routed 32/32, lexical unmoved | 32/32; 697 of 697 identical | ✅ |
+| **4 corpus answers move** | **0 moved** — see §5 | ❌ |
+
+**Eleven phrasings now return one answer.** The two-route finding is settled:
+there is no longer a thin path and a rich path, because nothing falls through.
+
+## 5. The prediction was wrong, and the reason is B7
+
+I predicted four corpus answers would move and none did. `answer_diff` reads
+**729 of 729 identical**.
+
+The four questions this item deliberately changed are `kpi_028`–`kpi_031`, and
+**all four live in the calibration bank** — the one corpus that calls
+`run_mi_agent_query` directly and **bypasses routing entirely** (backlog B7).
+Their differ records carry `answer: ""`; that surface grades structure, not
+prose, and no route change can register in it.
+
+So the differ's clean result says nothing whatever about this item. It is not
+evidence the change was safe, and it is not evidence it worked.
+
+**This is the fifth instance of an instrument unable to see the change it was
+meant to measure — and the first found by a prediction being wrong rather than by
+a defect slipping through.** The prediction assumed the corpus containing these
+questions would exercise them the way production does. It does not, and that was
+already written down.
+
+What actually evidences this item: the shipped-shapes surface (15/15, which does
+drive `execute_governed_mi_query`), the eleven-phrasing route probe, and the 22
+tests.
+
+## 6. Constructed coverage
+
+> **729 of 729 identical means the differ could not reach this change at all** —
+> a stronger and less comforting statement than the usual "the fix did not reach
+> the corpora". The four corpus questions in the class are answered on a path
+> that does not route. The claim rests on the routed probe and the tests.

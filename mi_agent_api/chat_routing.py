@@ -258,10 +258,79 @@ _PRIOR_PERIOD_MARKERS = (
 )
 
 
-def _is_portfolio_summary(question: str) -> bool:
-    """A whole-book summary request, with no dimension or comparison in it."""
+#: Item 4 — the trigger half of the class. A VOCABULARY, and stated as one
+#: rather than dressed up as a rule: it is the same kind of finite list as
+#: `lexical.AXIS_MARKERS`, and the day someone writes "give me the top-line
+#: picture" it will need a word added.
+#:
+#: What makes the class a RULE rather than these phrases is the second half
+#: below — the question must name NOTHING ELSE. That is computed, and it is what
+#: keeps "tell me about brokers", "tell me about arrears", "how is lending
+#: doing" and "what is the CPR of this book" out. The CPR case matters most: an
+#: honest "I cannot compute that" must not become a summary nobody asked for.
+_SUMMARY_INTENT = (
+    "summary", "summarise", "summarize", "overview", "snapshot",
+    "the basics", "basics about", "headline", "key metrics", "key figures",
+    "key numbers", "highlights", "top-line", "top line",
+    "how is it doing", "how are we doing", "how is the book doing",
+    "how is the portfolio doing", "how is the book looking",
+    "where do we stand", "how do things stand", "how are things",
+    "tell me about",
+)
+
+#: Spec markers that mean another governed capability owns this question. Read
+#: rather than re-derived: each is set by the parser and consumed by its own
+#: recogniser, so duplicating any of their vocabularies here would recreate the
+#: multi-owner defect this programme has closed six times.
+_SPECIALIST_SPEC_MARKS = ("risk_limit_query", "risk_monitor_mode", "forecast_mode",
+                          "cohort_progression", "bridge_query", "temporal_mode")
+
+
+def _names_something_else(question: str, spec=None) -> bool:
+    """Whether the question asks for anything more specific than the book itself.
+
+    A measure, a dimension, a filter, a comparison, or a specialist capability
+    the spec already marks. This is the half of the class that is COMPUTED, and
+    it does all the discriminating — the vocabulary above only decides whether a
+    summary was asked for at all.
+    """
+    for mark in _SPECIALIST_SPEC_MARKS:
+        if getattr(spec, mark, None):
+            return True
+    try:
+        from mi_agent import llm_query_parser as _p
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.datasets import semantics_path
+        from mi_workflows.analytical.intent import is_comparative as _comparative
+        semantics = load_mi_semantics(semantics_path())
+        if [k for _s, _e, k, _a in _p._measure_hits(question, semantics)
+                if k != "loan_count"]:
+            return True
+        if _p._explicit_dimensions(question, semantics)[0]:
+            return True
+        if _p._parse_filters(question, semantics):
+            return True
+        if _comparative(question):
+            return True
+    except Exception:  # noqa: BLE001 - a summary is the fallback, not the default
+        return True
+    return False
+
+
+def _is_portfolio_summary(question: str, spec=None) -> bool:
+    """A whole-book summary request — the book's overall position, however worded.
+
+    Item 4. This required one of nine LITERAL PHRASES, so "Tell me the basics
+    about this book" was refused outright while "book overview", "key metrics"
+    and "What are the headline numbers?" fell through to the generic executor
+    and came back as a two-KPI card. Three different outcomes for one question,
+    only one of them the governed summary.
+
+    The generic path was never DECIDING those were summaries; it was failing to
+    recognise them. Claiming them here is what makes the answer single.
+    """
     q = f" {question.lower().strip()} "
-    if not any(m in q for m in _SUMMARY_MARKERS):
+    if not any(m in q for m in _SUMMARY_INTENT):
         return False
     # "summarise the portfolio by region" is a stratification, not a summary; and
     # "summarise what changed" is a movement question.
@@ -269,7 +338,7 @@ def _is_portfolio_summary(question: str) -> bool:
         return False
     if any(m in q for m in _PRIOR_PERIOD_MARKERS):
         return False
-    return True
+    return not _names_something_else(question, spec)
 
 
 def _is_period_movement(question: str) -> bool:
@@ -2760,7 +2829,7 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="portfolio_summary", priority=80, lens_aware=True,
             description="Current governed headline position.",
-            recognise=lambda r: _is_portfolio_summary(r.question),
+            recognise=lambda r: _is_portfolio_summary(r.question, r.spec),
             handle=lambda r: _route_portfolio_summary(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
