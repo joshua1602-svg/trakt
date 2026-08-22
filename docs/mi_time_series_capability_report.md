@@ -1,5 +1,16 @@
 # Time-series capability — eight shapes, measured
 
+> **⚠ SUPERSEDED — see `docs/mi_time_series_capability_reissue.md`.**
+>
+> Two things have moved since this report. **(1)** It predates P0: the three
+> silent drops recorded below are now refusals (8 answered, 21 refused, 0 silent
+> drops). **(2)** Its ratings were rated by column-NAME matching, which could not
+> see a time axis carried as a `prior`/`current` pair or a dimension carried in a
+> column called `category`. **Shapes 7 and 8 are PARTIAL, not ABSENT** — the
+> ratings below are floors set by the instrument, not ceilings set by the
+> product. Shapes 1-6 are unchanged.
+
+
 Report only. No fix proposed and none made.
 
 **58 runs — 29 phrasings × 2 books**, through `execute_governed_mi_query` with

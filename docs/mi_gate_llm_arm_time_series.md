@@ -264,6 +264,12 @@ another phrasing.** That is the brief's second divergence category —
 phrasings rather than between arms, so the Gate's arm-vs-arm comparison does not
 surface it.
 
+**Followed up in** `docs/mi_time_series_capability_reissue.md` (shapes 7 and 8
+re-rated ABSENT → PARTIAL from artifact contents),
+`docs/mi_phrasing_reachability.md` (3 of the 21 absences reachable under another
+wording) and `docs/mi_measurement_environment_traps.md` (the two environment
+traps recorded beside the book-fallback hazard).
+
 **Nothing here was fixed**, per the brief. Both ratings are recorded side by
 side in the instrument (`rating` from the inherited surface rule, `rating_brief`
 from the brief's rule) and a column census records what every artifact actually
