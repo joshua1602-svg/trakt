@@ -326,3 +326,52 @@ def test_both_limbs_ship_the_same_kind_because_it_is_one_property():
         verdict, message = R.assess(R.ExecutionReceipt(facets=facets))
         assert verdict == R.VERDICT_REFUSE
         assert message.endswith("I have not substituted a broader figure.")
+
+
+# --------------------------------------------------------------------------- #
+# The designed hole, proved rather than asserted
+# --------------------------------------------------------------------------- #
+# `stamp_coverage` reported KIND_SERIES_AXIS as a LIVE HOLE in sixteen
+# (route, kind) cells — a kind that can be raised where nothing can confirm it.
+# It is declared in DESIGNED_HOLES, and the reason given there is a CLAIM about
+# behaviour: the facet never enters a reconciler. These tests are that claim's
+# proof. A declaration without one is how an instrument gets talked out of a
+# finding.
+def test_no_reconciler_ever_receives_a_series_axis_facet():
+    """The real raiser's output must not be reconcilable, because it is already
+    adjudicated. Exercised through the raiser, not a hand-built facet."""
+    facets = R.temporal_honouring_facets("balance by month", HEATMAP, VALUES)
+    assert facets and all(f.status == R.LOST and f.reason for f in facets)
+
+
+def test_only_one_place_constructs_this_kind():
+    """One raiser, and the declaration in DESIGNED_HOLES depends on it.
+
+    A second construction site — especially one before execution — would put a
+    series_axis facet into a reconciler's list, and the hole would stop being
+    designed.
+    """
+    import inspect
+    from pathlib import Path
+
+    root = Path(R.__file__).resolve().parents[1]
+    sites = []
+    for path in root.rglob("*.py"):
+        if "test" in path.name or "/tests/" in str(path):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if "KIND_SERIES_AXIS" in line and "kind=" in line:
+                sites.append("%s:%d" % (path.relative_to(root), line_no))
+    assert len(sites) == 2, sites          # limb 1 and limb 2, both in the raiser
+    assert all("execution_receipt.py" in s for s in sites), sites
+    source = inspect.getsource(R.temporal_honouring_facets)
+    assert source.count("KIND_SERIES_AXIS") == 2
+
+
+def test_the_designed_hole_is_declared():
+    """If the kind is ever removed or renamed, the declaration must not linger."""
+    from question_interpretation import stamp_coverage
+
+    assert "KIND_SERIES_AXIS" in stamp_coverage.DESIGNED_HOLES
+    assert hasattr(R, "KIND_SERIES_AXIS")

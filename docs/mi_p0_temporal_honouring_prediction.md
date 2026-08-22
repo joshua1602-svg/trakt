@@ -423,5 +423,60 @@ older than this stage.
 
 ### The set difference
 
-Recorded below when the base-commit run lands. **The estate criterion is not
-called met before then.**
+Both trees run in this environment, one at a time (three concurrent suites, one
+of them stale, were killed first — a contended run is not a measurement).
+
+| | base `99ea9ca` | P0 head |
+|---|---|---|
+| failed | **189** | **189** |
+| passed | 9495 | **9560** |
+| skipped / xfailed / errors | 36 / 8 / 43 | 36 / 8 / 43 |
+| wall clock | 38:41 | 39:12 |
+
+The 65 extra passes are this stage's own tests: 29 on the sentence-side owner,
+36 on the property. Nothing else changed count.
+
+By NAME the two sets differ in exactly two places, and neither is a regression.
+
+**NEW at the P0 head — one, real, and acted on.**
+
+    question_interpretation/tests/test_stamp_coverage_instrument.py::test_no_hole_is_live
+
+The facet-stamping coverage instrument reported `series_axis` as a LIVE HOLE in
+sixteen (route, kind) cells: *"a facet kind can now be raised somewhere that
+cannot confirm it."* The instrument is right that no reconciler branch receives
+it, and that is the design — the facet is raised AFTER execution from the
+rendered rows, arrives LOST with its reason already set, and goes straight to
+`assess`. A reconciler reading declared evidence is precisely what T5 defeats.
+
+That matches the instrument's own criterion for a DESIGNED hole — *"a kind
+constructed with a status and a reason already set, which the detector has
+finished adjudicating"* — so it is declared in `DESIGNED_HOLES`. Declared **with
+a proof, not an assertion**: three tests require that the real raiser's output is
+already adjudicated, that exactly two construction sites exist and both are
+inside that one function, and that the declaration cannot outlive the kind. If a
+second raiser ever appears — especially one running before execution — the hole
+stops being designed and the instrument is right again.
+
+**"FIXED" at the P0 head — one, and it is an artefact of the measurement, not a
+change in the product.**
+
+    mi_agent/tests/test_registry_governance.py::test_checked_in_registry_matches_generator
+
+It fails at base and passes at the P0 head, which is the wrong direction for
+anything P0 did — and P0 touches neither file. Cause: the checked-in registry
+records its source as an ABSOLUTE path,
+
+    source_registry: /home/user/trakt/config/system/fields_registry.yaml
+
+and the generator regenerates it from wherever the tree is checked out. The base
+run was a git worktree under `/tmp`, so the paths differ and the metadata
+assertion fails. Both input files are byte-identical between the two trees
+(md5-checked), and the `fields` block matches entry for entry; only
+`source_registry` differs. **The test fails in any checkout not located at
+`/home/user/trakt`.** That is a real brittleness in that test, unrelated to this
+stage and not authorised here — recorded, not fixed.
+
+**So: zero new failures by name that P0 caused and did not close, and zero
+fixes.** The estate criterion is met on that reading, and the reading is stated
+rather than reduced to a count.
