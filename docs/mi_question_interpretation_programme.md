@@ -595,6 +595,55 @@ Given a new id, the differ reported it correctly: one case gone, one arrived.
 > tell a rewritten case from moved behaviour, and the reading it produces is the
 > more alarming of the two.
 
+## STANDING RULES — two corrections earned by items 1 and 2
+
+### The parameterisation rule, replaced
+
+The `_qualified_span_re` ruling generalised wrongly. It was read as *"parameterise
+the implementation and keep the vocabularies distinct"*, and item 1 needed the
+exact opposite. The rule is:
+
+> **Share what is one fact. Separate what is two.**
+
+| | what was ONE fact | what was TWO |
+|---|---|---|
+| **B22** `_qualified_span_re` | the qualified-mention TEST | the vocabularies — scope nouns are genuinely not lens nouns |
+| **item 1** comparators | the VOCABULARY — "is 'bigger than' a comparator" is one fact about English | the implementations — an operator is not a receipt word |
+
+**Hard-coding was the error in both, in opposite directions.** In B22 hard-coding
+one noun list dropped five governed phrases; in item 1 keeping two comparator
+lists dropped five comparators. Neither case is evidence for a fixed shape; both
+are evidence for asking which part is genuinely singular.
+
+### A vocabulary consolidation is not complete when the lists agree
+
+**Fixing a multi-owner decision can expose a hard-coded constraint the old
+vocabulary was too small to reach.** Item 1 unified the comparator lists, the
+lists agreed on 29 of 30 — and the three target phrasings still failed, because
+`_filter_field_of` probed a **fixed twelve characters** for a currency sign and
+`"bigger than "` is exactly twelve. Every phrase the old vocabulary held was
+short enough for the window. Enlarging the vocabulary made the window the
+binding constraint.
+
+That is the **third** instance of a fix revealing something the layer above was
+masking. So:
+
+> A vocabulary consolidation is complete not when the lists agree, but when the
+> **consumers of the unified list have been exercised across its full range** —
+> longest and shortest phrase, every direction, every consumer.
+
+### `test_the_detectors_stay_separate` guards a property nobody would notice losing
+
+Kept prominent deliberately. `execution_receipt._detect_thresholds` reads the
+SENTENCE and never the applied filters. Deriving its facet from the filters is
+the obvious simplification, it would pass every existing test, and it would
+**silently delete** the protection that makes `exceeding`, `in excess of`,
+`minimum of`, `beneath`, `up to`, `maximum of` and `capped at` refuse rather than
+answer over the whole book. Two independent detectors is the design: a threshold
+the parser misses must still be RAISED, so the guard has something it cannot
+honour. The test asserts `_detect_thresholds` takes the question and nothing
+else, which is the only mechanical form that claim has.
+
 ## Backlog
 
 ### Item 1 follow-ons — recorded during the fix, deliberately not opened inside it
