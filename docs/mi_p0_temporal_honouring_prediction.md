@@ -266,3 +266,84 @@ Implementation stops and reports, rather than continuing, at the first of:
 Both books, all 29 phrasings; the four standing surfaces; the estate; the
 shipped shapes; the twelve Q8 variations on both books. Then the frozen baseline
 is re-recorded, and the commit it was taken at is stated.
+
+---
+---
+
+# P0 — the result, measured
+
+Implemented across three commits from the base, each with its own before/after:
+
+| commit | change |
+|---|---|
+| `924eaa8` | the sentence-side owner, inert — nothing read it |
+| `4c2cf9b` | limb 1: a requested time axis must be proven by the shipped rows |
+| `1b90fe4` | rt_005b re-declared (B9 closed as a consequence) |
+| `1f79f19` | limb 2: the segments the sentence named must survive the series |
+
+## 9. Prediction against outcome
+
+| prediction (§4) | outcome | |
+|---|---|---|
+| silent drops 3 → 0, both books | **3 → 0 on alderbridge, 3 → 0 on kestrelmoor** | ✅ |
+| honest refusals 18 → 21, both books | **21 of 29 on both** | ✅ |
+| exactly three runs move per book | **exactly three, and the same three, on both** | ✅ |
+| no shape rating changes | **every rating identical, both books** | ✅ |
+| the eight standing answers unmoved | **unmoved** | ✅ |
+| calibration bank unmoved | **267 passed** | ✅ |
+| robustness bank unmoved, both books | **CORRECT 32 / UNHELPFUL 6 / SAFE 4 / DISCLOSED 2 on each** | ✅ |
+| the three seasoning families unmoved by name | **Q1 4/4, Q7 4/4, Q8 12/12 CORRECT on both books** | ✅ |
+| shipped shapes 15/15 | **15 correct, 0 wrong, 0 refusals of either kind** | ✅ |
+| routed surface: only rt_005b moves | **32 passed / 0 failed / 0 declared defects**, from 31/0/1 | ✅ |
+
+## 10. The three runs that moved, in full
+
+**T5 — the time axis, two phrasings, both books.** An 88-group heatmap over a
+single reporting period, `ok=True`, no verdict, no facet, no note. Now:
+
+> I understood that you asked for a series by month, but that could not be
+> applied to the calculation (a series by month — the answer that was produced
+> carries no time axis; it reports a single position and cannot show movement).
+> I have not substituted a broader figure.
+
+**T8 — the segments, one phrasing, both books.** A three-point whole-book series
+answering a question about two segments, labelled *"Funded balance for **Total**:
+tracked across 3 reporting period(s)"*. Now:
+
+> I understood that you asked for Direct and Acquired tracked separately, but
+> that could not be applied to the calculation (Direct and Acquired tracked
+> separately — the answer that was produced is a single whole-book series; it is
+> not split by the segments you named). I have not substituted a broader figure.
+
+Both sentences are `assess`'s, not this stage's.
+
+## 11. Two corrections earned during implementation
+
+Recorded because the discipline is that a fix measured only by "does the right
+thing happen" stops at the first case that works.
+
+1. **The unit owner was asked the wrong question.** The first composition asked
+   `requested_unit` about the noun alone, and `"balance by day"` read as no time
+   axis at all — `UNIT_PATTERNS` holds `day` only as phrases (`by day`, `per
+   day`, `daily`), never as the bare word. Caught by the test that derives its
+   cases from `UNIT_PATTERNS` rather than listing them. The owner is now asked
+   about the marker and the noun together.
+
+2. **A blacklist reported a cut on the answer it exists to catch.** Limb 2 first
+   asked whether any column that was neither a time nor a measure varied,
+   against a list of measure words. `cohort_progression` ships a second table
+   carrying `wa_ltv` and `wa_interest_rate` beside the whole-book series, and
+   neither word was on the list, so the whole-book series "proved" a cut.
+   Replaced by a structural rule with no vocabulary at all: a row set is cut
+   when it carries more rows than an uncut answer of its shape would. That
+   count differs by form — a series carries one row per point, a movement table
+   carries one row — and reading both as "one row per point" then refused the
+   two `analytical_composition` answers that correctly track front book against
+   back book. Both errors were found by measurement, not by review.
+
+## 12. What P0 did not do
+
+No capability was added. Every time-series shape carries the rating it carried
+before: T1 proven, T2 partial, T3–T8 absent. Three answers that were confident
+and wrong are now refusals that say what was lost. The eight shapes are no
+closer to working than they were at `99ea9ca`; they are only no longer silent.
