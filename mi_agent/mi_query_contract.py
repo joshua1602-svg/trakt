@@ -269,6 +269,14 @@ def build_query_trace(*, question: str, spec, parse_meta: Optional[dict],
         "applied_dimensions": inv.applied,
         "rejected_dimensions": inv.rejected,
         "requested_filters": list((_spec_get(spec, "filters") or {}).keys()),
+        # P1E: the measure set gets the same requested/executed/rejected surface
+        # the trace already gives dimensions and filters, so a measure the
+        # executor could not calculate is visible rather than merely absent.
+        "requested_measures": [m.get("field")
+                               for m in (_spec_get(spec, "measures") or [])
+                               if isinstance(m, dict) and m.get("field")],
+        "executed_measures": list(meta.get("measures_executed") or []),
+        "unavailable_measures": list(meta.get("measures_unavailable") or []),
         "applied_filters": finv.applied_filters,
         "rejected_filters": (finv.rejected_filters
                              + [{"filter": f, "reason": "field unavailable in this dataset"}

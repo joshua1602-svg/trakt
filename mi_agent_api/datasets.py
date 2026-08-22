@@ -714,6 +714,30 @@ def _evo_ids(portfolioId, client_id, toRunId, to_run_id):
     return (client_id or "client_001"), (toRunId or to_run_id)
 
 
+#: Where a derived view records the schema of the BOOK it was projected from.
+#:
+#: D6 (B14). `resolve_active_view` picks the view from a SUBSTRING TEST on the
+#: question — the word "forecast" anywhere selects the forecast view — before the
+#: question is parsed and before any route claims it. The forecast view then
+#: keeps twelve of the book's seventy-six columns, and every availability check
+#: downstream reads those twelve, so a field the book carries for all 11,035
+#: loans is reported as absent from "this dataset".
+#:
+#: Stamped rather than re-loaded: the book is already an argument to the
+#: projection that drops its columns.
+BOOK_COLUMNS_ATTR = "book_columns"
+
+
+def _stamp_book_columns(frame, book_df) -> None:
+    """Record the source book's columns on a DERIVED frame, in place."""
+    if frame is None or book_df is None:
+        return
+    try:
+        frame.attrs[BOOK_COLUMNS_ATTR] = [str(c) for c in book_df.columns]
+    except Exception:  # noqa: BLE001 - metadata must never break a query
+        pass
+
+
 def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
     """``(df, error)`` for a tab-aware query. Funded keeps the existing active
     dataset (unchanged); pipeline / forecast resolve the governed pipeline (and,
@@ -769,6 +793,12 @@ def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
     frame = workspace_mod.build_forecast_view_frame(funded_df, pipeline_df)
     if not len(frame):
         return None, "No forecast data is available for the forecast view."
+    # D6 (B14): the derived frame keeps TWELVE of the book's seventy-six columns,
+    # and every availability check downstream reads whichever frame was loaded —
+    # so "the front book" came back as "field is unavailable in this dataset",
+    # true of this projection and false of the book. The book's schema is in hand
+    # right here and was being discarded; it travels with the frame instead.
+    _stamp_book_columns(frame, funded_df)
     return frame, None
 
 

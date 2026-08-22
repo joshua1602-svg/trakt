@@ -31,6 +31,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+import yaml
+
 import pandas as pd
 
 from engine.gate_1_alignment.semantic_alignment import (
@@ -339,7 +341,37 @@ def run(*, verbose: bool = True) -> Dict[str, Any]:
                   f"{m['mapped_count']} mapped, {m['unmapped_count']} unmapped, "
                   f"{m['client_contract_count']} resolved by client contract, "
                   f"{m['low_confidence_count']} low confidence")
+
+    # Publish the governed per-portfolio metadata this stage established. The
+    # asset class is decided ONCE, here, and every downstream MI view reads it
+    # from the registry rather than re-deriving it — which is what makes
+    # "Equity Release MI = common core + ER semantics" a property of the book
+    # rather than of whichever component happens to be asking.
+    registry = _publish_portfolio_metadata()
+    if verbose:
+        declared = {e["source_portfolio_id"]: e.get("asset_class")
+                    for e in registry["portfolios"]}
+        print(f"  [onboarding] governed portfolio metadata: {declared}")
     return contracts
+
+
+def _publish_portfolio_metadata() -> Dict[str, Any]:
+    """Write each portfolio's governed asset class to the portfolio registry.
+
+    The asset class comes from the client's onboarding configuration — the same
+    ``portfolio.asset_class`` the pipeline already reads — and is normalised to
+    the Business Semantics Registry vocabulary on the way in.
+    """
+    from engine.onboarding_agent import portfolio_registry_writer as registry_writer
+
+    client_cfg = yaml.safe_load(
+        cfg.demo_client_config().read_text(encoding="utf-8")) or {}
+    declared = (client_cfg.get("portfolio") or {}).get("asset_class")
+    return registry_writer.publish(
+        cfg.portfolio_registry_path(),
+        [{"source_portfolio_id": p.source_portfolio_id}
+         for p in cfg.ALL_PORTFOLIOS],
+        asset_class=declared)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:  # pragma: no cover - CLI

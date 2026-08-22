@@ -1,0 +1,476 @@
+# Adversarial probe set — §4.0(a)
+#
+# 36 questions authored to trigger the four whole-string shapes that produced
+# the known defect class. Each declares the CORRECT clause split, in the six
+# spans of clause_splitting_phase1/span_model.py. It asserts classification,
+# never outcome: two trees that both refuse are not equivalent if only one
+# refuses for the right reason.
+#
+# Expectations are written from first principles — what the sentence actually
+# says — not from what any tree produces. Concept names are registry keys
+# because BOTH trees resolve concepts against the same registry; the only thing
+# that varies between trees is which span the words landed in, so a concept
+# level assertion isolates span assignment.
+#
+# A span not declared is asserted EMPTY. A spurious binding fails a probe
+# exactly as a missing one does: inventing a filter the question never stated
+# is the silent-narrowing defect this layer exists to retire.
+#
+# `right_for_wrong_reason: true` marks a probe where the release candidate's
+# END BEHAVIOUR is defensible but its classification is not — a refusal that
+# comes from a downstream guard rather than from reading the sentence, or a
+# grouping that happens to display the requested subset. These are the cases a
+# regression bank cannot see.
+version: 1
+instrument: adversarial_probe_set
+authored_before_splitter: true
+probes:
+
+# --------------------------------------------------------------------------
+# Shape 1 — a measure word inside a FILTER clause.
+# The measure named in the filter must never become the subject.
+# --------------------------------------------------------------------------
+- id: adv_mif_01
+  shape: measure_in_filter
+  question: "balance where LTV above 50%"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [current_loan_to_value]
+  rationale: >-
+    LTV occurs only inside the where-clause. The subject is the residue,
+    'balance'. This is defect occurrence 1 of 4 (_detect_metric).
+
+- id: adv_mif_02
+  shape: measure_in_filter
+  question: "how many loans have a balance above £250k"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    filter: [current_outstanding_balance]
+  rationale: >-
+    'how many' decides count at the operation span and nowhere else. 'balance'
+    is inside the filter clause and cannot supply the subject. This is defect
+    occurrence 2 of 4 (wants_balance_too).
+
+- id: adv_mif_03
+  shape: measure_in_filter
+  question: "total exposure where the interest rate is over 6%"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [current_interest_rate]
+  rationale: "'total' fixes amount; the rate is the narrowing condition."
+
+- id: adv_mif_04
+  shape: measure_in_filter
+  question: "how many loans have an LTV above 80%"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    filter: [current_loan_to_value]
+  rationale: "The count-vs-amount decision belongs to the opener alone."
+
+- id: adv_mif_05
+  shape: measure_in_filter
+  question: "what is the funded balance for loans with an LTV below 40%"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [current_loan_to_value]
+  rationale: >-
+    'with ... below' opens a filter (draft rule 11) and closes the subject.
+    The subject was already fixed by 'the funded balance'.
+
+- id: adv_mif_06
+  shape: measure_in_filter
+  question: "number of cases where the borrower age is over 75"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    filter: [youngest_borrower_age]
+  rationale: "'number of' is a count opener; age narrows the population."
+
+- id: adv_mif_07
+  shape: measure_in_filter
+  question: "total balance where days in arrears exceed 90"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [number_of_days_in_arrears]
+  rationale: >-
+    A measure with a comparator inside a where-clause is a condition, never
+    the thing being measured.
+
+- id: adv_mif_08
+  shape: measure_in_filter
+  question: "average LTV where the balance is above £500k"
+  expect:
+    operation: [average_or_rate]
+    subject: [current_loan_to_value]
+    filter: [current_outstanding_balance]
+  rationale: >-
+    Reverse polarity of probe 01. LTV is the subject and balance the filter,
+    so a rule that simply prefers one measure word over another fails one of
+    the two probes whichever preference it picks.
+
+- id: adv_mif_09
+  shape: measure_in_filter
+  question: "how much is lent where the original LTV was above 70%"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [original_loan_to_value]
+  rationale: "'how much' fixes amount; original LTV is the condition."
+
+- id: adv_mig_01
+  shape: measure_in_grouping
+  question: "balance by LTV bucket"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [ltv_bucket]
+  rationale: >-
+    Defect occurrence 4 of 4 (answer_type.asked v2), which typed this as a
+    RATE question because 'LTV' appeared anywhere in the string.
+
+- id: adv_mig_02
+  shape: measure_in_grouping
+  question: "how many loans by LTV bucket"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: [ltv_bucket]
+  rationale: >-
+    Both halves of the defect at once: the opener says count, the grouping
+    clause says LTV, and neither may contaminate the other.
+
+- id: adv_mig_03
+  shape: measure_in_grouping
+  question: "balance by age bucket"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [age_bucket]
+  rationale: "Age is the axis, not the measure."
+
+- id: adv_mig_04
+  shape: measure_in_grouping
+  question: "balance by region where borrower age is over 70"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [collateral_geography]
+    filter: [youngest_borrower_age]
+  rationale: >-
+    Defect occurrence 3 of 4 (answer_type.asked v1), which returned AGE.
+    Three spans in one sentence, each of which can steal from the others.
+
+- id: adv_mig_05
+  shape: measure_in_grouping
+  question: "average interest rate by LTV bucket"
+  expect:
+    operation: [average_or_rate]
+    subject: [current_interest_rate]
+    grouping: [ltv_bucket]
+  rationale: >-
+    Two measure words, one in the subject and one in the grouping clause.
+    Position decides which is which.
+
+- id: adv_mig_06
+  shape: measure_in_grouping
+  question: "count of loans by ticket bucket"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: [ticket_bucket]
+  rationale: >-
+    'ticket' is a balance-derived bucket. A count question grouped by a
+    balance band must stay a count.
+
+- id: adv_mig_07
+  shape: measure_in_grouping
+  question: "total exposure by arrears bucket"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [arrears_bucket]
+  rationale: "Arrears is the axis; exposure is the subject."
+
+- id: adv_mig_08
+  shape: measure_in_grouping
+  question: "balance by original LTV bucket"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [original_ltv_bucket]
+  rationale: "Original vs current LTV must not collapse into one another."
+
+- id: adv_mig_09
+  shape: measure_in_grouping
+  question: "how many loans by arrears bucket and region"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    grouping: [arrears_bucket, collateral_geography]
+  rationale: "Two grouping axes in one clause, still a count."
+
+- id: adv_mig_10
+  shape: measure_in_grouping
+  question: "average LTV by term bucket"
+  expect:
+    operation: [average_or_rate]
+    subject: [current_loan_to_value]
+    grouping: [term_bucket]
+  rationale: >-
+    Control for probe adv_mig_01: here LTV genuinely IS the subject, so a
+    rule that suppresses LTV as a subject fails this one.
+
+# --------------------------------------------------------------------------
+# Shape 3 — a dimension VALUE that could be misread as an axis.
+# 'in London' narrows the population; 'by region' breaks it down.
+# --------------------------------------------------------------------------
+- id: adv_vaa_01
+  shape: value_as_axis
+  question: "total balance in London"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [collateral_geography]
+  rationale: "The 'exposure to London' idiom — draft rule 16. A value, not an axis."
+
+- id: adv_vaa_02
+  shape: value_as_axis
+  question: "balance by region"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [collateral_geography]
+  rationale: >-
+    The control for adv_vaa_01. Same field, opposite span, decided only by
+    which opener introduced it.
+
+- id: adv_vaa_03
+  shape: value_as_axis
+  question: "balance in London by broker"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping: [broker_channel]
+    filter: [collateral_geography]
+  rationale: "Both spans in one sentence, on two different fields."
+
+- id: adv_vaa_04
+  shape: value_as_axis
+  question: "how many loans in the North West"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    filter: [collateral_geography]
+  rationale: "A value filter under a count opener."
+
+- id: adv_vaa_05
+  shape: value_as_axis
+  question: "how much is in Scotland"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [collateral_geography]
+  rationale: "'in <value>' with no dimension word present at all."
+
+- id: adv_vaa_06
+  shape: value_as_axis
+  question: "balance where the account status is offer"
+  right_for_wrong_reason: true
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [account_status]
+  rationale: >-
+    The field is named and a VALUE is given. A tree that turns this into a
+    breakdown by account status displays the offer number among the others,
+    so the answer looks right while the classification is wrong. This is the
+    D4 categorical-domain backlog item seen at the span layer.
+
+- id: adv_vaa_07
+  shape: value_as_axis
+  question: "balance where the occupancy type is buy to let"
+  right_for_wrong_reason: true
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [occupancy_type]
+  rationale: "Same shape as adv_vaa_06 on a second field, to prove it is structural."
+
+- id: adv_vaa_08
+  shape: value_as_axis
+  question: "exposure to London and the South East"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [collateral_geography]
+  rationale: "A compound value on one field is still one filter span."
+
+- id: adv_vaa_09
+  shape: value_as_axis
+  question: "balance excluding London"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter: [collateral_geography]
+  rationale: >-
+    Draft rule 15. A negated value filter is still a filter; dropping it
+    silently widens the population instead of narrowing it, which is the same
+    defect class facing the other way.
+
+- id: adv_vaa_10
+  shape: value_as_axis
+  question: "balance by portfolio"
+  right_for_wrong_reason: true
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping:
+      unresolvable: "portfolio"
+  rationale: >-
+    'portfolio' is one of the declared ambiguous dimension terms — it could be
+    portfolio_id, acquired_portfolio_id or source_portfolio_type. The correct
+    classification is a grouping span that is filled but unresolvable, which
+    clarifies. A tree that resolves it to a specific id answers a question
+    nobody asked; a tree that refuses it downstream because groupings block
+    reaches an acceptable outcome for a reason unrelated to the sentence.
+
+- id: adv_vaa_11
+  shape: value_as_axis
+  question: "balance by stage"
+  right_for_wrong_reason: true
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    grouping:
+      unresolvable: "stage"
+  rationale: >-
+    Second declared ambiguous term: IFRS9 stage, internal risk stage and
+    pipeline stage are three different axes.
+
+- id: adv_vag_01
+  shape: vague_unbounded
+  question: "show me the loans with high LTV"
+  expect:
+    operation: [neutral]
+    subject: [loan_count]
+    filter:
+      unresolvable: "high LTV"
+  rationale: >-
+    'with ...' opens a filter (draft rule 11) but 'high' states no bound. The
+    dangerous readings are both live: fold LTV into the subject and answer a
+    weighted-average LTV, or drop the clause and list the whole book.
+
+- id: adv_vag_02
+  shape: vague_unbounded
+  question: "which loans are risky"
+  expect:
+    operation: [neutral]
+    subject: [loan_count]
+    filter:
+      unresolvable: "risky"
+  rationale: >-
+    'which' without a superlative is a listing, not a ranking. 'risky' has no
+    governed definition and must clarify.
+
+- id: adv_vag_03
+  shape: vague_unbounded
+  question: "how much is in the good book"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter:
+      unresolvable: "the good book"
+  rationale: >-
+    'in <value>' is a filter opener, but 'the good book' resolves to no
+    governed value. Binding it to whatever field happens to match a fragment
+    of the phrase narrows the population on a condition the user never stated.
+
+- id: adv_vag_04
+  shape: vague_unbounded
+  question: "balance for large loans"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter:
+      unresolvable: "large loans"
+  rationale: "'large' names no threshold. There is no defensible default."
+
+- id: adv_vag_05
+  shape: vague_unbounded
+  question: "how many loans are performing well"
+  expect:
+    operation: [count]
+    subject: [loan_count]
+    filter:
+      unresolvable: "performing well"
+  rationale: "A count over an undefined population is a confident wrong number."
+
+- id: adv_vag_06
+  shape: vague_unbounded
+  question: "total exposure to problem cases"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter:
+      unresolvable: "problem cases"
+  rationale: >-
+    'to <value>' is the same opener as 'exposure to London'; here the operand
+    does not resolve, so the span is filled-unresolvable rather than dropped.
+
+- id: adv_vag_08
+  shape: vague_unbounded
+  question: "exposure to high risk borrowers"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter:
+      unresolvable: "high risk borrowers"
+  rationale: >-
+    Internal risk grade exists as a governed dimension, but 'high risk' names
+    no grade. Resolving the field without resolving the value is exactly the
+    half-answer the unresolvable state exists to prevent.
+
+- id: adv_vag_10
+  shape: vague_unbounded
+  question: "what is the balance of the recent vintages"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter:
+      unresolvable: "recent vintages"
+  rationale: >-
+    'recent' is a bound on a governed dimension with no value. It reads as a
+    period but is not one — vintage_year is an origination attribute, not the
+    reporting window — so a tree that folds it into the period span answers a
+    different question rather than clarifying.
+
+- id: adv_vag_11
+  shape: vague_unbounded
+  question: "balance for the back book"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter:
+      unresolvable: "the back book"
+  rationale: >-
+    An industry phrase with no governed definition in this registry. Rule 27
+    treats 'relative to the back book' as a second population; standing alone
+    it is an unresolved filter, and the two readings must not be conflated.
+
+- id: adv_vag_12
+  shape: vague_unbounded
+  question: "how much are we exposed to the weaker cohorts"
+  expect:
+    operation: [amount]
+    subject: [current_outstanding_balance]
+    filter:
+      unresolvable: "the weaker cohorts"
+  rationale: >-
+    portfolio_cohort is governed; 'weaker' is a judgement the data cannot
+    supply. Field resolved, value not — clarify.

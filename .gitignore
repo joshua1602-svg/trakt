@@ -149,3 +149,7 @@ output/regulatory_watch/discovery_demo/stage1a/
 # The blanket *.xml rule above would otherwise drop the RSS fixture and break
 # the discovery suite on a fresh clone.
 !tests/fixtures/regulatory_watch/publications/*.xml
+
+# Synthetic second book, rebuilt on demand by
+# question_interpretation/run_robustness_deterministic.py
+question_interpretation/.kestrelmoor_store/

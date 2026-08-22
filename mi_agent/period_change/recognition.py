@@ -60,6 +60,14 @@ CHANGE_MARKERS: Tuple[str, ...] = (
     "drivers of", "driver of", "what drove", "main drivers",
     "portfolio evolution", "evolution of the portfolio",
     "composition change", "composition changed", "shifted", "shift in",
+    # The same verb family, in the tenses a ranked question actually uses.
+    # "grown", "rose" and "fell" were already here; "grew", "growth",
+    # "declined" and "dropped" are the missing conjugations of the identical
+    # intent, and without them "which region grew the most last month?" was not
+    # recognised as change language at all.
+    "grew", "grow", "growth", "shrank",
+    "decline", "declined", "declining", "dropped", "drop in",
+    "rising", "falling", "gained", "lost balance",
 )
 
 #: Period tokens that are themselves change language: nobody writes

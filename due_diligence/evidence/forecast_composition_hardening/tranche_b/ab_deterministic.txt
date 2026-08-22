@@ -1,0 +1,20 @@
+== BEFORE  /tmp/claude-0/-home-user-trakt/8fa44461-4d82-5a00-b9a3-1df72087ab19/scratchpad/det_pre  (752 runs)
+   grades          : {'CORRECT': 696, 'SAFE_REFUSAL': 56}
+   unsafe          : 0
+   correct/disclosed: 696 (92.6%)
+   SUBSTANTIVE_CALCULATED  :  642 (85.4%)
+   INFORMATIONAL_NO_COMPUTE:   54 (7.2%)
+   CONTROLLED_REFUSAL      :   56 (7.4%)
+   parser mix      : {'deterministic': 752}
+== AFTER   /tmp/claude-0/-home-user-trakt/8fa44461-4d82-5a00-b9a3-1df72087ab19/scratchpad/det_post  (752 runs)
+   grades          : {'CORRECT': 696, 'SAFE_REFUSAL': 56}
+   unsafe          : 0
+   correct/disclosed: 696 (92.6%)
+   SUBSTANTIVE_CALCULATED  :  642 (85.4%)
+   INFORMATIONAL_NO_COMPUTE:   54 (7.2%)
+   CONTROLLED_REFUSAL      :   56 (7.4%)
+   parser mix      : {'deterministic': 752}
+
+matched runs 752   grade differences 0   answer-text differences 196
+grade transitions: {}
+text differences by variation: {'Q1.1': 20, 'Q1.2': 20, 'Q1.3': 20, 'Q1.4': 20, 'Q8.1/seasoning': 20, 'Q8.2/seasoning': 20, 'Q8.3/seasoning': 20, 'Q8.4/seasoning': 20, 'Q9.2': 12, 'Q9.3': 12, 'Q9.4': 12}

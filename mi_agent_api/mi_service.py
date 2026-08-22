@@ -40,7 +40,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from trakt_core import perf as _perf
 from trakt_core.audit import emit_audit_event
@@ -94,7 +94,10 @@ class MiQueryRequest:
     filters: Optional[Dict[str, Any]] = None
     dataset_context: Optional[str] = None
     context: Optional[Any] = None
-    source_portfolio_lens: Optional[str] = None
+    #: The portfolio scope the caller has selected. A LIST selects several books
+    #: explicitly and resolves to exactly those — never to their provenance
+    #: type, which would widen the answer to books the caller did not choose.
+    source_portfolio_lens: Optional[Union[str, List[str]]] = None
     #: DEPRECATED as an identity input. Retained because adapters used it as the
     #: fallback portfolio selector when the caller named none, and dropping it
     #: would change which frame those callers resolve. Never authoritative for
@@ -457,6 +460,334 @@ def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
         return None, "Could not load the governed data for this query."
 
 
+#: Parser provenance for the evaluation harness. The distinction that matters:
+#: a deterministic FALLBACK after an LLM failure is not an LLM result, and a
+#: harness that cannot tell them apart reports a fiction.
+_LLM_FAILURE_CATEGORIES = (
+    ("authentication", ("authenticationerror", "401", "api key")),
+    ("rate_limit", ("ratelimit", "429", "overloaded")),
+    ("timeout", ("timeout", "timed out", "deadline")),
+    ("parse_failure", ("failed validation", "did not return a usable")),
+)
+
+
+def _parser_provenance(workflow: Dict[str, Any]) -> Dict[str, Any]:
+    """``{parser_used, llm_failure}`` — non-secret, for evaluation only."""
+    meta = (workflow.get("metadata") or {}) if isinstance(workflow, dict) else {}
+    parse_meta = meta.get("parse_metadata") or {}
+    detail = str(parse_meta.get("parser_mode_detail")
+                 or meta.get("parser_mode_detail") or "")
+    mode = str(parse_meta.get("parser_mode") or workflow.get("parser_mode") or "")
+    status = str(parse_meta.get("status") or "").lower()
+
+    if detail == "deterministic_fallback":
+        used = "deterministic_fallback_after_llm_failure"
+    elif mode == "llm" or detail.startswith("llm"):
+        used = "llm"
+    else:
+        used = "deterministic"
+
+    failure = None
+    if used == "deterministic_fallback_after_llm_failure" or detail == "validation_failed":
+        # "validation_failed" already names the failure: the model returned a
+        # spec the governed validator rejected. Reporting that as "unknown" hid
+        # the single most common LLM failure mode behind a placeholder.
+        failure = ("parse_failure" if detail == "validation_failed" else "unknown")
+        for category, needles in _LLM_FAILURE_CATEGORIES:
+            if any(n in status for n in needles):
+                failure = category
+                break
+    return {"parser_used": used, "llm_failure": failure,
+            "parser_mode_detail": detail or None,
+            "specialist_intent_carried": parse_meta.get("specialist_intent_carried") or []}
+
+
+def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
+                         route: Optional[str], semantics: Dict[str, Any],
+                         frame, parsed=None) -> Dict[str, Any]:
+    """P0 semantic guard for an answer produced by a routed governed capability.
+
+    A routed answer never reaches the point-in-time executor, so the workflow's
+    guard cannot see it. The check here is deliberately narrower: a route
+    declares its identity and its own scope, which is enough to tell whether a
+    period comparison, a stress condition, a value threshold or a ranking the
+    user asked for was actually part of what ran.
+
+    The bar for refusing is a facet that would change the NUMBER or that IS the
+    subject of the question. A facet a listing route simply could not narrow to
+    (asking about London and receiving every region's limit) is disclosed, not
+    refused: the requested category is present and no single figure is being
+    passed off as the narrow one. Never refuses on an unprovable facet, so a
+    working governed route cannot be disabled by this check.
+    """
+    if not isinstance(routed, dict) or not routed.get("ok"):
+        return routed
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+
+        spec = routed.get("spec") if isinstance(routed.get("spec"), dict) else {}
+        # The measure SET the route declares it compared, not just the spec's
+        # singular metric: a P1E spec can carry a set with metric=None, and the
+        # substitution check then had nothing to compare against.
+        _compared = receipt_mod.comparison_evidence(routed)
+        substitution = receipt_mod.detect_measure_substitution(
+            question, route=route, metric_key=(spec or {}).get("metric"),
+            executed_concepts=receipt_mod.comparison_measure_concepts(_compared))
+        facets = receipt_mod.detect_requested_facets(
+            question, semantics, frame=frame,
+            requested_dimensions=receipt_mod.requested_dimension_terms(
+                question, semantics,
+                available_columns=receipt_mod.book_columns(frame)),
+            # The parser's resolved filters, so the narrowing owner consumes that
+            # answer instead of claiming the same field.
+            resolved_filters=set(getattr(getattr(parsed, "spec", None),
+                                         "filters", None) or ()))
+        # D2 — THE ROLE DECISION, CONSUMED RATHER THAN DEFAULTED.
+        #
+        # `requested_dimension_terms` raises every named dimension as a
+        # grouping. On the point-in-time path a later reader gave each one the
+        # role its sources actually assigned; on this path nothing did, so a
+        # dimension the parser positively slotted as a FILTER was asserted to be
+        # a breakdown and the routed reconciler stamped that assertion. Measured
+        # across 693 corpus questions, the two paths asserted a different role on
+        # 37 — every one of them the same divergence.
+        #
+        # The parse is the one already threaded through routing (it supplies the
+        # governed population predicates a few lines above), so this reads a
+        # decision that was taken once rather than re-deriving it.
+        #
+        # `settle_unresolved=False`: the ROLE is settled here, but what a routed
+        # answer owes an UNRESOLVED role is not, because that turns on evidence
+        # D7 (B12) has yet to repair. See the branch in the split for the
+        # measurement behind that choice.
+        facets = receipt_mod._split_named_dimension_roles(
+            facets, getattr(parsed, "spec", None) or {}, semantics,
+            receipt_mod.book_columns(frame),
+            question=question, settle_unresolved=False)
+        granularity = receipt_mod.granularity_facets(question, route)
+        # P1L: the material row population the spec carries. Raised from the
+        # governed spec, proven from execution evidence the route reports — a
+        # route that reports nothing leaves these LOST and the answer refuses,
+        # instead of presenting a whole-book figure for a narrowed question.
+        population = receipt_mod.population_facets(spec, semantics)
+        import os as _od
+        if _od.environ.get("P1L_DEBUG"):
+            import sys as _sd
+            print(f"P1LG route={route} specfilters={(spec or {}).get('filters')} "
+                  f"evidence={(routed.get('metadata') or {}).get('populationApplied')}", file=_sd.stderr)
+        receipt_mod.reconcile_population(
+            population, (routed.get("metadata") or {}).get("populationApplied"),
+            dataset_columns=receipt_mod.book_columns(frame))
+        # A filter naming the population the ANALYTICAL PLAN already resolved
+        # from the intent is a no-op, not a loss. "Of the current offer pipeline,
+        # how much should convert?" sometimes parsed with an explicit
+        # pipeline_stage = Offer filter and sometimes without; the plan resolves
+        # OFFER either way and declares it on its findings, but the funded-frame
+        # narrowing ledger has nothing to report for a pipeline predicate, so
+        # the facet was stamped LOST and the same question answered on one run
+        # and refused on the next.
+        #
+        # Accepted only on the plan's own declaration, and only when that
+        # declaration names BOTH the same field and the value asked for — a plan
+        # that narrowed to KFI cannot satisfy a request for OFFER, and
+        # account_status = offer (right value, wrong field) stays lost.
+        for _facet in population:
+            if (_facet.status != receipt_mod.APPLIED
+                    and receipt_mod._analytical_population_satisfies(routed, _facet)):
+                _facet.status, _facet.reason = receipt_mod.APPLIED, ""
+        # EVERY population on this receipt is stamped from the same evidence,
+        # whoever raised it. Three raisers now: the ledger from `spec.filters`,
+        # the detector from the seasoning owner's decision, and the role owner
+        # reclassifying a named dimension the parser slotted as a filter.
+        #
+        # Two failure modes are closed here, both of them recurrences:
+        #
+        #   DUPLICATE  the ledger and the detector raise the same governed
+        #              population — the same decision seen from two places — and
+        #              one is stamped applied while the other is left lost, so
+        #              the answer refuses itself. Live for ten minutes in
+        #              7c46f81. Deduped on (kind, field, label): the label
+        #              carries the predicate, so two facets agreeing on all
+        #              three ARE the same claim.
+        #   UNSTAMPED  a population that is NOT a duplicate is pulled out of the
+        #              list below and never reaches `reconcile_routed_facets`,
+        #              so it keeps its LOST default whatever execution did — and
+        #              a lost population blocks. That is e35a01b's shape, a
+        #              reclassification into a kind with no receiver, arriving on
+        #              this path.
+        #
+        # Both are closed by MERGING into the ledger's list: a population from
+        # any raiser is stamped from the same evidence by the same two calls as
+        # it joins, and the merged list is the only one that reaches the receipt.
+        # `test_every_routed_population_is_stamped` is what says so.
+        _seen = {(f.kind, f.field_key, f.label) for f in population}
+        for _extra in facets:
+            if _extra.kind != receipt_mod.KIND_POPULATION:
+                continue
+            _key = (_extra.kind, _extra.field_key, _extra.label)
+            if _key in _seen:
+                continue
+            _seen.add(_key)
+            population.append(_extra)
+            receipt_mod.reconcile_population(
+                [_extra], (routed.get("metadata") or {}).get("populationApplied"),
+                dataset_columns=receipt_mod.book_columns(frame))
+            if (_extra.status != receipt_mod.APPLIED
+                    and receipt_mod._analytical_population_satisfies(routed, _extra)):
+                _extra.status, _extra.reason = receipt_mod.APPLIED, ""
+        facets = [f for f in facets
+                  if f.kind != receipt_mod.KIND_POPULATION] + population
+        if not facets and not substitution and not granularity:
+            # Nothing to adjudicate, but the answer still states what governed
+            # capability produced it and as at when — the receipt is required on
+            # every successful substantive answer, not only contested ones.
+            receipt = receipt_mod.build_routed_receipt(
+                route=route, envelope=routed, facets=[])
+            routed["executionSummary"] = receipt.to_dict()
+            line = receipt.render()
+            if line:
+                routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{line}"
+            return routed
+        # The granularity facet joins the list BEFORE reconciliation, not after.
+        # It used to be appended below, which is why its status had to be
+        # written at detection: nothing ever adjudicated it. A facet whose
+        # outcome is decided before execution cannot record a request that
+        # SUCCEEDED, and a rule can only be enforced on a request that is
+        # represented.
+        if granularity:
+            facets = list(facets) + list(granularity)
+        _population = [f for f in facets if f.kind == receipt_mod.KIND_POPULATION]
+        facets = receipt_mod.reconcile_routed_facets(
+            [f for f in facets if f.kind != receipt_mod.KIND_POPULATION],
+            route=route, semantics=semantics,
+            available_columns=receipt_mod.book_columns(frame),
+            envelope=routed)
+        facets = list(facets) + _population
+        # A temporal route may have compared a shorter span than the question
+        # named ("since inception" answered as one month). Verified against the
+        # periods the route itself declares.
+        facets = receipt_mod.check_period_grain(facets, routed)
+        # And the WINDOW, separately from the grain. A series at the right level
+        # over fewer periods than the question named is a different defect from
+        # a series at the wrong level, owed a different sentence.
+        facets = receipt_mod.check_window_coverage(facets, routed, question, route)
+        receipt = receipt_mod.build_routed_receipt(
+            route=route, envelope=routed, facets=facets)
+        verdict, message = receipt_mod.assess(receipt, substitution=substitution)
+        routed["executionSummary"] = receipt.to_dict()
+        routed["semanticGuard"] = {"verdict": verdict, "message": message,
+                                   "route": route,
+                                   "facets": [f.to_dict() for f in facets]}
+        if verdict in (receipt_mod.VERDICT_REFUSE,
+                       receipt_mod.VERDICT_CLARIFY):
+            routed["ok"] = False
+            routed["error"] = message
+            routed["answer"] = message
+            routed["artifacts"] = []
+            routed["controlledRefusal"] = True
+            routed["clarificationRequested"] = (
+                verdict == receipt_mod.VERDICT_CLARIFY)
+            routed.setdefault("warnings", []).append(message)
+        elif verdict == receipt_mod.VERDICT_PARTIAL and message:
+            routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{message}"
+            routed.setdefault("warnings", []).append(message)
+        else:
+            line = receipt.render()
+            if line:
+                routed["answer"] = f"{(routed.get('answer') or '').rstrip()}\n\n{line}"
+    except Exception:  # noqa: BLE001 - the guard must never break a governed route
+        logger.exception("routed semantic guard failed for question=%r", question)
+    return routed
+
+
+def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
+                            view: str) -> Dict[str, Any]:
+    """§7 THE FAIL-CLOSED SAFETY RULE.
+
+    A materially analytical question that no governed route claimed has reached
+    the generic point-in-time executor. That executor answers from ONE snapshot
+    of the funded tape with whatever measure and dimension the parse produced. It
+    has no concept of a pipeline, a limit, a run rate or a forecast — so for a
+    question in one of those families it cannot be right, only plausible.
+
+    These are the four measured cases this exists to stop, all of them ``ok=True``
+    with a green guard before it:
+
+        "How many loans are we completing at the moment?"  -> 11,035 loans
+        "What completion rate are we running at?"          -> £1.96bn
+        "Where are we closest to our limits?"              -> WA LTV by region
+        "Which of our limits are most at risk?"            -> balance by status
+
+    The check is STRUCTURAL and runs AFTER execution, not before it, for the same
+    reason the P0 receipt does: the question is not what the answer was meant to
+    be, it is what the answer demonstrably carries. An answer that DOES carry the
+    structure the question needs is left completely alone — "how does the front
+    book compare with the back book?", answered by grouping on the seasoning
+    segment with both sides present, is a real comparison reached by another
+    mechanism, and refusing it would lose a capability the product has.
+
+    Never refuses a question the boundary did not recognise as materially
+    analytical. "Balance by region" is not analytical and keeps the answer it has
+    always had.
+    """
+    if not isinstance(result, dict) or not result.get("ok"):
+        return result
+    try:
+        from mi_workflows.analytical import intent as intent_mod
+
+        reading = intent_mod.classify(question)
+        if not reading.materially_analytical:
+            return result
+        spec = result.get("spec") if isinstance(result.get("spec"), dict) else {}
+        evidence = {
+            # The point-in-time path reads the funded/arrears view of the loan
+            # tape. It never reads the governed pipeline extract.
+            "dataset": view,
+            # And it reads ONE governed snapshot. A cross-period answer comes
+            # from a route, and a route would have claimed the question.
+            "periods": 1,
+            "forecast": False,
+            "limits": False,
+            "grouping": spec.get("dimension") or "",
+            "populations": 0,
+        }
+        unmet = intent_mod.unmet_requirements(reading, evidence=evidence)
+        if not unmet:
+            return result
+
+        message = intent_mod.refusal_message(reading, unmet)
+        result["ok"] = False
+        result["error"] = message
+        result["answer"] = message
+        result["artifacts"] = []
+        result["controlledRefusal"] = True
+        result.setdefault("warnings", []).append(message)
+        # The receipt and the guard must tell the SAME story as the answer.
+        # A green guard beside a refusal reads as a spurious refusal, and an
+        # execution summary still carrying "11,035 loans" leaves on the envelope
+        # the very figure the refusal says it will not substitute — a reader (or
+        # a channel rendering the receipt) would find the number anyway.
+        from mi_agent import execution_receipt as receipt_mod
+
+        result["executionSummary"] = None
+        result["semanticGuard"] = {
+            "verdict": receipt_mod.VERDICT_REFUSE, "message": message,
+            "route": None,
+            "facets": [{"kind": r, "status": receipt_mod.UNAVAILABLE,
+                        "label": intent_mod.REQUIREMENT_REASONS.get(r, r)}
+                       for r in unmet]}
+        meta = result.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            block = reading.to_dict()
+            block["unmet"] = list(unmet)
+            block["failClosed"] = True
+            meta["analyticalIntent"] = block
+    except Exception:  # noqa: BLE001 - the boundary must never break an answer
+        logger.exception("analytical fail-closed check failed for question=%r",
+                         question)
+    return result
+
+
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
                   deps: CapabilityDependencies) -> Dict[str, Any]:
     """The analytical pipeline.
@@ -523,6 +854,47 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             frame, err = ds._resolve_query_frame("funded", pid)
             return None if err else frame
 
+        # P1L — GOVERNED POPULATION PROPAGATION.
+        #
+        # The population is resolved ONCE, here, and the specialist routes
+        # receive an ALREADY-CORRECT frame rather than each re-interpreting
+        # spec.filters for itself. Thirteen routes reading the same dict would
+        # be thirteen chances to disagree about what "the back book" means.
+        #
+        # A route that resolves its frame through this seam therefore honours
+        # the population automatically and reports evidence. A route that builds
+        # its own frame (or reads a run artefact) reports nothing, and the P0
+        # population ledger then refuses rather than letting a whole-book figure
+        # answer a narrowed question.
+        from mi_agent import population as _population_mod
+
+        # B17: the caller-supplied drill-through filters are merged BEFORE the
+        # predicates are computed, not after.
+        #
+        # `try_route` calls `parsed.merge_filters(extra_filters)` itself, so the
+        # drill was on the spec by the time `population_facets(spec)` read it —
+        # and absent from the predicates the frame resolver narrows on. Raised,
+        # never applied, refused: every drill-through on a routed question came
+        # back "the population collateral_geography = South East … could not be
+        # applied", fail-closed and correct in outcome, wrong in cause.
+        #
+        # Merging here is idempotent, so the call inside `try_route` still stands
+        # and this does not become a second owner of the merge.
+        if parsed is not None and req.filters:
+            parsed.merge_filters(req.filters)
+        _predicates = _population_mod.material_predicates(
+            (parsed.spec.filters if parsed is not None else None), semantics)
+        _population_evidence: Dict[str, Any] = {}
+
+        def _population_frame(cid, rid):
+            frame_in = _routed_frame(cid, rid)
+            if frame_in is None or not _predicates:
+                return frame_in
+            narrowed, ev = _population_mod.apply_population(
+                frame_in, _predicates, semantics)
+            _population_evidence.update(ev.to_dict())
+            return narrowed
+
         routed = chat_routing_mod.try_route(
             req.question, portfolio_id=portfolio_id, view=view,
             output_root=ds._onboarding_output_root(),
@@ -535,15 +907,27 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             history_model_provider=lambda: ds._pipeline_history(client_id),
             as_of=req.as_of_date,
             source_lens=req.source_portfolio_lens or None,
-            frame_resolver=_routed_frame,
+            frame_resolver=_population_frame,
             extra_filters=req.filters or None,
-            parsed=parsed)
+            parsed=parsed,
+            base_frame_resolver=_routed_frame)
+        if isinstance(routed, dict) and _population_evidence:
+            routed.setdefault("metadata", {})["populationApplied"] = dict(
+                _population_evidence)
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None
     if routed is not None:
         route = (routed.get("metadata") or {}).get("route") if isinstance(routed, dict) else None
+        if isinstance(routed, dict):
+            rmeta = routed.setdefault("metadata", {})
+            if isinstance(rmeta, dict):
+                rmeta.setdefault("parserProvenance", _parser_provenance(
+                    {"metadata": {"parse_metadata": dict(getattr(parsed, "meta", {}) or {})}}))
         _stamp_routed_scope(routed, req)
+        routed = _guard_routed_answer(routed, question=req.question, route=route,
+                                      semantics=semantics, frame=df,
+                                      parsed=parsed)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
@@ -576,9 +960,16 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
 
     meta = result.setdefault("metadata", {}) if isinstance(result, dict) else {}
     if isinstance(meta, dict):
-        meta["llm"] = {"enabled": llm_cfg.enabled, "available": llm_cfg.available,
-                       "model": llm_cfg.model if llm_cfg.available else None,
-                       "status": llm_cfg.status}
+        # NOTE the key: ``llmConfig``, not ``llm``. The adapter puts the
+        # parser's own LLM block (call count, tokens, cost) on ``metadata.llm``;
+        # overwriting it here previously destroyed the only evidence of whether
+        # a model was actually consulted, which let a deterministic fallback be
+        # reported as an LLM result.
+        meta["llmConfig"] = {"enabled": llm_cfg.enabled,
+                             "available": llm_cfg.available,
+                             "model": llm_cfg.model if llm_cfg.available else None,
+                             "status": llm_cfg.status}
+        meta.setdefault("parserProvenance", _parser_provenance(workflow))
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
     # Governed portfolio scope + coverage. The BACKEND states which portfolios
@@ -593,6 +984,9 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # operator must see, not a silent downgrade.
     if llm_cfg.enabled and not llm_cfg.available and isinstance(result, dict):
         result.setdefault("warnings", []).extend(llm_cfg.warnings)
+    # §7 — a materially analytical question must never leave here with a
+    # confident current-position figure that answers something else.
+    result = _fail_closed_analytical(result, question=req.question, view=view)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))
@@ -609,6 +1003,10 @@ _RUN_SCOPED_ROUTES = {
     # Period Change Analysis resolves and compares two governed snapshots, so
     # the run it closed on is genuinely part of the answer.
     "period_change_analysis",
+    # The analytical capability layer composes dated snapshots and the weekly
+    # pipeline extract, so the run it closed on is part of the answer for the
+    # same reason.
+    "analytical_composition",
 }
 
 

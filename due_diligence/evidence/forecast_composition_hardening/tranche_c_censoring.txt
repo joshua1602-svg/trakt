@@ -1,0 +1,70 @@
+================================================================================================
+ALDERBRIDGE   504 cases   window 2026-04-13 -> 2026-06-29 = 77 days
+
+  stage         config              NAIVE         MATURED @ config lag    KM @ config lag
+  KFI             0.20   0.0635 ( 32/504 )      NO MATURED SAMPLE (0/0)      0.5078 (n=504)
+  APPLICATION     0.45   0.1016 ( 32/315 )      NO MATURED SAMPLE (0/0)      1.0000 (n=315)
+  OFFER           0.75   0.1693 ( 32/189 )               1.0000 (10/10)      1.0000 (n=189)
+
+  maturity check — cases with a FULL config lag of observation:
+    KFI          lag  90d   INSUFFICIENT — window shorter than the lag
+    APPLICATION  lag  60d   0 matured of 315 observed
+    OFFER        lag  30d   10 matured of 189 observed
+
+  is the KM estimate identified? risk set remaining AT the horizon:
+    stage         horizon      n  at risk  events  estimate
+    KFI              14d     504      378       0  0.0000
+    KFI              28d     504      294       0  0.0000
+    KFI              42d     504      210       0  0.0000
+    KFI              56d     504      126       0  0.0000
+    KFI              90d     504        0      32  0.5078   <- risk set exhausted; not identified
+    APPLICATION      14d     315      189       0  0.0000
+    APPLICATION      28d     315      105       0  0.0000
+    APPLICATION      42d     315       32       0  0.0000
+    APPLICATION      56d     315        0      32  1.0000   <- risk set exhausted; not identified
+    APPLICATION      60d     315        0      32  1.0000   <- risk set exhausted; not identified
+    OFFER            14d     189       63       0  0.0000
+    OFFER            28d     189        0      32  1.0000   <- risk set exhausted; not identified
+    OFFER            42d     189        0      32  1.0000   <- risk set exhausted; not identified
+    OFFER            56d     189        0      32  1.0000   <- risk set exhausted; not identified
+    OFFER            30d     189        0      32  1.0000   <- risk set exhausted; not identified
+
+  observed days from first sighting at a stage to completion:
+    KFI          n= 32  min= 70  median= 70  max= 77   (config assumes 90d)
+    APPLICATION  n= 32  min= 49  median= 49  max= 49   (config assumes 60d)
+    OFFER        n= 32  min= 28  median= 28  max= 28   (config assumes 30d)
+================================================================================================
+KESTRELMOOR   732 cases   window 2026-04-13 -> 2026-06-29 = 77 days
+
+  stage         config              NAIVE         MATURED @ config lag    KM @ config lag
+  KFI             0.20   0.0628 ( 46/732 )      NO MATURED SAMPLE (0/0)      0.5082 (n=732)
+  APPLICATION     0.45   0.1007 ( 46/457 )      NO MATURED SAMPLE (0/0)      1.0000 (n=457)
+  OFFER           0.75   0.1673 ( 46/275 )               1.0000 (15/15)      1.0000 (n=275)
+
+  maturity check — cases with a FULL config lag of observation:
+    KFI          lag  90d   INSUFFICIENT — window shorter than the lag
+    APPLICATION  lag  60d   0 matured of 457 observed
+    OFFER        lag  30d   15 matured of 275 observed
+
+  is the KM estimate identified? risk set remaining AT the horizon:
+    stage         horizon      n  at risk  events  estimate
+    KFI              14d     732      549       0  0.0000
+    KFI              28d     732      427       0  0.0000
+    KFI              42d     732      305       0  0.0000
+    KFI              56d     732      183       0  0.0000
+    KFI              90d     732        0      46  0.5082   <- risk set exhausted; not identified
+    APPLICATION      14d     457      275       0  0.0000
+    APPLICATION      28d     457      153       0  0.0000
+    APPLICATION      42d     457       46       0  0.0000
+    APPLICATION      56d     457        0      46  1.0000   <- risk set exhausted; not identified
+    APPLICATION      60d     457        0      46  1.0000   <- risk set exhausted; not identified
+    OFFER            14d     275       91       0  0.0000
+    OFFER            28d     275        0      46  1.0000   <- risk set exhausted; not identified
+    OFFER            42d     275        0      46  1.0000   <- risk set exhausted; not identified
+    OFFER            56d     275        0      46  1.0000   <- risk set exhausted; not identified
+    OFFER            30d     275        0      46  1.0000   <- risk set exhausted; not identified
+
+  observed days from first sighting at a stage to completion:
+    KFI          n= 46  min= 70  median= 70  max= 77   (config assumes 90d)
+    APPLICATION  n= 46  min= 49  median= 49  max= 49   (config assumes 60d)
+    OFFER        n= 46  min= 28  median= 28  max= 28   (config assumes 30d)

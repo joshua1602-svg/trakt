@@ -1,0 +1,126 @@
+[
+  {
+    "id": "Q1",
+    "q": "How has the profile of new originations changed in the last few months?",
+    "ok": true,
+    "route": "analytical_composition",
+    "intent": "origination_profile_change",
+    "capabilities": [
+      "period_movement",
+      "population_profile"
+    ],
+    "findings": 18,
+    "guard": "ok",
+    "refusal": false,
+    "answer": "Front Book (0-12 months): 2,626 loans at 2026-04-30 against 3,020 loans at 2026-06-30. Current Outstanding Balance \u00a3262.4m against \u00a3299.9m; Current Loan To Value 29.38% against 29.14%; Current Interest Rate 6.53% against 6.53%. These are rolling cohorts \u2014 membership is set by the origination window, so a loan joins or leaves it with the passage of time. This is a comparison of two cohorts, not movement within one population. Current profile: Region \u2014 North West 22.6%, Scotland 16.8%, North East 10.8%; LTV band \u2014 20-30% 35.0%, 30-40% 29.9%, <20% 19.3%; Borrower age band \u2014 70-75 26.4%, 75-80 21.3%, 65-70 18.5%; Ticket size \u2014 50-100k 28.5%, 100-150k 22.4%, 200-300k 15.0%; Interest rate band \u2014 6-7% 52.1%, 7-8% 23.5%, 5-6% 21.9%.\n\nCalculated: Composed governed capabilities."
+  },
+  {
+    "id": "Q2",
+    "q": "When are we likely to reach \u00a3100m of loans?",
+    "ok": true,
+    "route": "forecast_extrapolation",
+    "intent": null,
+    "capabilities": [],
+    "findings": 0,
+    "guard": null,
+    "refusal": false,
+    "answer": "The book has already reached \u00a3100.0m (current funded balance \u00a31.77bn).\n\nCalculated: Run-rate extrapolation."
+  },
+  {
+    "id": "Q3",
+    "q": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+    "ok": true,
+    "route": "analytical_composition",
+    "intent": "pipeline_offer_outlook",
+    "capabilities": [
+      "pipeline_stock",
+      "pipeline_completion_forecast"
+    ],
+    "findings": 3,
+    "guard": null,
+    "refusal": false,
+    "answer": "Offer stage pipeline is \u00a323.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: \u00a33.9m. Expected to land: 2026-07 \u00a33.9m.\n\nCalculated: Composed governed capabilities."
+  },
+  {
+    "id": "Q4",
+    "q": "What is the current completion run rate?",
+    "ok": true,
+    "route": "forecast_extrapolation",
+    "intent": null,
+    "capabilities": [],
+    "findings": 0,
+    "guard": null,
+    "refusal": false,
+    "answer": "The current completion run-rate is ~\u00a333.8m/month (\u00a3405.7m/year) based on 2 month(s) of funded growth.\n\nCalculated: Run-rate extrapolation."
+  },
+  {
+    "id": "Q5",
+    "q": "Are we likely to breach any concentration limits in the next three months?",
+    "ok": true,
+    "route": "risk_limits",
+    "intent": null,
+    "capabilities": [],
+    "findings": 0,
+    "guard": null,
+    "refusal": false,
+    "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available \u2014 extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "id": "Q6",
+    "q": "Which limits are closest to breaching?",
+    "ok": true,
+    "route": "risk_limits",
+    "intent": null,
+    "capabilities": [],
+    "findings": 0,
+    "guard": null,
+    "refusal": false,
+    "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available \u2014 extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "id": "Q7",
+    "q": "How does the risk profile of older vintages compare with the front book?",
+    "ok": true,
+    "route": "analytical_composition",
+    "intent": "vintage_risk_comparison",
+    "capabilities": [
+      "portfolio_snapshot",
+      "portfolio_snapshot",
+      "vintage_analysis"
+    ],
+    "findings": 29,
+    "guard": "ok",
+    "refusal": false,
+    "answer": "Back Book (13+ months) against Front Book (0-12 months) (9,235 vs 3,020 loans): Loan Count 9,235 vs 3,020 (+6,215); Current Outstanding Balance \u00a31.47bn vs \u00a3299.9m (+\u00a31.17bn); Current Loan To Value 39.16% vs 29.14% (+10.01pp); Current Interest Rate 6.42% vs 6.53% (-0.11pp); Youngest Borrower Age 79.2 vs 71.9 (+7.3). Across 14 governed origination vintage(s), 2013 holds \u00a361.3m at 50.55% weighted-average LTV and 2026 holds \u00a3147.7m at 28.87%.\n\nCalculated: Composed governed capabilities."
+  },
+  {
+    "id": "Q8",
+    "q": "How has the balance from direct lending changed relative to acquired lending?",
+    "ok": true,
+    "route": "analytical_composition",
+    "intent": "population_movement_comparison",
+    "capabilities": [
+      "period_movement",
+      "period_movement"
+    ],
+    "findings": 3,
+    "guard": "ok",
+    "refusal": false,
+    "answer": "Across 2026-04-30 \u2192 2026-06-30, Direct, 5,612 loans: Current Outstanding Balance \u00a3530.4m \u2192 \u00a3558.0m (+\u00a327.7m). Across 2026-04-30 \u2192 2026-06-30, Acquired, 6,643 loans: Current Outstanding Balance \u00a31.17bn \u2192 \u00a31.21bn (+\u00a340.0m). Direct against Acquired (5,612 vs 6,643 loans): Current Outstanding Balance \u00a3558.0m vs \u00a31.21bn (\u2212\u00a3656.4m).\n\nCalculated: Composed governed capabilities."
+  },
+  {
+    "id": "Q9",
+    "q": "Based on the current pipeline, what is the forecast funded balance?",
+    "ok": true,
+    "route": "analytical_composition",
+    "intent": "funded_balance_outlook",
+    "capabilities": [
+      "funded_balance_forecast",
+      "pipeline_completion_forecast"
+    ],
+    "findings": 8,
+    "guard": "ok",
+    "refusal": false,
+    "answer": "Current funded balance is \u00a31.77bn as at 2026-06-30. Gross pipeline in the governed extract is \u00a376.7m as at 2026-06-29. Expected completions from the open pipeline: \u00a37.7m. This excludes 46 case(s) worth \u00a34.8m the extract already shows as completed or withdrawn. Forecast funded balance: \u00a31.78bn. Expected to land: 2026-07 \u00a33.9m; 2026-08 \u00a31.9m; 2026-09 \u00a31.8m.\n\nCalculated: Composed governed capabilities."
+  }
+]

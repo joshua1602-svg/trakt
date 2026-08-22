@@ -149,7 +149,6 @@ def test_a_named_portfolio_does_not_rescue_an_unknown_measure():
     # long-standing governed behaviour, not a substitution — nothing was named
     # to substitute for.
     "concentration by region",
-    "coverage by borrower type",
     "regions with the most loans",
     "breakdown by region",
     "give me a breakdown of balance by region",
@@ -167,6 +166,29 @@ def test_a_named_portfolio_does_not_rescue_an_unknown_measure():
 def test_supported_questions_still_answer(question):
     body = ask(question)
     assert body["ok"] is True, f"{question!r} regressed: {body.get('error')}"
+
+
+def test_an_unavailable_dimension_is_refused_not_substituted():
+    """P0 contract change, deliberate and asserted here rather than dropped.
+
+    ``coverage by borrower type`` previously answered ``ok:true`` on this
+    dataset: ``borrower_type`` is absent, so the parser reached for
+    ``amortisation_type`` and the user received a confident single-bucket
+    breakdown of a dimension they never named. That is the DIMENSION form of the
+    measure substitution this module already forbids, and the P0 launch
+    invariant rules it out explicitly — an unavailable requested field is never
+    silently replaced by an available one.
+
+    The question is still parsed and still routed; what changed is that the
+    substitution now fails closed instead of being presented as the answer.
+    """
+    body = ask("coverage by borrower type")
+    assert body["ok"] is False
+    error = (body.get("error") or "").lower()
+    assert "borrower type" in error
+    # The substitute is NAMED, so the refusal is actionable rather than opaque.
+    assert "amortisation" in error
+    assert "not returned" in error or "not substituted" in error
 
 
 def test_an_unknown_measure_with_no_dimension_is_still_refused():

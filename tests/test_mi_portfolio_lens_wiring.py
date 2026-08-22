@@ -100,9 +100,16 @@ class TestWorkflowLensWiring(unittest.TestCase):
         # filter is the current direct membership, not a type string.
         self.assertEqual(filt.get("source_portfolio_id"), ["direct_001"])
 
-    def test_nl_acquired_and_backbook(self):
+    def test_nl_acquired(self):
         self.assertEqual(self._lens("show acquired book balance")[0].get("name"), "acquired")
-        self.assertEqual(self._lens("show the back book")[0].get("name"), "acquired")
+
+    def test_nl_backbook_is_seasoning_not_provenance(self):
+        """P1J-1 (ruling R2a): "the back book" is the VINTAGE axis, not
+        provenance. This case previously asserted it resolved to *acquired*,
+        which silently excluded every seasoned direct loan and included every
+        recent acquired one. Seasoning resolves through mi_agent.seasoning; see
+        tests/test_p1j1_vintage_seasoning.py."""
+        self.assertEqual(self._lens("show the back book")[0].get("name"), "total")
 
     def test_nl_cohort(self):
         lens, filt, _ = self._lens("balance for acquired_001 only")

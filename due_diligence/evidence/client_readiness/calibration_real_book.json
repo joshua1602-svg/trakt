@@ -1,0 +1,1158 @@
+{
+  "client": "alderbridge",
+  "reportingDate": "2026-06-30",
+  "loans": 11035,
+  "syntheticPassed": 251,
+  "realPassed": 125,
+  "regressed": {
+    "grp1_033": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance by region"
+    },
+    "grp1_034": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance by borrower type"
+    },
+    "grp1_035": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance by product type"
+    },
+    "grp1_038": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance by broker"
+    },
+    "grp1_043": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance by term bucket"
+    },
+    "grp1_045": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "loan count by region"
+    },
+    "grp1_046": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "loan count by borrower type"
+    },
+    "grp1_047": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "loan count by product type"
+    },
+    "grp1_050": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "loan count by broker"
+    },
+    "grp1_055": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "loan count by term bucket"
+    },
+    "grp1_057": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average LTV by region"
+    },
+    "grp1_058": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average LTV by product type"
+    },
+    "grp1_059": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average LTV by broker"
+    },
+    "grp1_061": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average LTV by borrower type"
+    },
+    "grp1_065": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average borrower age by region"
+    },
+    "grp1_066": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average borrower age by product type"
+    },
+    "grp1_067": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average borrower age by broker"
+    },
+    "grp1_068": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "average borrower age by borrower type"
+    },
+    "grp1_069": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "weighted average interest rate by region"
+    },
+    "grp1_070": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "weighted average interest rate by product type"
+    },
+    "grp1_071": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "weighted average interest rate by broker"
+    },
+    "grp1_073": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "weighted average interest rate by borrower type"
+    },
+    "grp1_075": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "show me balance by region"
+    },
+    "grp1_076": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "show me balance by borrower type"
+    },
+    "grp1_077": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "show me balance by product type"
+    },
+    "grp1_078": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "show me balance by broker"
+    },
+    "grp1_079": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "break down balance by region"
+    },
+    "grp1_080": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "break down balance by borrower type"
+    },
+    "grp1_081": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "break down balance by product type"
+    },
+    "grp1_082": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "break down balance by broker"
+    },
+    "grp1_083": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance split by region"
+    },
+    "grp1_084": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance split by borrower type"
+    },
+    "grp1_085": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance split by product type"
+    },
+    "grp1_086": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "balance split by broker"
+    },
+    "grp1_087": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "exposure by region"
+    },
+    "grp1_088": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "exposure by borrower type"
+    },
+    "grp1_089": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "exposure by product type"
+    },
+    "grp1_090": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "exposure by broker"
+    },
+    "grp1_091": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "total valuation by region"
+    },
+    "grp1_092": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "original balance by region"
+    },
+    "grp1_093": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "total valuation by product type"
+    },
+    "grp1_094": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "original balance by product type"
+    },
+    "grp1_095": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "total valuation by broker"
+    },
+    "grp1_096": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "single_dim",
+      "question": "original balance by broker"
+    },
+    "grp2_097": {
+      "passed": false,
+      "failures": [
+        "dimension borrower_type not applied",
+        "dimension geographic_region_obligor not applied",
+        "artifact ['chart:bar', 'table'] incompatible with expected heatmap"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by borrower type by region"
+    },
+    "grp2_099": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by region by product type"
+    },
+    "grp2_100": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker', 'Product Type' are not available in this dataset. The MI book for this client does not include broker_channel, erm_product_type. These fields are not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by broker by product type"
+    },
+    "grp2_101": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by account status by region"
+    },
+    "grp2_102": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by product type by age bucket"
+    },
+    "grp2_103": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by region by LTV bucket"
+    },
+    "grp2_104": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by occupancy type by region"
+    },
+    "grp2_105": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by rate type by product type"
+    },
+    "grp2_106": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "WA LTV by product type and region"
+    },
+    "grp2_107": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "average LTV by region and age bucket"
+    },
+    "grp2_108": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "average interest rate by product type and rate type"
+    },
+    "grp2_109": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied",
+        "dimension borrower_type not applied",
+        "artifact ['chart:bar', 'table'] incompatible with expected heatmap"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "loan count by region and borrower type"
+    },
+    "grp2_111": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker', 'Product Type' are not available in this dataset. The MI book for this client does not include broker_channel, erm_product_type. These fields are not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "number of loans by broker and product type"
+    },
+    "grp2_112": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by borrower type by product type"
+    },
+    "grp2_113": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by region by age bucket"
+    },
+    "grp2_114": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by broker by region"
+    },
+    "grp2_115": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by account status by product type"
+    },
+    "grp2_116": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by term bucket by LTV bucket"
+    },
+    "grp2_117": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by ticket size by region"
+    },
+    "grp2_118": {
+      "passed": false,
+      "failures": [
+        "dimension borrower_type not applied",
+        "dimension geographic_region_obligor not applied",
+        "artifact ['chart:bar', 'table'] incompatible with expected heatmap"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "average LTV by borrower type and region"
+    },
+    "grp2_119": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by origination channel by region"
+    },
+    "grp2_120": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by rate type by region"
+    },
+    "grp2_121": {
+      "passed": false,
+      "failures": [
+        "dimension borrower_type not applied",
+        "artifact ['chart:bar', 'table'] incompatible with expected heatmap"
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "balance by borrower type by age bucket"
+    },
+    "grp2_122": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker', 'Product Type' are not available in this dataset. The MI book for this client does not include broker_channel, erm_product_type. These fields are not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "two_dim",
+      "question": "WA interest rate by broker and product type"
+    },
+    "filt_129": {
+      "passed": false,
+      "failures": [
+        "filter borrower_type not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "how many joint borrowers are there"
+    },
+    "filt_130": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where LTV above 50%"
+    },
+    "filt_131": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by broker where LTV above 50%"
+    },
+    "filt_132": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by product type for loans above £250k"
+    },
+    "filt_133": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where LTV between 40 and 60"
+    },
+    "filt_134": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Age Bucket, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "count by borrower type where age is over 70"
+    },
+    "filt_135": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied",
+        "filter borrower_type not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "WA LTV by region for joint borrowers"
+    },
+    "filt_136": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "average LTV by product type for joint borrowers"
+    },
+    "filt_137": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by broker for loans above £250k"
+    },
+    "filt_138": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where LTV above 30%"
+    },
+    "filt_139": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where LTV above 40%"
+    },
+    "filt_140": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where LTV above 60%"
+    },
+    "filt_141": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where LTV above 70%"
+    },
+    "filt_142": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by broker where LTV above 50%"
+    },
+    "filt_143": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by product type where LTV above 50%"
+    },
+    "filt_144": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by borrower type where LTV above 50%"
+    },
+    "filt_146": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region for loans above £250k"
+    },
+    "filt_147": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by broker for loans above £250k"
+    },
+    "filt_148": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by product type for loans above £250k"
+    },
+    "filt_151": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied",
+        "filter borrower_type not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region for joint borrowers"
+    },
+    "filt_152": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by product type for joint borrowers"
+    },
+    "filt_153": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by broker for joint borrowers"
+    },
+    "filt_154": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where borrower age is over 70"
+    },
+    "filt_155": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where borrower age is over 75"
+    },
+    "filt_156": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "balance by region where borrower age is over 80"
+    },
+    "filt_157": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "WA LTV by broker where LTV above 40%"
+    },
+    "filt_158": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "filtered",
+      "question": "WA LTV by product type where LTV above 40%"
+    },
+    "rank_160": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "top 10 regions by balance"
+    },
+    "rank_161": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "top 5 brokers by balance"
+    },
+    "rank_162": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "top 10 products by balance"
+    },
+    "rank_163": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "which region has the largest balance"
+    },
+    "rank_164": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "which broker has the largest balance"
+    },
+    "rank_165": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "which product type has the highest balance"
+    },
+    "rank_166": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "regions with the most loans"
+    },
+    "rank_167": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "highest average LTV regions"
+    },
+    "rank_168": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "which region has the highest average LTV"
+    },
+    "rank_169": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "smallest region by balance"
+    },
+    "rank_175": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "top 5 region by balance"
+    },
+    "rank_176": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "top 5 broker by balance"
+    },
+    "rank_177": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "top 10 product type by balance"
+    },
+    "rank_180": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Broker' is not available in this dataset. The MI book for this client does not include broker_channel. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "which broker has the highest average LTV"
+    },
+    "rank_181": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "which product type has the highest average LTV"
+    },
+    "rank_182": {
+      "passed": false,
+      "failures": [
+        "not ok: I understood that you asked for ranking by borrower type, but that could not be applied to the calculation (ranking by borrower type — field is unavailable in this dataset). I have not substituted a broader figure."
+      ],
+      "known_gap": null,
+      "category": "ranking",
+      "question": "which borrower type has the highest average LTV"
+    },
+    "risk_204": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "risk",
+      "question": "balance by region"
+    },
+    "risk_206": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "risk",
+      "question": "exposure by region"
+    },
+    "risk_207": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "risk",
+      "question": "largest regional concentration"
+    },
+    "risk_212": {
+      "passed": false,
+      "failures": [
+        "filter geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "risk",
+      "question": "exposure to the South East"
+    },
+    "risk_213": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "risk",
+      "question": "concentration by region"
+    },
+    "risk_214": {
+      "passed": false,
+      "failures": [
+        "not ok: 'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+      ],
+      "known_gap": null,
+      "category": "risk",
+      "question": "concentration by product type"
+    },
+    "risk_215": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "risk",
+      "question": "concentration by borrower type"
+    },
+    "dq_224": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "data_quality",
+      "question": "coverage for region"
+    },
+    "dq_225": {
+      "passed": false,
+      "failures": [
+        "not ok: I could not answer this as asked: the breakdown was changed to Amortisation Type, which you did not ask for, in place of borrower type. I have not returned the substituted breakdown."
+      ],
+      "known_gap": null,
+      "category": "data_quality",
+      "question": "coverage by borrower type"
+    },
+    "dq_226": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "data_quality",
+      "question": "data coverage by region"
+    },
+    "dq_227": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied"
+      ],
+      "known_gap": null,
+      "category": "data_quality",
+      "question": "reconciliation for balance by region where LTV above 50%"
+    },
+    "unsup_233": {
+      "passed": false,
+      "failures": [
+        "answered with data (expected refuse/clarify)",
+        "emitted a data artifact on a refuse/clarify case: ['chart:bar', 'table']"
+      ],
+      "known_gap": null,
+      "category": "unsupported",
+      "question": "show defaulted balance by region"
+    },
+    "unsup_234": {
+      "passed": false,
+      "failures": [
+        "answered with data (expected refuse/clarify)",
+        "emitted a data artifact on a refuse/clarify case: ['kpi']"
+      ],
+      "known_gap": null,
+      "category": "unsupported",
+      "question": "defaulted balance"
+    },
+    "unsup_239": {
+      "passed": false,
+      "failures": [
+        "answered with data (expected refuse/clarify)",
+        "emitted a data artifact on a refuse/clarify case: ['chart:bar', 'table']"
+      ],
+      "known_gap": null,
+      "category": "unsupported",
+      "question": "show arrears by region"
+    },
+    "ambig_251": {
+      "passed": false,
+      "failures": [
+        "dimension geographic_region_obligor not applied",
+        "dimension borrower_type not applied",
+        "expected warning 'Showing a table across 3 dimensions' not surfaced"
+      ],
+      "known_gap": null,
+      "category": "ambiguous",
+      "question": "balance by region by borrower type by LTV bucket"
+    }
+  },
+  "recovered": {}
+}

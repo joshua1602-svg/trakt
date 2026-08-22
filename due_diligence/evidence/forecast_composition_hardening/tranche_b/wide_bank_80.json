@@ -1,0 +1,562 @@
+[
+  {
+    "q": "What is the total AuM?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'."
+  },
+  {
+    "q": "Show balance by region.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the weighted average LTV?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What has changed versus the prior month?",
+    "ok": true,
+    "route": "period_movement",
+    "refusal": false,
+    "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Book contributed approximately +\u00a311.5m and ALP Acquired Back Book contributed approximately +\u00a36.6m of the movement.\n\nCalculated: Month-on-month movement."
+  },
+  {
+    "q": "Compare April and June funded balance.",
+    "ok": true,
+    "route": "temporal_compare",
+    "refusal": false,
+    "answer": "Funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn in 2026-06 \u2014 a change of \u00a332.6m (+1.69%, up).\n\nCalculated: Governed period comparison."
+  },
+  {
+    "q": "Show funded balance evolution by month.",
+    "ok": true,
+    "route": "evolution",
+    "refusal": false,
+    "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution."
+  },
+  {
+    "q": "Show risk limit breaches.",
+    "ok": true,
+    "route": "risk_limits",
+    "refusal": false,
+    "answer": "8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "q": "Are we within our concentration limits?",
+    "ok": true,
+    "route": "risk_limits",
+    "refusal": false,
+    "answer": "8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "q": "Which region has the largest exposure?",
+    "ok": true,
+    "route": "geo_exposure",
+    "refusal": false,
+    "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure."
+  },
+  {
+    "q": "Summarise the portfolio.",
+    "ok": true,
+    "route": "portfolio_summary",
+    "refusal": false,
+    "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis."
+  },
+  {
+    "q": "What is the balance of the front book?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 1,177 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show balance by LTV band for the back book.",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I could not build a governed query for this question: heatmap requires at least two dimensions. No substitute figure has been returned."
+  },
+  {
+    "q": "What is the median balance?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Median Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How many loans are on the book?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Count of \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the average interest rate?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Interest Rate \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show me the top 5 regions by balance.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 5 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 5 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the arrears balance?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I understood that you asked for more than one measure (arrears and balance), but that could not be applied to the calculation (more than one measure (arrears and balance) \u2014 only one measure can be calculated per question, so the others were not returned). I have not substituted a broader figure."
+  },
+  {
+    "q": "How has the balance changed since April?",
+    "ok": true,
+    "route": "period_change_analysis",
+    "refusal": false,
+    "answer": "Between 30 April 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a332.6m (\u00a31.93bn \u2192 \u00a31.96bn). No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk.\n\nCalculated: Governed period change."
+  },
+  {
+    "q": "Show the funded balance bridge.",
+    "ok": true,
+    "route": "funded_bridge",
+    "refusal": false,
+    "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m).\n\nCalculated: Funded balance bridge."
+  },
+  {
+    "q": "What is the balance of loans over 80% LTV?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I could not answer this as asked: the answer reports ltv, but the question asked about balance. I have not returned the substituted breakdown."
+  },
+  {
+    "q": "Show loan count by vintage year.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 13 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Vintage \u00b7 13 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the weighted average LTV by seasoning bucket?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Seasoning Bucket \u00b7 4 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Which vintage has the highest LTV?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 13 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Vintage \u00b7 13 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What proportion of the book is in London?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Share of Balance \u00b7 London \u00b7 1,380 qualifying loans of 11,035 \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question."
+  },
+  {
+    "q": "Show the LTV distribution.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How much has the book grown this year?",
+    "ok": true,
+    "route": "period_change_analysis",
+    "refusal": false,
+    "answer": "Between 31 May 2026 and 30 June 2026, 10 of 12 governed metrics could be compared across both snapshots. Largest observed movements measured in counts: Youngest Borrower Age +0 (71 \u2192 71); Number Of Days In Arrears +0 (0 \u2192 0). Largest observed movements measured in currency: Current Outstanding Balance +\u00a318.1m (\u00a31.95bn \u2192 \u00a31.96bn); Allocated Losses +\u00a30 (\u00a30 \u2192 \u00a30); Arrears Balance +\u00a30 (\u00a30 \u2192 \u00a30). Largest observed movements measured in percentage points: Current Interest Rate +0.00 pp (6.56% \u2192 6.56%); Credit Impaired Obligor +0.00 pp (0.00% \u2192 0.00%). The largest observed composition shifts were Collateral Geography \u2014 South East +0.12 pp of count share; Collateral Geography \u2014 West Midlands -0.04 pp of count share; Collateral Geography \u2014 East Midlands +0.04 pp of count share. The balance bridge reconciles: opening \u00a31.95bn +\u00a310.1m new lending, \u2212\u00a30 exits, +\u00a37.9m on continuing loans, closing \u00a31.96bn. No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk.\n\nCalculated: Governed period change."
+  },
+  {
+    "q": "What is the monthly payment profile?",
+    "ok": true,
+    "route": "evolution",
+    "refusal": false,
+    "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution."
+  },
+  {
+    "q": "What level of arrears do we have?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Arrears Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show balance by origination channel.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 2 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Origination Channel \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the total balance for loans over \u00a3500k?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Balance > 500000 \u00b7 119 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How has the front book changed?",
+    "ok": true,
+    "route": "analytical_composition",
+    "refusal": false,
+    "answer": "Front Book (0-12 months): 1,219 loans at 2026-05-31 against 1,177 loans at 2026-06-30. Current Outstanding Balance \u00a3175.4m against \u00a3171.7m; Current Loan To Value 34.38% against 34.71%; Current Interest Rate 6.46% against 6.45%. These are rolling cohorts \u2014 membership is set by the origination window, so a loan joins or leaves it with the passage of time. This is a comparison of two cohorts, not movement within one population. Current profile: Region \u2014 South East 28.3%, London 21.6%, South West 12.5%; LTV band \u2014 30-40% 52.6%, 20-30% 23.3%, 40-50% 21.7%; Borrower age band \u2014 70-75 33.9%, 65-70 32.9%, 60-65 15.5%; Ticket size \u2014 200-300k 27.3%, 100-150k 22.8%, 150-200k 20.8%; Interest rate band \u2014 6-7% 48.6%, 5-6% 24.3%, 7-8% 21.8%.\n\nCalculated: Composed governed capabilities."
+  },
+  {
+    "q": "How has the back book changed over the last few months?",
+    "ok": true,
+    "route": "analytical_composition",
+    "refusal": false,
+    "answer": "Back Book (13+ months): 9,714 loans at 2026-04-30 against 9,858 loans at 2026-06-30. Current Outstanding Balance \u00a31.75bn against \u00a31.79bn; Current Loan To Value 43.49% against 43.97%; Current Interest Rate 6.57% against 6.57%. These are rolling cohorts \u2014 membership is set by the origination window, so a loan joins or leaves it with the passage of time. This is a comparison of two cohorts, not movement within one population. Current profile: Region \u2014 South East 26.1%, London 21.0%, South West 12.0%; LTV band \u2014 40-50% 37.1%, 30-40% 29.2%, 50-60% 19.7%; Borrower age band \u2014 70-75 33.6%, 75-80 26.7%, 65-70 20.9%; Ticket size \u2014 200-300k 30.2%, 300-500k 21.6%, 150-200k 19.2%; Interest rate band \u2014 6-7% 51.0%, 7-8% 25.5%, 5-6% 19.6%.\n\nCalculated: Composed governed capabilities."
+  },
+  {
+    "q": "What is the KFI to completion conversion rate?",
+    "ok": true,
+    "route": "cohort_conversion",
+    "refusal": false,
+    "answer": "Cumulative cohort conversion is 6.3% \u2014 the share of the original KFI cohort (504 case(s)) that has funded to date. The chart tracks that cohort through KFI \u2192 Application \u2192 Offer \u2192 Funded across 12 week(s). This is the single definition of conversion used on the KPI card, the funnel and the forecast.\n\nCalculated: Cohort conversion."
+  },
+  {
+    "q": "Show the pipeline funnel.",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'."
+  },
+  {
+    "q": "Show me the offer pipeline by stage.",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'."
+  },
+  {
+    "q": "How many cases are at offer?",
+    "ok": false,
+    "route": null,
+    "refusal": true,
+    "answer": "I understood this as a pipeline question, but I have not answered it: this asks about the pipeline (applications, offers or completions), which is a different governed dataset from the funded book. I have NOT substituted a current-position figure, because that would answer a different question from the one you asked. Ask for the governed analytic directly \u2014 for example the concentration limit tests, the completion run-rate, the pipeline at a named stage, or a named measure compared across two reporting periods \u2014 and I will compute it."
+  },
+  {
+    "q": "What if conversion improved by 10%?",
+    "ok": true,
+    "route": "scenario",
+    "refusal": false,
+    "answer": "A +10% completion run-rate lifts the monthly run-rate from \u00a316.3m to \u00a317.9m (annualised \u00a3215.0m). What-if assumption: a conversion change maps proportionally to the completion run-rate (KFI inflow held constant); dates share the base forecast's basis and carry the same downside/base/upside uncertainty.\n\nCalculated: Scenario projection."
+  },
+  {
+    "q": "Compare the direct and acquired books.",
+    "ok": true,
+    "route": "portfolio_risk_comparison",
+    "refusal": false,
+    "answer": "Direct has higher observed Current Outstanding Balance than Acquired. Direct has higher observed Current Loan To Value than Acquired. Direct has higher observed Current Valuation Amount than Acquired. Acquired has higher observed Current Interest Rate than Direct. Direct has higher observed Youngest Borrower Age than Acquired. Across 3 governed directional indicators, Direct is more favourable on 1 and Acquired on 2. This is an observation per indicator, not an overall assessment of either portfolio.\n\nCalculated: Total Current Outstanding Balance \u00b7 Total Current Principal Balance \u00b7 Loan Count \u00b7 Weighted-average Current Loan To Value \u00b7 Weighted-average Original Loan To Value \u00b7 Total Arrears Balance \u00b7 Average Number Of Days In Arrears \u00b7 Share of Credit Impaired Obligor \u00b7 Share of Litigation \u00b7 Total Current Valuation Amount \u00b7 Total Original Valuation Amount \u00b7 Weighted-average Current Interest Rate \u00b7 Average Youngest Borrower Age \u00b7 Direct vs Acquired."
+  },
+  {
+    "q": "How does the front book compare with the back book on LTV?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 2 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Seasoning Segment \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Compare weighted average LTV for direct and acquired.",
+    "ok": true,
+    "route": "portfolio_risk_comparison",
+    "refusal": false,
+    "answer": "Direct has higher observed Current Loan To Value than Acquired.\n\nCalculated: Weighted-average Current Loan To Value \u00b7 Direct vs Acquired."
+  },
+  {
+    "q": "Show the balance evolution for the front book.",
+    "ok": true,
+    "route": "evolution",
+    "refusal": false,
+    "answer": "Funded balance over 3 period(s) (scoped to seasoning_segment = Front Book): latest \u00a3171.7m (down over the window).\n\nCalculated: Metric evolution."
+  },
+  {
+    "q": "What has changed in the acquired book since April?",
+    "ok": true,
+    "route": "period_change_analysis",
+    "refusal": false,
+    "answer": "Between 30 April 2026 and 30 June 2026, 10 of 12 governed metrics could be compared across both snapshots. Largest observed movements measured in counts: Youngest Borrower Age +0 (70 \u2192 70); Number Of Days In Arrears +0 (0 \u2192 0). Largest observed movements measured in currency: Current Outstanding Balance +\u00a311.1m (\u00a3568.3m \u2192 \u00a3579.4m); Allocated Losses +\u00a30 (\u00a30 \u2192 \u00a30); Arrears Balance +\u00a30 (\u00a30 \u2192 \u00a30). Largest observed movements measured in percentage points: Current Interest Rate +0.00 pp (6.88% \u2192 6.88%); Credit Impaired Obligor +0.00 pp (0.00% \u2192 0.00%). The largest observed composition shifts were Account Status \u2014 Active +0.13 pp of count share; Account Status \u2014 Redeemed -0.13 pp of count share; Collateral Geography \u2014 South West -0.06 pp of count share. The balance bridge reconciles: opening \u00a3568.3m +\u00a30 new lending, \u2212\u00a33.0m exits, +\u00a314.1m on continuing loans, closing \u00a3579.4m. No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk.\n\nCalculated: Governed period change."
+  },
+  {
+    "q": "What is the balance of new lending?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 2 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Seasoning Segment \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show new lending by region.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the heatmap for your query, covering 23 group(s).\n\nCalculated: Count of \u00b7 grouped by Seasoning Segment and Region \u00b7 23 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How much new lending did we write?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "'write' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a governed measure \u2014 e.g. balance, LTV, interest rate, borrower age or property value \u2014 optionally by a dimension."
+  },
+  {
+    "q": "Is the credit quality of new origination better or worse than the back book?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 2 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Seasoning Segment \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is our concentration by region?",
+    "ok": true,
+    "route": "geo_exposure",
+    "refusal": false,
+    "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure."
+  },
+  {
+    "q": "Are we within our concentration limits?",
+    "ok": true,
+    "route": "risk_limits",
+    "refusal": false,
+    "answer": "8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "q": "Which limits are we breaching?",
+    "ok": true,
+    "route": "risk_limits",
+    "refusal": false,
+    "answer": "8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "q": "Show me the largest concentrations.",
+    "ok": true,
+    "route": "concentration_analysis",
+    "refusal": false,
+    "answer": "Largest amortisation type exposure is Interest roll-up (100.0% of exposure). Largest collateral type exposure is Residential property (100.0% of exposure). Largest purpose exposure is RMRT (33.5% of exposure). Largest exposure currency denomination exposure is GBP (100.0% of exposure). Largest collateral geography exposure is South East (26.3% of exposure). Largest origination channel exposure is Direct (70.5% of exposure). Largest interest rate type exposure is FXRL (100.0% of exposure).\n\nCalculated: Exposure concentration."
+  },
+  {
+    "q": "How has the direct book performed versus acquired?",
+    "ok": true,
+    "route": "portfolio_risk_comparison",
+    "refusal": false,
+    "answer": "Direct has higher observed Current Outstanding Balance than Acquired. Direct has higher observed Current Loan To Value than Acquired. Direct has higher observed Current Valuation Amount than Acquired. Acquired has higher observed Current Interest Rate than Direct. Direct has higher observed Youngest Borrower Age than Acquired. Across 3 governed directional indicators, Direct is more favourable on 1 and Acquired on 2. This is an observation per indicator, not an overall assessment of either portfolio.\n\nCalculated: Total Current Outstanding Balance \u00b7 Total Current Principal Balance \u00b7 Loan Count \u00b7 Weighted-average Current Loan To Value \u00b7 Weighted-average Original Loan To Value \u00b7 Total Arrears Balance \u00b7 Average Number Of Days In Arrears \u00b7 Share of Credit Impaired Obligor \u00b7 Share of Litigation \u00b7 Total Current Valuation Amount \u00b7 Total Original Valuation Amount \u00b7 Weighted-average Current Interest Rate \u00b7 Average Youngest Borrower Age \u00b7 Direct vs Acquired."
+  },
+  {
+    "q": "What is the weighted average LTV of the front book?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 Seasoning Segment = Front Book \u00b7 1,177 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show arrears by region.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Arrears Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How many loans completed last month?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I understood that you asked for comparison period (last month), but that could not be applied to the calculation (comparison period (last month) \u2014 the answer is a single point in time; no period comparison was calculated). I have not substituted a broader figure."
+  },
+  {
+    "q": "What is the average loan size for recent originations?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I understood that you asked for the average, but that could not be applied to the calculation (the average \u2014 the average was requested; the calculation ran count instead, and no substitute has been presented as the answer). I have not substituted a broader figure."
+  },
+  {
+    "q": "Show me the seasoning profile of the book.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Average Months on Book \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the split between direct and acquired?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How many loans are in the back book?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Seasoning Segment = Back Book \u00b7 9,858 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show weighted average LTV by vintage.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 13 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Vintage \u00b7 13 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the total exposure to London?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I understood that you asked for London, but that could not be applied to the calculation (London \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure."
+  },
+  {
+    "q": "Show the top 10 largest loans.",
+    "ok": true,
+    "route": "concentration_analysis",
+    "refusal": false,
+    "answer": "The largest single-loan exposure is \u00a3842k, representing 0.043% of exposure. Top 5 loans account for 0.20% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 11,035 loans."
+  },
+  {
+    "q": "What is our exposure to borrowers over 85?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Borrower Age > 85 \u00b7 86 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question."
+  },
+  {
+    "q": "Show the arrears trend.",
+    "ok": true,
+    "route": "evolution",
+    "refusal": false,
+    "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution."
+  },
+  {
+    "q": "How is the book performing?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Count of \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the current LTV of the acquired book?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 Source Portfolio in alp_acquired \u00b7 3,909 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show balance by product type.",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+  },
+  {
+    "q": "Which loans are in arrears?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Arrears Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the average time on book?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Average Months on Book \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show me the interest rate distribution.",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Interest Rate \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the balance by seasoning segment?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 2 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Seasoning Segment \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How much of the book is front book?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I understood that you asked for a proportion of the book, but that could not be applied to the calculation (a proportion of the book \u2014 an absolute figure was calculated for the filtered population, not its proportion of the book). I have not substituted a broader figure."
+  },
+  {
+    "q": "Show completions by month.",
+    "ok": true,
+    "route": "evolution_funnel",
+    "refusal": false,
+    "answer": "Latest week Completions weekly flow: \u00a33.9m; 5-week average weekly flow \u00a31.1m (up vs prior week). Current stock level \u00a35.6m.\n\nCalculated: Governed analysis."
+  },
+  {
+    "q": "What is the pipeline value?",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'."
+  },
+  {
+    "q": "How has LTV moved over the last three months?",
+    "ok": true,
+    "route": "period_change_analysis",
+    "refusal": false,
+    "answer": "Between 31 May 2026 and 30 June 2026, 0 of 1 governed metrics could be compared across both snapshots. No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk.\n\nCalculated: Governed period change."
+  },
+  {
+    "q": "Give me the portfolio summary for the direct book.",
+    "ok": true,
+    "route": "portfolio_summary",
+    "refusal": false,
+    "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).\n\nCalculated: Governed analysis."
+  },
+  {
+    "q": "What is the largest regional concentration?",
+    "ok": true,
+    "route": "geo_exposure",
+    "refusal": false,
+    "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure."
+  },
+  {
+    "q": "Show me a breakdown by borrower age.",
+    "ok": false,
+    "route": null,
+    "refusal": false,
+    "answer": "'Borrower Gender' is not available in this dataset. The MI book for this client does not include borrower_1_gender. This field is not reported, so the question cannot be answered from the current data (no value was fabricated)."
+  },
+  {
+    "q": "What is the weighted average interest rate by region?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Weighted-average Interest Rate \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "How many loans have LTV over 60%?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Count of \u00b7 Current LTV > 60 \u00b7 433 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the total valuation of the collateral?",
+    "ok": true,
+    "route": null,
+    "refusal": false,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Valuation \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  }
+]

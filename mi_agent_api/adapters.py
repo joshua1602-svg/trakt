@@ -518,6 +518,27 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
     return "Here is the result for your query."
 
 
+def _with_receipt(answer: str, workflow: Dict[str, Any]) -> str:
+    """Append the execution receipt to a successful substantive answer.
+
+    A refusal already states its own reason and carries no receipt, so it is
+    returned untouched. The receipt is derived from execution (see
+    ``mi_agent.execution_receipt``), never from the question, which is what makes
+    it capable of exposing a scope error rather than repeating one.
+    """
+    receipt = workflow.get("execution_receipt") or {}
+    if not workflow.get("ok") or not receipt:
+        return answer
+    line = receipt.get("receipt")
+    if not line:
+        return answer
+    parts = [answer.rstrip(), line]
+    not_applied = receipt.get("notApplied") or []
+    if not_applied:
+        parts.append("Not applied: " + "; ".join(not_applied) + ".")
+    return "\n\n".join(p for p in parts if p)
+
+
 def _cap_bar_rows(rows: List[Dict[str, Any]], x_key: str, value_key: str,
                   n: int = 10) -> Tuple[List[Dict[str, Any]], bool]:
     """Cap a bar chart to the top ``n`` categories by ``value_key``.
@@ -604,7 +625,19 @@ def adapt_workflow_result(
     chart_type = cr.get("chart_type") if cr else None
     chart_emitted = False
 
-    if qr:
+    # P0: a declined answer must not ship the result it declined. The workflow
+    # keeps ``query_result`` for the audit trail, but rendering it as a table
+    # titled "Result" — or as a KPI reading "£1.96BN" — alongside "I have not
+    # substituted a broader figure" hands the reader the very number the guard
+    # just refused to present. This covers EVERY refusal, not only the semantic
+    # guard's: the dimension invariant refuses the same way and shipped the
+    # whole-book KPI next to its refusal.
+    # ``qr`` itself is left intact so the metadata below still reports what ran.
+    refused = (not workflow.get("ok")
+               or bool(workflow.get("semantic_refusal"))
+               or bool(workflow.get("controlled_refusal")))
+
+    if qr and not refused:
         result_type = qr.get("result_type")
         if result_type == "summary":
             artifacts.append(_kpi_artifact(qr, spec, ctx, hints))
@@ -633,7 +666,7 @@ def adapt_workflow_result(
     # Only warn about degraded fidelity when we could not emit a chart at all
     # (no Plotly figure and no normalisable series). With a figure present,
     # heatmap/treemap render faithfully via the Plotly renderer.
-    if chart_type in {"heatmap", "treemap"} and not chart_emitted:
+    if chart_type in {"heatmap", "treemap"} and not chart_emitted and not refused:
         raw_warnings.append(f"{chart_type} could not be rendered; showing the result table.")
 
     # Hide technical diagnostics (e.g. the percent-scale heuristic note) from the
@@ -680,8 +713,21 @@ def adapt_workflow_result(
         # A controlled response (unmapped question / unsupported concept)
         # carries its own user-facing answer — never replace it with the
         # generic lead sentence.
-        "answer": workflow.get("answer") or _answer(workflow.get("interpreted"),
-                                                    qr, chart_type),
+        # A declined answer states WHY. Falling through to the generic lead
+        # sentence gave "Here is the result for your query" on a refusal — a
+        # success-shaped answer to a question that was not answered.
+        "answer": _with_receipt(
+            workflow.get("answer")
+            or (workflow.get("error") if refused else None)
+            or _answer(workflow.get("interpreted"), qr, chart_type),
+            workflow),
+        # P0: the machine-derived statement of what was ACTUALLY executed —
+        # measure, aggregation, filters that really narrowed the frame,
+        # groupings that really grouped, population, period. Structured for
+        # callers that want to render it themselves; also folded into `answer`
+        # above so a text-first channel (Copilot) cannot miss it.
+        "executionSummary": workflow.get("execution_receipt"),
+        "semanticGuard": workflow.get("semantic_guard"),
         "interpreted": _interpreted_string(workflow.get("interpreted")),
         "spec": spec,
         "validation": validation,
@@ -714,6 +760,7 @@ def adapt_workflow_result(
             "chartType": chart_type,
             "unmappedQuestion": bool(workflow.get("unmapped_question")),
             "controlledUnsupported": bool(workflow.get("controlled_unsupported")),
+            "controlledRefusal": refused,
             # Technical diagnostics retained for engineers / an expandable UI panel.
             "diagnostics": diagnostics,
         },

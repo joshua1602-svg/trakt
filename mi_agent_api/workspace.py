@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+from mi_agent import portfolio_lens as lens_mod
 
 VIEWS = ("funded", "pipeline", "forecast")
 DEFAULT_VIEW = "funded"
@@ -42,14 +43,24 @@ def resolve_active_view(question: str, dataset_context: Optional[str]) -> str:
     overrides the active tab; otherwise the tab (``dataset_context``) wins.
 
     Priority of explicit wording: forecast > pipeline > funded (so "forecast
-    funded balance" routes to forecast, not funded)."""
+    funded balance" routes to forecast, not funded).
+
+    B21 — A DISCLAIMED VIEW WORD DOES NOT CHOOSE THE FRAME. This was a bare
+    substring test, so the clause RULING OUT a view was what selected it:
+    "the balance by vintage, ignoring the forecast" loaded the forecast frame,
+    which carries 12 of the funded book's 71 columns, and the question died at
+    prepared-data validation on a column the funded book has. The
+    undisclaimed-mention test is `portfolio_lens`'s, not a second copy — the
+    lens resolver already had to decide whether a word was ruling a scope out,
+    and this is the same decision over a different vocabulary.
+
+    Substring semantics are unchanged for every mention the sentence does not
+    rule out, which on this corpus is all 697 of them.
+    """
     q = (question or "").lower()
-    if "forecast" in q:
-        return "forecast"
-    if "pipeline" in q:
-        return "pipeline"
-    if "funded" in q:
-        return "funded"
+    for view in ("forecast", "pipeline", "funded"):
+        if lens_mod.undisclaimed_mention(q, view):
+            return view
     ctx = (dataset_context or "").strip().lower()
     return ctx if ctx in VIEWS else DEFAULT_VIEW
 

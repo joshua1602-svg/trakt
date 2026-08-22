@@ -1,0 +1,679 @@
+meta:
+  name: Routed surface — the governed service path, routing as shipped
+  description: >-
+    The third measurement surface. Drives execute_governed_mi_query, so a
+    question is claimed by whichever route claims it in production, and the
+    answer is adjudicated by the guard that actually adjudicates it.
+  count: 32
+  entry_point: mi_agent_api.mi_service.execute_governed_mi_query
+  enforced_by: question_interpretation/routed_surface.py
+
+  # WHAT THIS SURFACE CAN SEE, and what it cannot. Stated here so nobody quotes
+  # it later as covering more than it does — the failure of the other two banks
+  # was never that they were wrong, but that their blindness was undocumented
+  # until a defect walked through it.
+  sees:
+    - >-
+      The routing decision itself. Which route claims a question is the thing
+      neither other bank can observe — the calibration bank calls
+      run_mi_agent_query directly and is always point-in-time, and the
+      robustness bank exercises routing but grades only an outcome label.
+    - >-
+      The verdict and the facet kinds and statuses the guard produced, so a
+      false APPLIED is visible as data rather than only as a wrong sentence.
+    - >-
+      Behaviour that differs between the routed and point-in-time paths. Four of
+      the six Stage 5 trace questions behave differently on the two.
+  cannot_see:
+    - >-
+      Numeric correctness. Nothing here checks that a figure is right; it checks
+      which capability answered and what the receipt claimed. The calibration
+      bank remains the only surface that grades numbers.
+    - >-
+      The LLM parser arm. Deterministic only, like every surface in this
+      programme, for the reason standing condition 1 records.
+    - >-
+      Any book but alderbridge. The robustness bank is the only two-book
+      surface, so a defect appearing on kestrelmoor alone is invisible here.
+    - >-
+      Answer TEXT. answer_diff owns that, byte for byte. This asserts structure,
+      so a reworded refusal does not fail it and a changed verdict does.
+    - >-
+      Anything a route declines to declare. The residual tier of the routed
+      grouping check is unprovable from the payload, so a facet applied on that
+      tier reads the same here as one proven by name. rt_013 is that tier's one
+      demonstrably false member, declared rather than left to read as coverage.
+    - >-
+      A named dimension the parser slotted as a FILTER. The deterministic parser
+      resolves no categorical filter at all — every filter it fills is a numeric
+      bound on a measure — so no question this surface can ASK reaches the role
+      owner's filter branch. `test_d2_routed_role_carriage.py` constructs the
+      parse instead, and asserts that the day the parser learns categorical
+      filters, that construction can be replaced by a real question here.
+
+questions:
+  # --- Stage 5: the time axis ------------------------------------------------
+  - id: rt_001
+    question: balance by month over the last 12 months
+    note: >-
+      A coverage limit. Twelve months asked, three governed snapshots carried.
+      Refuses rather than answering over a shorter window, because offering the
+      narrower window as the answer is itself a substitution.
+    expect_route: evolution
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, applied]
+      - [comparison_period, unsupported]
+
+  - id: rt_002
+    question: funded balance by month
+    note: The grain the series does publish. The facet records a request honoured.
+    expect_route: evolution
+    expect_verdict: ok
+    expect_facets:
+      - [granularity, applied]
+
+  - id: rt_003
+    question: balance by week over the last 6 months
+    note: >-
+      Both defects in one sentence, owed different sentences. A weekly series
+      cannot be expressed by month-end snapshots, and six months is not three.
+    expect_route: evolution
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, unsupported]
+      - [comparison_period, unsupported]
+
+  - id: rt_004
+    question: funded balance by quarter
+    note: >-
+      Reaches no route and fails parser validation — "bar chart requires a
+      dimension (or x)" — before any facet is built. A time grain is not a
+      registry field and has nowhere to live on the spec. Pinned as it is, so
+      the respecified change 4 has a before.
+    expect_route: null
+    expect_verdict: null
+    expect_ok: false
+    expect_answer_contains: requires a dimension
+
+  - id: rt_005
+    question: how many loans each month
+    note: >-
+      Declared expected-to-fail on B9 grounds when this bank was written, and
+      that was wrong on two counts, both caught by the surface's first run. It
+      does not ship a figure — it refuses — so it was never in the B9 class,
+      which is questions that SHIP a point. And the expectations stated the
+      current behaviour, so the case passed while claiming a defect: an
+      expected-to-fail case must state the CORRECT outcome, or it can never
+      fail and never be fixed. Re-declared as the ordinary passing case it is.
+    expect_route: null
+    expect_verdict: refuse
+    expect_facets:
+      - [period_comparison, unavailable]
+
+  - id: rt_005b
+    question: Show regional concentration evolution over time.
+    expected_to_fail: >-
+      B9, the actual member — the one question of 90 that asks for a series and
+      SHIPS a point. `geo_exposure` answers with a current concentration
+      snapshot and says nothing about the series that was asked for. The
+      expectation below is the CORRECT outcome, so this case fails until B9 is
+      ruled on and closed, and passes the moment it is.
+    expect_route: geo_exposure
+    expect_verdict: refuse
+
+  - id: rt_006
+    question: balance by month by region
+    note: >-
+      Was the false APPLIED — the whole-book series with the receipt vouching
+      for a regional breakdown that was never computed. Now refuses, which is
+      correct while `evolution` cannot segment.
+    will_change_when: >-
+      The segmented series lands. A refusal is right today because the answer
+      would be the whole book; once the route can cut a series by a dimension
+      this must become an answer, and this case failing is how the estate finds
+      out. Not declared expected-to-fail: the CURRENT behaviour is correct, and
+      marking correct behaviour as a known defect is how a surface stops meaning
+      anything.
+    expect_route: evolution
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, applied]
+      - [grouping_dimension, lost]
+
+  # --- The granularity contract, both directions -----------------------------
+  - id: rt_007
+    question: show geographic exposure by postcode
+    note: >-
+      A grain the route cannot express. Refuses, naming the level it used.
+
+      CORRECTED IN D7. This expected BOTH grouping facets applied, and the
+      second is `postcode` — a dimension the route does not publish and cannot
+      break down by. It was applied only because the routed evidence ladder
+      stamped APPLIED on any facet it could not disprove, so this expectation
+      was pinning a false certification. It is now `lost`, which is what the
+      granularity facet beside it has always said in words: the answer is
+      reported at ITL3 level, not by postcode.
+    expect_route: geo_exposure
+    expect_verdict: refuse
+    expect_facets:
+      - [granularity, unsupported]
+      - [grouping_dimension, applied]
+      - [grouping_dimension, lost]
+
+  - id: rt_008
+    question: geographic exposure by ITL3 area
+    note: >-
+      The half that did not exist before Stage 5 — a grain request recorded as
+      HONOURED. Without it no rule can be enforced on a correct request.
+    expect_route: geo_exposure
+    expect_verdict: ok
+    expect_facets:
+      - [granularity, applied]
+      - [grouping_dimension, applied]
+      - [grouping_dimension, applied]
+
+  # --- The governed populations, on the path that answers them ---------------
+  - id: rt_009
+    question: What is the balance of the front book?
+    note: >-
+      Not composite, so no route claims it and it falls to point-in-time. The
+      e35a01b regression; pop_255's routed sibling.
+    expect_route: null
+    expect_verdict: ok
+    expect_facets:
+      - [row_population, applied]
+
+  - id: rt_010
+    question: How does the front book compare with our older lending from a risk perspective?
+    note: >-
+      Composite, so analytical_composition claims it. The same vocabulary as
+      rt_009 on a different path — which is the whole reason this surface exists.
+    expect_route: analytical_composition
+    expect_verdict: ok
+
+  # --- What a receipt must never do ------------------------------------------
+  - id: rt_011
+    question: What is the run rate of new lending and is it accelerating?
+    note: >-
+      Answered the WHOLE BOOK's run rate — first projection point £1.96bn — for
+      a question about new lending, with the facet stamped APPLIED. The receipt
+      did not merely miss it; it vouched for it.
+
+      The facet was `grouping_dimension` until the seasoning role gained one
+      owner. "New lending" is a governed POPULATION — months_on_book le 1 — and
+      recording it as a breakdown was the misclassification underneath B13. The
+      refusal now names the population it could not apply rather than a
+      breakdown nobody asked for.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [row_population, lost]
+
+  - id: rt_012
+    question: What is the completion run rate?
+    note: >-
+      Can-fail for rt_011. A change that refused every run-rate question would
+      satisfy rt_011 and fail here.
+
+      Asserts `ok`, not a verdict. `mi_service` returns before `assess` when a
+      routed answer raises no facet and no substitution, so the guard leaves no
+      verdict at all — an absence this bank must not mistake for a failure. The
+      first draft asserted `verdict: ok` and failed for that reason.
+    expect_route: forecast_extrapolation
+    expect_ok: true
+
+  # --- D7: a breakdown is certified only where execution declared it ---------
+  - id: rt_013
+    question: Show concentration limit status.
+    expected_to_fail: >-
+      RE-POINTED IN D7, and the reason is a correction to this case rather than
+      to the code. It was written against "Are any regional limits breached?" on
+      the belief that `risk_limits` has no dimension axis at all. Reading the
+      limit-test rows shows otherwise: the tests ARE per region — London 21.1%
+      against 25.0%, South East 26.3% against 30.0%, Scotland 3.3% against 8.0%
+      — so certifying a geography breakdown there is TRUE, and the declared
+      "correct outcome" of no facet was wrong. rt_013b now carries that case as
+      an ordinary passing one.
+
+      The genuinely false member is this question. The word "status" in "limit
+      status" resolves to the registry field `account_status`, no source gives
+      it a role, and the limit tests do not cover it. The ANSWER is right — "8
+      passed, 0 warnings, 1 breach" — and only the receipt was wrong.
+
+      After D7 it is wrong differently: the claim is no longer certified, so the
+      unproven grouping blocks and a correct answer refuses. Fail-closed, wrong
+      reason, no wrong number — the posture recorded for B1. The correct outcome
+      below is the answer standing with no breakdown claim attached, and it
+      needs the TERM RESOLUTION fixed (B18), not the evidence rule. This case
+      fails until B18 lands.
+    expect_route: risk_limits
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets: []
+
+  - id: rt_013b
+    question: Are any regional limits breached?
+    note: >-
+      The can-fail for rt_013 and for D7's declaration. The geography claim here
+      is TRUE — the Schedule 8 tests are written per region — and after D7 it is
+      also PROVEN, from the fields the route states its executed tests cover
+      rather than from the existence of an axis nobody could name.
+
+      A change that removed the declaration, or that refused every risk_limits
+      question to satisfy rt_013, would fail here.
+    expect_route: risk_limits
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
+
+  # --- Declared before their fixes, per the rt_013 pattern -------------------
+  - id: rt_014
+    question: What is the forecast run rate for the front book?
+    note: >-
+      CLOSED BY D6; re-declared, because leaving it claiming a closed defect
+      would make the surface lie.
+
+      It said: "front book — field is unavailable in this dataset." True of the
+      12-column forecast PROJECTION the view resolver loaded, false of the
+      76-column book, which carries `seasoning_segment` for all 11,035 loans and
+      1,177 Front Book loans among them. The view was chosen by a SUBSTRING TEST
+      on the question — the word "forecast" anywhere — before parsing and before
+      any route claimed it.
+
+      It now names the real obstacle. And the KIND changed too, which is the
+      part worth keeping: with the book's schema in view the seasoning owner
+      takes "the front book" as a governed POPULATION rather than a breakdown,
+      so the receipt reads `row_population seasoning_segment LOST` — the
+      population the forecast could not apply, rather than a wrong claim about
+      what the dataset reports.
+
+      What this pins going forward is the KIND as well as the status. A change
+      that made it `grouping_dimension lost` would still refuse, still be
+      honest about availability, and still have lost the population.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [projection, applied]
+      - [row_population, lost]
+
+  - id: rt_015
+    question: What is the balance where account status is active?
+    note: >-
+      RE-DECLARED: B16a closed this, and leaving it claiming a defect that is
+      closed would make the surface lie.
+
+      It answered `ok`: "Total Balance · grouped by Account Status · 2 groups ·
+      11,035 loans", with `grouping_dimension account_status APPLIED` — the
+      reader asked for the balance of ACTIVE loans and was given the whole book
+      split by status, certified. B13's class, and a wrong NUMBER.
+
+      It now refuses, carrying `lost_narrowing account_status LOST` and no
+      grouping claim at all: the field the narrowing owner takes is not also
+      raised as a breakdown, which is B15's shape and would have been reopened
+      by a second selector owner.
+
+      What this pins going forward is the pair: a refusal, AND exactly one facet.
+      A change that reinstated the breakdown claim beside the refusal would still
+      refuse and would still be wrong.
+    expect_route: null
+    expect_ok: false
+    expect_verdict: refuse
+    expect_facets:
+      - [lost_narrowing, lost]
+
+  - id: rt_016
+    question: Show geographic exposure by ITL3 area.
+    filters:
+      collateral_geography: South East
+    note: >-
+      The DRILL-THROUGH API — a UI drill from a breakdown into one of its
+      groups. No question text can reach this path, which is why the case
+      supplies filters rather than words.
+    note: >-
+      CLOSED BY D8 (B17); re-declared, because a case still claiming a closed
+      defect makes the surface lie.
+
+      Every drill-through on a routed question used to refuse:
+      `material_predicates` was computed from `parsed.spec.filters` BEFORE
+      `try_route` merged the caller's filters into that same spec, so the
+      narrowing never reached the frame resolver but WAS on the spec when the
+      population ledger read it. Raised, never applied, refused — fail-closed
+      and correct in outcome, wrong in cause.
+
+      The merge now happens before the predicates are computed. `geo_exposure`
+      resolves its frame through the governed population seam, so it narrows and
+      reports evidence: rowsBefore 11,035, rowsAfter 2,420.
+
+      Found while proving D2's FILTER branch reachable — the same API reaches it
+      on the point-in-time path, where it always worked.
+
+      ONE grouping facet, not the two `geo_exposure` usually raises, and the
+      difference is the role owner doing its job: with the drill on the spec,
+      `collateral_geography` is a FILTER and is reclassified into the population
+      below, leaving `geographic_region_collateral_itl3` as the only axis. The
+      question asks for a breakdown by ITL3 area and a narrowing to South East,
+      and the receipt now says exactly that.
+    expect_route: geo_exposure
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
+      - [granularity, applied]
+      - [row_population, applied]
+
+  # --- D6 / B14: the availability check reads the FRAME, not the book --------
+  - id: rt_017
+    question: What is the forecast run rate by vintage?
+    note: >-
+      CLOSED BY D6; re-declared. The second instance, and the one that showed it
+      was a CLASS rather than a seasoning-vocabulary incident.
+
+      `resolve_active_view` picks the frame from a keyword scan of the question —
+      the word "forecast" anywhere selects the forecast view — before the
+      question is parsed and before any route claims it. That view is a DERIVED
+      frame of **12 columns**; the book carries **76**. Every availability check
+      downstream then reads those 12.
+
+      `vintage_year`, which the book carries for all 11,035 loans, was reported
+      as "field is unavailable in this dataset". True of the projection, false of
+      the book. It now says what `rt_018` — the same shape asked about REGION,
+      one of the twelve columns the projection kept — has always said: the
+      breakdown was not applied.
+
+      Unlike rt_014 the KIND does not change here, and that is the distinction
+      the pair records: "the front book" is a governed population, "by vintage"
+      is a breakdown, and D6 changes only what the availability check READS.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [projection, applied]
+      - [grouping_dimension, lost]
+
+  - id: rt_018
+    question: What is the forecast run rate by region?
+    note: >-
+      THE CONTROL, and the reason rt_014 and rt_017 state the expectations they
+      do. `collateral_geography` IS one of the forecast frame's twelve columns,
+      so the same question shape gets `lost` and the true sentence: "this answer
+      covers the whole population; it is neither narrowed to nor broken down by
+      region".
+
+      Passes today and must keep passing. A change that made every forecast facet
+      LOST would satisfy rt_014 and rt_017 and be indistinguishable here — which
+      is why this case asserts the STATUS and not just the refusal.
+    expect_route: forecast_extrapolation
+    expect_verdict: refuse
+    expect_facets:
+      - [projection, applied]
+      - [grouping_dimension, lost]
+
+  - id: rt_019
+    question: What is the forecast run rate for active loans?
+    expected_to_fail: >-
+      B19 — the same root, a worse symptom, and NOT fixed by D6.
+
+      This answers `ok`: "The current completion run-rate is ~£16.3m/month
+      (£195.5m/year)" — byte-identical to the unqualified "What is the completion
+      run rate?", with **no facet at all**. A narrowed question answered over the
+      whole book, silently. B13's class again.
+
+      It happens because B16a's value allowlist is built from the LOADED FRAME,
+      and the forecast projection carries no `account_status` column, so no value
+      of it can be recognised and no narrowing is raised. D6 scopes the
+      availability check to the book's SCHEMA; recognising the VALUE needs the
+      book's ROWS, which is a different change and is left as B19.
+
+      Stated here so the gap is visible rather than closed by silence.
+    expect_route: forecast_extrapolation
+    expect_ok: false
+    expect_verdict: refuse
+
+  # --- D8: the population evidence, and what a drill-through must not lose ---
+  - id: rt_020
+    question: What is the balance of the front book?
+    filters:
+      collateral_geography: South East
+    note: >-
+      CLOSED BY D8; re-declared. NOT the same defect as rt_016 — its mirror.
+
+      The drill-through here always DID reach the frame and WAS applied: the
+      answer reads "Seasoning Segment = Front Book · South East · 278 loans",
+      down from 1,177. Both narrowings ran. The receipt carried ONE population
+      facet, for the seasoning segment, and said nothing about the geography.
+
+      A narrowing that ran, unrecorded — B16a's mirror, where one was lost and
+      unrecorded. Either way the receipt did not say what happened to the rows,
+      and honour-or-clarify can only adjudicate what is represented.
+
+      The cause was the D8 divergence: the routed path raised populations from
+      `spec.filters`, the point-in-time path only from the seasoning owner or by
+      reclassifying a dimension the question NAMED. So the same drill on
+      "balance by region" was recorded and this one was not — whether a
+      narrowing reached the receipt depended on whether the question happened to
+      mention the field.
+
+      Both populations now reach the receipt and both are applied.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [row_population, applied]
+      - [row_population, applied]
+
+  - id: rt_022
+    question: What is the completion run rate?
+    filters:
+      collateral_geography: South East
+    note: >-
+      THE CAN-FAIL for rt_016 and rt_020. It replaces rt_021, whose premise
+      turned out to be wrong, and it takes a NEW ID rather than reusing that one
+      — the answer differ keys on (surface, id), so re-pointing a case in place
+      reports a MOVEMENT where there was only a case change. A replaced case
+      should read as one case gone and another arrived.
+
+      rt_021 was written against `geo_exposure` on the belief that the route could
+      not narrow on `account_status`. It can: `geo_exposure` resolves its frame
+      through the governed population seam, so it narrows on ANY material
+      predicate and reports evidence — rowsBefore 11,035, rowsAfter 11,000. The
+      case fired as a stop condition, the evidence was checked, and the premise
+      was the thing that was wrong. Recorded rather than quietly rewritten.
+
+      `forecast_extrapolation` is the route that genuinely cannot: it answers
+      from a replayed history model rather than a resolved frame, so it reports
+      no narrowing evidence at all. The drill must therefore REFUSE — no
+      evidence, no certification — and that is the bar `reconcile_population`
+      has always held.
+
+      If this ever answers `ok`, a population reached the receipt applied on
+      something other than execution evidence.
+    expect_route: forecast_extrapolation
+    expect_ok: false
+    expect_verdict: refuse
+    expect_facets:
+      - [row_population, lost]
+
+  # --- B22: a bare substring must not silently narrow the population --------
+  - id: rt_023
+    question: What is the balance for loans purchased at auction?
+    note: >-
+      CLOSED BY B22; re-declared. It answered over the ACQUIRED cohort
+      closed it; the wording below is the record of what it was.
+
+      B22. Answers over the ACQUIRED cohort — 3,909 of 11,035 loans — for a
+      question about how a property was bought. A complete, correctly formatted
+      answer over 35% of the book.
+
+      EVIDENCE THIS EXPECTATION RESTS ON, measured at cd4a005:
+      `portfolio_lens.resolve_lens` returns the Acquired lens; the receipt reads
+      `filtersApplied: ["Source Portfolio in alp_acquired"], population: 3909`;
+      and `portfolio_lens.scope_phrase_spans` on the same sentence returns
+      `()` — no governed scope phrase is present. The module's own test says
+      this is not a scope reference and the decision that owns the vocabulary
+      does not ask it.
+
+      Correct outcome: the whole book, 11,035 loans, no source-portfolio filter.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 11035
+    expect_filters: []
+    expect_facets: []
+
+  - id: rt_024
+    question: What is the balance of the acquired book?
+    note: >-
+      THE CAN-FAIL. The same word, doing the job the decision assumes.
+
+      EVIDENCE: `scope_phrase_spans` returns `"of the acquired book"`, and the
+      receipt reads `filtersApplied: ["Source Portfolio in alp_acquired"],
+      population: 3909`. Both measured at cd4a005.
+
+      A fix that stopped the lens narrowing at all would satisfy rt_023 and
+      rt_025 and destroy this.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 3909
+    expect_filters: ['Source Portfolio in alp_acquired']
+
+  - id: rt_025
+    question: What is the balance where the borrower acquired the property recently?
+    note: >-
+      CLOSED BY B22; re-declared. The second instance, and the one that
+      closed it; the wording below is the record of what it was.
+
+      B22, the second instance, and the one that shows the vocabulary is ordinary
+      English rather than a near-miss. The sentence is about the BORROWER
+      acquiring a PROPERTY; nothing in it names a book.
+
+      EVIDENCE: `scope_phrase_spans` returns `()`; `resolve_lens` returns
+      Acquired; the receipt reads `population: 3909`. Measured at cd4a005.
+
+      Correct outcome: 11,035 loans, no source-portfolio filter.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 11035
+    expect_filters: []
+    expect_facets: []
+
+  - id: rt_026
+    question: What is the balance excluding the acquired book?
+    note: >-
+      CLOSED BY B22; re-declared. B22's worst case, and the one that
+      closed it; the wording below is the record of what it was.
+
+      B22's worst case, and the one that proves qualification alone is not the
+      whole fix.
+
+      This answers over the acquired book — 3,909 loans — for a question that
+      EXCLUDES it. The reader asked for everything else and received only the
+      thing they ruled out.
+
+      EVIDENCE, and it is why the disclaiming guard is a separate component:
+      `scope_phrase_spans` DOES find `"the acquired book"` here, so the
+      qualified-mention test that fixes rt_023 and rt_025 leaves this untouched.
+      `resolve_lens` returns Acquired; the receipt reads `population: 3909`.
+      Measured at cd4a005.
+
+      Correct outcome, under the ruling that a disclaiming construction DECLINES
+      rather than selecting the opposite: the lens does not select, and the
+      exclusion is recorded as a narrowing that was requested and not applied, so
+      the answer does not silently widen to the whole book either. Inferring
+      "therefore the direct book" would be a guess about scope, and a guess about
+      scope is a substitution.
+    expect_route: null
+    expect_ok: false
+    expect_verdict: refuse
+
+  - id: rt_027
+    question: Show balance by region for directly held collateral.
+    note: >-
+      CLOSED BY B22; re-declared. The DIRECT half of the same
+      closed it; the wording below is the record of what it was.
+
+      The DIRECT half of the same vocabulary, so the fix cannot be a special case
+      for one family.
+
+      EVIDENCE: `scope_phrase_spans` returns `()`; `resolve_lens` returns Direct;
+      the receipt reads `filtersApplied: ["Source Portfolio in alp_origination"],
+      population: 7126`. Measured at cd4a005.
+
+      Correct outcome: a regional breakdown over 11,035 loans.
+    expect_route: null
+    expect_ok: true
+    expect_verdict: ok
+    expect_population: 11035
+    expect_filters: []
+
+  # --- B21: a disclaimed view word must not choose the frame -----------------
+  - id: rt_028
+    question: What is the balance by vintage, ignoring the forecast?
+    note: >-
+      B21, DECLARED EXPECTED-TO-FAIL AT 61d8956 AND NOW FIXED. The clause saying
+      to IGNORE the forecast was what loaded the forecast frame — twelve of the
+      book's seventy-one columns — so the question died at prepared-data
+      validation on `vintage_year`, a column the funded book carries.
+
+      It took FOUR owners, not one. The frame resolver and the dataset resolver
+      were the two named in the prediction; fixing them left the question
+      computing the right number over the right 11,035 loans and then REFUSED,
+      because a fourth reader was still raising a requested-projection facet
+      from a forecast word the sentence had ruled out. The honour-or-clarify
+      guard was working exactly as designed on a request never made.
+    expect_view: funded
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
+
+  - id: rt_029
+    question: Show forecast balance by region.
+    note: >-
+      THE CAN-FAIL for rt_028. A genuine forecast question, where the word IS the
+      subject.
+
+      EVIDENCE: corpus question `forecast_006`; `resolve_active_view` returns
+      "forecast" and must keep doing so. Measured at 4b30fe3.
+
+      This is the case that a too-aggressive guard destroys, and on this book it
+      is the ONLY way to see that happen: the forecast and funded frames agree to
+      the penny here, so a forecast question wrongly answered on the funded frame
+      returns the identical number. The view assertion is the whole test.
+    expect_view: forecast
+
+  - id: rt_030
+    question: What is the balance by seasoning segment excluding pipeline cases?
+    note: >-
+      B21 ON THE PIPELINE HALF, declared expected-to-fail at 61d8956 and now
+      fixed — so the fix is not a special case for one word.
+
+      This is the case that found the THIRD owner. With the frame and the
+      dataset both correctly sent to the funded book, the analytical intent
+      classifier still read "pipeline" and "cases" as a pipeline family, raised
+      the pipeline-dataset structural requirement, and refused: "this asks about
+      the pipeline ... which is a different governed dataset from the funded
+      book", for a question that EXCLUDES pipeline cases.
+    expect_view: funded
+    expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
+
+  - id: rt_031
+    question: How much pipeline is overdue?
+    note: >-
+      THE SECOND CAN-FAIL, and the reason `expect_view` had to be added at all.
+
+      EVIDENCE: `resolve_active_view` returns "pipeline"; the answer is "No
+      governed pipeline data is available for the pipeline view" — BYTE-IDENTICAL
+      to rt_030's answer today. Measured at 4b30fe3.
+
+      Two questions, opposite intents, same sentence back. Nothing in `ok`, the
+      verdict, the facets, the population or the answer text distinguishes them.
+      Only the view does, and until B21 nothing in the estate asserted it: every
+      `datasetContext` elsewhere is a request parameter being sent, never a check
+      on what came back.
+    expect_view: pipeline

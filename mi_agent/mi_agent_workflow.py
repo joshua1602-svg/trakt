@@ -38,6 +38,115 @@ from . import portfolio_scope as _portfolio_registry
 _RENDERABLE = {"bar", "line", "scatter", "bubble", "heatmap", "treemap"}
 
 
+#: Validation errors that mean "the dataset does not carry the field this
+#: question needs" — the case where we can name the missing field instead of
+#: reporting a bare validation failure.
+_MISSING_FIELD_RE = re.compile(
+    r"Canonical column '([^']+)' \(for semantic field '([^']+)'\) not present")
+_UNKNOWN_FIELD_RE = re.compile(r"Unknown semantic field: '([^']+)'")
+
+#: P1M. "This measure does not permit that statistic." Named separately from the
+#: generic validation failure because the reader needs to be told two specific
+#: things: which statistic they asked for, and that the neighbouring statistic
+#: the product COULD have computed was not quietly put in its place.
+_AGG_NOT_ALLOWED_RE = re.compile(
+    r"Aggregation '([^']+)' not allowed for metric '([^']+)'")
+
+
+def _validation_refusal(errors: List[str], semantics: dict) -> str:
+    """A refusal that says what could not be fulfilled, in the house style.
+
+    The reference behaviour is the governed unavailable-concept response: name
+    the concept, name the field, and state plainly that nothing was substituted.
+    A bare "the proposed query failed validation" tells the reader nothing they
+    can act on, even though the failing field is known here.
+    """
+    named: List[str] = []
+    for err in errors or []:
+        match = _MISSING_FIELD_RE.search(err) or _UNKNOWN_FIELD_RE.search(err)
+        if not match:
+            continue
+        key = match.group(2) if match.re is _MISSING_FIELD_RE else match.group(1)
+        entry = (semantics.get("fields", {}) if isinstance(semantics, dict) else {}).get(key) or {}
+        label = entry.get("business_name") or entry.get("display_name") or key.replace("_", " ")
+        canonical = entry.get("canonical_field", key)
+        if label not in [n[0] for n in named]:
+            named.append((label, canonical))
+    if named:
+        if len(named) == 1:
+            label, canonical = named[0]
+            return (f"'{label}' is not available in this dataset. The MI book for "
+                    f"this client does not include {canonical}. This field is not "
+                    "reported, so the question cannot be answered from the current "
+                    "data (no value was fabricated).")
+        labels = ", ".join(f"'{l}'" for l, _ in named)
+        columns = ", ".join(c for _, c in named)
+        return (f"{labels} are not available in this dataset. The MI book for this "
+                f"client does not include {columns}. These fields are not reported, "
+                "so the question cannot be answered from the current data (no value "
+                "was fabricated).")
+    refusal = _statistic_refusal(errors, semantics)
+    if refusal:
+        return refusal
+    detail = "; ".join(errors or []) or "the requested combination is not supported"
+    return ("I could not build a governed query for this question: " + detail +
+            ". No substitute figure has been returned.")
+
+
+def _statistic_refusal(errors: List[str], semantics: dict) -> Optional[str]:
+    """P1M refusal for a statistic the registry does not govern for a measure.
+
+    Says the three things a reader needs and nothing more: the statistic they
+    asked for, the measure they asked for it on, and — explicitly — that the
+    statistic the product does govern was NOT substituted. The last clause is the
+    point of the message. A reader who has just been refused a median is entitled
+    to know that the number they did not receive is not hiding somewhere in the
+    answer as a weighted average.
+    """
+    from . import statistic as _statistic
+
+    for err in errors or []:
+        match = _AGG_NOT_ALLOWED_RE.search(err)
+        if not match:
+            continue
+        requested, metric = match.group(1), match.group(2)
+        entry = ((semantics.get("fields", {}) if isinstance(semantics, dict) else {})
+                 .get(metric) or {})
+        measure = (entry.get("business_name") or entry.get("display_name")
+                   or metric.replace("_", " "))
+        asked = _statistic.label(requested)
+        governed = _statistic.label(entry.get("default_aggregation"))
+        tail = (f" I have not substituted {governed} {measure}."
+                if governed else " No substitute figure has been returned.")
+        return (f"I understood that you asked for {asked} {measure}, but {asked} "
+                f"is not currently a governed statistic for {measure}." + tail)
+    return None
+
+
+def _reporting_date_label(df) -> Optional[str]:
+    """The frame's own reporting cut-off, formatted for the execution receipt.
+
+    Read from the data (``data_cut_off_date``), never from the question, so the
+    receipt states the date the numbers actually came from. Returns None when the
+    frame carries no usable cut-off rather than guessing one.
+    """
+    try:
+        for column in ("data_cut_off_date", "reporting_date"):
+            if column not in getattr(df, "columns", []):
+                continue
+            values = df[column].dropna()
+            if values.empty:
+                continue
+            import pandas as _pd
+            stamp = _pd.to_datetime(values.iloc[0], errors="coerce")
+            if _pd.isna(stamp):
+                continue
+            return f"{stamp.day} {stamp.strftime('%B %Y')}"
+    except Exception:  # noqa: BLE001 - a label must never break a query
+        return None
+    return None
+
+
 def _dedupe(items: List[str]) -> List[str]:
     """De-duplicate a list of strings, preserving first-seen order."""
     seen: set = set()
@@ -239,6 +348,112 @@ def _capability_explanation(question: str, frame, history_periods: int = 1
     return " ".join(parts)
 
 
+#: How each governed format reads in a management answer.
+def _format_measure_value(value, fmt: str) -> str:
+    """One measure, formatted the way a reader expects to see it."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if fmt == "currency":
+        for cut, suffix in ((1e9, "bn"), (1e6, "m"), (1e3, "k")):
+            if abs(number) >= cut:
+                return f"£{number / cut:,.2f}{suffix}"
+        return f"£{number:,.2f}"
+    if fmt == "percent":
+        return f"{number:.2f}%"
+    if fmt == "integer":
+        return f"{number:,.1f}" if number % 1 else f"{int(number):,}"
+    return f"{number:,.2f}"
+
+
+def _multi_measure_answer(spec, qres, semantics: dict) -> Optional[str]:
+    """A CFO-readable answer for a governed multi-measure request.
+
+    One request, several measures, ONE population — so the answer reads as a
+    single management summary rather than as several unrelated figures. Every
+    number comes from the executed row; nothing here calculates.
+    """
+    try:
+        executed = (getattr(qres, "metadata", None) or {}).get("measures_executed")
+        data = getattr(qres, "data", None)
+        if not executed or data is None or not len(data):
+            return None
+        if getattr(qres, "result_type", None) != "summary":
+            return None      # a grouped result is read from its table
+        row = data.iloc[0]
+        fields = semantics.get("fields", {}) or {}
+        lines = []
+        for measure in executed:
+            column = measure.get("column")
+            if column not in data.columns:
+                continue
+            if measure.get("aggregation") == "count":
+                lines.append(f"Loans: {int(row[column]):,}")
+                continue
+            entry = fields.get(measure.get("field"), {}) or {}
+            label = measure.get("label") or measure.get("field")
+            if measure.get("aggregation") == "weighted_avg":
+                label = f"Weighted-average {label}"
+            elif measure.get("aggregation") == "avg":
+                label = f"Average {label}"
+            lines.append(f"{label}: "
+                         f"{_format_measure_value(row[column], entry.get('format'))}")
+        if not lines:
+            return None
+        unavailable = (getattr(qres, "metadata", None) or {}).get(
+            "measures_unavailable") or []
+        answer = " · ".join(lines)
+        if unavailable:
+            # Every requested measure is accounted for: what ran, and what did
+            # not, by name. A silent 3-of-4 is the failure this prevents.
+            answer += ("  Not available: " + "; ".join(unavailable) + ".")
+        return answer
+    except Exception:  # noqa: BLE001 - prose must never break a good answer
+        return None
+
+
+def _contribution_answer(spec, qres, semantics: dict) -> Optional[str]:
+    """The leading contributor, in a sentence, from the executed rows only."""
+    try:
+        data = getattr(qres, "data", None)
+        if data is None or not len(data):
+            return None
+        entry = (semantics.get("fields", {}) or {}).get(spec.metric or "", {}) or {}
+        canonical = entry.get("canonical_field") or spec.metric
+        name = entry.get("business_name") or canonical
+        contribution_col = f"{canonical}_contribution"
+        value_col = f"{canonical}_weighted_avg"
+        if contribution_col not in data.columns:
+            return None
+        group_col = data.columns[0]
+        top = data.iloc[0]
+        total = float(data[contribution_col].sum())
+        parts = [
+            f"{top[group_col]} contributes the most to the portfolio "
+            f"{name}: {float(top[contribution_col]):.2f} of the "
+            f"{total:.2f} total"]
+        if value_col in data.columns and "weight_share_pct" in data.columns:
+            parts.append(
+                f"— {float(top['weight_share_pct']):.1f}% of the book at "
+                f"{float(top[value_col]):.2f}.")
+        else:
+            parts[-1] += "."
+        # Name the highest-VALUE group too when it is a different group: that
+        # difference is the whole reason this is a separate calculation.
+        if value_col in data.columns:
+            highest = data.loc[data[value_col].idxmax()]
+            if highest[group_col] != top[group_col]:
+                parts.append(
+                    f"The highest {name} is {highest[group_col]} at "
+                    f"{float(highest[value_col]):.2f}, but it is "
+                    f"{float(highest['weight_share_pct']):.1f}% of the book and "
+                    f"contributes {float(highest[contribution_col]):.2f}.")
+        return " ".join(parts)
+    except Exception:  # noqa: BLE001 - prose must never break a good answer
+        return None
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -316,7 +531,14 @@ def run_mi_agent_query(
         result["error"] = "data must be a pandas DataFrame or a path to a CSV"
         return result
 
-    available_columns = set(df.columns)
+    # D6 (B14): the SCHEMA of the book being reported on, which is the frame's
+    # own columns unless this frame is a derived VIEW of a larger book — the
+    # forecast projection keeps twelve of seventy-six. Every availability check
+    # below asks the book, so a field the book carries is never reported as
+    # absent from "this dataset".
+    from . import execution_receipt as _receipt_schema
+
+    available_columns = _receipt_schema.book_columns(df)
 
     # ---- controlled-unsupported guard -------------------------------------
     # If the question asks for a governed concept whose field is NOT in this
@@ -523,7 +745,9 @@ def run_mi_agent_query(
     warnings.extend(vr.warnings)
     if not vr.ok:
         result["interpreted"]["Validation"] = "Failed"
-        result["error"] = "The proposed query failed validation."
+        result["error"] = _validation_refusal(vr.errors, semantics)
+        result["answer"] = result["error"]
+        result["controlled_refusal"] = True
         result["warnings"] = _dedupe(warnings)
         result["metadata"] = {
             "parse_metadata": parse_meta,
@@ -680,6 +904,30 @@ def run_mi_agent_query(
                 f"This result covers £{inc:,.0f} of the £{tot:,.0f} funded book; "
                 f"£{excl:,.0f} was excluded{because}.")
 
+    # P1A — a filtered KPI whose predicate matched NOTHING is not an answer of
+    # zero. "Average LTV in Atlantis" must not report £0 / 0% as though the book
+    # genuinely held nothing there: an empty population means the predicate did
+    # not select anything, which the operator has to be told.
+    _recon = (qres.metadata or {}).get("reconciliation") or {}
+    if spec.filters and _recon.get("records_after_filters") == 0:
+        applied = ", ".join(str(k) for k in (spec.filters or {}))
+        val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
+                                            "resolved_fields": {}}
+        val["ok"] = False
+        val.setdefault("errors", []).append(
+            f"no_rows_match_filter: {applied}")
+        result["validation"] = val
+        if isinstance(result.get("interpreted"), dict):
+            result["interpreted"]["Validation"] = "Failed"
+        result["error"] = (
+            f"No loans in this book match that filter ({applied}), so there is "
+            "nothing to calculate. I have not returned a whole-book figure in "
+            "its place.")
+        result["answer"] = result["error"]
+        result["controlled_refusal"] = True
+        result["warnings"] = _dedupe(warnings)
+        return result
+
     # A grouped / loan-level result with no rows after preparation is not a
     # "passed" query — surface it as a controlled validation failure with an
     # exact reason rather than rendering an empty chart.
@@ -698,6 +946,155 @@ def run_mi_agent_query(
         result["interpreted"]["Validation"] = "Failed"
         result["error"] = f"The query produced no usable rows ({reason})."
         result["warnings"] = _dedupe(warnings)
+        return result
+
+    # ---- P1D: a contribution answer names its answer ----------------------
+    # "Which region contributes most to the weighted average LTV?" deserves a
+    # sentence saying which one, from the executed rows. Stated with BOTH
+    # figures because the point of the calculation is that they differ: the
+    # leading contributor is rarely the group with the highest value.
+    # P1E: a multi-measure request gets a management answer naming every figure.
+    if qres is not None and (getattr(qres, "metadata", None) or {}).get(
+            "measures_executed"):
+        line = _multi_measure_answer(spec, qres, semantics)
+        if line:
+            result["answer"] = line
+
+    if spec.aggregation == "contribution" and qres is not None:
+        line = _contribution_answer(spec, qres, semantics)
+        if line:
+            result["answer"] = line
+
+    # ---- P0: execution receipt + semantic-completeness guard ---------------
+    # The dimension and filter invariants above compare the SPEC with execution.
+    # They cannot see intent the parser dropped before a spec existed, which is
+    # how a scoped question came to be answered from the whole book. Re-derive
+    # the material facets from the QUESTION and reconcile them against what
+    # actually executed, then either refuse, disclose, or stand.
+    try:
+        from . import execution_receipt as _receipt_mod
+
+        _requested_dims = _receipt_mod.requested_dimension_terms(
+            question, semantics, available_columns=available_columns)
+        _facets = _receipt_mod.detect_requested_facets(
+            question, semantics, frame=df, requested_dimensions=_requested_dims,
+            # The parser's resolved filters, so the narrowing owner consumes that
+            # answer instead of claiming the same field.
+            resolved_filters=set(getattr(spec, "filters", None) or ()))
+        # D8: the caller's drill-through narrowings, which no reader of the
+        # QUESTION can raise because they were never spoken. Deduped on
+        # (kind, field, label), as 7c46f81 established — the seasoning owner and
+        # this ledger can name the same governed population.
+        _drill = _receipt_mod.drill_population_facets(extra_filters, semantics)
+        if _drill:
+            _facets = list(_facets) + list(_drill)
+
+        # ---- Stage 2: build the question interpretation and CARRY it --------
+        # Assembled from the spec and the facets that were just produced for
+        # the receipt's own purposes — it re-interprets nothing and decides
+        # nothing. Nothing reads it: it is carried so Stage 3 can convert
+        # consumers onto it one at a time.
+        #
+        # Taken BEFORE reconcile_facets, because the object records LINGUISTIC
+        # claims — what the question said — and reconciliation is where those
+        # become execution claims. Its own try/except: an interpretation that
+        # cannot be built must never cost an answer.
+        try:
+            from question_interpretation.projection import from_parts as _qi_build
+            result["question_interpretation"] = _qi_build(
+                question, spec=spec, facets=list(_facets),
+                dim_terms=_requested_dims, semantics=semantics).as_dict()
+        except Exception as _qi_exc:                       # noqa: BLE001
+            result["question_interpretation"] = {"error": str(_qi_exc)}
+
+        _facets = _receipt_mod.reconcile_facets(
+            _facets, spec=spec, query_result=qres, semantics=semantics,
+            available_columns=available_columns, route=None,
+            # The question itself, so the role owner can consult the SENTENCE'S
+            # role markers and not only the slots the parser managed to fill.
+            question=question,
+            # The point-in-time executor has no stress/scenario capability, so a
+            # scenario is never applied on this path. Stating that explicitly is
+            # what turns "what would a 10% fall do to LTV" into a refusal rather
+            # than today's current-LTV answer.
+            scenario_applied=False)
+        _substitution = _receipt_mod.detect_substitution(
+            _facets, spec=spec, query_result=qres, semantics=semantics)
+        if not _substitution:
+            _substitution = _receipt_mod.detect_measure_substitution(
+                question, metric_key=getattr(spec, "metric", None),
+                executed_concepts=_receipt_mod.executed_measure_concepts(qres))
+        if not _substitution:
+            _substitution = _receipt_mod.detect_unranked_superlative(
+                question, spec=spec, query_result=qres)
+        receipt = _receipt_mod.build_receipt(
+            spec=spec, query_result=qres, semantics=semantics, facets=_facets,
+            parser_confidence=(parse_meta or {}).get("parser_confidence"),
+            period=_reporting_date_label(df))
+        verdict, message = _receipt_mod.assess(
+            receipt, substitution=_substitution, semantics=semantics)
+        result["execution_receipt"] = receipt.to_dict()
+        result["semantic_guard"] = {"verdict": verdict, "message": message,
+                                    "facets": [f.to_dict() for f in _facets],
+                                    "substitution": _substitution}
+        if verdict in (_receipt_mod.VERDICT_REFUSE,
+                       _receipt_mod.VERDICT_CLARIFY):
+            # Fail closed: the calculation that ran answers a materially
+            # different question from the one asked. Never present it.
+            result["ok"] = False
+            result["error"] = message
+            result["answer"] = message
+            result["controlled_refusal"] = True
+            result["semantic_refusal"] = True
+            # A clarification fails closed the same way — no figure ships — but
+            # it is a question back, not a judgement that the question cannot be
+            # answered. The reader is asked; nothing is asserted.
+            result["clarification_requested"] = (
+                verdict == _receipt_mod.VERDICT_CLARIFY)
+            result["warnings"] = _dedupe(warnings + [message])
+            result["metadata"] = {
+                "parse_metadata": parse_meta,
+                "parser_mode_detail": parse_meta.get("parser_mode_detail"),
+                "execution_receipt": result["execution_receipt"],
+                "semantic_guard": result["semantic_guard"],
+                "llm": parse_meta.get("llm"),
+            }
+            return result
+        if verdict == _receipt_mod.VERDICT_PARTIAL and message:
+            warnings.append(message)
+    except Exception as exc:  # noqa: BLE001 - a guard fault must not ship a figure
+        # A guard fault used to record a warning and LET THE ANSWER STAND, on
+        # the reasoning that the guard must never break a good answer. But a
+        # guard that could not run cannot tell a good answer from a bad one, and
+        # the failure mode is not hypothetical: a one-word attribute error
+        # during this tranche turned three refusals into confident whole-book
+        # answers, marked only by a warning nobody reads. That is the same
+        # defect as the population rule above — a figure presented when the
+        # check that would have stopped it did not run.
+        #
+        # So it now fails CLOSED, consistent with the posture everywhere else in
+        # this path. Measured before changing: zero guard faults across all 231
+        # executed calibration cases, so this costs nothing on current evidence
+        # and closes a demonstrated hole. The fault is still recorded loudly,
+        # because a guard that breaks is a defect to fix, not a state to live in.
+        message = (
+            "I could not verify that the calculation answers the question as "
+            f"asked ({exc}), so I have not returned a figure. This is a fault in "
+            "the check itself, not a limitation of your question.")
+        warnings.append(f"semantic completeness guard unavailable: {exc}")
+        result["ok"] = False
+        result["error"] = message
+        result["answer"] = message
+        result["controlled_refusal"] = True
+        result["guard_fault"] = True
+        result["warnings"] = _dedupe(warnings + [message])
+        result["semantic_guard"] = {"verdict": "unavailable", "error": str(exc)}
+        result["metadata"] = {
+            "parse_metadata": parse_meta,
+            "parser_mode_detail": parse_meta.get("parser_mode_detail"),
+            "semantic_guard": result["semantic_guard"],
+            "llm": parse_meta.get("llm"),
+        }
         return result
 
     # ---- chart (only where a chart type is renderable) --------------------

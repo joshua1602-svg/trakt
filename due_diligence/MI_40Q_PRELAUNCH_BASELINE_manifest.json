@@ -1,0 +1,72 @@
+{
+  "artifact": "MI 40-question pre-launch baseline",
+  "purpose": "Immutable pre-launch MI Agent baseline. Verification only; no production code, tests, question bank or expected answers were modified.",
+  "timestampUtc": "2026-08-18T00:00:00+00:00",
+  "git": {
+    "branch": "claude/mi-query-agent-review-n8d33r",
+    "headSha": "4c550ee4d0a94193c73132e7919b57345efbfab1",
+    "workingTreeClean": true,
+    "remoteSha": "25190c1d2bb34a6cc314358f3006d3978cc6025d",
+    "localMatchesRemote": false,
+    "unpushedCommits": "7"
+  },
+  "questionBank": {
+    "path": "config/mi/golden_questions/business_semantic_questions.yaml",
+    "sha256": "e0fc0b61e529b5e0e986c82a69d5115e29956114df050642ba0969913e913194",
+    "questionCount": 40,
+    "lastModifyingCommit": "69373d01dbb0748516bd77e5121c2fe2bd6c3260"
+  },
+  "fixture": {
+    "root": "/home/user/trakt/demo_platform/workspace/store/processed/platform/alderbridge",
+    "files": {
+      "2026-04-30/platform_canonical_typed.csv": "88ce77341d1f5a1c89be5908346435e24231c58ee85e9f796b93a521c8daf3e5",
+      "2026-05-31/platform_canonical_typed.csv": "cffd127d525f73ac1187e07b6da36cf25535d4dc709319a91299b1a268f6a6d0",
+      "2026-06-30/platform_canonical_typed.csv": "5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c",
+      "latest/platform_canonical_typed.csv": "5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c"
+    },
+    "combinedSha256": "34e20a43dc24b80b4f5190a13b9cbb9323b696af5c1f93fa038bec2364511e06",
+    "snapshots": [
+      "2026-04-30",
+      "2026-05-31",
+      "2026-06-30"
+    ],
+    "loans": 11035,
+    "balanceGbp": 1964886258.21
+  },
+  "semanticsRegistry": {
+    "path": "mi_agent/mi_semantics_field_registry.yaml",
+    "sha256": "c29b555bf666dcffa24910bea5453bfbf3a4f001a20eb9068bdbf6312aff18a7"
+  },
+  "entrypoint": "mi_agent_api.mi_service.execute_governed_mi_query",
+  "runs": {
+    "deterministic": {
+      "transcript": "MI_40Q_PRELAUNCH_BASELINE_deterministic.json",
+      "parserProvenance": {
+        "deterministic": 40
+      },
+      "llmEnabled": false
+    },
+    "genuineLlm": {
+      "transcript": "MI_40Q_PRELAUNCH_BASELINE_llm.json",
+      "parserProvenance": {
+        "llm": 32,
+        "deterministic": 8
+      },
+      "llmFailureCategories": {
+        "parse_failure": 18
+      },
+      "model": "MI_AGENT_LLM_MODEL default",
+      "llmEnabled": true,
+      "credentialsRecorded": false
+    }
+  },
+  "launchGate": {
+    "incorrectSuccessful": 0,
+    "silentSemanticErrors": 1,
+    "hardFailures": 0,
+    "verdict": "FAIL",
+    "failingQuestions": [
+      "B25"
+    ]
+  }
+}

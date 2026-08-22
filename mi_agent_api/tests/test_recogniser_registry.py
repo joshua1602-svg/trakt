@@ -143,7 +143,11 @@ HISTORICAL_ORDER = (
 #: Workflow-layer routes registered ABOVE the migrated chain (additive
 #: registration — the extension mechanism the registry was built for). Each
 #: declares its own position; the historical chain keeps its relative order.
-WORKFLOW_ROUTES = ("portfolio_risk_comparison", "concentration_analysis")
+#: ``analytical_composition`` is the analytical capability layer, which sits
+#: ahead of all of them because a question needing SEVERAL capabilities must not
+#: be answered in part by whichever single one matches it first.
+WORKFLOW_ROUTES = ("portfolio_risk_comparison", "concentration_analysis",
+                   "analytical_composition")
 
 
 def test_the_live_registry_reproduces_the_historical_chain_order():
@@ -179,7 +183,8 @@ def test_lens_aware_routes_are_declared_on_the_recogniser():
     assert chat_routing._lens_aware_routes() == frozenset({
         "portfolio_summary", "period_movement", "funded_bridge",
         "cohort_progression", "geo_exposure", "portfolio_risk_comparison",
-        "concentration_analysis", "period_change_analysis"})
+        "concentration_analysis", "period_change_analysis",
+        "analytical_composition"})
 
 
 # --------------------------------------------------------------------------- #

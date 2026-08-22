@@ -109,8 +109,10 @@ def test_registry_field_count_and_tiers(semantics):
     # (obligor/collateral) + 5 Phase 0B risk/borrower bands
     # (pd_bucket, lgd_bucket, ead_bucket, borrower_structure, borrower_type)
     # + protected_equity_flag, which is derived from protected_equity_percentage
-    # rather than read from source.
-    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 5 + 1
+    # rather than read from source, + the 2 governed seasoning dimensions
+    # (seasoning_segment, seasoning_bucket) added by P1J-1, both derived from
+    # months_on_book.
+    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 5 + 1 + 2
     assert m["field_count"] == m["core_field_count"] + m["extended_field_count"]
     # v0.2.x set == 72; Phase 0B adds 27 MI/M&A risk + segmentation/snapshot
     # semantic fields == 99; the funded-book vs pipeline date-semantics work adds
@@ -125,8 +127,11 @@ def test_registry_field_count_and_tiers(semantics):
     # charge_type, collateral_type, seller_name, nace_industry_code,
     # manufacturer, model, balloon_amount, current_residual_value_of_asset,
     # date_of_lease_expiration, number_of_leased_objects == 116.
-    assert m["field_count"] == 116
-    assert m["core_field_count"] == 80
+    # P1J-1 adds the 2 governed seasoning dimensions (seasoning_segment,
+    # seasoning_bucket), derived from months_on_book == 118.
+    assert m["field_count"] == 118
+    # +2 core: both governed seasoning dimensions are core-tier (P1J-1).
+    assert m["core_field_count"] == 82
     # The generated metadata counts must match the actual entries (drift guard).
     assert m["field_count"] == len(semantics["fields"])
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])

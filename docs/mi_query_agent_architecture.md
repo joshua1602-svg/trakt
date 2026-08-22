@@ -860,7 +860,7 @@ from code.
    resolves each through the same `resolve_capability_state` — the multi-
    capability orchestration lives in the workflow layer, not here.
 
-### What was deliberately NOT done
+### What was deliberately NOT done *(at the time this section was written)*
 
 No period-change analysis, portfolio risk comparison, covenant headroom, driver
 attribution, explanatory workflows, workflow planner, materiality logic,
@@ -868,3 +868,148 @@ comparison engine or multi-capability orchestration. Routing dispatches to **one
 deterministic capability** and stops. The confidence field, the metadata slot and
 the semantics context are all *inert* today — carried, never interpreted — which
 is what keeps them free of assumptions the real registry would contradict.
+
+---
+
+## 12. The analytical capability layer
+
+Step 3 above has since been taken, and taken as described: **registration, not
+restructuring.** `mi_workflows/analytical/` composes two or more governed
+deterministic capabilities into one answer, and registers through the existing
+registry with no change to it.
+
+```mermaid
+flowchart LR
+  Q["question"] --> PL["planner<br/>which capabilities, and why"]
+  PL --> RG["capability registry<br/>validate declared inputs"]
+  RG --> EX["EXISTING deterministic engines"]
+  EX --> F["structured findings<br/>value · population · period · evidence"]
+  F --> N["narrative"]
+  F --> R["execution receipt"]
+```
+
+| | |
+|---|---|
+| Route | `analytical_composition`, priority 5, confidence 0.8, `lens_aware` |
+| Capabilities | ten, declared in `mi_workflows/analytical/registry.py`, each naming the engine it delegates to |
+| Owns a calculation? | **No.** A test parses every module in the package and fails if one imports `pandas` or `numpy` |
+| Engages when | the deterministic planner composes **two or more** capabilities |
+| Declines when | a single existing route owns the question (`AnalyticalCapability.route_owner`), or a plan produces nothing computable — the handler then returns `None` and the question falls through unchanged |
+| LLM role | may PROPOSE a plan (`planner.plan_from_proposal`); the proposal is validated against the registry and rejected whole on an unknown capability, a missing input or a population the question never named. It never calculates |
+| Governance | populations go through `mi_agent.population.apply_population`; every plan is checked by `mi_agent.population.fabricated_concepts` before any data is read; the route publishes `metadata.analyticalComposition`, which `execution_receipt.analytical_evidence` reconciles the question's facets against |
+
+**File ownership.** Planning and deference belong in
+`mi_workflows/analytical/planner.py`; a capability declaration in
+`registry.py`; an adapter over an existing engine in `executors.py`; the answer
+shape in `route.py`. A new analytical capability is a declaration plus an
+adapter — no change to routing, the receipt or the parser.
+
+Evidence: `due_diligence/MI_AGENT_ANALYTICAL_CAPABILITY_LAYER.md`.
+
+---
+
+## 13. The analytical intent boundary
+
+Section 12 added the capability layer. This section adds the thing that decides
+whether a question ever reaches it — and, more importantly, what happens when
+nothing can.
+
+**The problem it solves.** Measured across 752 runs of ordinary CFO phrasings
+(`due_diligence/MI_AGENT_ANALYTICAL_NL_ROBUSTNESS.md`), every figure the
+capability layer produced was right — 2,686 of 2,686 reconciled — and a quarter
+of questions still returned a confident answer to a different question. Every
+one of those originated *upstream*: no recogniser claimed the question, so it
+fell through to the generic point-in-time executor, which answered from one
+snapshot of the funded tape with whatever measure and dimension the parse
+happened to produce, and the guard passed because it raised no facet at all.
+
+```
+"How many loans are we completing at the moment?"  ->  11,035 loans   ok=True
+"What completion rate are we running at?"          ->  £1.96bn        ok=True
+"Where are we closest to our limits?"              ->  WA LTV by region
+"Which of our limits are most at risk?"            ->  balance by account status
+```
+
+### Six families, and nothing else
+
+`mi_workflows/analytical/intent.py` recognises a question as belonging to one or
+more of six governed families, and to one or more governed operations within
+them.
+
+| Family | Governed operations | Who already owns them |
+|---|---|---|
+| `MIX_PROFILE` | snapshot · composition · comparison · change · divergence · attribution | `analytical_composition`, `period_change_analysis`, `portfolio_summary`, `period_movement` |
+| `PIPELINE` | stock · movement · conversion · run-rate · expected completion · timing · mix | `analytical_composition`, `forecast_extrapolation`, `cohort_conversion`, `scenario` |
+| `LIMITS_CONCENTRATION` | concentration · status · headroom · ranking · movement · forecast breach | `risk_limits`, `analytical_composition` |
+| `FORECAST_PROJECTION` | project value · milestone · horizon · scenario | `forecast_extrapolation`, `scenario`, `analytical_composition` |
+| `MOVEMENT_TREND` | delta · trend · ranking · acceleration · attribution | `analytical_composition`, `period_change_analysis`, `period_movement`, `evolution`, `temporal_compare`, `funded_bridge` |
+| `VINTAGE_COHORT` | snapshot · comparison · evolution · ranking · divergence | `analytical_composition`, `cohort_progression` |
+
+A test asserts that **every capability and every route named above already
+exists**. The boundary can route a question to a governed answer; it cannot
+invent one.
+
+The vocabularies are CONCEPT sets — the words a book, a control or a movement is
+described with — not question templates. No entry exists because a test phrasing
+needed to pass.
+
+### What it does, in three moves
+
+**1. It settles governed intent flags the parser left open.** `try_route` calls
+`intent.settle(question, spec)` before any recogniser is consulted. When the
+`LIMITS_CONCENTRATION` family is recognised and the parse did not set
+`risk_limit_query`, the boundary sets it — and the `risk_limits` route, entirely
+unchanged, then claims the question. It never overrides a flag the parser has
+already settled, and it never hands a question to a capability that would answer
+in the wrong unit: a *"how many"* question is not given to the currency-only
+run-rate capability.
+
+**2. It tells the planner what family it is looking at.** The capability layer's
+plan builders no longer carry private vocabularies. Two comparison vocabularies
+is exactly how *"are X and Y developing differently?"* came to resolve one way
+and *"how has X moved relative to Y?"* another, for the same question.
+
+**3. It fails closed.** After the point-in-time executor has run, a structural
+check asks whether the answer CARRIES what the question needs — the pipeline
+extract, a limit schedule, a forecast, two reporting snapshots, two populations.
+If it does not, the answer is replaced by a controlled refusal naming what could
+not be established. The check runs after execution, not before, for the same
+reason the P0 receipt does: what matters is what the answer demonstrably
+carries, not what it was meant to be. An answer that DOES carry the structure —
+a front/back comparison reached by grouping on the seasoning segment — is left
+completely alone, and a question that is not materially analytical
+(*"balance by region"*) is never touched.
+
+### The governed lending ruling
+
+`mi_agent/seasoning.py` gained four **lending windows** on the axis it already
+owns, driven by the same `seasoning:` config block:
+
+| Window | Definition |
+|---|---|
+| NEW | originated in the last **1** month |
+| RECENT | originated in the last **3** months |
+| FRONT BOOK | originated in the last **12** months |
+| BACK BOOK | older than **12** months |
+
+They are **nested, not a partition** — every NEW loan is also RECENT and also
+FRONT BOOK — because "new lending" and "the front book" are different questions.
+Front and back keep the `seasoning_segment` predicate they already had, so
+anything that resolved to them before resolves to identical rows now.
+
+"Lending" is deliberately **not** globally mapped. `_SEGMENT_PHRASES`, which
+selects a population everywhere in the stack, was not touched. The role is
+resolved by analytical context: a PROFILE / MIX / RISK context makes "new
+lending" a population of loans; a RUN RATE / VOLUME / FLOW context makes it an
+origination flow. Where context settles neither, no population is created and
+the fail-closed rule applies.
+
+| | |
+|---|---|
+| Module | `mi_workflows/analytical/intent.py` |
+| Seams | `chat_routing.try_route` (flag settling, pre-routing) and `mi_service._fail_closed_analytical` (post-execution, point-in-time path only) |
+| Owns a calculation? | **No.** It classifies and it routes |
+| Evidence published | `metadata.analyticalIntent` — families, operations, signals, lending windows and role, requirements, and any flag it set |
+| Tests | `tests/test_analytical_intent_boundary.py` |
+
+Evidence: `due_diligence/MI_AGENT_ANALYTICAL_INTENT_V1.md`.

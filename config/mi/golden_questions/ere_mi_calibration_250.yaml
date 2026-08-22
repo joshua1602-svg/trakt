@@ -2,7 +2,7 @@ meta:
   name: ERE MI Agent curated calibration bank
   description: 250+ realistic business-user MI questions with expected semantic behaviour + output checks.
     Additional to the generated registry harness (mi_agent/mi_query_harness.py).
-  count: 252
+  count: 255
   fixture: mi_agent.mi_query_harness.build_fixture (funded tape)
   enforced_by: mi_agent/tests/test_mi_calibration_bank.py
 questions:
@@ -13,6 +13,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: &id001 []
   expected_filters: []
@@ -32,6 +33,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -51,6 +53,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -70,6 +73,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -89,6 +93,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -109,6 +114,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -129,6 +135,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -149,6 +156,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -169,6 +177,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -188,6 +197,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -207,6 +217,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -226,6 +237,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -245,6 +257,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -264,6 +277,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -283,6 +297,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -302,6 +317,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -321,6 +337,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -340,6 +357,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: youngest_borrower_age
+  expected_answer_type: age
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -359,6 +377,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: youngest_borrower_age
+  expected_answer_type: age
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -378,6 +397,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: youngest_borrower_age
+  expected_answer_type: age
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -397,6 +417,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -416,6 +437,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -435,6 +457,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -454,6 +477,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_valuation_amount
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -473,6 +497,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_valuation_amount
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -492,6 +517,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: original_principal_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -511,6 +537,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: original_principal_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -530,6 +557,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: mixed
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -549,6 +577,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: mixed
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -568,6 +597,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: mixed
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -587,6 +617,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: mixed
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -606,6 +637,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: *id001
   expected_filters: []
@@ -616,10 +648,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: '''size'' is parsed as the ticket-size dimension, so this returns balance by ticket bucket
-    instead of a mean-size KPI. Use ''average loan balance''. Follow-up: metric vocabulary for ''loan
-    size''.'
-  notes: Known parser quirk.
+  known_gap: null
+  notes: "D2: 'loan size' resolves as a measure when an aggregator precedes it; the bucket reading is masked."
 - id: grp1_033
   category: single_dim
   question: balance by region
@@ -627,9 +657,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -640,6 +671,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance grouped by region.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_034
   category: single_dim
   question: balance by borrower type
@@ -647,6 +679,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -658,8 +691,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Balance grouped by borrower type.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_035
   category: single_dim
   question: balance by product type
@@ -667,6 +702,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -680,6 +716,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance grouped by product type.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_036
   category: single_dim
   question: balance by LTV bucket
@@ -687,6 +726,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - ltv_bucket
@@ -707,6 +747,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -727,6 +768,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -740,6 +782,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance grouped by broker.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_039
   category: single_dim
   question: balance by account status
@@ -747,6 +792,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - account_status
@@ -767,6 +813,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - origination_channel
@@ -787,6 +834,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - interest_rate_type
@@ -807,6 +855,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - occupancy_type
@@ -827,6 +876,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - term_bucket
@@ -840,6 +890,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance grouped by term bucket.
+  requires_fields:
+  - term_bucket
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_044
   category: single_dim
   question: balance by ticket size
@@ -847,6 +900,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - ticket_bucket
@@ -867,9 +921,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -881,6 +936,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Loan count grouped by region.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_046
   category: single_dim
   question: loan count by borrower type
@@ -888,6 +944,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -900,8 +957,10 @@ questions:
   expected_columns_include:
   - loan_count
   expected_min_columns: 2
-  known_gap: null
   notes: Loan count grouped by borrower type.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_047
   category: single_dim
   question: loan count by product type
@@ -909,6 +968,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -923,6 +983,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Loan count grouped by product type.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_048
   category: single_dim
   question: loan count by LTV bucket
@@ -930,6 +993,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - ltv_bucket
@@ -951,6 +1015,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -972,6 +1037,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -986,6 +1052,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Loan count grouped by broker.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_051
   category: single_dim
   question: loan count by account status
@@ -993,6 +1062,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - account_status
@@ -1014,6 +1084,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - origination_channel
@@ -1035,6 +1106,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - interest_rate_type
@@ -1056,6 +1128,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - occupancy_type
@@ -1077,6 +1150,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - term_bucket
@@ -1091,6 +1165,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Loan count grouped by term bucket.
+  requires_fields:
+  - term_bucket
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_056
   category: single_dim
   question: loan count by ticket size
@@ -1098,6 +1175,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - ticket_bucket
@@ -1119,9 +1197,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1132,6 +1211,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: WA LTV by region.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_058
   category: single_dim
   question: average LTV by product type
@@ -1139,6 +1219,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1152,6 +1233,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: WA LTV by product type.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_059
   category: single_dim
   question: average LTV by broker
@@ -1159,6 +1243,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1172,6 +1257,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: WA LTV by broker.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_060
   category: single_dim
   question: average LTV by age bucket
@@ -1179,6 +1267,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -1199,6 +1288,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -1210,8 +1300,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: WA LTV by borrower type.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_062
   category: single_dim
   question: average LTV by account status
@@ -1219,6 +1311,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - account_status
@@ -1239,6 +1332,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - interest_rate_type
@@ -1259,6 +1353,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - occupancy_type
@@ -1279,9 +1374,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: youngest_borrower_age
+  expected_answer_type: age
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1292,6 +1388,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_066
   category: single_dim
   question: average borrower age by product type
@@ -1299,6 +1396,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: youngest_borrower_age
+  expected_answer_type: age
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1312,6 +1410,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_067
   category: single_dim
   question: average borrower age by broker
@@ -1319,6 +1420,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: youngest_borrower_age
+  expected_answer_type: age
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1332,6 +1434,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_068
   category: single_dim
   question: average borrower age by borrower type
@@ -1339,6 +1444,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: youngest_borrower_age
+  expected_answer_type: age
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -1350,8 +1456,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: ''
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_069
   category: single_dim
   question: weighted average interest rate by region
@@ -1359,9 +1467,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1372,6 +1481,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_070
   category: single_dim
   question: weighted average interest rate by product type
@@ -1379,6 +1489,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1392,6 +1503,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_071
   category: single_dim
   question: weighted average interest rate by broker
@@ -1399,6 +1513,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1412,6 +1527,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_072
   category: single_dim
   question: weighted average interest rate by rate type
@@ -1419,6 +1537,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - interest_rate_type
@@ -1439,6 +1558,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -1450,8 +1570,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: ''
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_074
   category: single_dim
   question: weighted average interest rate by age bucket
@@ -1459,6 +1581,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -1479,9 +1602,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1492,6 +1616,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_076
   category: single_dim
   question: show me balance by borrower type
@@ -1499,6 +1624,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -1510,8 +1636,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_077
   category: single_dim
   question: show me balance by product type
@@ -1519,6 +1647,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1532,6 +1661,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_078
   category: single_dim
   question: show me balance by broker
@@ -1539,6 +1671,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1552,6 +1685,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_079
   category: single_dim
   question: break down balance by region
@@ -1559,9 +1695,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1572,6 +1709,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_080
   category: single_dim
   question: break down balance by borrower type
@@ -1579,6 +1717,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -1590,8 +1729,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_081
   category: single_dim
   question: break down balance by product type
@@ -1599,6 +1740,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1612,6 +1754,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_082
   category: single_dim
   question: break down balance by broker
@@ -1619,6 +1764,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1632,6 +1778,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_083
   category: single_dim
   question: balance split by region
@@ -1639,9 +1788,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1652,6 +1802,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_084
   category: single_dim
   question: balance split by borrower type
@@ -1659,6 +1810,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -1670,8 +1822,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_085
   category: single_dim
   question: balance split by product type
@@ -1679,6 +1833,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1692,6 +1847,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_086
   category: single_dim
   question: balance split by broker
@@ -1699,6 +1857,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1712,6 +1871,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_087
   category: single_dim
   question: exposure by region
@@ -1719,9 +1881,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1732,6 +1895,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_088
   category: single_dim
   question: exposure by borrower type
@@ -1739,6 +1903,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -1750,8 +1915,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_089
   category: single_dim
   question: exposure by product type
@@ -1759,6 +1926,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1772,6 +1940,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_090
   category: single_dim
   question: exposure by broker
@@ -1779,6 +1950,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1792,6 +1964,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_091
   category: single_dim
   question: total valuation by region
@@ -1799,9 +1974,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_valuation_amount
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1812,6 +1988,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Collateral valuation by dimension.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_092
   category: single_dim
   question: original balance by region
@@ -1819,9 +1996,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: original_principal_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1832,6 +2010,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Original advance by dimension.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_093
   category: single_dim
   question: total valuation by product type
@@ -1839,6 +2018,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_valuation_amount
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1852,6 +2032,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Collateral valuation by dimension.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_094
   category: single_dim
   question: original balance by product type
@@ -1859,6 +2042,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: original_principal_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -1872,6 +2056,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Original advance by dimension.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_095
   category: single_dim
   question: total valuation by broker
@@ -1879,6 +2066,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_valuation_amount
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1892,6 +2080,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Collateral valuation by dimension.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp1_096
   category: single_dim
   question: original balance by broker
@@ -1899,6 +2090,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: original_principal_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1912,6 +2104,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Original advance by dimension.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_097
   category: two_dim
   question: balance by borrower type by region
@@ -1919,10 +2114,11 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -1931,8 +2127,11 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 3
-  known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
 - id: grp2_098
   category: two_dim
   question: balance by LTV bucket by age bucket
@@ -1940,6 +2139,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - ltv_bucket
@@ -1961,6 +2161,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - geographic_region_obligor
@@ -1975,6 +2176,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_100
   category: two_dim
   question: balance by broker by product type
@@ -1982,6 +2186,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -1996,6 +2201,10 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - broker_channel
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_101
   category: two_dim
   question: balance by account status by region
@@ -2003,10 +2212,11 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - account_status
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2017,6 +2227,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_102
   category: two_dim
   question: balance by product type by age bucket
@@ -2024,6 +2235,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -2038,6 +2250,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_103
   category: two_dim
   question: balance by region by LTV bucket
@@ -2045,9 +2260,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   - ltv_bucket
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2059,6 +2275,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_104
   category: two_dim
   question: balance by occupancy type by region
@@ -2066,10 +2283,11 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - occupancy_type
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2080,6 +2298,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_105
   category: two_dim
   question: balance by rate type by product type
@@ -2087,6 +2306,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - interest_rate_type
@@ -2101,6 +2321,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_106
   category: two_dim
   question: WA LTV by product type and region
@@ -2108,6 +2331,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -2122,6 +2346,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_107
   category: two_dim
   question: average LTV by region and age bucket
@@ -2129,9 +2356,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   - age_bucket
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2143,6 +2371,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_108
   category: two_dim
   question: average interest rate by product type and rate type
@@ -2150,6 +2379,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -2164,6 +2394,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_109
   category: two_dim
   question: loan count by region and borrower type
@@ -2171,9 +2404,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   - borrower_type
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2183,8 +2417,11 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 3
-  known_gap: null
   notes: Two-dim count matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
 - id: grp2_110
   category: two_dim
   question: count by age bucket and LTV bucket
@@ -2192,6 +2429,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -2213,6 +2451,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -2227,6 +2466,10 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two-dim count matrix.
+  requires_fields:
+  - broker_channel
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_112
   category: two_dim
   question: balance by borrower type by product type
@@ -2234,6 +2477,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -2248,6 +2492,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_113
   category: two_dim
   question: balance by region by age bucket
@@ -2255,9 +2502,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   - age_bucket
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2269,6 +2517,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_114
   category: two_dim
   question: balance by broker by region
@@ -2276,6 +2525,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -2290,6 +2540,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_115
   category: two_dim
   question: balance by account status by product type
@@ -2297,6 +2550,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - account_status
@@ -2311,6 +2565,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_116
   category: two_dim
   question: balance by term bucket by LTV bucket
@@ -2318,6 +2575,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - term_bucket
@@ -2332,6 +2590,9 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - term_bucket
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_117
   category: two_dim
   question: balance by ticket size by region
@@ -2339,10 +2600,11 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - ticket_bucket
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2353,6 +2615,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_118
   category: two_dim
   question: average LTV by borrower type and region
@@ -2360,10 +2623,11 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - borrower_type
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2372,8 +2636,11 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 3
-  known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
 - id: grp2_119
   category: two_dim
   question: balance by origination channel by region
@@ -2381,10 +2648,11 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - origination_channel
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2395,6 +2663,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_120
   category: two_dim
   question: balance by rate type by region
@@ -2402,10 +2671,11 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - interest_rate_type
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2416,6 +2686,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_121
   category: two_dim
   question: balance by borrower type by age bucket
@@ -2423,6 +2694,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -2435,8 +2707,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 3
-  known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: grp2_122
   category: two_dim
   question: WA interest rate by broker and product type
@@ -2444,6 +2718,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_interest_rate
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -2458,6 +2733,10 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
+  requires_fields:
+  - broker_channel
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_123
   category: filtered
   question: how many loans have LTV above 50%
@@ -2465,6 +2744,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -2486,6 +2766,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -2507,6 +2788,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -2528,6 +2810,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -2549,6 +2832,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -2569,6 +2853,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -2589,6 +2874,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -2601,8 +2887,10 @@ questions:
   expected_columns_include:
   - loan_count
   expected_min_columns: 1
-  known_gap: null
   notes: Filtered whole-book KPI.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_130
   category: filtered
   question: balance by region where LTV above 50%
@@ -2610,9 +2898,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2624,6 +2913,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_131
   category: filtered
   question: balance by broker where LTV above 50%
@@ -2631,6 +2921,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -2645,6 +2936,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_132
   category: filtered
   question: balance by product type for loans above £250k
@@ -2652,6 +2946,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -2666,6 +2961,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_133
   category: filtered
   question: balance by region where LTV between 40 and 60
@@ -2673,9 +2971,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2687,6 +2986,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_134
   category: filtered
   question: count by borrower type where age is over 70
@@ -2694,6 +2994,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -2706,8 +3007,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_135
   category: filtered
   question: WA LTV by region for joint borrowers
@@ -2715,9 +3018,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - borrower_type
   expected_artifact_type: bar
@@ -2727,8 +3031,11 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
 - id: filt_136
   category: filtered
   question: average LTV by product type for joint borrowers
@@ -2736,6 +3043,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -2750,6 +3058,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_137
   category: filtered
   question: balance by broker for loans above £250k
@@ -2757,6 +3068,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -2771,6 +3083,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_138
   category: filtered
   question: balance by region where LTV above 30%
@@ -2778,9 +3093,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2792,6 +3108,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_139
   category: filtered
   question: balance by region where LTV above 40%
@@ -2799,9 +3116,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2813,6 +3131,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_140
   category: filtered
   question: balance by region where LTV above 60%
@@ -2820,9 +3139,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2834,6 +3154,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_141
   category: filtered
   question: balance by region where LTV above 70%
@@ -2841,9 +3162,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2855,6 +3177,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_142
   category: filtered
   question: balance by broker where LTV above 50%
@@ -2862,6 +3185,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -2876,6 +3200,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + LTV filter.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_143
   category: filtered
   question: balance by product type where LTV above 50%
@@ -2883,6 +3210,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -2897,6 +3225,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + LTV filter.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_144
   category: filtered
   question: balance by borrower type where LTV above 50%
@@ -2904,6 +3235,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -2916,8 +3248,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Grouped balance + LTV filter.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_145
   category: filtered
   question: balance by age bucket where LTV above 50%
@@ -2925,6 +3259,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -2946,9 +3281,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_outstanding_balance
   expected_artifact_type: bar
@@ -2960,6 +3296,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + balance-threshold filter.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_147
   category: filtered
   question: balance by broker for loans above £250k
@@ -2967,6 +3304,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -2981,6 +3319,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + balance-threshold filter.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_148
   category: filtered
   question: balance by product type for loans above £250k
@@ -2988,6 +3329,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -3002,6 +3344,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + balance-threshold filter.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_149
   category: filtered
   question: how many loans have a balance above 200000
@@ -3009,6 +3354,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -3030,6 +3376,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -3051,9 +3398,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - borrower_type
   expected_artifact_type: bar
@@ -3063,8 +3411,11 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Grouped balance + categorical (borrower-structure) filter.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
 - id: filt_152
   category: filtered
   question: balance by product type for joint borrowers
@@ -3072,6 +3423,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -3086,6 +3438,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + categorical (borrower-structure) filter.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_153
   category: filtered
   question: balance by broker for joint borrowers
@@ -3093,6 +3448,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -3107,6 +3463,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + categorical (borrower-structure) filter.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_154
   category: filtered
   question: balance by region where borrower age is over 70
@@ -3114,9 +3473,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - youngest_borrower_age
   expected_artifact_type: bar
@@ -3128,6 +3488,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + age filter.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_155
   category: filtered
   question: balance by region where borrower age is over 75
@@ -3135,9 +3496,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - youngest_borrower_age
   expected_artifact_type: bar
@@ -3149,6 +3511,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + age filter.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_156
   category: filtered
   question: balance by region where borrower age is over 80
@@ -3156,9 +3519,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - youngest_borrower_age
   expected_artifact_type: bar
@@ -3170,6 +3534,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + age filter.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_157
   category: filtered
   question: WA LTV by broker where LTV above 40%
@@ -3177,6 +3542,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -3191,6 +3557,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped WA LTV + LTV filter.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_158
   category: filtered
   question: WA LTV by product type where LTV above 40%
@@ -3198,6 +3567,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -3212,6 +3582,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped WA LTV + LTV filter.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: filt_159
   category: filtered
   question: balance where LTV above 50%
@@ -3219,6 +3592,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -3230,10 +3604,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Bare ''balance where <filter>'' (no total/how-much/how-many cue) resolves the metric to
-    LTV and drops the filter. Use ''total balance where LTV above 50%''. Follow-up: treat ''balance where
-    ...'' as filtered balance.'
-  notes: Known parser gap on bare filtered balance.
+  known_gap: null
+  notes: "D2: the metric slot is no longer captured by the filter clause (_metric_slot)."
 - id: rank_160
   category: ranking
   question: top 10 regions by balance
@@ -3241,9 +3613,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3254,6 +3627,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_161
   category: ranking
   question: top 5 brokers by balance
@@ -3261,6 +3635,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -3274,6 +3649,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_162
   category: ranking
   question: top 10 products by balance
@@ -3281,6 +3659,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -3294,6 +3673,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_163
   category: ranking
   question: which region has the largest balance
@@ -3301,9 +3683,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3314,6 +3697,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_164
   category: ranking
   question: which broker has the largest balance
@@ -3321,6 +3705,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -3334,6 +3719,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_165
   category: ranking
   question: which product type has the highest balance
@@ -3341,6 +3729,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -3354,6 +3743,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_166
   category: ranking
   question: regions with the most loans
@@ -3361,9 +3753,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3374,6 +3767,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_167
   category: ranking
   question: highest average LTV regions
@@ -3381,9 +3775,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3394,6 +3789,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_168
   category: ranking
   question: which region has the highest average LTV
@@ -3401,9 +3797,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3414,6 +3811,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_169
   category: ranking
   question: smallest region by balance
@@ -3421,9 +3819,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3434,6 +3833,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_170
   category: ranking
   question: largest loans
@@ -3441,6 +3841,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3460,6 +3861,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3479,6 +3881,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3498,6 +3901,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3517,6 +3921,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3536,9 +3941,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3549,6 +3955,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Top-N grouped ranking.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_176
   category: ranking
   question: top 5 broker by balance
@@ -3556,6 +3963,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -3569,6 +3977,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Top-N grouped ranking.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_177
   category: ranking
   question: top 10 product type by balance
@@ -3576,6 +3987,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -3589,6 +4001,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Top-N grouped ranking.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_178
   category: ranking
   question: top 3 age bucket by balance
@@ -3596,6 +4011,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -3616,6 +4032,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - account_status
@@ -3636,6 +4053,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - broker_channel
@@ -3649,6 +4067,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked WA LTV by dimension.
+  requires_fields:
+  - broker_channel
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_181
   category: ranking
   question: which product type has the highest average LTV
@@ -3656,6 +4077,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -3669,6 +4091,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked WA LTV by dimension.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: rank_182
   category: ranking
   question: which borrower type has the highest average LTV
@@ -3676,6 +4101,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_loan_to_value
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -3689,6 +4115,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked WA LTV by dimension.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: pipe_183
   category: pipeline
   question: pipeline amount by stage
@@ -3696,6 +4125,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3716,6 +4146,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3736,6 +4167,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: any
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3756,6 +4188,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: any
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3776,6 +4209,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: any
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3796,6 +4230,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: rate
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3816,6 +4251,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3836,6 +4272,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3856,6 +4293,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: any
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3876,6 +4314,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3896,6 +4335,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3916,6 +4356,7 @@ questions:
   execution: parse_only
   expected_scope: pipeline
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3936,6 +4377,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: forecast_funded_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3955,6 +4397,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3975,6 +4418,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: any
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -3995,6 +4439,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: any
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4015,6 +4460,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4035,6 +4481,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4055,6 +4502,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4075,6 +4523,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: any
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4095,6 +4544,7 @@ questions:
   execution: parse_only
   expected_scope: forecast
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4115,9 +4565,10 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4128,6 +4579,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Concentration view.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_205
   category: risk
   question: balance by LTV bucket
@@ -4135,6 +4587,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - ltv_bucket
@@ -4155,9 +4608,10 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4168,6 +4622,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Concentration view.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_207
   category: risk
   question: largest regional concentration
@@ -4175,9 +4630,10 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4186,10 +4642,9 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: 'Resolves to a loan-level ranking TABLE, not a region concentration bar. Use ''which region
-    has the largest balance''. Follow-up: route ''largest <dim> concentration'' to a grouped concentration
-    bar.'
-  notes: 'Known gap: concentration phrasing -> loan-level table.'
+  known_gap: null
+  notes: "D2: 'regional' added as the adjectival form of the governed region dimension."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_208
   category: risk
   question: how many loans have a balance above £250k
@@ -4197,6 +4652,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -4217,6 +4673,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -4237,6 +4694,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -4257,10 +4715,11 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
-  - geographic_region_obligor
+  - collateral_geography
   expected_artifact_type: kpi
   expected_reconciliation: true
   expected_dimension_invariant_ok: true
@@ -4268,9 +4727,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'A place name (''exposure to London'') is not turned into a region filter — the whole-book
-    balance is returned. Follow-up: parse place names as region-value filters (or clarify).'
-  notes: 'Known gap: place-name exposure not filtered.'
+  notes: "D2: the place resolves to the governed region filter and refuses safely when nothing matches."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does. The product was already correct on a real book. This case was the standing xfail: it was diagnosed as a missing London value, but a real book carries 1,380 London loans and the filter simply targeted the code field."
 - id: risk_212
   category: risk
   question: exposure to the South East
@@ -4278,10 +4736,11 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
-  - geographic_region_obligor
+  - collateral_geography
   expected_artifact_type: kpi
   expected_reconciliation: true
   expected_dimension_invariant_ok: true
@@ -4289,9 +4748,9 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'A place name (''exposure to London'') is not turned into a region filter — the whole-book
-    balance is returned. Follow-up: parse place names as region-value filters (or clarify).'
-  notes: 'Known gap: place-name exposure not filtered.'
+  known_gap: null
+  notes: "D2: 'exposure to <place>' names a geography filter."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_213
   category: risk
   question: concentration by region
@@ -4299,9 +4758,10 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4312,6 +4772,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance concentration by a categorical dimension.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_214
   category: risk
   question: concentration by product type
@@ -4319,6 +4780,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - erm_product_type
@@ -4332,6 +4794,9 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance concentration by a categorical dimension.
+  requires_fields:
+  - erm_product_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: risk_215
   category: risk
   question: concentration by borrower type
@@ -4339,6 +4804,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -4350,8 +4816,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Balance concentration by a categorical dimension.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: risk_216
   category: risk
   question: concentration by account status
@@ -4359,6 +4827,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - account_status
@@ -4379,6 +4848,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - ltv_bucket
@@ -4390,10 +4860,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: 'The bucket field name pulls the MEASURE (WA LTV / mean age) instead of balance, so ''concentration
-    by LTV bucket'' returns WA LTV per bucket, not the balance concentration. Use ''balance by LTV bucket''.
-    Follow-up: prefer balance for ''concentration by <bucket>''.'
-  notes: Known metric-resolution quirk on bucket concentration.
+  known_gap: null
+  notes: "D2: the grouping term no longer supplies the measure; 'concentration by X' is a balance concentration."
 - id: risk_218
   category: risk
   question: concentration by age bucket
@@ -4401,6 +4869,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -4412,10 +4881,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: 'The bucket field name pulls the MEASURE (WA LTV / mean age) instead of balance, so ''concentration
-    by LTV bucket'' returns WA LTV per bucket, not the balance concentration. Use ''balance by LTV bucket''.
-    Follow-up: prefer balance for ''concentration by <bucket>''.'
-  notes: Known metric-resolution quirk on bucket concentration.
+  known_gap: null
+  notes: "D2: the grouping term no longer supplies the measure."
 - id: risk_219
   category: risk
   question: how many loans are above 70% LTV
@@ -4423,6 +4890,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -4443,6 +4911,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -4463,6 +4932,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: null
+  expected_answer_type: count
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -4483,6 +4953,7 @@ questions:
   execution: full
   expected_scope: risk
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - age_bucket
@@ -4494,30 +4965,28 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: '''property value band'' is mis-mapped to the age bucket (no valuation-band dimension in
-    the tape). Follow-up: add a valuation-band dimension or refuse.'
-  notes: Known dimension mis-mapping.
+  known_gap: null
+  notes: "Declared expectation; see MI_AGENT_CLIENT_READINESS.md section 3 for the dimension it names."
 - id: risk_223
   category: risk
   question: high age borrower exposure
-  expected_status: answer
+  expected_status: clarify
   execution: full
   expected_scope: risk
-  expected_metric: current_outstanding_balance
+  expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
-  expected_filters:
-  - youngest_borrower_age
-  expected_artifact_type: kpi
-  expected_reconciliation: true
+  expected_filters: []
+  expected_artifact_type: none
+  expected_reconciliation: false
   expected_dimension_invariant_ok: true
   expected_filter_invariant_ok: true
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No age threshold is parsed from ''high age'', so the whole-book balance is returned unfiltered.
-    Use ''balance for borrowers over 80''. Follow-up: qualitative-threshold handling or clarify.'
-  notes: 'Known: qualitative ''high age'' not turned into a filter.'
+  known_gap: null
+  notes: "D2: a qualitative bound with no number is a clarify - there is no defensible default for 'high'."
 - id: dq_224
   category: data_quality
   question: coverage for region
@@ -4525,9 +4994,10 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4538,6 +5008,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Coverage is delivered via the reconciliation block on the grouped result.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: dq_225
   category: data_quality
   question: coverage by borrower type
@@ -4545,6 +5016,7 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
   - borrower_type
@@ -4556,8 +5028,10 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 2
-  known_gap: null
   notes: Coverage is delivered via the reconciliation block on the grouped result.
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. This question is answerable on any book that reports the field; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it, which is stricter than the original expectation, not weaker."
 - id: dq_226
   category: data_quality
   question: data coverage by region
@@ -4565,9 +5039,10 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4578,6 +5053,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Coverage is delivered via the reconciliation block on the grouped result.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: dq_227
   category: data_quality
   question: reconciliation for balance by region where LTV above 50%
@@ -4585,9 +5061,10 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -4599,6 +5076,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Filtered grouped result carries a reconciliation block.
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: dq_228
   category: data_quality
   question: missing region count
@@ -4606,6 +5084,7 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4616,10 +5095,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard - how much data is missing is not a governed analytic here."
 - id: dq_229
   category: data_quality
   question: missing borrower age count
@@ -4627,6 +5104,7 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4637,10 +5115,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard."
 - id: dq_230
   category: data_quality
   question: missing LTV count
@@ -4648,6 +5124,7 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4658,10 +5135,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard."
 - id: dq_231
   category: data_quality
   question: loans excluded from LTV analysis
@@ -4669,6 +5144,7 @@ questions:
   execution: full
   expected_scope: data_quality
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4679,10 +5155,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'No dedicated ''missing/excluded count'' intent — the system surfaces coverage via the reconciliation
-    block on a normal result, not as a standalone count. Follow-up: a data-quality intent that answers
-    missing/excluded counts directly.'
-  notes: 'Known gap: DQ counts are not a first-class query.'
+  known_gap: null
+  notes: "D2: the missing-data guard."
 - id: dq_232
   category: data_quality
   question: which fields are unavailable for this query
@@ -4690,6 +5164,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4705,14 +5180,15 @@ questions:
 - id: unsup_233
   category: unsupported
   question: show defaulted balance by region
-  expected_status: refuse
+  expected_status: answer
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
-  expected_artifact_type: none
+  expected_artifact_type: any
   expected_reconciliation: false
   expected_dimension_invariant_ok: true
   expected_filter_invariant_ok: true
@@ -4721,17 +5197,21 @@ questions:
   expected_min_columns: 1
   known_gap: null
   notes: Field genuinely absent (default); must refuse with a reason, never fabricate or substitute.
+  requires_fields:
+  - default_amount
+  requires_fields_reason: "ANSWERABLE ON ANY REAL BOOK. default_amount is a canonical Annex-2 field carried by every book onboarded through the transformation; build_fixture simply omits it. On the demonstration book this correctly returns 0.00 across 11,035 loans, grouped by region. Refusing to report a field the book does report is the wrong behaviour, and 'zero' is an answer."
 - id: unsup_234
   category: unsupported
   question: defaulted balance
-  expected_status: refuse
+  expected_status: answer
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
-  expected_artifact_type: none
+  expected_artifact_type: any
   expected_reconciliation: false
   expected_dimension_invariant_ok: true
   expected_filter_invariant_ok: true
@@ -4740,6 +5220,9 @@ questions:
   expected_min_columns: 1
   known_gap: null
   notes: Field genuinely absent (default); must refuse with a reason, never fabricate or substitute.
+  requires_fields:
+  - default_amount
+  requires_fields_reason: "ANSWERABLE ON ANY REAL BOOK. Same canonical field as unsup_233 without the grouping; returns 0.00 across 11,035 loans."
 - id: unsup_235
   category: unsupported
   question: show NNEG by region
@@ -4747,6 +5230,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4766,6 +5250,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4785,6 +5270,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4804,6 +5290,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4819,14 +5306,15 @@ questions:
 - id: unsup_239
   category: unsupported
   question: show arrears by region
-  expected_status: refuse
+  expected_status: answer
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
-  expected_artifact_type: none
+  expected_artifact_type: any
   expected_reconciliation: false
   expected_dimension_invariant_ok: true
   expected_filter_invariant_ok: true
@@ -4835,6 +5323,9 @@ questions:
   expected_min_columns: 1
   known_gap: null
   notes: Field genuinely absent (arrears); must refuse with a reason, never fabricate or substitute.
+  requires_fields:
+  - arrears_balance
+  requires_fields_reason: "ANSWERABLE ON ANY REAL BOOK. arrears_balance is a canonical Annex-2 field. On the demonstration book this correctly returns 0.00 by region. An equity-release book in good standing having no arrears is a fact about the book, not a gap in the product."
 - id: unsup_240
   category: unsupported
   question: arrears balance by broker
@@ -4842,6 +5333,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4861,6 +5353,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4880,6 +5373,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4899,6 +5393,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4918,6 +5413,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4937,6 +5433,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4956,6 +5453,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4975,6 +5473,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -4985,10 +5484,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "D2: 'best' is no longer absorbed as ranking framing; it names a basis the question does not give."
 - id: ambig_248
   category: ambiguous
   question: show bad regions
@@ -4996,6 +5493,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -5006,10 +5504,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "Subjective concept, clarified rather than substituted."
 - id: ambig_249
   category: ambiguous
   question: show profitability by region
@@ -5017,6 +5513,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -5027,10 +5524,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "Subjective concept, clarified rather than substituted."
 - id: ambig_250
   category: ambiguous
   question: show me interesting regions
@@ -5038,6 +5533,7 @@ questions:
   execution: full
   expected_scope: unknown
   expected_metric: null
+  expected_answer_type: none
   expected_metrics: null
   expected_dimensions: []
   expected_filters: []
@@ -5048,10 +5544,8 @@ questions:
   expected_warnings: []
   expected_columns_include: []
   expected_min_columns: 1
-  known_gap: 'Currently answered as balance by a dimension (a subjective/unavailable concept was silently
-    substituted with balance). Ideal: clarify or refuse. Follow-up: detect subjective/unavailable concepts
-    (''best'', ''bad'', ''interesting'', ''profitability'').'
-  notes: 'Known gap: subjective term silently mapped to balance.'
+  known_gap: null
+  notes: "Subjective concept, clarified rather than substituted."
 - id: ambig_251
   category: ambiguous
   question: balance by region by borrower type by LTV bucket
@@ -5059,9 +5553,10 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - geographic_region_obligor
+  - collateral_geography
   - borrower_type
   - ltv_bucket
   expected_filters: []
@@ -5073,9 +5568,12 @@ questions:
   - Showing a table across 3 dimensions
   expected_columns_include: []
   expected_min_columns: 4
-  known_gap: null
   notes: '3+ dims: all requested dimensions preserved as a table (no silent truncation); the dimension
     invariant sees all three applied.'
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
+  requires_fields:
+  - borrower_type
+  requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
 - id: ambig_252
   category: ambiguous
   question: balance trend where LTV above 50%
@@ -5083,6 +5581,7 @@ questions:
   execution: full
   expected_scope: funded
   expected_metric: current_outstanding_balance
+  expected_answer_type: currency
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
@@ -5097,3 +5596,190 @@ questions:
   known_gap: null
   notes: 'Filtered time-series: LTV filter applied before the trend is built; reconciliation shows fewer
     records. Never a silently unfiltered trend.'
+- id: pop_253
+  category: governed_population
+  question: What is the balance of the front book?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'Governed population as the WHOLE subject of a simple question, on the
+    point-in-time path. Added as the regression test for the defect e35a01b
+    introduced and 3a428bc diagnosed: the role split rewrote this grouping facet
+    as a population, and reconcile_facets had no branch for a population, so it
+    kept the default LOST status and the answer refused. Answered correctly
+    before the split; refused after it; answers again with the reconciler
+    branch. Not a re-declared expectation and not a regenerated bank -- the
+    expectation here is what the product did at 43f264a.'
+  coverage_note: These three cases exist because BOTH standing measurement
+    surfaces were clean throughout that regression. The calibration bank has
+    only three questions whose field is both filtered and raised as a dimension
+    and all three are borrower_type, which no real book carries; the robustness
+    bank holds the seasoning vocabulary only in composite phrasings, which
+    analytical_composition claims before the point-in-time path is reached. The
+    simple form -- the form a user actually asks -- was in neither.
+- id: pop_254
+  category: governed_population
+  question: What is the balance of newly originated loans?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'The same population under a DIFFERENT governed name. "New lending" is
+    defined by configuration as a months-on-book bound while the term resolves
+    to seasoning_segment, so this case fails if acceptance ever depends on the
+    field name coinciding with the predicate text -- the coincidence that let
+    front book pass 32c263a while new lending did not.'
+- id: pop_255
+  category: governed_population
+  question: What is the average LTV of the back book?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_loan_to_value
+  expected_answer_type: rate
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: The other side of the same governed pair, with a weighted-average
+    measure rather than a sum, so a population applied only for sums would fail
+    here.
+- id: b16_001
+  category: unapplied_narrowing
+  question: What is the balance where account status is active?
+  expected_status: refuse
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: null
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 0
+  known_gap: null
+  notes: 'CLOSED BY B16a; the flag is retired and the story kept. This ANSWERED:
+    "Total Balance, grouped by Account Status, 2 groups, 11,035 loans", with the
+    breakdown certified -- the reader asked for the balance of ACTIVE loans and
+    was given the whole book split by status. B13''s class, a wrong NUMBER rather
+    than a wrong receipt. It answered because the lexical predicate machinery is
+    entirely NUMERIC (is_filter_subject and condition_cut both need a comparator
+    and a number), so the categorical selector had no owner at all.
+
+    Constructed: no question in any of the four corpora contains this construct,
+    which is why this case exists rather than a corpus finding.'
+- id: b16_002
+  category: unapplied_narrowing
+  question: What is the balance for interest roll-up loans?
+  expected_status: refuse
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters: []
+  expected_artifact_type: null
+  expected_reconciliation: false
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 0
+  known_gap: null
+  notes: 'CLOSED BY B16a; the flag is retired and the story kept. The worse shape:
+    this answered "entire funded portfolio, 11,035 loans" with NO FACET AT ALL --
+    the dimension term is never raised, so the receipt made no claim and nothing
+    blocked. A whole-book figure for a narrowed question, silently.
+
+    The pair matters. A fix that only repaired cases where a grouping facet
+    already exists would have satisfied b16_001 and left this one, which is why
+    the owner reads a VALUE allowlist built from the book rather than the
+    dimension terms the detector happens to raise.'
+- id: b16_003
+  category: unapplied_narrowing
+  question: What is the balance by account status?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions:
+  - account_status
+  expected_filters: []
+  expected_artifact_type: chart
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'THE CAN-FAIL for b16_001. The same field, asked as a genuine breakdown.
+    A change that refused every question naming account status would satisfy
+    b16_001 and destroy this. Passes today and must keep passing.'
+- id: b16_004
+  category: unapplied_narrowing
+  question: What is the balance of the front book?
+  expected_status: answer
+  execution: full
+  expected_scope: funded
+  expected_metric: current_outstanding_balance
+  expected_answer_type: currency
+  expected_metrics: null
+  expected_dimensions: []
+  expected_filters:
+  - seasoning_segment
+  expected_artifact_type: kpi
+  expected_reconciliation: true
+  expected_dimension_invariant_ok: true
+  expected_filter_invariant_ok: true
+  expected_warnings: []
+  expected_columns_include: []
+  expected_min_columns: 1
+  known_gap: null
+  notes: 'THE SECOND CAN-FAIL. A narrowing that IS resolved, by the seasoning
+    owner. A change that recorded every marked selector as lost would refuse this
+    and undo 7c46f81. Duplicates pop_253 deliberately: this one is here to break
+    if B16a reaches past the narrowings nobody resolved.'

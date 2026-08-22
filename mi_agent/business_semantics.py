@@ -78,6 +78,9 @@ AGG_AVERAGE = "average"
 AGG_WEIGHTED_AVERAGE = "weighted_average"
 AGG_SHARE = "share"
 AGG_DISTRIBUTION = "distribution"
+#: A cardinality — how many loans carry a value — declared on an identifier, so
+#: nothing about the field's VALUE is interpreted.
+AGG_COUNT = "count"
 
 DIRECTION_HIGHER_IS_BETTER = "higher_is_better"
 DIRECTION_HIGHER_IS_WORSE = "higher_is_worse"

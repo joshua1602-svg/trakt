@@ -49,6 +49,11 @@ AGG_AVERAGE = "average"
 AGG_WEIGHTED_AVERAGE = "weighted_average"
 AGG_SHARE = "share"
 AGG_DISTRIBUTION = "distribution"
+#: A cardinality: how many loans carry a value for the field. Its metric column
+#: is an IDENTIFIER, so the arithmetic below never touches the values — only
+#: whether each is present. That is what makes "how many loans" a governed
+#: measure rather than a sum of something meaningless.
+AGG_COUNT = "count"
 
 #: Units, resolved from the runtime MI semantics registry's ``format``.
 UNIT_CURRENCY = "currency"
@@ -134,6 +139,15 @@ def aggregate(df: pd.DataFrame, metric_field: str, aggregation: str, *,
     def _empty(basis: Optional[str]) -> MetricAggregate:
         return MetricAggregate(None, aggregation, unit, basis, population,
                                0, population, None)
+
+    if aggregation == AGG_COUNT:
+        # A cardinality is a property of the POPULATION, so there is usually no
+        # column behind it — the registry declares it derived. When a column IS
+        # named, presence is counted; the values are never coerced or summed.
+        n = (int(df[metric_field].notna().sum())
+             if metric_field in df.columns else population)
+        return MetricAggregate(float(n), aggregation, UNIT_INTEGER, None,
+                               population, n, population - n, None)
 
     if metric_field not in df.columns:
         return _empty(weight_field if aggregation == AGG_WEIGHTED_AVERAGE

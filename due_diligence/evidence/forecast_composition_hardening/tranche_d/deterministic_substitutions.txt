@@ -1,0 +1,46 @@
+
+=== Q1.3  How does recent lending compare with what we were originating earlier in the year?
+  frozen expectation population : months_on_book <= 3
+  deterministic resolved to     : predicates=['months_on_book le 3']
+                                  labels=['Recent lending (last 3 months)']
+                                  populationApplied=['months_on_book le 3']
+  ok=True refusal=None
+  window disclosed in answer    : Recent lending (last 3 months): 367 loans at 2026-04-30 against 258 loans at 2026-06-30. Current Outstanding Balance £53.2m against £39.7m; Current Loan To Value 34.17% against 34.73%; Current Interest Rate 6.4
+
+=== Q3.3  Of the current offer pipeline, how much should convert and over what timeframe?
+  frozen expectation population : pipeline_stage == OFFER, latest weekly extract
+  deterministic resolved to     : predicates=['pipeline_stage = OFFER', "pipeline_stage in ['OFFER']"]
+                                  labels=['pipeline cases at Offer stage']
+                                  populationApplied=-
+  ok=True refusal=None
+  window disclosed in answer    : Offer stage pipeline is £29.4m across 157 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £5.0m. Expected to land: 2026-07 £5.0m.
+
+Calculated: Composed governed capabili
+
+=== Q3.4  How much is sitting at offer today and what do we expect to complete from it and when?
+  frozen expectation population : pipeline_stage == OFFER, latest weekly extract
+  deterministic resolved to     : predicates=['pipeline_stage = OFFER', "pipeline_stage in ['OFFER']"]
+                                  labels=['pipeline cases at Offer stage']
+                                  populationApplied=-
+  ok=True refusal=None
+  window disclosed in answer    : Offer stage pipeline is £29.4m across 157 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £5.0m. Expected to land: 2026-07 £5.0m.
+
+Calculated: Composed governed capabili
+
+=== Q4.4  Based on the last few weeks, what level of completions are we currently achieving?
+  frozen expectation population : completions per unit time — a flow
+  deterministic resolved to     : predicates=-
+                                  labels=-
+                                  populationApplied=-
+  ok=False refusal=None
+  window disclosed in answer    : You asked about the last few weeks. This figure is measured from month-end funded snapshots, so the finest window it can express is one month. I have not answered over a monthly window in its place — ask for a 
+
+=== Q6.3  Which of our limits are currently most at risk?
+  frozen expectation population : the governed limit schedule
+  deterministic resolved to     : predicates=-
+                                  labels=-
+                                  populationApplied=-
+  ok=True refusal=None
+  window disclosed in answer    : 8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.
+
+Calculated: Concentration limits

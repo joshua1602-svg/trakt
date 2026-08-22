@@ -53,9 +53,17 @@ restructuring:
 3. ``RecogniserRegistry.register`` is public and additive — a BSR-driven loader
    can register recognisers at startup from configuration rather than code.
 
-Deliberately NOT here: workflow recognisers, multi-capability orchestration, a
-workflow planner, comparison engines or materiality logic. This module routes to
-ONE deterministic capability and stops.
+Deliberately NOT here: multi-capability orchestration, a workflow planner,
+comparison engines or materiality logic. This module dispatches to ONE handler
+and stops.
+
+That is still true of a handler that goes on to compose several capabilities.
+``mi_workflows.analytical`` is the first to do so: it registers here like any
+other recogniser, declares its capabilities and the routes it defers to in
+``metadata``, and carries a higher ``confidence`` so a genuinely composite
+question outranks the single-capability recogniser that would otherwise catch
+it — which is the arbitration this registry was built to support, used without
+a change to it.
 """
 
 from __future__ import annotations
@@ -111,6 +119,14 @@ class RouteRequest:
     as_of: Optional[str] = None
     source_lens: Optional[Any] = None
     frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None
+    #: The governed funded frame BEFORE the request's row population is applied.
+    #: ``frame_resolver`` narrows to the population the question named, which is
+    #: what a single-capability route wants. A route that composes SEVERAL
+    #: populations — the two sides of a governed partition, say — has to be able
+    #: to address the book they partition, and cannot reconstruct it from an
+    #: already-narrowed frame. Optional and unused by every migrated recogniser,
+    #: so nothing about their behaviour changes.
+    base_frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None
     #: Parser metadata for the single parse (mode, confidence, note).
     parse_meta: Mapping[str, Any] = field(default_factory=dict)
     #: Governed semantic metadata from the Business Semantics Registry, when one

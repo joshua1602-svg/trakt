@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-08-12T12:40:18.158950+00:00'
+  generated_at: '2026-08-20T16:44:28.343180+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -21,10 +21,10 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 116
-  core_field_count: 80
+  field_count: 118
+  core_field_count: 82
   extended_field_count: 36
-  derived_field_count: 16
+  derived_field_count: 18
   virtual_field_count: 15
   missing_curated_fields: []
   version: 0.3.0
@@ -196,6 +196,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -261,6 +263,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -328,6 +332,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -560,6 +566,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
   collateral_type:
     canonical_field: collateral_type
     mi_tier: core
@@ -610,6 +617,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -642,6 +651,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -706,6 +717,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -738,6 +751,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -761,6 +776,9 @@ fields:
     - current ltv
     - loan to value
     - cltv
+    - credit quality
+    - quality of the book
+    - book quality
     source_criteria:
     - curated
     role: metric
@@ -770,6 +788,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -804,6 +824,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -836,6 +858,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -868,6 +892,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -902,6 +928,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1102,6 +1130,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1248,6 +1278,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1339,6 +1371,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1372,6 +1406,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1535,6 +1571,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
   geographic_region_collateral_itl3:
     canonical_field: geographic_region_collateral_itl3
     mi_tier: extended
@@ -1565,6 +1602,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
     derived: true
     derived_from: geographic_region_collateral
   geographic_region_obligor:
@@ -1597,6 +1635,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
   geographic_region_obligor_itl3:
     canonical_field: geographic_region_obligor_itl3
     mi_tier: extended
@@ -1626,6 +1665,7 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+    value_domain: uk_region
     derived: true
     derived_from: geographic_region_obligor
   ifrs9_stage:
@@ -1678,6 +1718,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -1709,6 +1751,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -1740,6 +1784,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -2203,8 +2249,11 @@ fields:
     chartable: true
     allowed_aggregations:
     - avg
+    - weighted_avg
     - median
     - distribution
+    - min
+    - max
     default_aggregation: avg
     allowed_chart_roles:
     - x
@@ -2213,7 +2262,7 @@ fields:
     - filter
     - color
     default_chart_role: x
-    weight_field: null
+    weight_field: current_outstanding_balance
     bucket_field: null
     notes: ''
     virtual: true
@@ -2297,6 +2346,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -2575,6 +2626,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -2640,6 +2693,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -2672,6 +2727,8 @@ fields:
     - avg
     - median
     - distribution
+    - min
+    - max
     default_aggregation: avg
     allowed_chart_roles:
     - x
@@ -2702,6 +2759,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3031,6 +3090,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3131,6 +3192,8 @@ fields:
     - avg
     - weighted_avg
     - distribution
+    - min
+    - max
     default_aggregation: weighted_avg
     allowed_chart_roles:
     - y
@@ -3162,6 +3225,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3195,6 +3260,8 @@ fields:
     - sum
     - avg
     - median
+    - min
+    - max
     default_aggregation: sum
     allowed_chart_roles:
     - y
@@ -3247,6 +3314,83 @@ fields:
     bucket_field: null
     notes: ''
     virtual: true
+  seasoning_bucket:
+    canonical_field: seasoning_bucket
+    mi_tier: core
+    business_name: Seasoning Bucket
+    display_name: Seasoning Bucket
+    business_description: Governed seasoning band (months on book at the reporting date), e.g. 0-12m /
+      13-24m / 25-60m / 60m+.
+    description: ''
+    synonyms:
+    - seasoning bucket
+    - seasoning band
+    - months on book band
+    - time on book band
+    - seasoning cohort
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: months_on_book
+  seasoning_segment:
+    canonical_field: seasoning_segment
+    mi_tier: core
+    business_name: Seasoning Segment
+    display_name: Seasoning Segment
+    business_description: Front book vs back book — the binary seasoning split, derived from months_on_book
+      against the governed reporting date. Independent of provenance (direct / acquired).
+    description: ''
+    synonyms:
+    - front book
+    - back book
+    - seasoning segment
+    - front or back book
+    - new lending
+    - new originations
+    - recent originations
+    - newly originated
+    - new origination
+    - seasoned book
+    - seasoned loans
+    - legacy book
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    - cohort
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    derived: true
+    derived_from: months_on_book
   seller_name:
     canonical_field: seller_name
     mi_tier: core
@@ -3597,6 +3741,12 @@ fields:
     - origination year
     - cohort year
     - year of origination
+    - origination vintage
+    - vintage cohort
+    - vintages
+    - origination vintages
+    - vintage years
+    - origination years
     source_criteria:
     - derived_bucket
     role: dimension
@@ -3639,8 +3789,11 @@ fields:
     chartable: true
     allowed_aggregations:
     - avg
+    - weighted_avg
     - median
     - distribution
+    - min
+    - max
     default_aggregation: avg
     allowed_chart_roles:
     - x
@@ -3649,6 +3802,6 @@ fields:
     - filter
     - color
     default_chart_role: x
-    weight_field: null
+    weight_field: current_outstanding_balance
     bucket_field: age_bucket
     notes: ''

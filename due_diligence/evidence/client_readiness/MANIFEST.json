@@ -1,0 +1,1434 @@
+{
+  "pack": "client_readiness",
+  "separateFrom": "due_diligence/evidence/MANIFEST.json",
+  "generatedAtTree": "f9c2c4a",
+  "manifestNotes": {
+    "immutableV1": "This pack is SEPARATE from the V1 manifest and shares no artefact with it. The V1 three-snapshot funded tapes, the twelve-week pipeline extracts and everything hashed against them are untouched; pipeline_fixture.py and the default path of second_book.build() still produce them byte-for-byte.",
+    "notCommitted": "The artefacts below are reproduced from the generator, not stored. 211 MB raw / ~30 MB gzipped, and the repository already gitignores the V1 funded tapes on the same basis. A digest fails when the generator drifts; a committed copy silently diverges from it.",
+    "supersetProperty": "The thirteen-month kestrelmoor funded history reproduces the V1 three cuts byte-for-byte. Any measurement that moves between the V1 fixture and this one is therefore attributable to the added history, not to a regenerated book.",
+    "stressBook": "kestrelmoor carries a declining-KFI profile over the final thirteen weeks (intake 61 -> 21/week); alderbridge is stationary as the control.",
+    "noExpectedDrift": "Every production file hashed in the V1 manifest is either byte-identical in the working tree or pinned in productionSources here, at its current state. There is no open-ended 'expected drift' state: a V1 code+config file that matches neither is a verification failure. The V1 code+config hashes are NOT re-baselined \u2014 they record which code the V1 measurement ran against, and that claim stays true.",
+    "manifestRepair": "three_axis.py, hashed in the V1 manifest, was extended IN PLACE during Tranche D to add an answer-type axis. The manifest was not updated, so V1 verification failed from commit c9ac20b onward and was not noticed because nothing ran the verifier automatically. Repaired additively: three_axis.py is restored to its hashed content and verifies, the extended instrument is tranche_d/three_axis_typed.py, and tests/test_evidence_manifest.py now runs both verifications in the suite. The relocated instrument reproduces the recorded det_post figures exactly \u2014 176 answer-type matches, 0 diverge, 740/752 semantic.",
+    "groundTruth": "The pipeline generator's per-transition probabilities are chosen so the implied stage-to-funding rates equal the governed 0.20/0.45/0.75 exactly. They are recoverable from matured observations to within 0.001-0.027, which is what lets an empirical estimator be judged against truth rather than against itself."
+  },
+  "packDigest": "4ee0282df7fc517beb15ada9e6a1b14fc3dc2accd126b61f9bebc1c496780978",
+  "totalBytes": 219353539,
+  "artefactCount": 163,
+  "truth": {
+    "stressBook": "kestrelmoor",
+    "controlBook": "alderbridge",
+    "reportingDates": [
+      "2025-06-30",
+      "2025-07-31",
+      "2025-08-31",
+      "2025-09-30",
+      "2025-10-31",
+      "2025-11-30",
+      "2025-12-31",
+      "2026-01-31",
+      "2026-02-28",
+      "2026-03-31",
+      "2026-04-30",
+      "2026-05-31",
+      "2026-06-30"
+    ],
+    "lastPipelineWeek": "2026-06-26",
+    "funded": {
+      "alderbridge": {
+        "2025-06-30": {
+          "rows": 8454,
+          "balance": 1687208353.81
+        },
+        "2025-07-31": {
+          "rows": 8667,
+          "balance": 1726524769.05
+        },
+        "2025-08-31": {
+          "rows": 8890,
+          "balance": 1767493895.58
+        },
+        "2025-09-30": {
+          "rows": 9084,
+          "balance": 1805383089.77
+        },
+        "2025-10-31": {
+          "rows": 9311,
+          "balance": 1846023849.64
+        },
+        "2025-11-30": {
+          "rows": 9540,
+          "balance": 1889829531.3
+        },
+        "2025-12-31": {
+          "rows": 9747,
+          "balance": 1929972701.69
+        },
+        "2026-01-31": {
+          "rows": 9957,
+          "balance": 1968219455.41
+        },
+        "2026-02-28": {
+          "rows": 10162,
+          "balance": 2009838688.34
+        },
+        "2026-03-31": {
+          "rows": 10375,
+          "balance": 2049112737.02
+        },
+        "2026-04-30": {
+          "rows": 10602,
+          "balance": 2092264726.87
+        },
+        "2026-05-31": {
+          "rows": 10837,
+          "balance": 2139340200.75
+        },
+        "2026-06-30": {
+          "rows": 11035,
+          "balance": 2179725487.34
+        }
+      },
+      "kestrelmoor": {
+        "2025-06-30": {
+          "rows": 9235,
+          "balance": 1381276909.29
+        },
+        "2025-07-31": {
+          "rows": 9503,
+          "balance": 1415099430.04
+        },
+        "2025-08-31": {
+          "rows": 9763,
+          "balance": 1448946956.63
+        },
+        "2025-09-30": {
+          "rows": 9999,
+          "balance": 1478895812.67
+        },
+        "2025-10-31": {
+          "rows": 10224,
+          "balance": 1509365885.75
+        },
+        "2025-11-30": {
+          "rows": 10460,
+          "balance": 1542066317.67
+        },
+        "2025-12-31": {
+          "rows": 10719,
+          "balance": 1573551957.42
+        },
+        "2026-01-31": {
+          "rows": 10981,
+          "balance": 1607186265.21
+        },
+        "2026-02-28": {
+          "rows": 11236,
+          "balance": 1640451879.99
+        },
+        "2026-03-31": {
+          "rows": 11471,
+          "balance": 1671686255.77
+        },
+        "2026-04-30": {
+          "rows": 11727,
+          "balance": 1704856181.41
+        },
+        "2026-05-31": {
+          "rows": 11985,
+          "balance": 1738460012.91
+        },
+        "2026-06-30": {
+          "rows": 12255,
+          "balance": 1772471338.39
+        }
+      }
+    }
+  },
+  "generatorSources": [
+    {
+      "group": "generator",
+      "path": "tests/analytical/client_pack.py",
+      "bytes": 3843,
+      "sha256": "a42eb4310265b62c452f604aca18900d5efb5b47be32f251b1568c5cb0d40709"
+    },
+    {
+      "group": "generator",
+      "path": "tests/analytical/client_fixture.py",
+      "bytes": 14984,
+      "sha256": "455a2cc448d7acb12072a60d09e796aaedbe42af340f0b4cf297ef827f2841cb"
+    },
+    {
+      "group": "generator",
+      "path": "tests/analytical/client_funded.py",
+      "bytes": 4889,
+      "sha256": "aec2b7e080bec8e061533931ff8b2623eee1e470fc75a78a607e64f058be09b2"
+    },
+    {
+      "group": "generator",
+      "path": "tests/analytical/second_book.py",
+      "bytes": 19807,
+      "sha256": "94e89819956334ba56ed161aa2754ade9cce7bf9b6d09236d86f05ed46aecaf3"
+    },
+    {
+      "group": "generator",
+      "path": "config/client/pipeline_expected_funding.yaml",
+      "bytes": 526,
+      "sha256": "7e366c3e04039ea65604281f73396656561d8131826c980dba0b265bbdec5744"
+    }
+  ],
+  "instrumentSources": [
+    {
+      "group": "instrument",
+      "path": "due_diligence/evidence/forecast_composition_hardening/tranche_d/three_axis_typed.py",
+      "bytes": 25994,
+      "sha256": "c650de90270fcb39c88cadf28a7f023d8dd2b1a13a2a6605b7de756bb6d8657b"
+    },
+    {
+      "group": "instrument",
+      "path": "due_diligence/evidence/client_readiness/hash_fixture_pack.py",
+      "bytes": 12031,
+      "sha256": "15b86f85958b208ce83d0add0fb808c9d19a727f6f95cd118b96decf3e8d40f1"
+    }
+  ],
+  "productionSources": [
+    {
+      "group": "code+config",
+      "path": "config/mi/golden_questions/ere_mi_calibration_250.yaml",
+      "bytes": 217154,
+      "sha256": "ce56f10b47c0a4a2596c3f12d0ae1626cf3b901ba64d63112d32d708a7680ee9"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/answer_type.py",
+      "bytes": 8720,
+      "sha256": "79a1508404ef78390f904f6e437d7568ea63426f5c54d8dec4b3beb83d100aa5"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/build_mi_semantics_registry.py",
+      "bytes": 79780,
+      "sha256": "cf84b42887b56295ca5ee69a3ba4aa332b9295fba487e07f6d94cce99ca8ffd3"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/execution_receipt.py",
+      "bytes": 114072,
+      "sha256": "a1291047cd0e5f9d2bdfa98b29427e30297f463de1c1d1143ca80a44d2024c81"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/llm_query_parser.py",
+      "bytes": 214490,
+      "sha256": "8e1ee96c9d66723248da5c9e2e338d070c0057ca3cd4872416f2e3594e469e94"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/mi_calibration.py",
+      "bytes": 20569,
+      "sha256": "0fc94bf160611bbbe50955daabae26c333415c0784102d7d905e1eb7f8ecdb83"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/mi_query_executor.py",
+      "bytes": 76273,
+      "sha256": "474aa1d47b8b23d753ed4bb8f315a582c98dbcdc20747fb71e4c3972063fd98e"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/mi_semantics_field_registry.yaml",
+      "bytes": 87849,
+      "sha256": "9a21cbd4cfc19f18d4cd9da33da5fb7a726e6f856b449f5189a12f835271dacc"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/period_request.py",
+      "bytes": 8817,
+      "sha256": "070a881576992336e0cd98fe4342f5250f316465931110c20efc09e5ff66af7b"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/population.py",
+      "bytes": 17233,
+      "sha256": "cf1be92108ba376158597f8bc2c7f17ff274b2d6f87a79057dba45c386721346"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/region_resolution.py",
+      "bytes": 10143,
+      "sha256": "a0ce7cff0deb515453b5cecb3f62cb016508abc8b70b186f2833fffc2b1f38b3"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/chat_routing.py",
+      "bytes": 156307,
+      "sha256": "966623b005e271c1c644e053917940483533831f7e5e42091b3089072cfe9eb7"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/mi_service.py",
+      "bytes": 46154,
+      "sha256": "1ad3635f24355d596c8f025b4ba618ccce06d34762b627902c4fb623606da8a4"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/movement_summary.py",
+      "bytes": 19275,
+      "sha256": "5f3f8d7de393ed543ad233159edaedf4127a71a17f86b58315ffa3f286d7526c"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent_api/period_change_route.py",
+      "bytes": 51808,
+      "sha256": "654f87b8f5a3618578793a80b3444741144b18e1b54510ff734eb037ffcfdfd0"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_workflows/analytical/executors.py",
+      "bytes": 57000,
+      "sha256": "4b53a1b08cc9f0436ae1aabe156c5937612c3c0b8ec77714b68a2c076b0443b2"
+    }
+  ],
+  "artefacts": [
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-07-04/M2L_KFI_and_Pipeline_2025_07_04.csv",
+      "role": "weekly pipeline extract @ 2025-07-04",
+      "bytes": 423069,
+      "sha256": "1a1baca8bc4555c14ace8a5cd42871d4989b6e59913a2d14c565ca759f338725"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-07-11/M2L_KFI_and_Pipeline_2025_07_11.csv",
+      "role": "weekly pipeline extract @ 2025-07-11",
+      "bytes": 423996,
+      "sha256": "8004a3a0ccb13c25367cd0cc6bae57f39e665c0a0211e7f21e95f46b134a84e1"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-07-18/M2L_KFI_and_Pipeline_2025_07_18.csv",
+      "role": "weekly pipeline extract @ 2025-07-18",
+      "bytes": 422383,
+      "sha256": "b5f8d8725cf8cffcdcae91a64a05293cb5a43e89264ba62c7d338f63235e380a"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-07-25/M2L_KFI_and_Pipeline_2025_07_25.csv",
+      "role": "weekly pipeline extract @ 2025-07-25",
+      "bytes": 424566,
+      "sha256": "a25263b77a1f6b3ef7bd2600e8d277f6abb92c39c887d28031c9918945acbeac"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-08-01/M2L_KFI_and_Pipeline_2025_08_01.csv",
+      "role": "weekly pipeline extract @ 2025-08-01",
+      "bytes": 425409,
+      "sha256": "b49dd52d44b19120060aef8752792a0ab71812c5ea83d5878259d0b6cf48e6ce"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-08-08/M2L_KFI_and_Pipeline_2025_08_08.csv",
+      "role": "weekly pipeline extract @ 2025-08-08",
+      "bytes": 425072,
+      "sha256": "331470745c943d1b5723f703c622676e4feb689e57da6e0811a3690ae20c45e5"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-08-15/M2L_KFI_and_Pipeline_2025_08_15.csv",
+      "role": "weekly pipeline extract @ 2025-08-15",
+      "bytes": 424212,
+      "sha256": "9726a4bbb96dd8805c29f22cf199fd6fe91d0834fbc9eccb8a9ec8727f794dee"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-08-22/M2L_KFI_and_Pipeline_2025_08_22.csv",
+      "role": "weekly pipeline extract @ 2025-08-22",
+      "bytes": 424912,
+      "sha256": "633f722559b295a2ccdcb494959b03830ee1a9e223720a8d9a0f666382b979ac"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-08-29/M2L_KFI_and_Pipeline_2025_08_29.csv",
+      "role": "weekly pipeline extract @ 2025-08-29",
+      "bytes": 426566,
+      "sha256": "318625ef626965b58a8193c7386bc99a9a276d9f42801f4540d957e0e34eb1ba"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-09-05/M2L_KFI_and_Pipeline_2025_09_05.csv",
+      "role": "weekly pipeline extract @ 2025-09-05",
+      "bytes": 424088,
+      "sha256": "56625b1d9be67331522e20f8f4db739ff86a794ebcb9c4ade51e364ca37c1e25"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-09-12/M2L_KFI_and_Pipeline_2025_09_12.csv",
+      "role": "weekly pipeline extract @ 2025-09-12",
+      "bytes": 423184,
+      "sha256": "52b4246c6202da4a08ec218452489ee9b687fd7cd2f028d649eeacf2d9505c8a"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-09-19/M2L_KFI_and_Pipeline_2025_09_19.csv",
+      "role": "weekly pipeline extract @ 2025-09-19",
+      "bytes": 423037,
+      "sha256": "ea654f91eb704fba86f4b4ee7220e24cd8fa2812f71bbb04f50ffc111e18f463"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-09-26/M2L_KFI_and_Pipeline_2025_09_26.csv",
+      "role": "weekly pipeline extract @ 2025-09-26",
+      "bytes": 423817,
+      "sha256": "7277429bd93cdd2164191609f5c21129a55353d18cad747c1ac7ae7ff4002484"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-10-03/M2L_KFI_and_Pipeline_2025_10_03.csv",
+      "role": "weekly pipeline extract @ 2025-10-03",
+      "bytes": 422847,
+      "sha256": "c70ddccad943490d8f0e9279fbcff806f524b62f725eb1639c5394b7769f6834"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-10-10/M2L_KFI_and_Pipeline_2025_10_10.csv",
+      "role": "weekly pipeline extract @ 2025-10-10",
+      "bytes": 423046,
+      "sha256": "36576a6c0d4e5a9159f6dd11e06b6ff799b3f3495074ca10adc061199d909331"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-10-17/M2L_KFI_and_Pipeline_2025_10_17.csv",
+      "role": "weekly pipeline extract @ 2025-10-17",
+      "bytes": 424051,
+      "sha256": "673b9d63c4aa18f5ed767f6f6170113151ac76deb1843da5d12bdbd0c45990a6"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-10-24/M2L_KFI_and_Pipeline_2025_10_24.csv",
+      "role": "weekly pipeline extract @ 2025-10-24",
+      "bytes": 420820,
+      "sha256": "9acdee6310e937a2d3d80b1c80c6a28621ba88d996dd98a5e03600186d1a3e5a"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-10-31/M2L_KFI_and_Pipeline_2025_10_31.csv",
+      "role": "weekly pipeline extract @ 2025-10-31",
+      "bytes": 422952,
+      "sha256": "9bbc9ac3dcba48152b631329b4d44c18accba5a7c671e6549da8ffb41b8a426b"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-11-07/M2L_KFI_and_Pipeline_2025_11_07.csv",
+      "role": "weekly pipeline extract @ 2025-11-07",
+      "bytes": 423682,
+      "sha256": "5d1cd47996b59082b5fc9f7bffa4451a274e20796bb55af6cd57c4e7dc31eeaa"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-11-14/M2L_KFI_and_Pipeline_2025_11_14.csv",
+      "role": "weekly pipeline extract @ 2025-11-14",
+      "bytes": 423804,
+      "sha256": "d9df315bccf716b116b62683fb67a56d12d86e97745bdd3b7dae740fc57a3bba"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-11-21/M2L_KFI_and_Pipeline_2025_11_21.csv",
+      "role": "weekly pipeline extract @ 2025-11-21",
+      "bytes": 421414,
+      "sha256": "8c96f5c69cd8d94bc6382e1e5345df6619cfb9777b886398129478eeab979812"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-11-28/M2L_KFI_and_Pipeline_2025_11_28.csv",
+      "role": "weekly pipeline extract @ 2025-11-28",
+      "bytes": 422118,
+      "sha256": "1d97a1a2e7373f82ee6ba9537fdcdd178641e13583d24f2a0c0ffc71316324d8"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-12-05/M2L_KFI_and_Pipeline_2025_12_05.csv",
+      "role": "weekly pipeline extract @ 2025-12-05",
+      "bytes": 423128,
+      "sha256": "152998669fdd13e43bca2a00d08f4f3e6ae4eeb25002b084529f09431ca326ee"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-12-12/M2L_KFI_and_Pipeline_2025_12_12.csv",
+      "role": "weekly pipeline extract @ 2025-12-12",
+      "bytes": 423209,
+      "sha256": "eb1540de31b85a964123403de85fd0518c63fa5388042139edda730b0b81e927"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-12-19/M2L_KFI_and_Pipeline_2025_12_19.csv",
+      "role": "weekly pipeline extract @ 2025-12-19",
+      "bytes": 420929,
+      "sha256": "80e08a859ddce730a084539f28aec3c85f4e884876a663ac8235a543f105e662"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2025-12-26/M2L_KFI_and_Pipeline_2025_12_26.csv",
+      "role": "weekly pipeline extract @ 2025-12-26",
+      "bytes": 419896,
+      "sha256": "d4eace9ef501ea334992fce5f809f2691c4f34797c69adb98c03743ec000a048"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-01-02/M2L_KFI_and_Pipeline_2026_01_02.csv",
+      "role": "weekly pipeline extract @ 2026-01-02",
+      "bytes": 418751,
+      "sha256": "2f9697ed3c07bcd1cf1916961f92e5a1fe8c8e735fc616bafe11254052ab8305"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-01-09/M2L_KFI_and_Pipeline_2026_01_09.csv",
+      "role": "weekly pipeline extract @ 2026-01-09",
+      "bytes": 419185,
+      "sha256": "155c16fcb5c51cd18ef5844cd4056dce5281c1317ece5c2ed922ae09b81b0950"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-01-16/M2L_KFI_and_Pipeline_2026_01_16.csv",
+      "role": "weekly pipeline extract @ 2026-01-16",
+      "bytes": 421658,
+      "sha256": "a555894cfcf16c34dc0b99f009273fa01a8c4e4270af0052cc3c0962c6dc269d"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-01-23/M2L_KFI_and_Pipeline_2026_01_23.csv",
+      "role": "weekly pipeline extract @ 2026-01-23",
+      "bytes": 421033,
+      "sha256": "148fb2b6c88620d135c94148b00b53b1c0df7d823b2ed78cf87552ec6ab46d41"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-01-30/M2L_KFI_and_Pipeline_2026_01_30.csv",
+      "role": "weekly pipeline extract @ 2026-01-30",
+      "bytes": 421816,
+      "sha256": "b8f288ea3a4c609b036e42fd125036dfe885b2844cf59d910d5537a32b130f13"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-02-06/M2L_KFI_and_Pipeline_2026_02_06.csv",
+      "role": "weekly pipeline extract @ 2026-02-06",
+      "bytes": 421489,
+      "sha256": "b8b43ecac98dc8188c51a649f750dc3290bf6d4b7e4c9a21cbdd2365f977db4d"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-02-13/M2L_KFI_and_Pipeline_2026_02_13.csv",
+      "role": "weekly pipeline extract @ 2026-02-13",
+      "bytes": 420266,
+      "sha256": "9db5c9f0265a3381895dc225e477f5b8a70881cc985f8b1650d49b6bc045d412"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-02-20/M2L_KFI_and_Pipeline_2026_02_20.csv",
+      "role": "weekly pipeline extract @ 2026-02-20",
+      "bytes": 420569,
+      "sha256": "21c117c930c18430fcd3a9ffd7f13b4db745393b84bab73e353bbc3d2d1b2cb2"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-02-27/M2L_KFI_and_Pipeline_2026_02_27.csv",
+      "role": "weekly pipeline extract @ 2026-02-27",
+      "bytes": 422689,
+      "sha256": "0b4f08dca38fbd406146c6ccd74c56bae4816f4b03eab2bc82291662d6353583"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-03-06/M2L_KFI_and_Pipeline_2026_03_06.csv",
+      "role": "weekly pipeline extract @ 2026-03-06",
+      "bytes": 421866,
+      "sha256": "3ec24b637b17f23dc2a4a9a5a1efd2b2c5eaf1c9d90ff0d90dcbc17b6d28533e"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-03-13/M2L_KFI_and_Pipeline_2026_03_13.csv",
+      "role": "weekly pipeline extract @ 2026-03-13",
+      "bytes": 420493,
+      "sha256": "2ee232fbf61912f17b5d2ff3807fee90679a2a1a18d12c8c1698802d73294001"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-03-20/M2L_KFI_and_Pipeline_2026_03_20.csv",
+      "role": "weekly pipeline extract @ 2026-03-20",
+      "bytes": 420533,
+      "sha256": "3c0edc4584f7af3a1667eec36c70434fa3e1e79c785956ddde407ce97e59df00"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-03-27/M2L_KFI_and_Pipeline_2026_03_27.csv",
+      "role": "weekly pipeline extract @ 2026-03-27",
+      "bytes": 425347,
+      "sha256": "e727e73a76b3bce15995a5706ceccef1ed161548e5cb5e8ac09bacec2bdf7506"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-04-03/M2L_KFI_and_Pipeline_2026_04_03.csv",
+      "role": "weekly pipeline extract @ 2026-04-03",
+      "bytes": 425921,
+      "sha256": "40bec29c869760bc21f9f123726ce426a81c02f2791709dd8486abff05cab06b"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-04-10/M2L_KFI_and_Pipeline_2026_04_10.csv",
+      "role": "weekly pipeline extract @ 2026-04-10",
+      "bytes": 427548,
+      "sha256": "f17b4e50171c82f59ca317ab25432990abd88e7237a3d64c87adcd159bdfdaf9"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-04-17/M2L_KFI_and_Pipeline_2026_04_17.csv",
+      "role": "weekly pipeline extract @ 2026-04-17",
+      "bytes": 428074,
+      "sha256": "86aa894e25a336b5fcf6986b284dcbf5d099dfb775604fa192497867eb320f03"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-04-24/M2L_KFI_and_Pipeline_2026_04_24.csv",
+      "role": "weekly pipeline extract @ 2026-04-24",
+      "bytes": 429916,
+      "sha256": "02991c3a720e91a631c2b725ec3564ccc43a0342b28674ebb09a5dfccded7753"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-05-01/M2L_KFI_and_Pipeline_2026_05_01.csv",
+      "role": "weekly pipeline extract @ 2026-05-01",
+      "bytes": 428570,
+      "sha256": "6612e2f015aaf4e608e7ba58469d23b2072133201a87a797a39529ee0071ee7f"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-05-08/M2L_KFI_and_Pipeline_2026_05_08.csv",
+      "role": "weekly pipeline extract @ 2026-05-08",
+      "bytes": 427575,
+      "sha256": "afae0d4c1e4d96bdeab276ab845aa435a5b908b4203f47401b36c2f1e1305c1c"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-05-15/M2L_KFI_and_Pipeline_2026_05_15.csv",
+      "role": "weekly pipeline extract @ 2026-05-15",
+      "bytes": 427039,
+      "sha256": "34bdfad20a47f86130cdc96ae8d492370b917828164ab01c0c9be4ca9b331088"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-05-22/M2L_KFI_and_Pipeline_2026_05_22.csv",
+      "role": "weekly pipeline extract @ 2026-05-22",
+      "bytes": 424284,
+      "sha256": "0a8e8c2afced23ee26531d9eb7fb45a552b5e3940f70adeb7a45e1e84a51af12"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-05-29/M2L_KFI_and_Pipeline_2026_05_29.csv",
+      "role": "weekly pipeline extract @ 2026-05-29",
+      "bytes": 423933,
+      "sha256": "b6cb3420ccf706764b9c003a703f97e25062d06d76c238bc8684287d06d01c79"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-06-05/M2L_KFI_and_Pipeline_2026_06_05.csv",
+      "role": "weekly pipeline extract @ 2026-06-05",
+      "bytes": 421409,
+      "sha256": "08027ee1cf80dddff31408d4654260918f5ba3f3451c252b7b8c494603ace49a"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-06-12/M2L_KFI_and_Pipeline_2026_06_12.csv",
+      "role": "weekly pipeline extract @ 2026-06-12",
+      "bytes": 423164,
+      "sha256": "efaab953e4a48c872be3c44cbe2aa702e8977e9577cdd5ff5813eb498f38dd9e"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-06-19/M2L_KFI_and_Pipeline_2026_06_19.csv",
+      "role": "weekly pipeline extract @ 2026-06-19",
+      "bytes": 422274,
+      "sha256": "29e4e91e15d10f399b311d3f7c6150d81c23064d8c4f3bc3f3249ae781ced3c8"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "alderbridge/pipeline/2026-06-26/M2L_KFI_and_Pipeline_2026_06_26.csv",
+      "role": "weekly pipeline extract @ 2026-06-26",
+      "bytes": 421786,
+      "sha256": "f97dd6e8e2bf7619ff76f7cc9981e724350114508b3fc997c1492168356775c9"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-07-04/M2L_KFI_and_Pipeline_2025_07_04.csv",
+      "role": "weekly pipeline extract @ 2025-07-04",
+      "bytes": 613007,
+      "sha256": "c48582304cdea692711726aee89fd26c8db40beaec2a87e945766388609c80b2"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-07-11/M2L_KFI_and_Pipeline_2025_07_11.csv",
+      "role": "weekly pipeline extract @ 2025-07-11",
+      "bytes": 616009,
+      "sha256": "98587f4f32381961bceb64b032f56fcf0cc4133972b426ad833c15a7e0adff53"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-07-18/M2L_KFI_and_Pipeline_2025_07_18.csv",
+      "role": "weekly pipeline extract @ 2025-07-18",
+      "bytes": 614533,
+      "sha256": "1a47a24832d17b9d81682ecc62ec7188035c2289a94f0b7a98c6d33a5da98bf5"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-07-25/M2L_KFI_and_Pipeline_2025_07_25.csv",
+      "role": "weekly pipeline extract @ 2025-07-25",
+      "bytes": 615501,
+      "sha256": "5a894fb9f659acaba393c3a2e3275da077f04c682e98d343896f3578f2603bc9"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-08-01/M2L_KFI_and_Pipeline_2025_08_01.csv",
+      "role": "weekly pipeline extract @ 2025-08-01",
+      "bytes": 615065,
+      "sha256": "34bfafe2bc85be7c7bd9f97c757832d995101bb8d2674a6eed1e389f5338b6c4"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-08-08/M2L_KFI_and_Pipeline_2025_08_08.csv",
+      "role": "weekly pipeline extract @ 2025-08-08",
+      "bytes": 613328,
+      "sha256": "c61be24e63be93fbc574ee9e096da7d56d762712fbeefe1f98778f4807e80c16"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-08-15/M2L_KFI_and_Pipeline_2025_08_15.csv",
+      "role": "weekly pipeline extract @ 2025-08-15",
+      "bytes": 611770,
+      "sha256": "da77a92afb533766e09c3b86bcc00a659af673a44870bcc628c60bcaf7e4ecc7"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-08-22/M2L_KFI_and_Pipeline_2025_08_22.csv",
+      "role": "weekly pipeline extract @ 2025-08-22",
+      "bytes": 607633,
+      "sha256": "208e9f24f442dbff11dc77e5c4b6883c6e4bcbe6950e3431610086bd35ec2c6b"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-08-29/M2L_KFI_and_Pipeline_2025_08_29.csv",
+      "role": "weekly pipeline extract @ 2025-08-29",
+      "bytes": 610903,
+      "sha256": "f79652874df306d7863ce4041982f03d974722312cfcb72d2e4bbf9984d2940b"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-09-05/M2L_KFI_and_Pipeline_2025_09_05.csv",
+      "role": "weekly pipeline extract @ 2025-09-05",
+      "bytes": 611998,
+      "sha256": "b350ece9b6cab6c1bd946de5639fd14255eee3d8bfa814dd1c1931db522791c2"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-09-12/M2L_KFI_and_Pipeline_2025_09_12.csv",
+      "role": "weekly pipeline extract @ 2025-09-12",
+      "bytes": 613900,
+      "sha256": "ae43e54f2c4716584c5340c6c6e24b548f032a70c71e76d68f2cb61597586012"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-09-19/M2L_KFI_and_Pipeline_2025_09_19.csv",
+      "role": "weekly pipeline extract @ 2025-09-19",
+      "bytes": 616343,
+      "sha256": "125e8ea12bbdea55261cba8b500d9f2ea7f37dc4c58568ede29c7908c88bbd68"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-09-26/M2L_KFI_and_Pipeline_2025_09_26.csv",
+      "role": "weekly pipeline extract @ 2025-09-26",
+      "bytes": 617175,
+      "sha256": "26ac07ffa8429bf329f77e1732093f987ef56a3485080af0aa388e70b51e8810"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-10-03/M2L_KFI_and_Pipeline_2025_10_03.csv",
+      "role": "weekly pipeline extract @ 2025-10-03",
+      "bytes": 620356,
+      "sha256": "d68dd9ecd589265254579387a949ccce66710569b06c0def3e5ebe20014b20bb"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-10-10/M2L_KFI_and_Pipeline_2025_10_10.csv",
+      "role": "weekly pipeline extract @ 2025-10-10",
+      "bytes": 619022,
+      "sha256": "444c9967295b3af532668e382024f1707658819ce82bda974c60e83b767cfbe8"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-10-17/M2L_KFI_and_Pipeline_2025_10_17.csv",
+      "role": "weekly pipeline extract @ 2025-10-17",
+      "bytes": 616817,
+      "sha256": "4e55a093dd4aefdafdd723218fa64ad2a74314503ac8b5b04a455ef94d8781db"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-10-24/M2L_KFI_and_Pipeline_2025_10_24.csv",
+      "role": "weekly pipeline extract @ 2025-10-24",
+      "bytes": 617548,
+      "sha256": "7e30d8a4f71d51e321c4a0af7b72626ee3a322a99dbae8536e8897a1998a5c27"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-10-31/M2L_KFI_and_Pipeline_2025_10_31.csv",
+      "role": "weekly pipeline extract @ 2025-10-31",
+      "bytes": 619306,
+      "sha256": "806c9ed0e7397b9671f355690dd127585e077793be1c7d266ccdafb2e3c0a782"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-11-07/M2L_KFI_and_Pipeline_2025_11_07.csv",
+      "role": "weekly pipeline extract @ 2025-11-07",
+      "bytes": 619129,
+      "sha256": "ae91c968500adf40b9d351e9181030618c85e88ee646f7ae039b9a3bcb744d9d"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-11-14/M2L_KFI_and_Pipeline_2025_11_14.csv",
+      "role": "weekly pipeline extract @ 2025-11-14",
+      "bytes": 618223,
+      "sha256": "5f923ad57457f0fbfa694b62a6aff728a9200098c04beea28844349006bb04f7"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-11-21/M2L_KFI_and_Pipeline_2025_11_21.csv",
+      "role": "weekly pipeline extract @ 2025-11-21",
+      "bytes": 618847,
+      "sha256": "595490e240cf83cc0e6b0e7f3ee608589346950a4bd8d7ab712813aeaf2fddb5"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-11-28/M2L_KFI_and_Pipeline_2025_11_28.csv",
+      "role": "weekly pipeline extract @ 2025-11-28",
+      "bytes": 617924,
+      "sha256": "1eb200d10d3f33843b372576fe6e403926f13887edc70b7c01d54a950b4cae8a"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-12-05/M2L_KFI_and_Pipeline_2025_12_05.csv",
+      "role": "weekly pipeline extract @ 2025-12-05",
+      "bytes": 619572,
+      "sha256": "49d04e79238c3b154cb23abcdc3c2b21f707f1cc5281b1276f6bfeabc60b01ed"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-12-12/M2L_KFI_and_Pipeline_2025_12_12.csv",
+      "role": "weekly pipeline extract @ 2025-12-12",
+      "bytes": 614185,
+      "sha256": "cdf57de12b22489594d9653e86ed8b209fd33e1a2dace8e2196aecf3195be0d2"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-12-19/M2L_KFI_and_Pipeline_2025_12_19.csv",
+      "role": "weekly pipeline extract @ 2025-12-19",
+      "bytes": 611263,
+      "sha256": "df2e1aa4c126e766aff13b8b690487f32cf05ecbca6a69e7763ce408febaf3f8"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2025-12-26/M2L_KFI_and_Pipeline_2025_12_26.csv",
+      "role": "weekly pipeline extract @ 2025-12-26",
+      "bytes": 610372,
+      "sha256": "d0d972a5e8482d0bb966ef24813918a46c1e714f7960c1d4866de002e1e7e650"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-01-02/M2L_KFI_and_Pipeline_2026_01_02.csv",
+      "role": "weekly pipeline extract @ 2026-01-02",
+      "bytes": 608309,
+      "sha256": "64947f008af77c5762d644dbb2bebfea08c83d29c7ffac7455f570c6a695ac40"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-01-09/M2L_KFI_and_Pipeline_2026_01_09.csv",
+      "role": "weekly pipeline extract @ 2026-01-09",
+      "bytes": 611133,
+      "sha256": "aa024aa5e523c4907140ce684d5b8ee158f7767f366b4cd5732f66c24a2ab001"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-01-16/M2L_KFI_and_Pipeline_2026_01_16.csv",
+      "role": "weekly pipeline extract @ 2026-01-16",
+      "bytes": 610165,
+      "sha256": "3ec2680ded1c45de0048896da78935a338d40ad4da9301d7c1dd8a56c03f587c"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-01-23/M2L_KFI_and_Pipeline_2026_01_23.csv",
+      "role": "weekly pipeline extract @ 2026-01-23",
+      "bytes": 610346,
+      "sha256": "e1a53c9a6228d2c5d5e939919f80b0fd9d8ce25757981d5b050e9eb0ae1f2f36"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-01-30/M2L_KFI_and_Pipeline_2026_01_30.csv",
+      "role": "weekly pipeline extract @ 2026-01-30",
+      "bytes": 609840,
+      "sha256": "6a0bc8bdf7d8f75591ee53597391c167faec41c9e68f9baf76ee9b946c73c8e7"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-02-06/M2L_KFI_and_Pipeline_2026_02_06.csv",
+      "role": "weekly pipeline extract @ 2026-02-06",
+      "bytes": 609505,
+      "sha256": "7cb3c72a0fb0e78eee2d28c0dc1b705b952410304012ab79cf1a92a8c1f5dcd7"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-02-13/M2L_KFI_and_Pipeline_2026_02_13.csv",
+      "role": "weekly pipeline extract @ 2026-02-13",
+      "bytes": 609146,
+      "sha256": "30acb38e5be8a6118d34a59547e887e3ca49f42bc7e035144ab28b9ba75ff75f"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-02-20/M2L_KFI_and_Pipeline_2026_02_20.csv",
+      "role": "weekly pipeline extract @ 2026-02-20",
+      "bytes": 611989,
+      "sha256": "ab32428de90afc53b4471154dd085cea256276ba7bb6e502b30824e12dd40a30"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-02-27/M2L_KFI_and_Pipeline_2026_02_27.csv",
+      "role": "weekly pipeline extract @ 2026-02-27",
+      "bytes": 612608,
+      "sha256": "3ea3bbd5727b0087f3d585f5c867e30d1dc0c469c5992ac040bddff6db7e7f12"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-03-06/M2L_KFI_and_Pipeline_2026_03_06.csv",
+      "role": "weekly pipeline extract @ 2026-03-06",
+      "bytes": 613073,
+      "sha256": "38088d7e4f0af8abf45efa7f33b1fed8609fdf1e42a4fe60127e965efa7c3567"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-03-13/M2L_KFI_and_Pipeline_2026_03_13.csv",
+      "role": "weekly pipeline extract @ 2026-03-13",
+      "bytes": 613183,
+      "sha256": "190a48860c19e7cfa4a36a610b7042dc590e90e75cb2e3333748020a0b410736"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-03-20/M2L_KFI_and_Pipeline_2026_03_20.csv",
+      "role": "weekly pipeline extract @ 2026-03-20",
+      "bytes": 615432,
+      "sha256": "3a4a134fd212ca6715a869bd27a56ea038c5e094ec9d56d7c4fd3b415022c717"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-03-27/M2L_KFI_and_Pipeline_2026_03_27.csv",
+      "role": "weekly pipeline extract @ 2026-03-27",
+      "bytes": 615284,
+      "sha256": "6b90ca654749e89ab6b81ed4f97758c10ae9d770dfb0ba3337ecc9d8bfcc1836"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-04-03/M2L_KFI_and_Pipeline_2026_04_03.csv",
+      "role": "weekly pipeline extract @ 2026-04-03",
+      "bytes": 612217,
+      "sha256": "5cba58e1afd204e502a4c219737706aae1abe74b28ffc9086fae9d81358421e6"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-04-10/M2L_KFI_and_Pipeline_2026_04_10.csv",
+      "role": "weekly pipeline extract @ 2026-04-10",
+      "bytes": 611972,
+      "sha256": "4360425894f3923169a155dc4648484791d6b2518893087cb5c25f2052afd529"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-04-17/M2L_KFI_and_Pipeline_2026_04_17.csv",
+      "role": "weekly pipeline extract @ 2026-04-17",
+      "bytes": 611746,
+      "sha256": "30267d06dfb19904f68f7943edaf96e0e35adaa9e72ccf2a53dea35a2ba967e3"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-04-24/M2L_KFI_and_Pipeline_2026_04_24.csv",
+      "role": "weekly pipeline extract @ 2026-04-24",
+      "bytes": 605677,
+      "sha256": "891009519d2ae22441a89c9539c55959eeb18aa2e45c188ee5b2db56ebf7bb54"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-05-01/M2L_KFI_and_Pipeline_2026_05_01.csv",
+      "role": "weekly pipeline extract @ 2026-05-01",
+      "bytes": 600542,
+      "sha256": "18d5b95857fa97134c5702178b7751c3466d685f835b387513971e1b7047f08b"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-05-08/M2L_KFI_and_Pipeline_2026_05_08.csv",
+      "role": "weekly pipeline extract @ 2026-05-08",
+      "bytes": 589528,
+      "sha256": "8e9db34841be88d70f9be7e87bfb965b01fbcc1447d3b950ed7db1dcc384ef13"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-05-15/M2L_KFI_and_Pipeline_2026_05_15.csv",
+      "role": "weekly pipeline extract @ 2026-05-15",
+      "bytes": 585400,
+      "sha256": "9a82c816947eaaf84e431d3895b42560ae2c35cf974b0242d0bbad679319e5a3"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-05-22/M2L_KFI_and_Pipeline_2026_05_22.csv",
+      "role": "weekly pipeline extract @ 2026-05-22",
+      "bytes": 579398,
+      "sha256": "c4b290b38255972b37ef1e6c770143d41c9da6e63ae4283dea47976754af9c87"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-05-29/M2L_KFI_and_Pipeline_2026_05_29.csv",
+      "role": "weekly pipeline extract @ 2026-05-29",
+      "bytes": 567574,
+      "sha256": "32e6595fa36be535205ec6db63c98f1d4a2402a77578df8a28db24a0254a8e43"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-06-05/M2L_KFI_and_Pipeline_2026_06_05.csv",
+      "role": "weekly pipeline extract @ 2026-06-05",
+      "bytes": 557438,
+      "sha256": "8fd6ef18593c1c02f667ca3c4bc1a64d99841bf86da14164a7bff397ee889806"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-06-12/M2L_KFI_and_Pipeline_2026_06_12.csv",
+      "role": "weekly pipeline extract @ 2026-06-12",
+      "bytes": 546110,
+      "sha256": "8d92f3bc802d836bb58bfa8158bc0adae55859602c0b3a4eb682c5cfcf9baa99"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-06-19/M2L_KFI_and_Pipeline_2026_06_19.csv",
+      "role": "weekly pipeline extract @ 2026-06-19",
+      "bytes": 537418,
+      "sha256": "6dd40bc123c0b4f02e6a546212023e70554207b837f2aa1208cfa423d87f3da1"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "kestrelmoor/pipeline/2026-06-26/M2L_KFI_and_Pipeline_2026_06_26.csv",
+      "role": "weekly pipeline extract @ 2026-06-26",
+      "bytes": 524750,
+      "sha256": "27c7a989c24287b0d685153cdf9a12109e82a3d38c3bca6aaefc6a7fd49d2d01"
+    },
+    {
+      "group": "fixture:other",
+      "path": "portfolio_registry.yaml",
+      "role": "portfolio_registry.yaml",
+      "bytes": 294,
+      "sha256": "0c6782baba1ad9e7ad4991a65d09731c64ecd9501cf85dd907b7b15814e31248"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-06-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-06-30",
+      "bytes": 800,
+      "sha256": "0da056fde2e8fd9439ed3c4aa28e3b477bee5d4ba21f7bd7c67a81c94a7823d2"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-06-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-06-30",
+      "bytes": 4714460,
+      "sha256": "055423ba06c19c83f000d789e8e49df93adbcf301778e7b92040b86141b479a9"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-07-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-07-31",
+      "bytes": 800,
+      "sha256": "c6c3cd58df0ffa383f8376a7d5404bc8b4dd7ae711ed24d32992cc6729a96c3f"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-07-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-07-31",
+      "bytes": 4831947,
+      "sha256": "fa73fbc2e69e7b7635136f5d35c78f65ced3d02142ea794151f09c68f2350fe8"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-08-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-08-31",
+      "bytes": 800,
+      "sha256": "8a2485ad59ed5f3f5ff19354f8eed93b8546bd485ba16515a006e7e5624b7508"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-08-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-08-31",
+      "bytes": 4955480,
+      "sha256": "266f3c85495b8f40271328a595178e53b6f9279e97f462aaf961e121e5c943b1"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-09-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-09-30",
+      "bytes": 800,
+      "sha256": "f91ef041aa9749808f9775a253cf60d1675cdd20386ed82f048554035a3398ae"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-09-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-09-30",
+      "bytes": 5063085,
+      "sha256": "c1ebb685728d7841cfdd725d20cfc5bf5402bc8ab640f88ff78b0f087060b6bd"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-10-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-10-31",
+      "bytes": 800,
+      "sha256": "9721954174c40b842f0f578c7e8b08a591c66b25fc09b2a640e6d18deea769b6"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-10-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-10-31",
+      "bytes": 5188557,
+      "sha256": "5593b9156d0c50426e8b2e42f7bff6bb5a7bb298cf7a36dcc04233971511673c"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-11-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-11-30",
+      "bytes": 799,
+      "sha256": "c8a35483dabd3c729c52e0baecf9ba864ac9de1e81fca6655f7f0c7efbe7fe2b"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-11-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-11-30",
+      "bytes": 5315126,
+      "sha256": "234e0fef686fb3353819164f747c5aa545135ea26169241aedd5ab3f7119f847"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-12-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-12-31",
+      "bytes": 800,
+      "sha256": "88f1e792b876c49ef8075033ec43040d97e34df2fe53b7a3cdad061e14cccfad"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2025-12-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-12-31",
+      "bytes": 5429320,
+      "sha256": "26b4430cef2dbaa33500937df5a1490216389227278659c9d4caf5163296b773"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-01-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-01-31",
+      "bytes": 800,
+      "sha256": "8c459bf6352a748e74506e980d8ad4e807bda4c5e4960606a639f7dbcaf2c473"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-01-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-01-31",
+      "bytes": 5544585,
+      "sha256": "85456ba1068a9b5aabe4e7177fc71ca4b3b9c3a5a8013dc6b5e3551001cb6983"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-02-28/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-02-28",
+      "bytes": 801,
+      "sha256": "23cd33b1cf1fe55138d01127261092421d011f66a27a5b3c553ba8f0474d04d7"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-02-28/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-02-28",
+      "bytes": 5657585,
+      "sha256": "443a7f43e4fd8d82ea66db3f354e89abb9d6bb1eb9d645a10ade428175506df9"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-03-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-03-31",
+      "bytes": 801,
+      "sha256": "ed0b31e33a7b36d3a3937829f83eefdf0d364a482857156dd99fd81b75735921"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-03-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-03-31",
+      "bytes": 5774996,
+      "sha256": "b300fc1c4f31e2796f3fd5a1a0c1108fa216d3da4457fedc46301e04a6dd00fc"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-04-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-04-30",
+      "bytes": 801,
+      "sha256": "ff536f07295b13e65b1a6cf48b24519871fa7df108ad9d7f728adaa811cc100c"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-04-30",
+      "bytes": 5900818,
+      "sha256": "083d5e0d79105ce2411e82b29cf981ce8970ea6442f7a19cb8d19e589e27f720"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-05-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-05-31",
+      "bytes": 801,
+      "sha256": "1f54ba78ba2607d5525ffcce9c785c91ec5374239885d47699f2a2efa2d971eb"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-05-31",
+      "bytes": 6030805,
+      "sha256": "351a2aa70ab3527f83a3590889fdf218e3b147f8a8767a4b1e6f6d8e124483b8"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-06-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-06-30",
+      "bytes": 801,
+      "sha256": "3bf645c8728465a4c0b460a4ea47e48ed9a471ed82ab5ce62becfefa6436a6ab"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-06-30",
+      "bytes": 6139957,
+      "sha256": "b84b8d0e5a53117037be746e79a1b09c8ed24eaf784858e416b1454d1903c21f"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/latest/latest_platform_canonical.json",
+      "role": "funded latest_platform_canonical @ latest",
+      "bytes": 317,
+      "sha256": "5d68ca2ab0c63387bbcda6a1659072d5f8e6723f5b989e898fcee3394d721a2f"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/latest/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ latest",
+      "bytes": 801,
+      "sha256": "3bf645c8728465a4c0b460a4ea47e48ed9a471ed82ab5ce62becfefa6436a6ab"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "processed/platform/alderbridge/latest/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ latest",
+      "bytes": 6139957,
+      "sha256": "b84b8d0e5a53117037be746e79a1b09c8ed24eaf784858e416b1454d1903c21f"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-06-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-06-30",
+      "bytes": 1302,
+      "sha256": "8c88babca2a77262bb3601df331bd76fdda42b71be327aae303569c20b3fca8a"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-06-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-06-30",
+      "bytes": 5437706,
+      "sha256": "dd4d67479b8b1871dbeea22a8dadccddf1c5e31b2740d0a2852e087e17a5cf0f"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-07-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-07-31",
+      "bytes": 1302,
+      "sha256": "c02d4ca7fcc7507e9a6bd68e9c8e97007f316dcb85f757adcc5ab7d0bbd126bb"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-07-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-07-31",
+      "bytes": 5592956,
+      "sha256": "94c1a3a9d16112e4604c03ea427d09813bc61fdd835980b9494f55e2eb4c9576"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-08-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-08-31",
+      "bytes": 1302,
+      "sha256": "ac124c1c69b7d24a5bd37263a073ad43b2e4dfd48622404c9548caca81853bb7"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-08-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-08-31",
+      "bytes": 5742759,
+      "sha256": "60a738c118da634b19ed9823f9db8a26ddaafda23b896ceefb306d27c078e124"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-09-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-09-30",
+      "bytes": 1302,
+      "sha256": "da6c22ee1a2ded504b79f3d77c846a6e1eb770a1fecc89cb8b5c8307a2232624"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-09-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-09-30",
+      "bytes": 5879091,
+      "sha256": "83dfb7afb6a075ff342180937211dc4e6246fd8bd5d2298d6891a1b28aa18a80"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-10-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-10-31",
+      "bytes": 1303,
+      "sha256": "419a39c378b7ac5e5b59881ab3e1f66ddcd45706936beab74dc0571c5d650839"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-10-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-10-31",
+      "bytes": 6009581,
+      "sha256": "652ae5c3b6f9074978dc13d81cd676c57f08d336a9addf5fb6835970ee4dce9e"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-11-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-11-30",
+      "bytes": 1303,
+      "sha256": "ce18b92946060ca10a8638f491cd8c5f962a222be1948feeef37c1055293dc3d"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-11-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-11-30",
+      "bytes": 6146370,
+      "sha256": "c6126f52bd6c04efc33c21d2a88d140e24ada2d577a6f7f5afeac6c1ae2e5330"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-12-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2025-12-31",
+      "bytes": 1303,
+      "sha256": "e4e88e4c75ab4ebebb1b6bf7a3aaa182f090225d35aed5e7e9469984d3e248eb"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2025-12-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2025-12-31",
+      "bytes": 6295060,
+      "sha256": "3dcb54be6660c7920d926970f696b2bbc5cfeafbd63f7c2a51ef155926288722"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-01-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-01-31",
+      "bytes": 1303,
+      "sha256": "d2fb5ce888e377782bc8ec8581df143bedbd7991d56d19d64ea66e778228eede"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-01-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-01-31",
+      "bytes": 6446559,
+      "sha256": "35517ffb37bec884e14eb90f8567457a91071247f1e29813b464378545840709"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-02-28/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-02-28",
+      "bytes": 1303,
+      "sha256": "57af35b7c4f5496daa856d3ad0c85f48d7c1107a4cce57f352698ef94bdfa7ac"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-02-28/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-02-28",
+      "bytes": 6594102,
+      "sha256": "f48fa2749eee87aea3fa822900c367139ce9d059d789a248ed163ff67af4fd48"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-03-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-03-31",
+      "bytes": 1303,
+      "sha256": "e3e04231cf69ab627d98541ebef5f35cca1a0b4dd60cb098d1328cce378459ab"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-03-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-03-31",
+      "bytes": 6729937,
+      "sha256": "e629876154f7099017a926f492c26c249377ccc96e89f9634b6b93294e04a7ae"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-04-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-04-30",
+      "bytes": 1303,
+      "sha256": "aeb7f9816a960737cda17ccbc040bba0651b918e0f9b82e24ef5f8807f69c579"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-04-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-04-30",
+      "bytes": 6877478,
+      "sha256": "2d17b216b19c189b5c3e841492114a042d7b5fce5f1bdfc54c8ce6eb8bd6d188"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-05-31/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-05-31",
+      "bytes": 1303,
+      "sha256": "a2013eb8b975da259c2052f68951a8bf2184324a379c6f099fa8d2c87ad7d9f3"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-05-31/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-05-31",
+      "bytes": 7026126,
+      "sha256": "9b4269393d905c526e046d26845584903046dd7a4cd2f6ec33c8ff6e1880880d"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-06-30/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ 2026-06-30",
+      "bytes": 1303,
+      "sha256": "f34044f461669725c379b7d932cebfc5ade90bba2b215763a15b0730e6cbf933"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/2026-06-30/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ 2026-06-30",
+      "bytes": 7182929,
+      "sha256": "755f617cef69bc89404c0c3151e306d87477b1883203f7dd1357c737e986293e"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/latest/latest_platform_canonical.json",
+      "role": "funded latest_platform_canonical @ latest",
+      "bytes": 317,
+      "sha256": "83da5bfa2f80662f27984180996ed586a87de08a315a785c3b011263ef4ccca2"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/latest/platform_canonical_manifest.json",
+      "role": "funded platform_canonical_manifest @ latest",
+      "bytes": 1303,
+      "sha256": "f34044f461669725c379b7d932cebfc5ade90bba2b215763a15b0730e6cbf933"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "processed/platform/kestrelmoor/latest/platform_canonical_typed.csv",
+      "role": "funded platform_canonical_typed @ latest",
+      "bytes": 7182929,
+      "sha256": "755f617cef69bc89404c0c3151e306d87477b1883203f7dd1357c737e986293e"
+    }
+  ]
+}

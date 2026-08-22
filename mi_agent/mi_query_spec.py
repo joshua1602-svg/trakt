@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 # Allowed enumerations (kept as module constants so the validator and parser
 # can share them).
@@ -24,6 +24,18 @@ CHART_TYPES = {"bar", "line", "scatter", "bubble", "heatmap", "treemap", "none"}
 AGGREGATIONS = {
     "sum", "avg", "weighted_avg", "count", "count_distinct",
     "median", "distribution", "loan_level", "balance_sum",
+    # P1N — the extreme value OF A MEASURE. Distinct from a ranking, which
+    # orders GROUPS and returns the winning group: "the highest LTV" is one
+    # number over a population, "which region has the highest LTV" is a ranking.
+    "min", "max",
+    # P1A — a filtered population expressed as a share of the whole book.
+    # Distinct from the aggregations above because it needs TWO populations.
+    "share",
+    # P1D — each group's CONTRIBUTION to a portfolio weighted aggregate
+    # (share of weight x the group's own value). Distinct from a per-group
+    # weighted average because a small group with a high value contributes
+    # little, and ranking the two the same way answers a different question.
+    "contribution",
 }
 OUTPUT_FORMATS = {"chart", "table", "text", "chart_and_table"}
 
@@ -59,6 +71,209 @@ AMBIGUOUS_DIMENSION_TERMS = {"stage", "portfolio", "region", "rate", "balance"}
 _SCALAR_FIELD_SLOTS = ("metric", "dimension", "x", "y", "size", "color", "weight_field", "sort_by")
 _LIST_FIELD_SLOTS = ("dimensions", "hierarchy")
 
+# --------------------------------------------------------------------------- #
+# Filter normalisation
+# --------------------------------------------------------------------------- #
+# ``filters`` is canonically ``{field_key: condition}`` (see
+# mi_query_executor._apply_filters). Callers that build a spec from JSON — the
+# LLM parser above all — routinely express the same intent as a LIST of predicate
+# objects, or under a singular ``filter`` key, because that is the more natural
+# JSON shape and nothing in the contract ruled it out. Both shapes previously
+# reached the dataclass unconverted: a list made ``referenced_fields`` raise
+# ``TypeError: unhashable type: 'dict'``, and a singular ``filter`` key was
+# dropped as unknown — so a correctly-identified predicate was either a crash or
+# a silently unfiltered answer.
+#
+# These helpers fold every recognised shape into the canonical mapping. A
+# predicate that cannot be folded is NEVER discarded: it is recorded in
+# ``unavailable_filters``, which the workflow already surfaces in warnings and
+# the query-audit panel.
+
+#: Keys a predicate object may use to name its field, in precedence order.
+_PREDICATE_FIELD_KEYS = ("field", "field_key", "key", "column", "name")
+#: Keys a predicate object may use to name its comparison operator.
+_PREDICATE_OP_KEYS = ("operator", "op", "comparator", "comparison")
+#: Keys a predicate object may use to carry its value.
+_PREDICATE_VALUE_KEYS = ("value", "values", "val")
+#: Operator spellings that mean plain equality/membership, for which the
+#: canonical condition is the bare value rather than an ``{"op", "value"}`` dict.
+_EQUALITY_OPS = {"", "=", "==", "eq", "equal", "equals", "equal_to", "equalto",
+                 "is", "is_equal_to", "in", "one_of"}
+
+
+def _predicate_to_condition(pred: Dict[str, Any]) -> Optional[tuple]:
+    """``{field, operator, value}`` -> ``(field_key, condition)``, or None.
+
+    Returns None when the object carries no usable field name, so the caller can
+    record it as unavailable rather than guess which column it meant.
+    """
+    field_key = None
+    for key in _PREDICATE_FIELD_KEYS:
+        candidate = pred.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            field_key = candidate.strip()
+            break
+    if field_key is None:
+        return None
+
+    operator = ""
+    for key in _PREDICATE_OP_KEYS:
+        candidate = pred.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            operator = candidate.strip().lower()
+            break
+
+    has_value = any(k in pred for k in _PREDICATE_VALUE_KEYS)
+    value: Any = None
+    for key in _PREDICATE_VALUE_KEYS:
+        if key in pred:
+            value = pred[key]
+            break
+    # ``between`` is also written as separate bounds.
+    if not has_value and ("min" in pred or "max" in pred):
+        lo, hi = pred.get("min"), pred.get("max")
+        if lo is not None and hi is not None:
+            return field_key, {"op": "between", "value": [lo, hi]}
+        return field_key, {"op": "ge" if lo is not None else "le",
+                           "value": lo if lo is not None else hi}
+    if not has_value:
+        return None
+
+    # Plain equality/membership is expressed as the bare value: the executor
+    # matches a string case-insensitively and a list as membership, which is what
+    # a categorical predicate means.
+    if operator in _EQUALITY_OPS:
+        if isinstance(value, (list, tuple, set)):
+            return field_key, list(value)
+        return field_key, value
+    return field_key, {"op": operator, "value": value}
+
+
+def _describe_unfoldable(pred: Any) -> str:
+    """A short, user-facing note for a predicate that could not be folded."""
+    if isinstance(pred, dict):
+        parts = [f"{k}={v!r}" for k, v in list(pred.items())[:3]]
+        body = ", ".join(parts) if parts else "empty predicate"
+    else:
+        body = repr(pred)[:80]
+    return (f"a filter was requested ({body}) but could not be interpreted, "
+            "so it was NOT applied")
+
+
+#: The most measures one question may carry. A management answer with more than
+#: four figures stops being readable, and an unbounded set would let a vague
+#: question quietly become an expensive one. A request beyond this is reported,
+#: never silently truncated.
+MAX_MEASURES = 4
+
+
+def normalise_measures(raw: Any, *, metric: Optional[str] = None,
+                       aggregation: Optional[str] = None,
+                       weight_field: Optional[str] = None) -> tuple:
+    """``(measures, notes)`` for any recognised measure shape.
+
+    Accepts the canonical list of ``{"field", "aggregation"}`` mappings, a list
+    of bare field-name strings, and the singular ``metric``/``aggregation``
+    pair. Never raises: anything unrecognised is reported through the notes so a
+    caller surfaces it instead of dropping it — the same discipline
+    ``normalise_filters`` follows.
+
+    Duplicates are folded: "balance and total balance" resolve to one governed
+    measure and must be reported once, not twice.
+    """
+    notes: List[str] = []
+    out: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def _add(field_name: Any, agg: Any = None, weight: Any = None) -> None:
+        name = str(field_name or "").strip()
+        if not name:
+            return
+        key = (name, str(agg or "").strip().lower() or None)
+        if key in seen or any(m["field"] == name and not agg for m in out):
+            return
+        seen.add(key)
+        entry: Dict[str, Any] = {"field": name}
+        if agg:
+            entry["aggregation"] = str(agg).strip().lower()
+        if weight:
+            entry["weight_field"] = str(weight).strip()
+        out.append(entry)
+
+    items: Any = raw
+    if isinstance(items, (str, Mapping)):
+        items = [items]
+    if items is None:
+        items = []
+    if not isinstance(items, (list, tuple)):
+        notes.append(f"measure specification {type(raw).__name__} was not "
+                     f"recognised and has not been applied")
+        items = []
+
+    for item in items:
+        if isinstance(item, str):
+            _add(item)
+        elif isinstance(item, Mapping):
+            name = (item.get("field") or item.get("metric")
+                    or item.get("name") or item.get("measure"))
+            if not name:
+                notes.append("a requested measure carried no field name and has "
+                             "not been applied")
+                continue
+            _add(name, item.get("aggregation") or item.get("agg"),
+                 item.get("weight_field") or item.get("weight"))
+        else:
+            notes.append(f"a requested measure of type {type(item).__name__} "
+                         f"was not recognised and has not been applied")
+
+    if not out and metric:
+        _add(metric, aggregation, weight_field)
+    return out, notes
+
+
+def normalise_filters(raw: Any) -> tuple:
+    """``(filters_dict, unavailable_notes)`` for any recognised filter shape.
+
+    Accepts the canonical mapping, a list of predicate objects, and a single
+    predicate object. Never raises: anything unrecognised is reported through the
+    notes so the caller can surface it instead of dropping it.
+    """
+    notes: List[str] = []
+    if raw is None:
+        return {}, notes
+    if isinstance(raw, dict):
+        # A lone predicate object — ``{"field": …, "operator": …, "value": …}`` —
+        # is a predicate, not a one-entry mapping of field to condition.
+        if any(k in raw for k in _PREDICATE_FIELD_KEYS) and \
+                any(k in raw for k in _PREDICATE_OP_KEYS + _PREDICATE_VALUE_KEYS):
+            folded = _predicate_to_condition(raw)
+            if folded is None:
+                notes.append(_describe_unfoldable(raw))
+                return {}, notes
+            return {folded[0]: folded[1]}, notes
+        # Canonical mapping. Keys must be usable as field references.
+        out: Dict[str, Any] = {}
+        for key, value in raw.items():
+            if isinstance(key, str) and key.strip():
+                out[key] = value
+            else:
+                notes.append(_describe_unfoldable({key: value}))
+        return out, notes
+    if isinstance(raw, (list, tuple)):
+        out = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                notes.append(_describe_unfoldable(item))
+                continue
+            folded = _predicate_to_condition(item)
+            if folded is None:
+                notes.append(_describe_unfoldable(item))
+                continue
+            out[folded[0]] = folded[1]
+        return out, notes
+    notes.append(_describe_unfoldable(raw))
+    return {}, notes
+
 
 @dataclass
 class MIQuerySpec:
@@ -77,6 +292,22 @@ class MIQuerySpec:
 
     aggregation: str = "count"                  # see AGGREGATIONS
     weight_field: Optional[str] = None
+
+    # P1E — MULTI-MEASURE COMPOSITION.
+    #
+    # A CFO asks one analytical question containing several governed measures
+    # ("balance, loan count, WA LTV and WA rate for the London book"), not four
+    # unrelated questions. ``measures`` is that set: an ordered list of
+    # ``{"field", "aggregation", "weight_field"}`` entries sharing ONE
+    # population, ONE filter set, ONE optional grouping and ONE reporting period.
+    #
+    # Backward compatibility is by NORMALISATION, not by a second code path:
+    # ``normalise_measures`` folds the singular ``metric``/``aggregation`` into a
+    # one-element list, and keeps ``metric``/``aggregation`` pointing at
+    # ``measures[0]``. Every existing single-metric query therefore produces
+    # exactly the spec it produced before, and the executor has one contract to
+    # consume rather than two.
+    measures: List[Dict[str, Any]] = field(default_factory=list)
 
     filters: Dict[str, Any] = field(default_factory=dict)
     top_n: Optional[int] = None
@@ -223,8 +454,52 @@ class MIQuerySpec:
         for slot in _LIST_FIELD_SLOTS:
             if slot in kwargs and kwargs[slot] is None:
                 kwargs[slot] = []
-        if "filters" in kwargs and kwargs["filters"] is None:
-            kwargs["filters"] = {}
+        # A SCALAR slot given a list. "Show me balance by region by borrower
+        # type" can come back with dimension=["collateral_geography",
+        # "borrower_type"] — the model expressing two dimensions in the singular
+        # slot. The value then reached the validator, which looked it up with
+        # ``fields.get(key)`` and raised TypeError: unhashable type: 'list',
+        # crashing the parse instead of producing a governed answer or a clean
+        # refusal. Same defect class as the list-shaped ``filters`` folded
+        # below, and folded the same way: nothing is discarded, and for
+        # ``dimension`` the extra names are carried into ``dimensions``, which
+        # is the slot that already expresses exactly this.
+        for slot in _SCALAR_FIELD_SLOTS:
+            value = kwargs.get(slot)
+            if not isinstance(value, (list, tuple)):
+                continue
+            names = [str(v).strip() for v in value if isinstance(v, str) and str(v).strip()]
+            kwargs[slot] = names[0] if names else None
+            if slot == "dimension" and len(names) > 1:
+                existing = [d for d in (kwargs.get("dimensions") or [])
+                            if isinstance(d, str)]
+                kwargs["dimensions"] = existing + [
+                    n for n in names if n not in existing]
+        # ``filters`` accepts the canonical mapping, a list of predicate objects
+        # or a single predicate object; a producer that wrote the singular
+        # ``filter`` key meant the same thing. Fold them all, and carry anything
+        # unfoldable into unavailable_filters rather than dropping it. Without
+        # this, a list reached referenced_fields() and raised TypeError, and a
+        # singular ``filter`` was discarded as an unknown key — both of which
+        # turned a correctly-identified predicate into a wrong answer.
+        raw_filters = kwargs.get("filters")
+        if not raw_filters and isinstance(data.get("filter"), (dict, list, tuple)):
+            raw_filters = data["filter"]
+        folded, notes = normalise_filters(raw_filters)
+        kwargs["filters"] = folded
+        # P1E: fold the measure set, accepting the singular metric/aggregation
+        # as a one-element list so the two shapes are one contract downstream.
+        measures, measure_notes = normalise_measures(
+            kwargs.get("measures") if kwargs.get("measures") is not None
+            else data.get("measure"),
+            metric=kwargs.get("metric"), aggregation=kwargs.get("aggregation"),
+            weight_field=kwargs.get("weight_field"))
+        kwargs["measures"] = measures
+        notes = list(notes) + measure_notes
+        if notes:
+            existing = list(kwargs.get("unavailable_filters") or [])
+            kwargs["unavailable_filters"] = existing + [
+                n for n in notes if n not in existing]
         return cls(**kwargs)
 
     @classmethod
@@ -292,14 +567,36 @@ class MIQuerySpec:
             for value in getattr(self, slot) or []:
                 if value:
                     out.append(value)
-        # filter keys are field references too
-        for key in self.filters or {}:
-            if key:
+        # P1E: every measure in the set is a field reference, so validation sees
+        # the whole request rather than only its first measure. ``loan_count``
+        # is a governed count, not a semantic field, and is excluded.
+        for measure in self.measures or []:
+            if not isinstance(measure, dict):
+                continue
+            name = measure.get("field")
+            if name and name not in ("loan_count", "count"):
+                out.append(name)
+        # filter keys are field references too. Defensive about the container and
+        # its keys: a spec built by a producer that bypassed from_dict (a direct
+        # constructor call, an older pickle) may still carry a non-mapping here,
+        # and introspection must never be the thing that raises.
+        filters = self.filters
+        if isinstance(filters, dict):
+            keys: List[Any] = list(filters.keys())
+        elif isinstance(filters, (list, tuple)):
+            keys = [f.get("field") if isinstance(f, dict) else f for f in filters]
+        else:
+            keys = []
+        for key in keys:
+            if isinstance(key, str) and key:
                 out.append(key)
-        # de-duplicate, preserve order
+        # de-duplicate, preserve order. Only hashable, string-valued references
+        # reach here, so membership testing is safe.
         seen = set()
         unique = []
         for f in out:
+            if not isinstance(f, str):
+                continue
             if f not in seen:
                 seen.add(f)
                 unique.append(f)

@@ -1,0 +1,341 @@
+{
+  "reportingDate": "2026-06-30",
+  "lastPipelineWeek": "2026-06-26",
+  "stressBook": "kestrelmoor",
+  "books": {
+    "alderbridge": [
+      {
+        "question": "How has the profile of new originations changed in the last few months?",
+        "status": 200,
+        "answer": "Front Book (0-12 months): 712 loans at 2025-06-30 against 2,581 loans at 2026-06-30. Current Outstanding Balance £95.2m against £378.0m; Current Loan To Value 32.11% against 30.86%; Current Interest Rate 6.53% against 6.50%. These are rolling cohorts — membership is set by the origination window, so a loan joins or leaves it with the passage of time. This is a comparison of two cohorts, not movement within one population. Current profile: Region — South East 23.1%, London 12.3%, East of England 10.8%; LTV band — 30-40% 40.8%, 20-30% 35.4%, 40-50% 11.5%; Borrower age band — 70-75 27.9%, 65-70 26.7%, 75-80 19.4%; Ticket size — 200-300k 21.8%, 100-150k 21.5%, 150-200k 18.3%; Interest rate band — 6-7% 62.5%, 7-8% 18.5%, 5-6% 17.9%.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "composition",
+          "movement"
+        ],
+        "findingCount": 18,
+        "periodSpans": [
+          " -> {'start': '2025-06-30', 'end': '2026-06-30', 'method': 'explicit_dates', 'available': ['2025-06-30', '2025-07-31', '2025-08-31', '2025-09-30', '2025-10-31', '2025-11-30', '2025-12-31', '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']}"
+        ],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "Front Book (0-12 months) is a rolling population — loans move out of it as they season, so this is the movement in the segment between the two reporting dates, not the movement of one fixed set of loans.",
+          "No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk."
+        ],
+        "refused": false
+      },
+      {
+        "question": "When are we likely to reach £100m of loans?",
+        "status": 200,
+        "answer": "The book has already reached £100.0m (current funded balance £2.18bn).\n\nCalculated: Run-rate extrapolation.",
+        "route": "forecast_extrapolation",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "Downside/base/upside are indicative scenario bands, not statistically validated confidence intervals."
+        ],
+        "refused": true
+      },
+      {
+        "question": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+        "status": 200,
+        "answer": "Offer stage pipeline is £7.5m across 39 case(s) as at 2026-06-26. Expected completion amount from pipeline cases at Offer stage: £5.4m. Expected to land: 2026-07 £5.4m.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "forecast",
+          "measure",
+          "timing"
+        ],
+        "findingCount": 3,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [],
+        "refused": false
+      },
+      {
+        "question": "What is the current completion run rate?",
+        "status": 200,
+        "answer": "The current completion run-rate is ~£42.3m/month (£507.6m/year) based on 12 month(s) of funded growth.\n\nCalculated: Run-rate extrapolation.",
+        "route": "forecast_extrapolation",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "Downside/base/upside are indicative scenario bands, not statistically validated confidence intervals."
+        ],
+        "refused": true
+      },
+      {
+        "question": "Are we likely to breach any concentration limits in the next three months?",
+        "status": 200,
+        "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available — extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document.",
+        "route": "risk_limits",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "limits unavailable / needs review."
+        ],
+        "refused": true
+      },
+      {
+        "question": "Which limits are closest to breaching?",
+        "status": 200,
+        "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available — extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document.",
+        "route": "risk_limits",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "limits unavailable / needs review."
+        ],
+        "refused": true
+      },
+      {
+        "question": "How does the risk profile of older vintages compare with the front book?",
+        "status": 200,
+        "answer": "Back Book (13+ months) against Front Book (0-12 months) (8,454 vs 2,581 loans): Loan Count 8,454 vs 2,581 (+5,873); Current Outstanding Balance £1.80bn vs £378.0m (+£1.42bn); Current Loan To Value 40.19% vs 30.86% (+9.33pp); Current Interest Rate 6.58% vs 6.50% (+0.09pp); Youngest Borrower Age 77.6 vs 70.8 (+6.8). Across 13 governed origination vintage(s), 2014 holds £117.5m at 47.06% weighted-average LTV and 2026 holds £185.4m at 30.58%.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "cohort",
+          "comparison",
+          "measure"
+        ],
+        "findingCount": 28,
+        "periodSpans": [
+          " -> {'start': None, 'end': '2026-06-30', 'method': None, 'available': ['2025-06-30', '2025-07-31', '2025-08-31', '2025-09-30', '2025-10-31', '2025-11-30', '2025-12-31', '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']}"
+        ],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [],
+        "refused": false
+      },
+      {
+        "question": "How has the balance from direct lending changed relative to acquired lending?",
+        "status": 200,
+        "answer": "Across 2025-06-30 → 2026-06-30, Direct, 7,126 loans: Current Outstanding Balance £1.12bn → £1.50bn (+£379.0m). Across 2025-06-30 → 2026-06-30, Acquired, 3,909 loans: Current Outstanding Balance £566.1m → £679.7m (+£113.6m). Direct against Acquired (7,126 vs 3,909 loans): Current Outstanding Balance £1.50bn vs £679.7m (+£820.4m).\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "comparison",
+          "movement"
+        ],
+        "findingCount": 3,
+        "periodSpans": [
+          " -> {'start': '2025-06-30', 'end': '2026-06-30', 'method': 'explicit_dates', 'available': ['2025-06-30', '2025-07-31', '2025-08-31', '2025-09-30', '2025-10-31', '2025-11-30', '2025-12-31', '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']}"
+        ],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk."
+        ],
+        "refused": false
+      },
+      {
+        "question": "Based on the current pipeline, what is the forecast funded balance?",
+        "status": 200,
+        "answer": "Current funded balance is £2.18bn as at 2026-06-30. Gross pipeline in the governed extract is £248.4m as at 2026-06-26. Expected completions from the open pipeline: £14.0m. This excludes 1,092 case(s) worth £201.4m the extract already shows as completed or withdrawn. Forecast funded balance: £2.19bn. Expected to land: 2026-07 £5.4m; 2026-08 £4.3m; 2026-09 £4.3m.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "forecast",
+          "measure",
+          "timing"
+        ],
+        "findingCount": 8,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "The forward forecast covers the open pipeline only. 1092 case(s) worth £201.4m are excluded because the extract already shows them as completed or withdrawn, so they are not future completions."
+        ],
+        "refused": false
+      }
+    ],
+    "kestrelmoor": [
+      {
+        "question": "How has the profile of new originations changed in the last few months?",
+        "status": 200,
+        "answer": "Front Book (0-12 months): 865 loans at 2025-06-30 against 3,020 loans at 2026-06-30. Current Outstanding Balance £91.4m against £299.9m; Current Loan To Value 30.46% against 29.14%; Current Interest Rate 6.46% against 6.53%. These are rolling cohorts — membership is set by the origination window, so a loan joins or leaves it with the passage of time. This is a comparison of two cohorts, not movement within one population. Current profile: Region — North West 22.6%, Scotland 16.8%, North East 10.8%; LTV band — 20-30% 35.0%, 30-40% 29.9%, <20% 19.3%; Borrower age band — 70-75 26.4%, 75-80 21.3%, 65-70 18.5%; Ticket size — 50-100k 28.5%, 100-150k 22.4%, 200-300k 15.0%; Interest rate band — 6-7% 52.1%, 7-8% 23.5%, 5-6% 21.9%.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "composition",
+          "movement"
+        ],
+        "findingCount": 18,
+        "periodSpans": [
+          " -> {'start': '2025-06-30', 'end': '2026-06-30', 'method': 'explicit_dates', 'available': ['2025-06-30', '2025-07-31', '2025-08-31', '2025-09-30', '2025-10-31', '2025-11-30', '2025-12-31', '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']}"
+        ],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "Front Book (0-12 months) is a rolling population — loans move out of it as they season, so this is the movement in the segment between the two reporting dates, not the movement of one fixed set of loans.",
+          "No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk."
+        ],
+        "refused": false
+      },
+      {
+        "question": "When are we likely to reach £100m of loans?",
+        "status": 200,
+        "answer": "The book has already reached £100.0m (current funded balance £1.77bn).\n\nCalculated: Run-rate extrapolation.",
+        "route": "forecast_extrapolation",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "Downside/base/upside are indicative scenario bands, not statistically validated confidence intervals."
+        ],
+        "refused": true
+      },
+      {
+        "question": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+        "status": 200,
+        "answer": "Offer stage pipeline is £5.0m across 50 case(s) as at 2026-06-26. Expected completion amount from pipeline cases at Offer stage: £3.6m. Expected to land: 2026-07 £3.6m.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "forecast",
+          "measure",
+          "timing"
+        ],
+        "findingCount": 3,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [],
+        "refused": false
+      },
+      {
+        "question": "What is the current completion run rate?",
+        "status": 200,
+        "answer": "The current completion run-rate is ~£33.1m/month (£396.7m/year) based on 12 month(s) of funded growth.\n\nCalculated: Run-rate extrapolation.",
+        "route": "forecast_extrapolation",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "Downside/base/upside are indicative scenario bands, not statistically validated confidence intervals."
+        ],
+        "refused": true
+      },
+      {
+        "question": "Are we likely to breach any concentration limits in the next three months?",
+        "status": 200,
+        "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available — extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document.",
+        "route": "risk_limits",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "limits unavailable / needs review."
+        ],
+        "refused": true
+      },
+      {
+        "question": "Which limits are closest to breaching?",
+        "status": 200,
+        "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available — extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document.",
+        "route": "risk_limits",
+        "findingKinds": [],
+        "findingCount": 0,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "limits unavailable / needs review."
+        ],
+        "refused": true
+      },
+      {
+        "question": "How does the risk profile of older vintages compare with the front book?",
+        "status": 200,
+        "answer": "Back Book (13+ months) against Front Book (0-12 months) (9,235 vs 3,020 loans): Loan Count 9,235 vs 3,020 (+6,215); Current Outstanding Balance £1.47bn vs £299.9m (+£1.17bn); Current Loan To Value 39.16% vs 29.14% (+10.01pp); Current Interest Rate 6.42% vs 6.53% (-0.11pp); Youngest Borrower Age 79.2 vs 71.9 (+7.3). Across 14 governed origination vintage(s), 2013 holds £61.3m at 50.55% weighted-average LTV and 2026 holds £147.7m at 28.87%.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "cohort",
+          "comparison",
+          "measure"
+        ],
+        "findingCount": 29,
+        "periodSpans": [
+          " -> {'start': None, 'end': '2026-06-30', 'method': None, 'available': ['2025-06-30', '2025-07-31', '2025-08-31', '2025-09-30', '2025-10-31', '2025-11-30', '2025-12-31', '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']}"
+        ],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [],
+        "refused": false
+      },
+      {
+        "question": "How has the balance from direct lending changed relative to acquired lending?",
+        "status": 200,
+        "answer": "Across 2025-06-30 → 2026-06-30, Direct, 5,612 loans: Current Outstanding Balance £390.3m → £558.0m (+£167.7m). Across 2025-06-30 → 2026-06-30, Acquired, 6,643 loans: Current Outstanding Balance £991.0m → £1.21bn (+£223.5m). Direct against Acquired (5,612 vs 6,643 loans): Current Outstanding Balance £558.0m vs £1.21bn (−£656.4m).\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "comparison",
+          "movement"
+        ],
+        "findingCount": 3,
+        "periodSpans": [
+          " -> {'start': '2025-06-30', 'end': '2026-06-30', 'method': 'explicit_dates', 'available': ['2025-06-30', '2025-07-31', '2025-08-31', '2025-09-30', '2025-10-31', '2025-11-30', '2025-12-31', '2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']}"
+        ],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk."
+        ],
+        "refused": false
+      },
+      {
+        "question": "Based on the current pipeline, what is the forecast funded balance?",
+        "status": 200,
+        "answer": "Current funded balance is £1.77bn as at 2026-06-30. Gross pipeline in the governed extract is £176.5m as at 2026-06-26. Expected completions from the open pipeline: £7.7m. This excludes 1,479 case(s) worth £156.1m the extract already shows as completed or withdrawn. Forecast funded balance: £1.78bn. Expected to land: 2026-07 £3.6m; 2026-08 £2.6m; 2026-09 £1.6m.\n\nCalculated: Composed governed capabilities.",
+        "route": "analytical_composition",
+        "findingKinds": [
+          "forecast",
+          "measure",
+          "timing"
+        ],
+        "findingCount": 8,
+        "periodSpans": [],
+        "period": null,
+        "comparisonPeriod": null,
+        "population": "loans",
+        "warnings": [
+          "The forward forecast covers the open pipeline only. 1479 case(s) worth £156.1m are excluded because the extract already shows them as completed or withdrawn, so they are not future completions."
+        ],
+        "refused": false
+      }
+    ]
+  }
+}

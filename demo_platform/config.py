@@ -545,6 +545,17 @@ def client_docs_dir() -> Path:
     return Path(__file__).resolve().parent / "docs"
 
 
+def portfolio_registry_path() -> Path:
+    """The demo client's OWN governed portfolio registry.
+
+    Deliberately inside the demo workspace rather than ``config/client/``: a
+    demonstration must not write shared production configuration. A real
+    deployment points ``TRAKT_PORTFOLIO_REGISTRY`` at its own file in exactly
+    this way, so the mechanism exercised here is the production one.
+    """
+    return onboarding_dir() / "portfolio_registry.yaml"
+
+
 def demo_client_config() -> Path:
     """The demo client master config (isolated from production client configs)."""
     return Path(__file__).resolve().parent / "config" / "config_client_ALDERBRIDGE_DEMO.yaml"
@@ -589,6 +600,10 @@ def mi_env(*, period_role: str = "current") -> Dict[str, str]:
         # The dated platform root, which gives multi-period evolution / bridge.
         "MI_AGENT_ONBOARDING_OUTPUT_ROOT": platform_prefix(),
         "MI_AGENT_CLIENT_ID": CLIENT_ID,
+        # The governed per-portfolio metadata onboarding published — including
+        # each book's ASSET CLASS, which is what lets MI compose the common
+        # semantic core plus this asset's own metrics and dimensions.
+        "TRAKT_PORTFOLIO_REGISTRY": str(portfolio_registry_path()),
         "MI_AGENT_RUN_ID": prd.reporting_date,
         "MI_AGENT_REPORTING_DATE": prd.reporting_date,
         # Investor decks, resolved locally (no signed blob URLs at render time).

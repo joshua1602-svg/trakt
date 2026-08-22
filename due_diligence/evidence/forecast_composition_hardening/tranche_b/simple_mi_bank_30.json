@@ -1,0 +1,182 @@
+[
+  {
+    "q": "What is the total AuM?",
+    "ok": false,
+    "route": null,
+    "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'."
+  },
+  {
+    "q": "What is the weighted average LTV?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the average borrower age?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Average Borrower Age \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show balance by region.",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show balance by LTV band.",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the bar for your query, covering 10 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 10 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show loan count by age band.",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the bar for your query, covering 8 group(s).\n\nCalculated: Average Borrower Age \u00b7 grouped by Age Bucket \u00b7 8 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show me a heatmap of balance by region and LTV band.",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the heatmap for your query, covering 88 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region and LTV Bucket \u00b7 88 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the largest single loan exposure?",
+    "ok": true,
+    "route": "concentration_analysis",
+    "answer": "The largest single-loan exposure is \u00a3842k, representing 0.043% of exposure. Top 5 loans account for 0.20% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 11,035 loans."
+  },
+  {
+    "q": "What is the maximum balance?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Maximum Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the minimum balance?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Minimum Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the median balance?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Median Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the balance of the front book?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 1,177 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the balance of the back book?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Seasoning Segment = Back Book \u00b7 9,858 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the balance of the direct book?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_origination \u00b7 7,126 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the balance of the acquired book?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_acquired \u00b7 3,909 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the balance of the sponsored book?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show balance by LTV band for the back book.",
+    "ok": false,
+    "route": null,
+    "answer": "I could not build a governed query for this question: heatmap requires at least two dimensions. No substitute figure has been returned."
+  },
+  {
+    "q": "Which region has the largest exposure?",
+    "ok": true,
+    "route": "geo_exposure",
+    "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure."
+  },
+  {
+    "q": "Summarise the portfolio.",
+    "ok": true,
+    "route": "portfolio_summary",
+    "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis."
+  },
+  {
+    "q": "What has changed versus the prior month?",
+    "ok": true,
+    "route": "period_movement",
+    "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Book contributed approximately +\u00a311.5m and ALP Acquired Back Book contributed approximately +\u00a36.6m of the movement.\n\nCalculated: Month-on-month movement."
+  },
+  {
+    "q": "Compare April and June funded balance.",
+    "ok": true,
+    "route": "temporal_compare",
+    "answer": "Funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn in 2026-06 \u2014 a change of \u00a332.6m (+1.69%, up).\n\nCalculated: Governed period comparison."
+  },
+  {
+    "q": "Show funded balance evolution by month.",
+    "ok": true,
+    "route": "evolution",
+    "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution."
+  },
+  {
+    "q": "Show risk limit breaches.",
+    "ok": true,
+    "route": "risk_limits",
+    "answer": "8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "q": "Which concentration limit is closest to breach?",
+    "ok": true,
+    "route": "risk_limits",
+    "answer": "8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "q": "Show geographic concentration limits.",
+    "ok": true,
+    "route": "risk_limits",
+    "answer": "geographic concentration: 4 passed, 0 warning(s), 0 breach(es), 0 need review, 0 unavailable. Nearest to limit: Largest other region (South West) (2.9 pp headroom). Largest concentration: South East at 26.3%.\n\nCalculated: Concentration limits vs the governing document."
+  },
+  {
+    "q": "What is the weighted average LTV of the acquired book?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 Source Portfolio in alp_acquired \u00b7 3,909 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the exposure-weighted borrower age?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Borrower Age \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Show balance by ticket size.",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the bar for your query, covering 7 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size \u00b7 7 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "What is the total balance for loans over \u00a3500k?",
+    "ok": true,
+    "route": null,
+    "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Balance > 500000 \u00b7 119 loans \u00b7 as at 30 June 2026."
+  },
+  {
+    "q": "Where is the back book most concentrated?",
+    "ok": true,
+    "route": "concentration_analysis",
+    "answer": "Largest amortisation type exposure is Interest roll-up (100.0% of exposure). Largest collateral type exposure is Residential property (100.0% of exposure). Largest purpose exposure is RMRT (33.5% of exposure). Largest exposure currency denomination exposure is GBP (100.0% of exposure). Largest collateral geography exposure is South East (26.1% of exposure). Largest origination channel exposure is Direct (69.0% of exposure). Largest interest rate type exposure is FXRL (100.0% of exposure).\n\nCalculated: Exposure concentration."
+  }
+]

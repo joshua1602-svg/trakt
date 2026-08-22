@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from mi_agent.mi_query_executor import _apply_filters
 from mi_agent.parsed_question import ParsedQuestion
 
+from mi_agent import period_request as _period_request
 from mi_agent import portfolio_lens as _portfolio_lens
 
 _logger = _logging.getLogger("mi_agent_api.chat_routing")
@@ -53,6 +54,8 @@ from .recogniser_registry import (
 
 from mi_workflows import concentration_analysis as conc_mod
 from mi_workflows import portfolio_risk_comparison as prc_mod
+from mi_workflows.analytical import intent as analytical_intent
+from mi_workflows.analytical import route as analytical_mod
 from mi_workflows.semantics import load_business_semantics
 
 from trakt_core.portfolio import (
@@ -192,9 +195,25 @@ def _table_artifact(title: str, *, columns: List[Dict[str, Any]],
 # --------------------------------------------------------------------------- #
 # Dataset / metric resolution
 # --------------------------------------------------------------------------- #
+#: The words that make a routed question a PIPELINE question. Kept as data
+#: because B21's disclaiming test is applied per term: "excluding pipeline
+#: cases" rules out `pipeline` AND `case` with one clause.
+_PIPELINE_WORDS = ("pipeline", "case", "kfi", "application", "offer")
+
+
 def _dataset_for(question: str, view: str, default: str = "funded") -> str:
+    """Which dataset a routed answer is built from.
+
+    B21 — THE SECOND OWNER, found by enumerating where the view decision arrives
+    rather than by a failing test. `resolve_active_view` picks the frame and
+    this picks the dataset, and both were bare substring tests over overlapping
+    vocabulary; fixing only the first would have left "the balance by seasoning
+    segment excluding pipeline cases" reaching the evolution route with
+    `dataset="pipeline"` — narrowed to the very thing it excluded, by a wider
+    word list than the one that was fixed. It reads the same disclaiming test.
+    """
     q = question.lower()
-    if "pipeline" in q or "case" in q or "kfi" in q or "application" in q or "offer" in q:
+    if any(_portfolio_lens.undisclaimed_mention(q, w) for w in _PIPELINE_WORDS):
         return "pipeline"
     if view == "pipeline":
         return "pipeline"
@@ -239,10 +258,79 @@ _PRIOR_PERIOD_MARKERS = (
 )
 
 
-def _is_portfolio_summary(question: str) -> bool:
-    """A whole-book summary request, with no dimension or comparison in it."""
+#: Item 4 — the trigger half of the class. A VOCABULARY, and stated as one
+#: rather than dressed up as a rule: it is the same kind of finite list as
+#: `lexical.AXIS_MARKERS`, and the day someone writes "give me the top-line
+#: picture" it will need a word added.
+#:
+#: What makes the class a RULE rather than these phrases is the second half
+#: below — the question must name NOTHING ELSE. That is computed, and it is what
+#: keeps "tell me about brokers", "tell me about arrears", "how is lending
+#: doing" and "what is the CPR of this book" out. The CPR case matters most: an
+#: honest "I cannot compute that" must not become a summary nobody asked for.
+_SUMMARY_INTENT = (
+    "summary", "summarise", "summarize", "overview", "snapshot",
+    "the basics", "basics about", "headline", "key metrics", "key figures",
+    "key numbers", "highlights", "top-line", "top line",
+    "how is it doing", "how are we doing", "how is the book doing",
+    "how is the portfolio doing", "how is the book looking",
+    "where do we stand", "how do things stand", "how are things",
+    "tell me about",
+)
+
+#: Spec markers that mean another governed capability owns this question. Read
+#: rather than re-derived: each is set by the parser and consumed by its own
+#: recogniser, so duplicating any of their vocabularies here would recreate the
+#: multi-owner defect this programme has closed six times.
+_SPECIALIST_SPEC_MARKS = ("risk_limit_query", "risk_monitor_mode", "forecast_mode",
+                          "cohort_progression", "bridge_query", "temporal_mode")
+
+
+def _names_something_else(question: str, spec=None) -> bool:
+    """Whether the question asks for anything more specific than the book itself.
+
+    A measure, a dimension, a filter, a comparison, or a specialist capability
+    the spec already marks. This is the half of the class that is COMPUTED, and
+    it does all the discriminating — the vocabulary above only decides whether a
+    summary was asked for at all.
+    """
+    for mark in _SPECIALIST_SPEC_MARKS:
+        if getattr(spec, mark, None):
+            return True
+    try:
+        from mi_agent import llm_query_parser as _p
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.datasets import semantics_path
+        from mi_workflows.analytical.intent import is_comparative as _comparative
+        semantics = load_mi_semantics(semantics_path())
+        if [k for _s, _e, k, _a in _p._measure_hits(question, semantics)
+                if k != "loan_count"]:
+            return True
+        if _p._explicit_dimensions(question, semantics)[0]:
+            return True
+        if _p._parse_filters(question, semantics):
+            return True
+        if _comparative(question):
+            return True
+    except Exception:  # noqa: BLE001 - a summary is the fallback, not the default
+        return True
+    return False
+
+
+def _is_portfolio_summary(question: str, spec=None) -> bool:
+    """A whole-book summary request — the book's overall position, however worded.
+
+    Item 4. This required one of nine LITERAL PHRASES, so "Tell me the basics
+    about this book" was refused outright while "book overview", "key metrics"
+    and "What are the headline numbers?" fell through to the generic executor
+    and came back as a two-KPI card. Three different outcomes for one question,
+    only one of them the governed summary.
+
+    The generic path was never DECIDING those were summaries; it was failing to
+    recognise them. Claiming them here is what makes the answer single.
+    """
     q = f" {question.lower().strip()} "
-    if not any(m in q for m in _SUMMARY_MARKERS):
+    if not any(m in q for m in _SUMMARY_INTENT):
         return False
     # "summarise the portfolio by region" is a stratification, not a summary; and
     # "summarise what changed" is a movement question.
@@ -250,7 +338,7 @@ def _is_portfolio_summary(question: str) -> bool:
         return False
     if any(m in q for m in _PRIOR_PERIOD_MARKERS):
         return False
-    return True
+    return not _names_something_else(question, spec)
 
 
 def _is_period_movement(question: str) -> bool:
@@ -443,10 +531,23 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
                            ) -> Optional[Dict[str, Any]]:
     """Month-on-month movement across the governed metrics, with attribution."""
     lens = _resolve_lens(question, source_lens)
+    # Honour the STATED period where the data covers it. A question that names
+    # "this year" and is answered over the latest month has had a declared
+    # element replaced, and disclosing the narrower window in the prose is not
+    # the same as honouring it.
+    span = _period_request.requested_span(question)
     mv = movement_mod.period_movement(
         output_root, client_id, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label)
+        lens_filters=lens.filters or None, lens_label=lens.label,
+        span_periods=span.periods if span else 1)
     if not mv.get("available"):
+        if span is not None and mv.get("spanRequested"):
+            message = _period_request.clarification(
+                span, int(mv.get("periodsAvailable") or 0))
+            return _envelope(
+                ok=False, question=question, spec=spec_dict, artifacts=[],
+                answer=message, error=message, route="period_movement",
+                warnings=[message])
         return _envelope(
             ok=True, question=question, spec=spec_dict, artifacts=[],
             answer=f"I can't compare against the prior month yet: "
@@ -879,9 +980,25 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                                f"{', '.join(str(k) for k in kept) or 'n/a'}.")})
     last_recon = (periods[-1].get("reconciliation") if periods else None) or {
         "dataset": dataset, "coverage_by_balance_pct": 100.0}
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=last_recon,
-                     source_notes=notes, warnings=warnings, route="evolution")
+    out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                    artifacts=[chart, table], reconciliation=last_recon,
+                    source_notes=notes, warnings=warnings, route="evolution")
+    if filtered:
+        # P1L: this route genuinely applies the population — per period, which is
+        # what makes a filtered trend meaningful — so it DECLARES that it did.
+        # The population ledger accepts execution evidence only, and a route that
+        # stays silent is treated as having widened. Silence from the one route
+        # that was always correct would have refused it.
+        last = next((p.get("filteredRows") for p in reversed(periods)
+                     if p.get("filteredRows") is not None), None)
+        before = next((p.get("rows") or p.get("totalRows") for p in reversed(periods)
+                       if (p.get("rows") or p.get("totalRows")) is not None), None)
+        out.setdefault("metadata", {})["populationApplied"] = {
+            "applied": [f"{key} (applied within each period)"
+                        for key in (getattr(spec, "filters", None) or {})],
+            "unavailable": [], "rowsBefore": before, "rowsAfter": last,
+        }
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -974,8 +1091,33 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
                   f"{_gbp(weighted.get('forecastFundedBalance'))}); the completion run-rate "
                   f"extrapolation projects ~{_gbp(base)}/month ({_gbp(ann)}/year) forward. {caveat}")
     else:
+        # HONOUR THE STATED GRANULARITY, OR CLARIFY. "Based on the last few
+        # weeks" pins no COUNT, so there is no span to fail — but it does pin a
+        # UNIT, and this run-rate is measured from month-end funded snapshots.
+        # Disclosing "based on 2 month(s) of funded growth" told the reader what
+        # was used; it did not answer the question they asked, which is the same
+        # shape as answering "this year" over the latest month with a note.
+        #
+        # The weekly pipeline extracts cannot stand in: ten of the twelve carry
+        # no completion at all, so a weekly completion rate would rest on two
+        # observations in the final fortnight — the censoring artefact Tranche C
+        # documents, not a rate.
+        unit = _period_request.requested_unit(question)
+        if _period_request.finer_than(unit, "month"):
+            message = _period_request.granularity_clarification(
+                unit, "month", "month-end funded snapshots")
+            return _envelope(
+                ok=False, question=question, spec=spec_dict, artifacts=[],
+                answer=message, error=message, route="forecast_extrapolation",
+                warnings=[message])
+        # State the OBSERVATION WINDOW on the answers that do stand. The sibling
+        # milestone answer above has always disclosed it; this one did not.
+        observed = rr.get("observedMonths")
+        basis = (f", based on {observed} month(s) of funded growth"
+                 if observed else "")
         answer = (f"Current funded balance {_gbp(cur)}; base completion run-rate ~{_gbp(base)}/month "
-                  f"({_gbp(ann)}/year), projected forward with downside/base/upside bands. {caveat}")
+                  f"({_gbp(ann)}/year){basis}, projected forward with "
+                  f"downside/base/upside bands. {caveat}")
 
     artifacts: List[Dict[str, Any]] = []
     proj = rr.get("projectedBalances", [])
@@ -1390,9 +1532,19 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
         warnings.append(f"{summ['unavailable']} test(s) unavailable (missing fields).")
     if summ.get("needsReview"):
         warnings.append(f"{summ['needsReview']} limit(s) need manual review.")
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=artifacts, reconciliation=recon, source_notes=notes,
-                     warnings=warnings, route="risk_limits")
+    envelope = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                         artifacts=artifacts, reconciliation=recon, source_notes=notes,
+                         warnings=warnings, route="risk_limits")
+    # D7 (B12): the route states which book dimensions its EXECUTED tests are
+    # written against. Without it the receipt certified "broken down by region"
+    # — and "broken down by account status" — over a table whose columns are
+    # test/actual/limit/headroom, because an axis existed that the reader could
+    # not identify. Derived from the tests that actually computed, so a limit
+    # reported unavailable certifies nothing.
+    fields_tested = risk_mod.tested_fields(tests)
+    if fields_tested:
+        envelope.setdefault("metadata", {})["groupedBy"] = fields_tested
+    return envelope
 
 
 # --------------------------------------------------------------------------- #
@@ -1646,12 +1798,58 @@ _GROUPED_RANKING_RE = re.compile(
     r"\b(?:top|bottom|largest|biggest|smallest|lowest|highest)\b[^?]*?\bby\b")
 
 
-def _is_geo_exposure(question: str) -> bool:
+def _is_aggregate_contribution_question(question: str) -> bool:
+    """True for "which region contributes most to the weighted average LTV?".
+
+    Uses the SAME detector the P0 guard uses, so a route cannot stand down for
+    one set of questions while the guard refuses a different set. No routed
+    capability decomposes a weighted average across groups, so every one of them
+    defers to the governed contribution aggregation.
+    """
+    try:
+        from mi_agent import execution_receipt as _receipt
+
+        return bool(_receipt._detect_contribution((question or "").lower()))
+    except Exception:  # noqa: BLE001 - a detection fault must not lose a route
+        logger.exception("contribution deference check failed for %r", question)
+        return False
+
+
+def _defers_to_period_change(question: str, *, spec: Any = None,
+                             view: str = "funded") -> bool:
+    """True when the governed period-change route positively claims ``question``.
+
+    A point-in-time route that answers a two-period question does not produce a
+    smaller answer — it produces a DIFFERENT one. Rather than duplicating
+    period-change vocabulary here, this asks the owning capability's own
+    recogniser, so the two can never drift apart.
+    """
+    try:
+        return bool(_period_change.recognise(question, spec=spec,
+                                             view=view or "funded").matched)
+    except Exception:  # noqa: BLE001 - a recognition fault must not lose a route
+        logger.exception("period-change deference check failed for %r", question)
+        return False
+
+
+def _is_geo_exposure(question: str, *, spec: Any = None,
+                     view: str = "funded") -> bool:
     q = f" {question.lower()} "
     if any(t in q for t in _RISK_LIMIT_TERMS):
         return False  # a limit/breach question is a risk-monitor question
     if "bridge" in q:
         return False  # a balance bridge by region is the bridge route
+    if _is_aggregate_contribution_question(question):
+        return False  # a contribution to a weighted average is not an exposure map
+    if _defers_to_period_change(question, spec=spec, view=view):
+        # "Which region grew the most last month?" is a PERIOD-CHANGE question
+        # that happens to name geography. This route answers at one date, so it
+        # would have reported today's largest region and silently dropped the
+        # comparison — exactly the substitution P0 refuses. Deference is narrow
+        # by construction: it applies only when the governed period-change
+        # recogniser positively claims the question, so anything that route
+        # declines still lands here.
+        return False
     if _GROUPED_RANKING_RE.search(q):
         # "show top 5 regions by balance" is a ranking question that happens to
         # mention geography — not a request for the ITL3 concentration view.
@@ -1887,9 +2085,15 @@ def _share_pct(value: Optional[float]) -> str:
     return "—" if value is None else f"{float(value) * 100:.1f}%"
 
 
-def _comparison_cell(value: Optional[float], unit: str) -> str:
+def _comparison_cell(value: Optional[float], unit: str,
+                     aggregation: Optional[str] = None) -> str:
     if value is None:
         return "—"
+    if aggregation == "count":
+        # A cardinality is a whole number. Keyed off the AGGREGATION, not the
+        # unit: the average of an integer-unit field (a term in months) is
+        # legitimately fractional and must keep its decimals.
+        return f"{float(value):,.0f}"
     if unit == "currency":
         return _gbp(value)
     if unit == "share":
@@ -1910,13 +2114,14 @@ def _metric_comparison_table(result: Dict[str, Any], *, spec_dict, portfolio_id,
     rows = []
     for c in comparisons:
         unit = c.get("unit") or "decimal"
+        agg = c.get("aggregation")
         rows.append({
             "metric": c["display_name"],
             "aggregation": c["aggregation"]
             + (f" (wt: {c['weight_basis']})" if c.get("weight_basis") else ""),
-            "a": _comparison_cell(c["portfolio_a"]["value"], unit),
-            "b": _comparison_cell(c["portfolio_b"]["value"], unit),
-            "difference": _comparison_cell(c["difference"]["absolute"], unit),
+            "a": _comparison_cell(c["portfolio_a"]["value"], unit, agg),
+            "b": _comparison_cell(c["portfolio_b"]["value"], unit, agg),
+            "difference": _comparison_cell(c["difference"]["absolute"], unit, agg),
             "direction": (c["directionality"]["higher"] or "—").replace(
                 "portfolio_a", label_a).replace("portfolio_b", label_b),
         })
@@ -2023,14 +2228,102 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
         return envelope
 
     sides = result["portfolio_results"]
+    metric_comparisons = result.get("metric_comparisons") or []
+    distribution_comparisons = result.get("distribution_comparisons") or []
+    requested = result.get("requested_metric") or {}
+    requested_set = result.get("requested_metrics") or (
+        [requested] if requested else [])
+    compared_ok = [r for r in requested_set if r.get("compared")]
+    not_compared = [r for r in requested_set if not r.get("compared")]
+    # Requested measures the workflow does not express at all (a loan count has
+    # no BSR directionality, so it is not one of the measures it undertook to
+    # compare). Named in the answer alongside `not_compared`, but kept out of
+    # the requested-MEASURE ledger those two lists feed.
+    uncomparable = result.get("uncomparable_measures") or []
+
+    # ---- the requested-measure invariant -------------------------------- #
+    # Every measure the caller named must be accounted for before this route may
+    # answer. When NONE was compared it is a refusal naming them; when some were
+    # and some were not, the answer stands and names what is missing (P1E's
+    # explicit-partial rule). The failure this prevents: "how do the two books
+    # compare on borrower age?" returning "no governed directional differences
+    # were observed" when borrower age was never compared at all.
+    if requested_set and not compared_ok:
+        names = _sentence_join([r.get("display_name") or r.get("field")
+                                for r in not_compared]) or "the requested measure"
+        reasons = "; ".join(sorted({str(r.get("reason")) for r in not_compared}))
+        message = (
+            f"I could not compare {sides[0]['label']} with {sides[1]['label']} "
+            f"on {names}: {reasons}. I have not compared a different "
+            f"measure instead, and I have not reported this as 'no difference'.")
+        envelope = _envelope(
+            ok=False, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=message, error=message, warnings=warnings + [message])
+        envelope["workflow"] = result
+        envelope["controlledRefusal"] = True
+        meta = envelope["metadata"]
+        meta["controlledRefusal"] = True
+        meta["controlledUnsupported"] = True
+        meta["portfolioComparison"] = {
+            # This route compares PORTFOLIO SCOPES, so the cohort concept it
+            # expresses is how the loans were SOURCED. Declared as evidence so a
+            # question asking about a different cohort — seasoning, vintage —
+            # cannot be marked answered merely because two books were compared.
+            "cohortConcept": "sourcing",
+            "requestedMetric": requested.get("field"),
+            "requestedMetrics": [r.get("field") for r in requested_set],
+            "requestedMetricCompared": False,
+            "reason": requested.get("reason"),
+            "measuresCompared": [],
+        }
+        return envelope
+
+    # ---- empty-comparison safety ---------------------------------------- #
+    # An empty comparison set means NOTHING WAS COMPARED. It does not mean the
+    # portfolios are alike, and it may never be rendered as a negative finding.
     summary_lines = result.get("summary") or []
     if summary_lines:
         answer = " ".join(summary_lines)
-    else:
+        if not_compared or uncomparable:
+            # Explicit partial: what ran, and what did not, by name. Never a
+            # silent three-of-four.
+            answer += (" Not compared: " + "; ".join(
+                f"{r.get('display_name') or r.get('field')} ({r.get('reason')})"
+                for r in list(not_compared) + list(uncomparable)) + ".")
+    elif metric_comparisons or distribution_comparisons:
+        # Something WAS compared and no direction emerged — a real observation.
         answer = (f"Compared {sides[0]['label']} with {sides[1]['label']} at "
-                  f"{result.get('reporting_date') or 'the current reporting date'}: "
-                  "no governed directional differences were observed across the "
-                  "selected indicators.")
+                  f"{result.get('reporting_date') or 'the current reporting date'} "
+                  f"across {len(metric_comparisons) + len(distribution_comparisons)} "
+                  f"governed indicator(s): no directional difference was observed "
+                  f"on any of them.")
+    else:
+        message = (
+            f"I did not compare {sides[0]['label']} with {sides[1]['label']}: no "
+            f"governed indicator was eligible for comparison on this book. "
+            f"Nothing was measured, so I cannot say whether the two books "
+            f"differ.")
+        envelope = _envelope(
+            ok=False, question=request.question, spec=request.spec_dict,
+            artifacts=[], route=route, lens_applied=True,
+            answer=message, error=message, warnings=warnings + [message])
+        envelope["workflow"] = result
+        envelope["controlledRefusal"] = True
+        envelope["metadata"]["controlledRefusal"] = True
+        envelope["metadata"]["controlledUnsupported"] = True
+        envelope["metadata"]["portfolioComparison"] = {
+            # This route compares PORTFOLIO SCOPES, so the cohort concept it
+            # expresses is how the loans were SOURCED. Declared as evidence so a
+            # question asking about a different cohort — seasoning, vintage —
+            # cannot be marked answered merely because two books were compared.
+            "cohortConcept": "sourcing",
+            "requestedMetric": requested.get("field"),
+            "requestedMetricCompared": False,
+            "reason": "no governed indicator was eligible for comparison",
+            "measuresCompared": [],
+        }
+        return envelope
 
     artifacts: List[Dict[str, Any]] = []
     table = _metric_comparison_table(result, spec_dict=request.spec_dict,
@@ -2057,6 +2350,28 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
         spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
         source_notes=notes, route=route, warnings=warnings, lens_applied=True)
     envelope["workflow"] = result
+    # The EVIDENCE the P0 guard verifies and the receipt renders: which measures
+    # were actually compared, and between which two books. Derived from executed
+    # comparison metadata, never from the question's wording.
+    envelope["metadata"]["portfolioComparison"] = {
+        # This route compares PORTFOLIO SCOPES, so the cohort concept it
+        # expresses is how the loans were SOURCED. Declared as evidence so a
+        # question asking about a different cohort — seasoning, vintage —
+        # cannot be marked answered merely because two books were compared.
+        "cohortConcept": "sourcing",
+        "requestedMetric": requested.get("field"),
+        "requestedMetrics": [r.get("field") for r in requested_set],
+        "requestedMetricsCompared": [r.get("field") for r in compared_ok],
+        "requestedMetricsNotCompared": [r.get("field") for r in not_compared],
+        "requestedMetricCompared": bool(compared_ok) if requested_set else None,
+        "measuresCompared": [c.get("field") for c in metric_comparisons],
+        "measureLabels": [c.get("display_name") for c in metric_comparisons],
+        "aggregations": [c.get("aggregation") for c in metric_comparisons],
+        "dimensionsCompared": [c.get("field") for c in distribution_comparisons],
+        "portfolioA": sides[0]["label"],
+        "portfolioB": sides[1]["label"],
+        "reportingDate": result.get("reporting_date"),
+    }
     return envelope
 
 
@@ -2071,6 +2386,10 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
 # takes no decisions.
 # --------------------------------------------------------------------------- #
 def _recognise_concentration(request: RouteRequest) -> Recognition:
+    if _is_aggregate_contribution_question(request.question):
+        # Concentration measures how exposure is DISTRIBUTED at one date; it
+        # does not decompose a weighted average across groups.
+        return Recognition.no("aggregate_contribution_question")
     matched, reason = conc_mod.is_concentration_question(
         request.question, request.spec)
     return (Recognition.yes(_WORKFLOW_CONFIDENCE, reason) if matched
@@ -2229,7 +2548,39 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
         spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
         source_notes=notes, route=route, warnings=warnings, lens_applied=True)
     envelope["workflow"] = result
+    # Structured evidence of a SINGLE-NAME analysis, so the receipt and the P0
+    # share facet can be settled from what executed rather than from the answer
+    # text. Reading a percentage out of prose proves only that prose mentions
+    # one; this states the grain, the measure and both sides of the share.
+    single = _single_name_evidence(result)
+    if single:
+        envelope.setdefault("metadata", {})["concentration"] = single
     return envelope
+
+
+def _single_name_evidence(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """What the concentration workflow declares about a single-name result.
+
+    ``None`` when it measured dimensions rather than individual names — a
+    regional breakdown is not evidence that the largest single loan was found.
+    """
+    for entry in (result.get("single_name_results") or []):
+        cats = entry.get("categories") or []
+        if not cats:
+            continue
+        top = cats[0]
+        return {
+            "kind": entry.get("kind"),
+            "grainField": entry.get("field"),
+            "basis": entry.get("basis"),
+            "population": entry.get("population"),
+            "distinctNames": entry.get("distinct_names"),
+            "topExposure": top.get("exposure"),
+            "topShare": top.get("exposure_share"),
+            "totalExposure": entry.get("total_exposure"),
+            "reportingDate": result.get("reporting_date"),
+        }
+    return None
 
 
 #: Human wording per route for the lens disclosure below.
@@ -2332,6 +2683,18 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
     resolution on the common path for no decision.
     """
     registry.extend([
+        # 0. The ANALYTICAL CAPABILITY LAYER. Registered first, and at a higher
+        #    confidence, because a question whose answer is two or more governed
+        #    capabilities must not be answered in part by whichever single
+        #    capability below happens to match it first. Safe to put here only
+        #    because its recognition is strict: it matches ONLY when the
+        #    deterministic planner composes a multi-capability plan, and the
+        #    planner declines every question a route below already owns
+        #    (mi_workflows/analytical/planner.py). Its handler also returns None
+        #    when a plan produces nothing computable, so a book missing the data
+        #    a plan needs falls through to exactly the behaviour it had before.
+        analytical_mod.recogniser(),
+
         # 1. What-if / scenario perturbs the run-rate and re-solves the
         #    milestone. Returns None when the magnitude cannot be quantified, so
         #    it falls through to forecast / conversion.
@@ -2372,7 +2735,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="funded_bridge", priority=40, lens_aware=True,
             description="Governed funded-balance attribution waterfall.",
-            recognise=lambda r: bool(getattr(r.spec, "bridge_query", False)),
+            recognise=lambda r: (bool(getattr(r.spec, "bridge_query", False))
+                                 and not _is_aggregate_contribution_question(r.question)),
             handle=lambda r: _route_bridge(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
@@ -2395,7 +2759,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="geo_exposure", priority=60, lens_aware=True,
             description="Funded exposure by UK ITL3 area.",
-            recognise=lambda r: _is_geo_exposure(r.question),
+            recognise=lambda r: _is_geo_exposure(r.question, spec=r.spec,
+                                                 view=r.view),
             handle=lambda r: _route_geo(
                 r.question, r.spec_dict, client_id=r.client_id, run_id=r.run_id,
                 frame_resolver=r.frame_resolver, portfolio_id=r.portfolio_id,
@@ -2464,7 +2829,7 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="portfolio_summary", priority=80, lens_aware=True,
             description="Current governed headline position.",
-            recognise=lambda r: _is_portfolio_summary(r.question),
+            recognise=lambda r: _is_portfolio_summary(r.question, r.spec),
             handle=lambda r: _route_portfolio_summary(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
@@ -2545,6 +2910,7 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
               parsed: Optional[Any] = None,
               registry: Optional[RecogniserRegistry] = None,
               capability_resolver: Optional[Callable[[Optional[str]], Any]] = None,
+              base_frame_resolver: Optional[Callable[[str, Optional[str]], Any]] = None,
               ) -> Optional[Dict[str, Any]]:
     """Route a question to a governed capability, or return ``None`` to defer to
     the point-in-time MI Agent path.
@@ -2578,6 +2944,26 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     parsed.merge_filters(extra_filters)
     spec = parsed.spec
 
+    # THE ANALYTICAL INTENT BOUNDARY.
+    #
+    # Before any recogniser is consulted, read the question for its governed
+    # analytical FAMILY and OPERATIONS, and settle the governed intent flags the
+    # parser left open. This is routing, not analysis: every flag it can set is
+    # one an existing route already recognises, and it never overrides a flag the
+    # parser has already settled.
+    #
+    # It exists because the same governed question reached two different answers
+    # depending on wording — "which limits have the least headroom?" reached the
+    # limits route; "where are we closest to our limits?" did not, and the funded
+    # executor answered it with weighted average LTV by region. The family is the
+    # same; only the phrasing differed. See
+    # ``mi_workflows/analytical/intent.py`` for the six families.
+    try:
+        analytical_reading, analytical_flags = analytical_intent.settle(question, spec)
+    except Exception as exc:  # noqa: BLE001 - the boundary must never break routing
+        _logger.warning("analytical intent boundary failed: %s", exc)
+        analytical_reading, analytical_flags = None, {}
+
     request = RouteRequest(
         question=question, spec=spec, spec_dict=spec.to_dict(),
         semantics=semantics, view=view, client_id=client_id, run_id=run_id,
@@ -2585,6 +2971,7 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         pipeline_root=pipeline_root, history_model=history_model,
         history_model_provider=history_model_provider, as_of=as_of,
         source_lens=source_lens, frame_resolver=frame_resolver,
+        base_frame_resolver=base_frame_resolver,
         parse_meta=parsed.meta, semantics_context=parsed.semantics_context)
 
     # The governed scope this request runs in, resolved lazily and AT MOST ONCE
@@ -2621,5 +3008,23 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
             _logger.warning("route %s failed: %s", recogniser.name, exc)
             continue
         if envelope is not None:
+            _stamp_analytical_intent(envelope, analytical_reading, analytical_flags)
             return _disclose_lens_scope(envelope, question, source_lens)
     return None
+
+
+def _stamp_analytical_intent(envelope: Dict[str, Any], reading, flags) -> None:
+    """Publish what the boundary recognised, on the answer it shaped.
+
+    Evidence, not decoration: a reader (and the fail-closed check downstream)
+    must be able to see which family a question was read as, and which governed
+    flag — if any — was settled on its behalf.
+    """
+    if not isinstance(envelope, dict) or reading is None or not reading.recognised:
+        return
+    meta = envelope.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        block = reading.to_dict()
+        if flags:
+            block["flagsApplied"] = dict(flags)
+        meta["analyticalIntent"] = block

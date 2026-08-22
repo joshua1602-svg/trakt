@@ -1,0 +1,60 @@
+== BEFORE  /tmp/claude-0/-home-user-trakt/8fa44461-4d82-5a00-b9a3-1df72087ab19/scratchpad/tb_pre  (752 runs)
+   grades          : {'CORRECT': 696, 'SAFE_REFUSAL': 56}
+   unsafe          : 0
+   correct/disclosed: 696 (92.6%)
+   SUBSTANTIVE_CALCULATED  :  642 (85.4%)
+   INFORMATIONAL_NO_COMPUTE:   54 (7.2%)
+   CONTROLLED_REFUSAL      :   56 (7.4%)
+   parser mix      : {'deterministic_fallback_after_llm_failure': 662, 'deterministic': 30, 'llm': 60}
+== AFTER   /tmp/claude-0/-home-user-trakt/8fa44461-4d82-5a00-b9a3-1df72087ab19/scratchpad/tb  (752 runs)
+   grades          : {'CORRECT': 688, 'SAFE_REFUSAL': 64}
+   unsafe          : 0
+   correct/disclosed: 688 (91.5%)
+   SUBSTANTIVE_CALCULATED  :  634 (84.3%)
+   INFORMATIONAL_NO_COMPUTE:   54 (7.2%)
+   CONTROLLED_REFUSAL      :   64 (8.5%)
+   parser mix      : {'llm': 145, 'deterministic': 29, 'deterministic_fallback_after_llm_failure': 578}
+
+matched runs 752   grade differences 8   answer-text differences 197
+grade transitions: {('CORRECT', 'SAFE_REFUSAL'): 8}
+text differences by variation: {'Q1.1': 20, 'Q1.2': 20, 'Q1.3': 20, 'Q1.4': 20, 'Q2.3': 1, 'Q8.1/seasoning': 20, 'Q8.2/seasoning': 20, 'Q8.3/seasoning': 20, 'Q8.4/seasoning': 20, 'Q9.2': 12, 'Q9.3': 12, 'Q9.4': 12}
+
+--- Q1.3 alderbridge/forced_llm repeat 2: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 258 loans: Current Outstanding Balance £53.2m → £39.7m (−£13.5m); Current Loan To Value 34.17% → 34.73% (+0.55pp); Current Interest Rate 6.48% → 6.40% (-0.0
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+
+--- Q1.3 alderbridge/forced_llm repeat 4: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 258 loans: Current Outstanding Balance £53.2m → £39.7m (−£13.5m); Current Loan To Value 34.17% → 34.73% (+0.55pp); Current Interest Rate 6.48% → 6.40% (-0.0
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+
+--- Q1.3 alderbridge/production repeat 0: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 258 loans: Current Outstanding Balance £53.2m → £39.7m (−£13.5m); Current Loan To Value 34.17% → 34.73% (+0.55pp); Current Interest Rate 6.48% → 6.40% (-0.0
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+
+--- Q1.3 alderbridge/production repeat 4: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 258 loans: Current Outstanding Balance £53.2m → £39.7m (−£13.5m); Current Loan To Value 34.17% → 34.73% (+0.55pp); Current Interest Rate 6.48% → 6.40% (-0.0
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+
+--- Q1.3 kestrelmoor/forced_llm repeat 0: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 1,019 loans: Current Outstanding Balance £97.3m → £96.6m (−£752k); Current Loan To Value 29.00% → 28.62% (-0.39pp); Current Interest Rate 6.51% → 6.49% (-0.
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+
+--- Q1.3 kestrelmoor/forced_llm repeat 2: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 1,019 loans: Current Outstanding Balance £97.3m → £96.6m (−£752k); Current Loan To Value 29.00% → 28.62% (-0.39pp); Current Interest Rate 6.51% → 6.49% (-0.
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+
+--- Q1.3 kestrelmoor/forced_llm repeat 4: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 1,019 loans: Current Outstanding Balance £97.3m → £96.6m (−£752k); Current Loan To Value 29.00% → 28.62% (-0.39pp); Current Interest Rate 6.51% → 6.49% (-0.
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+
+--- Q1.3 kestrelmoor/production repeat 4: CORRECT -> SAFE_REFUSAL
+    parser before=deterministic_fallback_after_llm_failure after=llm
+    before: Across 2026-04-30 → 2026-06-30, Recent lending (last 3 months), 1,019 loans: Current Outstanding Balance £97.3m → £96.6m (−£752k); Current Loan To Value 29.00% → 28.62% (-0.39pp); Current Interest Rate 6.51% → 6.49% (-0.
+    after : I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the

@@ -1,0 +1,125 @@
+== BEFORE  llm_post  (752 runs)
+   grades          : {'CORRECT': 675, 'SAFE_REFUSAL': 77}
+   unsafe          : 0
+   correct/disclosed: 675 (89.8%)
+   SUBSTANTIVE_CALCULATED  :  622 (82.7%)
+   INFORMATIONAL_NO_COMPUTE:   53 (7.0%)
+   CONTROLLED_REFUSAL      :   77 (10.2%)
+   parser mix      : {'llm': 643, 'deterministic': 18, 'deterministic_fallback_after_llm_failure': 91}
+== AFTER   d/llm_d3  (752 runs)
+   grades          : {'CORRECT': 682, 'SAFE_REFUSAL': 70}
+   unsafe          : 0
+   correct/disclosed: 682 (90.7%)
+   SUBSTANTIVE_CALCULATED  :  628 (83.5%)
+   INFORMATIONAL_NO_COMPUTE:   54 (7.2%)
+   CONTROLLED_REFUSAL      :   70 (9.3%)
+   parser mix      : {'llm': 626, 'deterministic': 29, 'deterministic_fallback_after_llm_failure': 97}
+
+matched runs 752   grade differences 17   answer-text differences 51
+grade transitions: {('CORRECT', 'SAFE_REFUSAL'): 5, ('SAFE_REFUSAL', 'CORRECT'): 12}
+text differences by variation: {'Q1.3': 3, 'Q2.3': 12, 'Q3.3': 2, 'Q3.4': 6, 'Q4.1': 12, 'Q4.4': 12, 'Q6.3': 2, 'Q9.1': 2}
+
+--- Q3.4 alderbridge/forced_llm repeat 3: CORRECT -> SAFE_REFUSAL
+    parser before=llm after=llm
+    before: Offer stage pipeline is £29.4m across 157 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £5.0m. Expected to land: 2026-07 £5.0m.
+
+Calculated: Composed governed capabilities.
+    after : I understood that you asked for the population account_status = offer, but that could not be applied to the calculation (the population account_status = offer — this analytical route calculated across the whole book; it 
+
+--- Q4.4 alderbridge/forced_llm repeat 0: CORRECT -> SAFE_REFUSAL
+    parser before=llm after=deterministic_fallback_after_llm_failure
+    before: Current funded balance £1.96bn; base completion run-rate ~£16.3m/month (£195.5m/year), projected forward with downside/base/upside bands. Downside/base/upside are indicative scenario bands, not statistically validated co
+    after : You asked about the last few weeks. This figure is measured from month-end funded snapshots, so the finest window it can express is one month. I have not answered over a monthly window in its place — ask for a monthly vi
+
+--- Q4.4 alderbridge/forced_llm repeat 1: CORRECT -> SAFE_REFUSAL
+    parser before=llm after=deterministic_fallback_after_llm_failure
+    before: Current funded balance £1.96bn; base completion run-rate ~£16.3m/month (£195.5m/year), projected forward with downside/base/upside bands. Downside/base/upside are indicative scenario bands, not statistically validated co
+    after : You asked about the last few weeks. This figure is measured from month-end funded snapshots, so the finest window it can express is one month. I have not answered over a monthly window in its place — ask for a monthly vi
+
+--- Q6.3 alderbridge/forced_llm repeat 0: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population arrears_balance gt 0, but that could not be applied to the calculation (the population arrears_balance gt 0 — this analytical route calculated across the whole book; it did 
+    after : 8 passed, 0 warning(s), 1 breach(es), 0 need review, 3 unavailable. Nearest to limit: Borrowers aged over 85 (-0.2 pp headroom). Largest concentration: WA current LTV at 43.2%.
+
+Calculated: Concentration limits vs the go
+
+--- Q1.3 alderbridge/production repeat 4: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+    after : Recent lending (last 3 months): 367 loans at 2026-04-30 against 258 loans at 2026-06-30. Current Outstanding Balance £53.2m against £39.7m; Current Loan To Value 34.17% against 34.73%; Current Interest Rate 6.48% against
+
+--- Q3.4 kestrelmoor/forced_llm repeat 2: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population account_status = offer, but that could not be applied to the calculation (the population account_status = offer — this analytical route calculated across the whole book; it 
+    after : Offer stage pipeline is £23.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £3.9m. Expected to land: 2026-07 £3.9m.
+
+Calculated: Composed governed capabilities.
+
+--- Q3.4 kestrelmoor/forced_llm repeat 3: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population account_status = offer, but that could not be applied to the calculation (the population account_status = offer — this analytical route calculated across the whole book; it 
+    after : Offer stage pipeline is £23.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £3.9m. Expected to land: 2026-07 £3.9m.
+
+Calculated: Composed governed capabilities.
+
+--- Q4.4 kestrelmoor/forced_llm repeat 0: CORRECT -> SAFE_REFUSAL
+    parser before=llm after=deterministic_fallback_after_llm_failure
+    before: Current funded balance £1.77bn; base completion run-rate ~£33.8m/month (£405.7m/year), projected forward with downside/base/upside bands. Downside/base/upside are indicative scenario bands, not statistically validated co
+    after : You asked about the last few weeks. This figure is measured from month-end funded snapshots, so the finest window it can express is one month. I have not answered over a monthly window in its place — ask for a monthly vi
+
+--- Q4.4 kestrelmoor/forced_llm repeat 1: CORRECT -> SAFE_REFUSAL
+    parser before=llm after=deterministic_fallback_after_llm_failure
+    before: Current funded balance £1.77bn; base completion run-rate ~£33.8m/month (£405.7m/year), projected forward with downside/base/upside bands. Downside/base/upside are indicative scenario bands, not statistically validated co
+    after : You asked about the last few weeks. This figure is measured from month-end funded snapshots, so the finest window it can express is one month. I have not answered over a monthly window in its place — ask for a monthly vi
+
+--- Q1.3 kestrelmoor/production repeat 2: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=deterministic_fallback_after_llm_failure
+    before: I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+    after : Recent lending (last 3 months): 1,008 loans at 2026-04-30 against 1,019 loans at 2026-06-30. Current Outstanding Balance £97.3m against £96.6m; Current Loan To Value 29.00% against 28.62%; Current Interest Rate 6.51% aga
+
+--- Q1.3 kestrelmoor/production repeat 4: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population origination_date ge 2024-01-01, but that could not be applied to the calculation (the population origination_date ge 2024-01-01 — this analytical route calculated across the
+    after : Recent lending (last 3 months): 1,008 loans at 2026-04-30 against 1,019 loans at 2026-06-30. Current Outstanding Balance £97.3m against £96.6m; Current Loan To Value 29.00% against 28.62%; Current Interest Rate 6.51% aga
+
+--- Q3.3 kestrelmoor/production repeat 0: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=deterministic_fallback_after_llm_failure
+    before: I understood that you asked for the population pipeline_stage = Offer, but that could not be applied to the calculation (the population pipeline_stage = Offer — this analytical route calculated across the whole book; it 
+    after : Offer stage pipeline is £23.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £3.9m. Expected to land: 2026-07 £3.9m.
+
+Calculated: Composed governed capabilities.
+
+--- Q3.3 kestrelmoor/production repeat 4: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=deterministic_fallback_after_llm_failure
+    before: I understood that you asked for the population pipeline_stage = Offer, but that could not be applied to the calculation (the population pipeline_stage = Offer — this analytical route calculated across the whole book; it 
+    after : Offer stage pipeline is £23.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £3.9m. Expected to land: 2026-07 £3.9m.
+
+Calculated: Composed governed capabilities.
+
+--- Q3.4 kestrelmoor/production repeat 1: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population account_status = offer, but that could not be applied to the calculation (the population account_status = offer — this analytical route calculated across the whole book; it 
+    after : Offer stage pipeline is £23.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £3.9m. Expected to land: 2026-07 £3.9m.
+
+Calculated: Composed governed capabilities.
+
+--- Q3.4 kestrelmoor/production repeat 3: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population account_status = offer, but that could not be applied to the calculation (the population account_status = offer — this analytical route calculated across the whole book; it 
+    after : Offer stage pipeline is £23.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £3.9m. Expected to land: 2026-07 £3.9m.
+
+Calculated: Composed governed capabilities.
+
+--- Q3.4 kestrelmoor/production repeat 4: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population account_status = offer, but that could not be applied to the calculation (the population account_status = offer — this analytical route calculated across the whole book; it 
+    after : Offer stage pipeline is £23.6m across 229 case(s) as at 2026-06-29. Expected completion amount from pipeline cases at Offer stage: £3.9m. Expected to land: 2026-07 £3.9m.
+
+Calculated: Composed governed capabilities.
+
+--- Q6.3 kestrelmoor/production repeat 0: SAFE_REFUSAL -> CORRECT
+    parser before=llm after=llm
+    before: I understood that you asked for the population account_status ne Redeemed, but that could not be applied to the calculation (the population account_status ne Redeemed — this analytical route calculated across the whole b
+    after : Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available — extraction required.). I can show observed concentrations once limits are provided.
+
+Calculated: Concentration limits vs the go

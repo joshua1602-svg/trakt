@@ -50,6 +50,12 @@ PORTFOLIO_TYPES: Tuple[str, ...] = (PORTFOLIO_TYPE_DIRECT, PORTFOLIO_TYPE_ACQUIR
 CONTEXT_KIND_TOTAL = "total"
 CONTEXT_KIND_TYPE = "type"
 CONTEXT_KIND_PORTFOLIO = "portfolio"
+#: Several portfolios selected explicitly. Distinct from a TYPE group: the
+#: member list is exactly what was selected, and does not grow when another book
+#: of the same provenance is onboarded. "The current portfolio" with two books
+#: selected means those two — resolving it to their type would silently widen
+#: the answer to books the user did not choose.
+CONTEXT_KIND_SELECTION = "selection"
 
 #: The reserved group context ids. Everything else is a ``source_portfolio_id``.
 CONTEXT_TOTAL = "total"
@@ -60,6 +66,9 @@ GROUP_CONTEXT_IDS: Tuple[str, ...] = (CONTEXT_TOTAL, CONTEXT_DIRECT, CONTEXT_ACQ
 #: Canonical provenance columns the registry is derived from.
 FIELD_PORTFOLIO_ID = "source_portfolio_id"
 FIELD_PORTFOLIO_TYPE = "source_portfolio_type"
+#: Governed asset class of a book. Carried on portfolio METADATA; a canonical
+#: tape may also stamp a column of this name, which is honoured as a fallback.
+FIELD_ASSET_CLASS = "asset_class"
 FIELD_PORTFOLIO_LABEL = "source_portfolio_label"
 
 #: Governed capability ids. A channel may render these; it may not invent them.
@@ -127,6 +136,15 @@ class PortfolioRecord:
     portfolio_id: str
     portfolio_type: Optional[str] = None
     label: Optional[str] = None
+    #: The governed ASSET CLASS of this book — equity_release, sme, bridge, …
+    #: Distinct from ``portfolio_type`` (direct / acquired), which is funded
+    #: provenance inside one SPV and says nothing about what the loans ARE. The
+    #: asset class is established once by onboarding and travels as governed
+    #: portfolio metadata; it is what lets MI compose "the common semantic core
+    #: plus this asset's own metrics and dimensions". Empty means UNKNOWN, and
+    #: every consumer must read that conservatively (see
+    #: ``BusinessSemanticsEntry.applies_to_asset``) rather than assuming a class.
+    asset_class: Optional[str] = None
     #: Does this book write new business? Drives Pipeline + origination forecast.
     originates: bool = False
     #: Is governed pipeline (pre-funded) data actually supplied for it?
@@ -157,6 +175,7 @@ class PortfolioRecord:
         return {
             "portfolio_id": self.portfolio_id,
             "portfolio_type": self.portfolio_type,
+            "asset_class": self.asset_class,
             "label": self.display_label,
             "originates": self.originates,
             "pipeline_data_available": self.pipeline_data_available,
@@ -272,6 +291,22 @@ class PortfolioRegistry:
             })
         return out
 
+    def asset_classes(self, portfolio_ids: Optional[Iterable[str]] = None
+                      ) -> Tuple[str, ...]:
+        """Distinct governed asset classes across ``portfolio_ids`` (default all).
+
+        Returns ``()`` when ANY selected book has not declared one — an unknown
+        book makes the set unknown, because a partially-declared scope must not
+        read as though every book were the declared class.
+        """
+        wanted = ({str(i).lower() for i in portfolio_ids}
+                  if portfolio_ids is not None else None)
+        selected = [p for p in self.portfolios
+                    if wanted is None or p.portfolio_id.lower() in wanted]
+        if not selected or any(not p.asset_class for p in selected):
+            return ()
+        return tuple(sorted({p.asset_class for p in selected if p.asset_class}))
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "client_id": self.client_id,
@@ -326,6 +361,9 @@ def build_registry(
         ptype = _clean(rec.get(FIELD_PORTFOLIO_TYPE))
         if ptype:
             slot["portfolio_type"] = ptype.lower()
+        aclass = _clean(rec.get(FIELD_ASSET_CLASS))
+        if aclass:
+            slot["asset_class"] = aclass.lower()
         label = _clean(rec.get(FIELD_PORTFOLIO_LABEL))
         if label:
             slot["label"] = label
@@ -367,6 +405,14 @@ def build_registry(
         label = (_clean(cfg.get(FIELD_PORTFOLIO_LABEL)) or _clean(cfg.get("label"))
                  or slot.get("label"))
 
+        # Asset class comes from GOVERNED METADATA ONLY. There is deliberately no
+        # inference from the portfolio id, the label or the tape: a guessed asset
+        # class would silently admit asset-specific metrics to a book that never
+        # declared one, which is the failure the conservative default prevents.
+        asset_class = _clean(cfg.get(FIELD_ASSET_CLASS)) or slot.get("asset_class")
+        if asset_class:
+            asset_class = asset_class.lower()
+
         if "originates" in cfg:
             originates = bool(cfg.get("originates"))
         else:
@@ -405,6 +451,7 @@ def build_registry(
         out.append(PortfolioRecord(
             portfolio_id=pid,
             portfolio_type=ptype,
+            asset_class=asset_class,
             label=label,
             originates=originates,
             pipeline_data_available=pipeline_available,
@@ -431,6 +478,10 @@ class PortfolioScope:
     label: str
     portfolio_ids: Tuple[str, ...] = ()
     portfolio_types: Tuple[str, ...] = ()
+    #: The DISTINCT governed asset classes of the books in this scope, sorted.
+    #: Empty means at least one book has not declared one — deliberately not the
+    #: same as "they differ", and read conservatively downstream.
+    asset_classes: Tuple[str, ...] = ()
     #: True when the requested context could not be matched and Total was used.
     fell_back_to_total: bool = False
     #: The context the caller asked for, when it differed from ``context_id``.
@@ -460,11 +511,24 @@ class PortfolioScope:
             "label": self.label,
             "portfolio_ids": list(self.portfolio_ids),
             "portfolio_types": list(self.portfolio_types),
+            "asset_classes": list(self.asset_classes),
         }
         if self.fell_back_to_total:
             out["fell_back_to_total"] = True
             out["requested_context_id"] = self.requested_context_id
         return out
+
+
+def _total_scope(registry: PortfolioRegistry, fell_back: bool = False,
+                 requested: Optional[str] = None) -> "PortfolioScope":
+    """The whole platform. Shared by every fallback so they cannot drift."""
+    ids = tuple(registry.ids())
+    return PortfolioScope(
+        context_id=CONTEXT_TOTAL, context_kind=CONTEXT_KIND_TOTAL, label="Total",
+        portfolio_ids=ids, portfolio_types=tuple(registry.types()),
+        asset_classes=registry.asset_classes(ids),
+        fell_back_to_total=fell_back,
+        requested_context_id=requested if fell_back else None)
 
 
 def resolve_scope(registry: PortfolioRegistry,
@@ -481,6 +545,31 @@ def resolve_scope(registry: PortfolioRegistry,
     if isinstance(context_id, Mapping):
         context_id = (context_id.get("context_id") or context_id.get("id")
                       or context_id.get("lens") or context_id.get("value"))
+    # An explicit MULTI-SELECTION resolves to exactly those books. Previously a
+    # list fell through ``_clean`` to None and widened to Total — the selection
+    # the user had deliberately narrowed was silently discarded, which is the
+    # scope mutation this module exists to prevent.
+    if isinstance(context_id, (list, tuple, set, frozenset)):
+        wanted = [c for c in (_clean(v) for v in context_id) if c]
+        if not wanted:
+            return _total_scope(registry)
+        if len(wanted) == 1:
+            context_id = wanted[0]
+        else:
+            members = [registry.get(w) for w in wanted]
+            found = [m for m in members if m is not None]
+            if not found:
+                return _total_scope(registry, fell_back=True,
+                                    requested=",".join(wanted))
+            ids_sel = tuple(m.portfolio_id for m in found)
+            return PortfolioScope(
+                context_id=",".join(ids_sel),
+                context_kind=CONTEXT_KIND_SELECTION,
+                label=" + ".join(m.display_label for m in found),
+                portfolio_ids=ids_sel,
+                portfolio_types=tuple(dict.fromkeys(
+                    m.portfolio_type for m in found if m.portfolio_type)),
+                asset_classes=registry.asset_classes(ids_sel))
     requested = _clean(context_id)
     ids = tuple(registry.ids())
     types = tuple(registry.types())
@@ -489,6 +578,7 @@ def resolve_scope(registry: PortfolioRegistry,
         return PortfolioScope(
             context_id=CONTEXT_TOTAL, context_kind=CONTEXT_KIND_TOTAL, label="Total",
             portfolio_ids=ids, portfolio_types=types,
+            asset_classes=registry.asset_classes(ids),
             fell_back_to_total=fell_back,
             requested_context_id=requested if fell_back else None)
 
@@ -503,7 +593,9 @@ def resolve_scope(registry: PortfolioRegistry,
         return PortfolioScope(
             context_id=low, context_kind=CONTEXT_KIND_TYPE, label=low.capitalize(),
             portfolio_ids=tuple(p.portfolio_id for p in members),
-            portfolio_types=(low,))
+            portfolio_types=(low,),
+            asset_classes=registry.asset_classes(
+                p.portfolio_id for p in members))
 
     record = registry.get(low)
     if record is not None:
@@ -511,7 +603,8 @@ def resolve_scope(registry: PortfolioRegistry,
             context_id=record.portfolio_id, context_kind=CONTEXT_KIND_PORTFOLIO,
             label=record.display_label,
             portfolio_ids=(record.portfolio_id,),
-            portfolio_types=(record.portfolio_type,) if record.portfolio_type else ())
+            portfolio_types=(record.portfolio_type,) if record.portfolio_type else (),
+            asset_classes=(record.asset_class,) if record.asset_class else ())
 
     # An unrecognised context is never silently narrowed to one book: it widens
     # to Total and says so, so a stale UI selection cannot mislabel a result.

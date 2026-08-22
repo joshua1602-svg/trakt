@@ -32,7 +32,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from mi_agent.mi_query_validator import load_mi_semantics
 from mi_agent import mi_calibration as CAL
-from mi_agent.mi_query_harness import build_fixture
+from mi_agent.mi_query_harness import build_fixture  # noqa: F401  (see df fixture)
 
 _SEMANTICS = _REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml"
 _CASES = CAL.load_bank()
@@ -45,7 +45,22 @@ def semantics():
 
 @pytest.fixture(scope="module")
 def df():
-    return build_fixture()
+    """A REAL funded tape, not build_fixture.
+
+    The bank was graded against build_fixture for its whole life and reported
+    251/252. On a real book it scored 125/252, because build_fixture fabricates
+    five columns no real book in this repository carries and puts English region
+    names in a NUTS3 code field. Grading here against the synthetic shape again
+    would re-open the gap Tranche E found, so this fixture skips rather than
+    falls back when the tape is absent.
+    """
+    tape = (_REPO_ROOT / "demo_platform" / "workspace" / "store" / "processed"
+            / "platform" / "alderbridge" / "2026-06-30"
+            / "platform_canonical_typed.csv")
+    try:
+        return CAL.default_bank_frame(tape)
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture(scope="module")
@@ -97,6 +112,39 @@ def test_every_category_has_zero_hard_failures(bank):
         if not r.ok and not r.known_gap:
             by_cat.setdefault(r.category, []).append(r.id)
     assert not by_cat, by_cat
+
+
+def test_every_case_declares_an_answer_type():
+    """Every case pins the TYPE of answer it expects, not just the measure.
+
+    A count carries no measure, so ``expected_metric`` is legitimately null for
+    31 of these cases. Without a separate type field there was nothing for a
+    wrong-typed answer to disagree with, and "how many loans have a balance
+    above GBP 250k" answered with a balance and passed. A new case added
+    without this field would re-open the hole.
+    """
+    from mi_agent import answer_type as A
+    missing = [c["id"] for c in _CASES if not c.get("expected_answer_type")]
+    assert not missing, f"cases with no expected_answer_type: {missing}"
+    unknown = [(c["id"], c["expected_answer_type"]) for c in _CASES
+               if c["expected_answer_type"] not in A.TYPES]
+    assert not unknown, f"cases with an unknown answer type: {unknown}"
+
+
+def test_answer_type_check_has_teeth(df, semantics):
+    """The new field must be able to FAIL, not merely be present.
+
+    Asserted by running a real case against a deliberately wrong declared type:
+    a currency answer must not satisfy a declared count.
+    """
+    from mi_agent import answer_type as A
+    case = dict(next(c for c in _CASES if c["id"] == "kpi_001"))
+    assert case["expected_answer_type"] == A.CURRENCY
+    assert CAL.evaluate_case(case, df, semantics).ok
+    case["expected_answer_type"] = A.COUNT
+    result = CAL.evaluate_case(case, df, semantics)
+    assert not result.ok
+    assert any("answer type" in f for f in result.failures), result.failures
 
 
 # --------------------------------------------------------------------------- #

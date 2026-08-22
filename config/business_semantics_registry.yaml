@@ -5,7 +5,7 @@
 # regenerate with --force (the script refuses to overwrite otherwise).
 metadata:
   schema_version: 2
-  version: 0.2.0
+  version: 0.3.0
   source_registry: config/system/fields_registry.yaml
   generator: scripts/build_business_semantics_registry.py
   description: 'Governed Business Semantics Registry: the subset of canonical registry fields that represent
@@ -13,7 +13,7 @@ metadata:
     risk comparison, ranking and monitoring workflows. See docs/business_semantics_registry_review.md
     for the full review, exclusions and uncertain entries.'
   source_field_count: 499
-  included_field_count: 242
+  included_field_count: 243
   uncertain_pending_review_count: 25
   taxonomy:
     analytical_concepts:
@@ -83,6 +83,7 @@ metadata:
     - static_baseline
     default_aggregations:
     - average
+    - count
     - distribution
     - share
     - sum
@@ -5407,3 +5408,27 @@ fields:
     confidence: high
     rationale: Age of the youngest borrower (MI core); drives expected loan duration and NNEG exposure
       on joint-life equity-release loans.
+  loan_count:
+    source_field: loan_count
+    display_name: Loan Count
+    analytical_concept: exposure
+    analytical_role: measure
+    temporality: point_in_time
+    categories:
+    - exposure
+    workflow_tags:
+    - portfolio_comparison
+    directionality: neutral
+    default_aggregation: count
+    weight_field: null
+    share_basis: null
+    portfolio_comparability: comparable
+    supports_materiality_assessment: false
+    asset_applicability:
+    - cross_asset
+    confidence: high
+    rationale: 'Loan cardinality: how many loans a population contains. Neutral by declaration — more
+      loans is neither better nor worse, it is scale — so a comparison may state the difference but never
+      reads a direction into it. Derived from the population, not from any field, which is why no identifier
+      is admitted to this registry to express it.'
+    derived: true

@@ -1,0 +1,373 @@
+{
+  "pack": "analytical_intent_v1",
+  "reportHead": "0495aa0",
+  "runFilesProducedAtTree": "044d13b",
+  "productionCodeLastChangedAt": "9125e77",
+  "note": "Every commit after 044d13b changed only due_diligence/. The run files therefore describe the production code at 9125e77, which is identical to that at reportHead.",
+  "artefacts": [
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "demo_platform/workspace/store/processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+      "role": "funded loan tape @ 2026-04-30",
+      "bytes": 6700270,
+      "sha256": "88ce77341d1f5a1c89be5908346435e24231c58ee85e9f796b93a521c8daf3e5"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "kestrelmoor_store/processed/platform/kestrelmoor/2026-04-30/platform_canonical_typed.csv",
+      "role": "funded loan tape @ 2026-04-30",
+      "bytes": 6877478,
+      "sha256": "2d17b216b19c189b5c3e841492114a042d7b5fce5f1bdfc54c8ce6eb8bd6d188"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "demo_platform/workspace/store/processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+      "role": "funded loan tape @ 2026-05-31",
+      "bytes": 6709772,
+      "sha256": "cffd127d525f73ac1187e07b6da36cf25535d4dc709319a91299b1a268f6a6d0"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "kestrelmoor_store/processed/platform/kestrelmoor/2026-05-31/platform_canonical_typed.csv",
+      "role": "funded loan tape @ 2026-05-31",
+      "bytes": 7026126,
+      "sha256": "9b4269393d905c526e046d26845584903046dd7a4cd2f6ec33c8ff6e1880880d"
+    },
+    {
+      "group": "fixture:funded:alderbridge",
+      "path": "demo_platform/workspace/store/processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv",
+      "role": "funded loan tape @ 2026-06-30",
+      "bytes": 6722678,
+      "sha256": "5ee6e8a49c80c6c6d84f53c912bf66e361d469d2ed88c74e696f33bcba4b2b9c"
+    },
+    {
+      "group": "fixture:funded:kestrelmoor",
+      "path": "kestrelmoor_store/processed/platform/kestrelmoor/2026-06-30/platform_canonical_typed.csv",
+      "role": "funded loan tape @ 2026-06-30",
+      "bytes": 7182929,
+      "sha256": "755f617cef69bc89404c0c3151e306d87477b1883203f7dd1357c737e986293e"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-04-13/M2L_KFI_and_Pipeline_2026_04_13.csv",
+      "role": "weekly pipeline extract @ 2026-04-13",
+      "bytes": 13341,
+      "sha256": "0a44f9ebbdc9ebb1026e03da85723ee7832ada2ae010337ad3c75a9c9371e26e"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-04-20/M2L_KFI_and_Pipeline_2026_04_20.csv",
+      "role": "weekly pipeline extract @ 2026-04-20",
+      "bytes": 26280,
+      "sha256": "29077f3563bcb4b5052a1f58280ec7acc4c13a6495c5a1e6fb823cf20eaf8eee"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-04-27/M2L_KFI_and_Pipeline_2026_04_27.csv",
+      "role": "weekly pipeline extract @ 2026-04-27",
+      "bytes": 39207,
+      "sha256": "f00d2a53d176ddf954f323f0376a376f33d15e11348e3ff11a51b70bfaac608b"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-05-04/M2L_KFI_and_Pipeline_2026_05_04.csv",
+      "role": "weekly pipeline extract @ 2026-05-04",
+      "bytes": 52204,
+      "sha256": "59a5a7d1cf1c634206ff883d85cfc794a375f085c4a880fb2755967a89d62c04"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-05-11/M2L_KFI_and_Pipeline_2026_05_11.csv",
+      "role": "weekly pipeline extract @ 2026-05-11",
+      "bytes": 65320,
+      "sha256": "2099a4ede3be05b90cbab6ea1821f6adcd61649b4da622d97275301962f97252"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-05-18/M2L_KFI_and_Pipeline_2026_05_18.csv",
+      "role": "weekly pipeline extract @ 2026-05-18",
+      "bytes": 78525,
+      "sha256": "507fb1878c92c86cfa12a10d282cdd44864f61c8d2678d3bea974c43dca433fb"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-05-25/M2L_KFI_and_Pipeline_2026_05_25.csv",
+      "role": "weekly pipeline extract @ 2026-05-25",
+      "bytes": 91947,
+      "sha256": "9174c0798bca0a81ec833bf03a79b09dbc869e4e0d4f769b7509e6c3db2a5516"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-06-01/M2L_KFI_and_Pipeline_2026_06_01.csv",
+      "role": "weekly pipeline extract @ 2026-06-01",
+      "bytes": 105478,
+      "sha256": "a4f75c8c88f92adc0938b54e79ec8e679852710b92e31c871b1a2c1ec2522f4c"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-06-08/M2L_KFI_and_Pipeline_2026_06_08.csv",
+      "role": "weekly pipeline extract @ 2026-06-08",
+      "bytes": 119236,
+      "sha256": "9115580e9d50b7219607b86f17dcdf4b20b70be048bcd20053bb01e0118b52fd"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-06-15/M2L_KFI_and_Pipeline_2026_06_15.csv",
+      "role": "weekly pipeline extract @ 2026-06-15",
+      "bytes": 133041,
+      "sha256": "c24c6ae58b1563ad2f45446fe6d1688f828933fd049504ebae1a6cabc4eeb78a"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-06-22/M2L_KFI_and_Pipeline_2026_06_22.csv",
+      "role": "weekly pipeline extract @ 2026-06-22",
+      "bytes": 146907,
+      "sha256": "f3fe155044cf3f6704e42c46d8e329d3d723f5f452b521e6800db0f61d39732e"
+    },
+    {
+      "group": "fixture:pipeline:alderbridge",
+      "path": "pipeline_root/alderbridge/pipeline/2026-06-29/M2L_KFI_and_Pipeline_2026_06_29.csv",
+      "role": "weekly pipeline extract @ 2026-06-29",
+      "bytes": 160910,
+      "sha256": "1475784864377133998772d5702a54f58b445bbbdb4f3516706aee1b7911bb6f"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-04-13/M2L_KFI_and_Pipeline_2026_04_13.csv",
+      "role": "weekly pipeline extract @ 2026-04-13",
+      "bytes": 18983,
+      "sha256": "0de825c93611c4b35e42ea48e57105eea4232b269b0b433b63f80cfd60788672"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-04-20/M2L_KFI_and_Pipeline_2026_04_20.csv",
+      "role": "weekly pipeline extract @ 2026-04-20",
+      "bytes": 37505,
+      "sha256": "2035cf0e450de31e0767381ebbbbdf8ea676013ef6698e1167a8f78e7cc24747"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-04-27/M2L_KFI_and_Pipeline_2026_04_27.csv",
+      "role": "weekly pipeline extract @ 2026-04-27",
+      "bytes": 56066,
+      "sha256": "abc1abf296308d9d81c9cee7ad7ac7c6a215d22fad486e747030a70af5e3ee5d"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-05-04/M2L_KFI_and_Pipeline_2026_05_04.csv",
+      "role": "weekly pipeline extract @ 2026-05-04",
+      "bytes": 74815,
+      "sha256": "8d8cc4e9123b3617f2bc9821cce66ca24a8815818730ddbf0fd12131900c20a2"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-05-11/M2L_KFI_and_Pipeline_2026_05_11.csv",
+      "role": "weekly pipeline extract @ 2026-05-11",
+      "bytes": 93683,
+      "sha256": "eaecfe22bf17807ea2553187d3374bf4843e9c8436538350253bb2e3f9f42c58"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-05-18/M2L_KFI_and_Pipeline_2026_05_18.csv",
+      "role": "weekly pipeline extract @ 2026-05-18",
+      "bytes": 112727,
+      "sha256": "739d5c52ec16e8b717619850b7e0560d9a59c1689c7c82b450029a49b3c7ecc3"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-05-25/M2L_KFI_and_Pipeline_2026_05_25.csv",
+      "role": "weekly pipeline extract @ 2026-05-25",
+      "bytes": 132109,
+      "sha256": "a7e26032101398bf7f3697b1dac08a0b7ac4adba49a02e6e3bb5b383e06c0baa"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-06-01/M2L_KFI_and_Pipeline_2026_06_01.csv",
+      "role": "weekly pipeline extract @ 2026-06-01",
+      "bytes": 151647,
+      "sha256": "6055cab4133c4470fee46ad5b73e70b9cc91fe09fd05bd48d6a5d2e732c9ffcb"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-06-08/M2L_KFI_and_Pipeline_2026_06_08.csv",
+      "role": "weekly pipeline extract @ 2026-06-08",
+      "bytes": 171342,
+      "sha256": "e9396773ed317a45d22e767d1f7993ac46bcba07ed9fa13d607b21b3e86629f8"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-06-15/M2L_KFI_and_Pipeline_2026_06_15.csv",
+      "role": "weekly pipeline extract @ 2026-06-15",
+      "bytes": 191211,
+      "sha256": "ad1baf36773ef8ac77b747e06bcd92dc58352521fe3129bf9584e81075080f1d"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-06-22/M2L_KFI_and_Pipeline_2026_06_22.csv",
+      "role": "weekly pipeline extract @ 2026-06-22",
+      "bytes": 211220,
+      "sha256": "f544243e1afb079b6987d5f487a89ac0e34a57316754e8a351dd490c543eebd7"
+    },
+    {
+      "group": "fixture:pipeline:kestrelmoor",
+      "path": "pipeline_root/kestrelmoor/pipeline/2026-06-29/M2L_KFI_and_Pipeline_2026_06_29.csv",
+      "role": "weekly pipeline extract @ 2026-06-29",
+      "bytes": 231357,
+      "sha256": "727640c3f7036e14546d5cde4b37b86352119d9a06069f41f74a4186a828ca7e"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_workflows/analytical/intent.py",
+      "role": "the intent classifier \u2014 step 3 of every trace",
+      "bytes": 40374,
+      "sha256": "3110135eb60e3c1a202e367156ee227d782b0ba2e8890568121aa4f891ca8c13"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_workflows/analytical/planner.py",
+      "role": "plan construction",
+      "bytes": 31432,
+      "sha256": "26e69e2151aa2f2fb3694c4283c52f2b261e16ab81df4aac5b68cf5b4355f0a1"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_workflows/analytical/executors.py",
+      "role": "capability adapters",
+      "bytes": 53559,
+      "sha256": "90fc5c22a7836ec9e1a218215af02ada5a6bb2f61f1e9f02871f16d6b8fb0b24"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_workflows/analytical/registry.py",
+      "role": "capability declarations",
+      "bytes": 11398,
+      "sha256": "e654fdf4c4eb04b7dfdc941473d936ecf67b40c38ce1dd13da25555b8e71590c"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/seasoning.py",
+      "role": "the governed lending windows",
+      "bytes": 20570,
+      "sha256": "e1db13d4a43b8ce8b5898805ffacbca9176926c5fd4cb33a2ef37d56c6533145"
+    },
+    {
+      "group": "code+config",
+      "path": "config/mi/buckets.yaml",
+      "role": "seasoning + lending-window thresholds",
+      "bytes": 7679,
+      "sha256": "b53711e679c5c1fc21f624e87bc0d374cda325362af9b2971bfae634af677faa"
+    },
+    {
+      "group": "code+config",
+      "path": "config/client/pipeline_expected_funding.yaml",
+      "role": "stage probabilities, lags, stage inclusion",
+      "bytes": 526,
+      "sha256": "7e366c3e04039ea65604281f73396656561d8131826c980dba0b265bbdec5744"
+    },
+    {
+      "group": "code+config",
+      "path": "config/business_semantics_registry.yaml",
+      "role": "aggregation / weighting / directionality",
+      "bytes": 165724,
+      "sha256": "a02bf753a224444e77b8a513f708a79362181c46c4ac0aa6c79ff0d41dc1fdd0"
+    },
+    {
+      "group": "code+config",
+      "path": "mi_agent/mi_semantics_field_registry.yaml",
+      "role": "field roles and formats",
+      "bytes": 87709,
+      "sha256": "981afdfbb31b2f44b806d18aebb5b3165c4e4dae1d08395948c894b6bd01c3f2"
+    },
+    {
+      "group": "measurement",
+      "path": "nl_bank.py",
+      "role": "the 44-variation bank",
+      "bytes": 6877,
+      "sha256": "f37729113df3a6734d661ac63f862f9963b592d13bbffe9e7c38566020bd8874"
+    },
+    {
+      "group": "measurement",
+      "path": "nl_harness.py",
+      "role": "the measurement harness",
+      "bytes": 7074,
+      "sha256": "131071ad9248192f4b416f5071ebc0d34fd0ba00b8f7024df0d48e8af773f17b"
+    },
+    {
+      "group": "measurement",
+      "path": "nl_score.py",
+      "role": "FROZEN scorer \u2014 scores baseline and V1 alike",
+      "bytes": 10490,
+      "sha256": "aade14173ab3623196434e833b90a1d112d4106c526381cade6c0cbc4c7164f7"
+    },
+    {
+      "group": "measurement",
+      "path": "nl_reconcile.py",
+      "role": "numeric TRUTH recomputation",
+      "bytes": 5455,
+      "sha256": "4802c50be93ff55ec923ab473250e6e30c4a5233456362dae063be769f4b3d39"
+    },
+    {
+      "group": "measurement",
+      "path": "v1_final.py",
+      "role": "distribution + baseline comparison + gate",
+      "bytes": 5466,
+      "sha256": "786ca261bf33702ceac57f0985e7621ba2643a3fd8b65f3ea7f68a774cd48ea5"
+    },
+    {
+      "group": "measurement",
+      "path": "v1_trace.py",
+      "role": "the ten traces",
+      "bytes": 10653,
+      "sha256": "3306224571fec5b9a4b9c922eb8155a28af8a5bb23bb19476ae7c3b46577dfb8"
+    },
+    {
+      "group": "measurement",
+      "path": "v1_score_run.py",
+      "role": "per-arm scoring",
+      "bytes": 3397,
+      "sha256": "3c625636ef0da0ea48e58f2284c85fa08c417a854808f1e619cbcd4c7a4f2b86"
+    },
+    {
+      "group": "run-file",
+      "path": "v1_nl_alderbridge_production.json",
+      "role": "752-run measurement output (uncompressed sha256)",
+      "bytes": 2478770,
+      "sha256": "50f4b38e85f121b98a9f6e6f4cfeba84053c1b932527199c0c48204956905514"
+    },
+    {
+      "group": "run-file",
+      "path": "v1_nl_alderbridge_forced_llm.json",
+      "role": "752-run measurement output (uncompressed sha256)",
+      "bytes": 2482727,
+      "sha256": "e08fdeb250226b644be1db7423fd60bef6e6a89d56f54a29ac4f1547abaea286"
+    },
+    {
+      "group": "run-file",
+      "path": "v1_nl_kestrelmoor_production.json",
+      "role": "752-run measurement output (uncompressed sha256)",
+      "bytes": 2495500,
+      "sha256": "2d2511babd0139274eece83acc25e283c79dbbda68d6348851bb147b55038e3b"
+    },
+    {
+      "group": "run-file",
+      "path": "v1_nl_kestrelmoor_forced_llm.json",
+      "role": "752-run measurement output (uncompressed sha256)",
+      "bytes": 2498863,
+      "sha256": "eb89bdf72b48c8544b9ab79ba6fe373d8e22880df31f1e4603ab8e423877b3a5"
+    },
+    {
+      "group": "audit",
+      "path": "audit/truth_pipeline.py",
+      "role": "TRUTH for the pipeline conversion forecast",
+      "bytes": 7327,
+      "sha256": "579f743d87f64b711ce27b610178797d6e65903a304b4142c21d68156ac26685"
+    },
+    {
+      "group": "audit",
+      "path": "audit/classify_substance.py",
+      "role": "mechanical substance partition",
+      "bytes": 4043,
+      "sha256": "e3aeacdac514b5803efd038f17d8a540dadece68190d6edd5298d0659fcb154b"
+    }
+  ]
+}

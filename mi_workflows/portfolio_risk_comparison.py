@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 import pandas as pd
 
 from mi_agent import portfolio_lens as _lens_mod
+from mi_agent import seasoning as _seasoning
 from mi_agent.portfolio_scope import apply_scope, registry_for_frame
 from trakt_core.portfolio import PortfolioRegistry, PortfolioScope, resolve_scope
 
@@ -59,6 +60,12 @@ DATASET = "funded"
 
 #: Canonical reporting-date column on the governed tape.
 REPORTING_DATE_FIELD = "reporting_date"
+
+#: The governed measure behind "how many loans". Loan cardinality is declared in
+#: the Business Semantics Registry on the canonical identifier with a ``count``
+#: aggregation, so an MI spec asking for ``loan_count`` resolves here and is
+#: compared under the same rules as every other measure.
+COUNT_MEASURE_FIELD = "loan_count"
 
 #: Asset-class column, when the tape declares one. Absent means "not declared"
 #: — asset-specific fields are then excluded rather than guessed at.
@@ -155,6 +162,24 @@ def rejection_reason(question: str, spec: Any = None) -> Optional[str]:
                     "temporal comparison / evolution routes")
         if getattr(spec, "forecast_mode", None):
             return "the parse resolved a forecast intent, owned by the forecast routes"
+    # SEASONING IS NOT PROVENANCE. "Compare the front book with the back book"
+    # is a comparison across the VINTAGE axis; this workflow compares where
+    # loans came from. Routed here it answered by sourcing — direct vs acquired
+    # — for a question about how long loans have been on the book, which is the
+    # axis conflation P1J-1 exists to remove. (It refused rather than answered,
+    # because the P1G cohort-identity guard caught the substitution, but a
+    # refusal is not the right answer to an answerable question.)
+    #
+    # Deferred ONLY when the question does not also name two governed provenance
+    # scopes. A question naming both axes ("the seasoned direct book vs recent
+    # acquired loans") still reaches this workflow and is still refused by the
+    # cohort guard, which is the safe outcome: better to refuse a two-axis
+    # question than to silently drop one of its axes.
+    if _seasoning.segments_named(question) and len(
+            _lens_mod.resolve_comparison_lenses(question)) < 2:
+        return ("the comparison is across the seasoning / vintage axis, which "
+                "is not a source-portfolio comparison")
+
     for reason, markers in _REJECTIONS:
         if any(m in q for m in markers):
             return reason
@@ -304,7 +329,19 @@ def resolve_common_reporting_date(frame_a: pd.DataFrame, frame_b: pd.DataFrame,
     return common, None, warnings
 
 
-def _asset_classes(frame: pd.DataFrame) -> Tuple[str, ...]:
+def _asset_classes(frame: pd.DataFrame,
+                   scope: Optional[PortfolioScope] = None) -> Tuple[str, ...]:
+    """The governed asset classes of a side of the comparison.
+
+    GOVERNED PORTFOLIO METADATA FIRST. The asset class is a fact about the book,
+    established once at onboarding and carried on the portfolio registry; the
+    tape may or may not stamp a column of the same name. Reading only the column
+    is what left this workflow with an unknown asset class on every deployment
+    whose extract does not carry one — which silently excluded every
+    asset-specific metric from every comparison.
+    """
+    if scope is not None and getattr(scope, "asset_classes", ()):
+        return tuple(str(a).lower() for a in scope.asset_classes)
     if ASSET_CLASS_FIELD not in frame.columns:
         return ()
     return tuple(v.lower() for v in _distinct(frame[ASSET_CLASS_FIELD]))
@@ -397,7 +434,7 @@ def _comparability_decision(entry: SemanticEntry, shared_asset: Optional[str],
         if shared_asset not in entry.asset_applicability:
             return FieldDecision(entry, False,
                                  f"not applicable to asset class '{shared_asset}'")
-    if entry.source_field not in columns:
+    if entry.source_field not in columns and not getattr(entry, "derived", False):
         return FieldDecision(entry, False, "field not present on the tape")
     return FieldDecision(entry, True, "governed for portfolio comparison")
 
@@ -514,8 +551,8 @@ def run_portfolio_risk_comparison(
                         "single-currency book assumption applies")
 
     # ---- asset class ------------------------------------------------------ #
-    classes_a = _asset_classes(frame_a)
-    classes_b = _asset_classes(frame_b)
+    classes_a = _asset_classes(frame_a, scope_a)
+    classes_b = _asset_classes(frame_b, scope_b)
     shared_asset = _shared_asset_class(classes_a, classes_b)
     if classes_a and classes_b and set(classes_a) != set(classes_b):
         limitations.append(
@@ -525,25 +562,86 @@ def run_portfolio_risk_comparison(
             "compared")
     elif not classes_a and not classes_b:
         limitations.append(
-            "the tape declares no asset_class column; asset-specific metrics "
-            "are excluded and only cross-asset metrics are compared")
+            "neither book declares a governed asset class (no portfolio "
+            "metadata and no asset_class column); asset-specific metrics are "
+            "excluded and only cross-asset metrics are compared")
 
     # ---- field selection: registry-governed ------------------------------- #
     columns = tuple(df.columns)
-    metric_field = getattr(spec, "metric", None) if spec is not None else None
+    # P1E: a comparison may be asked for SEVERAL governed measures at once
+    # ("compare the books on balance, count, LTV and borrower age"). The
+    # requested set is one list; a single requested metric is a one-element case
+    # of it, so there is one code path rather than two.
+    requested_fields: List[str] = []
+    #: Requested measures this comparison cannot express at all. Carried
+    #: separately from ``requested_metrics`` — which is the set of BSR measures
+    #: the workflow undertook to compare — so anything it cannot express is
+    #: DISCLOSED rather than dropped. An answer naming three of four measures
+    #: reads as complete, which is how a requested figure used to vanish.
+    uncomparable: List[Dict[str, Any]] = []
+    if spec is not None:
+        for measure in (getattr(spec, "measures", None) or []):
+            name = str((measure or {}).get("field") or "").strip()
+            if not name:
+                continue
+            if name in ("loan_count", "count"):
+                # The MI spec's count measure IS a governed BSR measure: loan
+                # cardinality, declared as a DERIVED measure — a property of the
+                # population, with no column behind it — carrying a neutral
+                # directionality. Resolved to that key so it goes through the
+                # same comparability rules as every other measure rather than
+                # being special-cased out of the comparison.
+                name = COUNT_MEASURE_FIELD
+            if name not in requested_fields:
+                requested_fields.append(name)
+        single = getattr(spec, "metric", None)
+        if not requested_fields and single:
+            requested_fields.append(single)
+    metric_field = requested_fields[0] if requested_fields else None
     concept = requested_concept(question)
 
     decisions: List[FieldDecision] = []
     mode: str
-    if metric_field and bsr.get(metric_field) is not None:
+    #: What became of a metric the caller explicitly asked for. Reported on the
+    #: result so a presenter can never mistake "nothing was compared" for "the
+    #: portfolios do not differ" — see ``requested_metric`` in the return value.
+    requested_metric: Optional[Dict[str, Any]] = None
+    requested_metrics: List[Dict[str, Any]] = []
+    if requested_fields:
         mode = "requested_metric"
-        decisions = [_comparability_decision(bsr.get(metric_field),
-                                             shared_asset, columns)]
-    elif metric_field and bsr.get(metric_field) is None:
-        mode = "requested_metric"
-        limitations.append(
-            f"'{metric_field}' is not governed by the Business Semantics "
-            "Registry for analytical comparison, so it is not compared")
+        for field_name in requested_fields:
+            entry = bsr.get(field_name)
+            if entry is None:
+                limitations.append(
+                    f"'{field_name}' is not governed by the Business Semantics "
+                    "Registry for analytical comparison, so it is not compared")
+                requested_metrics.append({
+                    "field": field_name, "display_name": field_name,
+                    "compared": False,
+                    "reason": ("not governed by the Business Semantics Registry "
+                               "for analytical comparison")})
+                continue
+            decision = _comparability_decision(entry, shared_asset, columns)
+            decisions.append(decision)
+            if not decision.selected:
+                # The governed rules declined this field. That decision is sound
+                # — but it must not vanish. Previously it stayed inside
+                # `decisions`, `metric_comparisons` came back empty, and the
+                # caller rendered the empty list as "no differences observed".
+                limitations.append(
+                    f"'{field_name}' was requested but not compared: "
+                    f"{decision.reason}")
+            requested_metrics.append({
+                "field": field_name,
+                "display_name": entry.display_name,
+                "compared": bool(decision.selected),
+                "reason": decision.reason,
+            })
+        for entry_note in uncomparable:
+            limitations.append(
+                f"'{entry_note['field']}' was requested but not compared: "
+                f"{entry_note['reason']}")
+        requested_metric = requested_metrics[0] if requested_metrics else None
     elif concept is not None:
         mode = "requested_concept"
         decisions = [_comparability_decision(e, shared_asset, columns)
@@ -587,6 +685,12 @@ def run_portfolio_risk_comparison(
         unit = engine.unit_for_field(entry.source_field, mi_semantics)
         if engine.is_monetary(unit) and not monetary_ok:
             suppressed_monetary.append(entry.source_field)
+            for requested in requested_metrics:
+                if requested["field"] == entry.source_field:
+                    requested["compared"] = False
+                    requested["reason"] = (
+                        "suppressed by the currency guard: the portfolios do "
+                        "not share a single governed currency")
             continue
         comparison = _compare_metric(entry, frame_a, frame_b, unit)
         metric_comparisons.append(comparison)
@@ -656,6 +760,17 @@ def run_portfolio_risk_comparison(
         ],
         "metric_comparisons": metric_comparisons,
         "distribution_comparisons": distribution_comparisons,
+        # None unless the caller named a metric. ``compared`` is the invariant a
+        # presenter must honour: a requested metric that was not compared may
+        # never be answered as though it had been.
+        "requested_metric": requested_metric,
+        # P1E: the full requested SET. Every entry carries its own outcome, so a
+        # four-measure comparison is accounted for measure by measure.
+        "requested_metrics": requested_metrics,
+        #: Requested measures this workflow does not express at all. Separate
+        #: from ``requested_metrics`` — those are BSR measures it undertook to
+        #: compare — but reported so the answer can name them.
+        "uncomparable_measures": uncomparable,
         "warnings": warnings,
         "limitations": limitations,
         "summary": summary,

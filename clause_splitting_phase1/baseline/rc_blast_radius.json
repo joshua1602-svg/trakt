@@ -1,0 +1,52 @@
+{
+  "rc": {
+    "calibration_bank": {
+      "cases_before": 252,
+      "cases_after": 252,
+      "cases_compared": 252,
+      "cases_only_before": [],
+      "cases_only_after": [],
+      "passed_before": 252,
+      "passed_after": 252,
+      "regressions": [],
+      "recoveries": [],
+      "moved": 0
+    },
+    "generated_harness": {
+      "cases_before": 249,
+      "cases_after": 249,
+      "cases_compared": 249,
+      "cases_only_before": [],
+      "cases_only_after": [],
+      "passed_before": 249,
+      "passed_after": 249,
+      "regressions": [],
+      "recoveries": [],
+      "moved": 0
+    },
+    "probes_adversarial": {
+      "cases_before": 40,
+      "cases_after": 40,
+      "cases_compared": 40,
+      "cases_only_before": [],
+      "cases_only_after": [],
+      "passed_before": 22,
+      "passed_after": 22,
+      "regressions": [],
+      "recoveries": [],
+      "moved": 0
+    },
+    "probes_time_series": {
+      "cases_before": 24,
+      "cases_after": 24,
+      "cases_compared": 24,
+      "cases_only_before": [],
+      "cases_only_after": [],
+      "passed_before": 1,
+      "passed_after": 1,
+      "regressions": [],
+      "recoveries": [],
+      "moved": 0
+    }
+  }
+}

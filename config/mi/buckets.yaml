@@ -142,3 +142,61 @@ buckets:
     scale: months
     edges: [0, 6, 12, 24, 36, 60, 120, 100000]
     labels: ["0-6m", "6-12m", "1-2y", "2-3y", "3-5y", "5-10y", "10y+"]
+
+
+# =========================================================================
+# GOVERNED SEASONING MODEL (P1J-1)
+# =========================================================================
+#
+# Seasoning is the VINTAGE axis and is completely independent of PROVENANCE
+# (direct / acquired). A directly-originated loan written five years ago is
+# DIRECT by provenance and BACK BOOK by seasoning; an acquired loan may be
+# front or back book by its own origination date. The two axes must never be
+# inferred from one another.
+#
+# ONE model serves both outputs, so they can never disagree:
+#   origination_date -> months_on_book -> seasoning_bucket   (analytical bands)
+#                                      -> seasoning_segment  (binary front/back)
+#
+# The binary front/back classification is LAYERED ON TOP of this same block
+# rather than being a second mechanism: `front_book_max_months` is the boundary,
+# and it is deliberately a separate scalar (not "the first bucket edge") so a
+# client can move the front/back boundary without re-cutting the analytical
+# bands, and vice versa.
+#
+# Seasoning is derived against the GOVERNED REPORTING / CUT-OFF DATE of the
+# frame being queried — never wall-clock "today" — so the same loan queried
+# against an older snapshot carries the seasoning it had at that date.
+#
+# Nothing here is a stored loan attribute: front/back and the bands are derived
+# deterministically at read time from origination_date and the reporting date.
+#
+# NOTE: `time_on_book_bucket` above is a SEPARATE, pre-existing QUANTILE
+# dimension (see mi_agent/quantile_buckets.py). It is untouched by this block.
+seasoning:
+  # Front book = originated within this many months of the reporting date.
+  # Back book = everything older. Client-configurable; never hard-coded.
+  front_book_max_months: 12
+
+  # Governed LENDING WINDOWS. The finer reading of the same months-on-book axis:
+  # "new lending" and "recent lending" are narrower than the front book, and
+  # nested inside it. Front and back are not repeated here — they are taken from
+  # front_book_max_months above, so the four windows cannot disagree.
+  lending_windows:
+    new_max_months: 1
+    recent_max_months: 3
+
+  # Inclusive integer month bands. Must partition [0, inf) with no gap or
+  # overlap; the last band omits max_months (open-ended).
+  buckets:
+    - name: "0-12m"
+      min_months: 0
+      max_months: 12
+    - name: "13-24m"
+      min_months: 13
+      max_months: 24
+    - name: "25-60m"
+      min_months: 25
+      max_months: 60
+    - name: "60m+"
+      min_months: 61

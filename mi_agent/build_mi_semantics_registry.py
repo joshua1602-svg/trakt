@@ -225,7 +225,19 @@ CURATION: Dict[str, dict] = {
     "current_loan_to_value": {
         "tier": "core", "business_name": "Current LTV",
         "business_description": "Current loan-to-value ratio.",
-        "synonyms": ["ltv", "current ltv", "loan to value", "cltv"],
+        # "credit quality" / "quality of the book" resolve here by GOVERNED
+        # RULING (P1J-1 R1): on a fully-performing book — no arrears, no
+        # defaults, no impairment, no risk grade — leverage is the governed
+        # quality proxy, and a lower weighted-average current LTV is better
+        # quality. The phrases are curated rather than inferred, and the receipt
+        # always names the executed measure ("Weighted-average Current LTV"), so
+        # the interpretation is visible rather than assumed. A book that carries
+        # genuine credit-risk fields should revisit this mapping.
+        # Bare "quality" is deliberately NOT a synonym: it also reads as data
+        # quality or valuation quality, and an ambiguous word must not silently
+        # select a measure.
+        "synonyms": ["ltv", "current ltv", "loan to value", "cltv",
+                     "credit quality", "quality of the book", "book quality"],
     },
     "indexed_loan_to_value": {
         "tier": "core", "business_name": "Indexed LTV",
@@ -252,7 +264,22 @@ CURATION: Dict[str, dict] = {
         "business_description": "Age of the youngest borrower on the loan.",
         "synonyms": ["age", "borrower age", "youngest borrower age",
                      "applicant age", "customer age", "youngest age"],
-        "overrides": {"bucket_field": "age_bucket"},
+        # P1N: exposure-weighted borrower age is commercially meaningful for an
+        # equity-release book — a £750k loan to an 88-year-old carries far more
+        # of the portfolio's longevity risk than a £90k loan to a 68-year-old,
+        # and the simple mean hides that. ``default_aggregation`` stays ``avg``:
+        # "average borrower age" must keep meaning the simple mean, and the
+        # weighted figure is reached only by asking for it.
+        # The weight is the SAME governed exposure field every other weighted
+        # measure uses (registry ``metadata.default_weight_field``, and the
+        # executor's own fallback hierarchy). Pinned rather than left implicit
+        # because validation requires an explicit weight before it will permit a
+        # weighted average — no new weighting concept is introduced.
+        "overrides": {"bucket_field": "age_bucket",
+                      "allowed_aggregations": ["avg", "weighted_avg", "median",
+                                               "distribution", "min", "max"],
+                      "default_aggregation": "avg",
+                      "weight_field": "current_outstanding_balance"},
     },
     # ---------------- CORE — portfolio dimensions ----------------
     "origination_date": {
@@ -382,6 +409,7 @@ CURATION: Dict[str, dict] = {
     # fallback. geographic_region_classification (a YEAR) is never a region.
     "collateral_geography": {
         "tier": "core", "business_name": "Region",
+        "value_domain": "uk_region",
         "business_description": "Readable geographic region label for the "
                                 "collateral / property location (analytics display).",
         "synonyms": ["region", "geography", "area", "property region",
@@ -394,6 +422,7 @@ CURATION: Dict[str, dict] = {
         "tier": "extended", "derived": True,
         "derived_from": "geographic_region_collateral",
         "business_name": "Collateral ITL3",
+        "value_domain": "uk_region",
         "business_description": "Granular UK ITL3 code for the collateral / "
                                 "property location (FCA/UK + MI drilldown).",
         "synonyms": ["collateral itl3", "collateral region code",
@@ -404,6 +433,7 @@ CURATION: Dict[str, dict] = {
         "tier": "extended", "derived": True,
         "derived_from": "geographic_region_obligor",
         "business_name": "Obligor ITL3",
+        "value_domain": "uk_region",
         "business_description": "Granular UK ITL3 code for the obligor / borrower "
                                 "(FCA/UK + MI drilldown).",
         "synonyms": ["obligor itl3", "obligor region code", "borrower itl3"],
@@ -411,6 +441,7 @@ CURATION: Dict[str, dict] = {
     },
     "geographic_region_obligor": {
         "tier": "core", "business_name": "Obligor Region (NUTS3)",
+        "value_domain": "uk_region",
         "business_description": "NUTS3 geographic region code for the obligor / borrower.",
         "synonyms": ["obligor region", "borrower region", "obligor nuts",
                      "obligor geography"],
@@ -609,6 +640,7 @@ CURATION: Dict[str, dict] = {
     },
     "geographic_region_collateral": {
         "tier": "extended", "business_name": "Collateral Region (NUTS3)",
+        "value_domain": "uk_region",
         "business_description": "NUTS3 geographic region code for the collateral.",
         "synonyms": ["collateral region", "asset region", "collateral nuts"],
     },
@@ -715,7 +747,13 @@ CURATION: Dict[str, dict] = {
         "business_name": "Vintage",
         "business_description": "Origination year cohort (derived from origination_date).",
         "synonyms": ["vintage", "vintage year", "origination year",
-                     "cohort year", "year of origination"],
+                     "cohort year", "year of origination", "origination vintage",
+                     "vintage cohort",
+                     # Plurals: "which vintages have the highest LTV" asks for a
+                     # breakdown BY vintage, and the resolver matches synonyms
+                     # literally rather than lemmatising.
+                     "vintages", "origination vintages", "vintage years",
+                     "origination years"],
         "overrides": dict(
             _BUCKET_OVERRIDES,
             allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
@@ -726,6 +764,49 @@ CURATION: Dict[str, dict] = {
         "business_name": "Maturity Year",
         "business_description": "Maturity year cohort (derived from maturity_date).",
         "synonyms": ["maturity year", "maturity cohort", "year of maturity"],
+        "overrides": dict(
+            _BUCKET_OVERRIDES,
+            allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
+        ),
+    },
+    # ---- GOVERNED SEASONING (P1J-1) ----
+    # The vintage axis, independent of provenance. Both dimensions come from ONE
+    # governed model (config/mi/buckets.yaml::seasoning, mi_agent/seasoning.py):
+    # the analytical bands and the binary front/back split can never disagree.
+    #
+    # Synonyms are deliberately NOT exhaustive. "older vintages" is absent because
+    # it more naturally asks for analysis ACROSS vintage cohorts than for
+    # back_book=true — a genuinely ambiguous phrase must fail safe rather than be
+    # given a convenient meaning. Provenance words (direct/acquired/purchased)
+    # never appear here, and these words never appear in the provenance lens.
+    "seasoning_segment": {
+        "tier": "core", "derived": True, "derived_from": "months_on_book",
+        "business_name": "Seasoning Segment",
+        "business_description": "Front book vs back book — the binary seasoning "
+                                "split, derived from months_on_book against the "
+                                "governed reporting date. Independent of "
+                                "provenance (direct / acquired).",
+        "synonyms": ["front book", "back book", "seasoning segment",
+                     "front or back book", "new lending", "new originations",
+                     "recent originations", "newly originated", "new origination",
+                     "seasoned book", "seasoned loans", "legacy book"],
+        "overrides": dict(
+            _BUCKET_OVERRIDES,
+            allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
+        ),
+    },
+    "seasoning_bucket": {
+        "tier": "core", "derived": True, "derived_from": "months_on_book",
+        "business_name": "Seasoning Bucket",
+        "business_description": "Governed seasoning band (months on book at the "
+                                "reporting date), e.g. 0-12m / 13-24m / 25-60m / "
+                                "60m+.",
+        # NOTE: bare "seasoning" is deliberately absent — months_on_book already
+        # owns it, and a synonym owned by two fields makes resolution
+        # order-dependent (asserted by test_no_synonym_maps_to_two_fields).
+        "synonyms": ["seasoning bucket", "seasoning band",
+                     "months on book band", "time on book band",
+                     "seasoning cohort"],
         "overrides": dict(
             _BUCKET_OVERRIDES,
             allowed_chart_roles=["x", "group", "filter", "color", "cohort"],
@@ -1069,9 +1150,16 @@ CURATION: Dict[str, dict] = {
                                "derived in the state layer).",
         "synonyms": ["months on book", "time on book", "mob", "seasoning",
                      "loan age"],
+        # P1N: exposure-weighted seasoning. The simple mean months-on-book
+        # counts a £50k loan and a £750k loan equally; the exposure-weighted
+        # figure states how seasoned the MONEY is, which is the portfolio
+        # question. ``default_aggregation`` stays ``avg`` for the same reason as
+        # borrower age.
         "overrides": {"role": "metric", "format": "integer", "chartable": True,
-                      "allowed_aggregations": ["avg", "median", "distribution"],
+                      "allowed_aggregations": ["avg", "weighted_avg", "median",
+                                               "distribution", "min", "max"],
                       "default_aggregation": "avg",
+                      "weight_field": "current_outstanding_balance",
                       "allowed_chart_roles": ["x", "y", "bucket", "filter", "color"],
                       "default_chart_role": "x", "bucket_field": None},
     },
@@ -1237,20 +1325,25 @@ def infer_aggregations(role: str, fmt: str, name: str,
     if role == "dimension":
         return ["count", "balance_sum"], "count"
     if role == "metric":
+        # P1N: ``min``/``max`` are added where a LOAN-LEVEL EXTREME reads as a
+        # real business figure — the largest loan, the highest LTV, the oldest
+        # borrower. They are NOT added to ``number_of_*`` count metrics, where
+        # "the maximum number of properties" is a curiosity rather than MI, nor
+        # to dimensions, flags, dates or identifiers.
         if fmt == "currency":
-            return ["sum", "avg", "median"], "sum"
+            return ["sum", "avg", "median", "min", "max"], "sum"
         if fmt == "percent":
             # Rate/LTV/percentage fields prefer weighted_avg over a simple
             # arithmetic average for portfolio MI (when a balance weight exists).
             default = "weighted_avg" if has_weight else "avg"
-            return ["avg", "weighted_avg", "distribution"], default
+            return ["avg", "weighted_avg", "distribution", "min", "max"], default
         if fmt == "integer":
             if _is_count_metric(name):
                 # ``number_of_*`` style counts: useful as sum/avg/median/distribution.
                 return ["sum", "avg", "median", "distribution"], "sum"
             # Ages / days / terms: not sensible to sum across loans.
-            return ["avg", "median", "distribution"], "avg"
-        return ["sum", "avg", "median"], "avg"
+            return ["avg", "median", "distribution", "min", "max"], "avg"
+        return ["sum", "avg", "median", "min", "max"], "avg"
     return [], ""
 
 
@@ -1377,6 +1470,13 @@ def build_entry(name: str, meta: dict, curated: dict,
         "bucket_field": overrides.get("bucket_field", inf_bucket_field),
         "notes": "",
     }
+
+    # A field may declare the DOMAIN its values are drawn from. The executor
+    # asks the semantics what a filter value means rather than knowing about
+    # any particular domain itself: "London" reaching a column that stores
+    # TLI43 is a property of the uk_region domain, not of the query engine.
+    if curated.get("value_domain"):
+        entry["value_domain"] = curated["value_domain"]
 
     if curated.get("derived"):
         entry["derived"] = True

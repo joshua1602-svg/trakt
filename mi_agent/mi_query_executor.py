@@ -53,7 +53,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -261,7 +261,8 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
                      balance_col: Optional[str] = None) -> float:
     """Compute a single scalar aggregation over ``df``.
 
-    Supports: sum, avg, median, count, count_distinct, weighted_avg, balance_sum.
+    Supports: sum, avg, median, min, max, count, count_distinct, weighted_avg,
+    balance_sum.
     ``distribution`` and ``loan_level`` are structural (not scalar) and are
     handled by the per-chart logic, not here.
     """
@@ -292,6 +293,10 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
         return float(vals.mean())
     if aggregation == "median":
         return float(vals.median())
+    if aggregation == "min":
+        return float(vals.min())
+    if aggregation == "max":
+        return float(vals.max())
     if aggregation == "weighted_avg":
         if not weight_col:
             raise MIQueryExecutionError("weighted_avg requires a weight field")
@@ -393,23 +398,112 @@ _OP_ALIASES = {
     "between": "between",
     # Categorical membership (used by the "Other" bar-bucket drill-through).
     "in": "in", "not_in": "not_in", "nin": "not_in", "not in": "not_in",
+    # Verbose spellings a JSON producer (notably the LLM parser) writes out in
+    # full. Folding them here means an operator the model spelled correctly in
+    # English is not silently downgraded to equality by the `.get(..., "eq")`
+    # default below — which would compare a threshold as an exact match and
+    # return an empty, unexplained result.
+    "gte": "ge", "greater_than_or_equal": "ge", "greater_than_or_equal_to": "ge",
+    "greater_or_equal": "ge", "not_less_than": "ge",
+    "lte": "le", "less_than_or_equal": "le", "less_than_or_equal_to": "le",
+    "less_or_equal": "le", "not_greater_than": "le",
+    "equal": "eq", "equals": "eq", "equal_to": "eq", "is_equal_to": "eq",
+    "not_equal": "ne", "not_equals": "ne", "not_equal_to": "ne", "is_not": "ne",
+    "one_of": "in", "any_of": "in", "none_of": "not_in", "not_one_of": "not_in",
+    "in_range": "between", "range": "between",
 }
 
 
 def _apply_numeric_op(col: pd.Series, op: str, value: Any) -> pd.Series:
-    """Boolean mask for a numeric comparison operator against a coerced column."""
-    s = coerce_numeric(col)
+    """Boolean mask for a comparison operator against a coerced column.
+
+    A comparison whose operand is a DATE ("origination_date >= 2024-01-01") is
+    compared as a date rather than forced through ``float()``. It used to raise
+    ``ValueError: could not convert string to float: '2024-01-01'`` out of the
+    executor, which surfaced as "The MI Agent could not complete this query." —
+    a crash, not a governed refusal. A range over an origination date is an
+    ordinary way to ask for recent lending, so it must compute; anything that is
+    neither numeric nor a date raises ``MIQueryExecutionError`` and is reported
+    as a controlled failure instead of an unhandled exception.
+    """
+    def _bounds(raw: Any) -> Tuple[Any, Any]:
+        return (raw if isinstance(raw, (list, tuple)) and len(raw) == 2
+                else (None, None))
+
+    def _as_number(raw: Any) -> Optional[float]:
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _as_date(raw: Any):
+        stamp = pd.to_datetime(raw, errors="coerce")
+        return None if pd.isna(stamp) else stamp
+
     if op == "between":
-        lo, hi = (value if isinstance(value, (list, tuple)) and len(value) == 2
-                  else (None, None))
-        return (s >= float(lo)) & (s <= float(hi))
-    v = float(value)
-    return {"gt": s > v, "ge": s >= v, "lt": s < v, "le": s <= v,
-            "eq": s == v, "ne": s != v}[op]
+        lo, hi = _bounds(value)
+        lo_n, hi_n = _as_number(lo), _as_number(hi)
+        if lo_n is not None and hi_n is not None:
+            s = coerce_numeric(col)
+            return (s >= lo_n) & (s <= hi_n)
+        lo_d, hi_d = _as_date(lo), _as_date(hi)
+        if lo_d is not None and hi_d is not None:
+            d = pd.to_datetime(col, errors="coerce")
+            return (d >= lo_d) & (d <= hi_d)
+        raise MIQueryExecutionError(
+            f"range bounds {value!r} are neither numeric nor dates")
+
+    ops = lambda s, v: {"gt": s > v, "ge": s >= v, "lt": s < v, "le": s <= v,   # noqa: E731
+                        "eq": s == v, "ne": s != v}[op]
+    number = _as_number(value)
+    if number is not None:
+        return ops(coerce_numeric(col), number)
+    stamp = _as_date(value)
+    if stamp is not None:
+        return ops(pd.to_datetime(col, errors="coerce"), stamp)
+    raise MIQueryExecutionError(
+        f"value {value!r} is neither numeric nor a date, so {op!r} cannot be "
+        "applied")
+
+
+#: Filter-value resolvers by declared ``value_domain``. A field says which
+#: domain its values are drawn from; the domain says what a user term means.
+#: Nothing here knows about any particular domain's contents.
+def _resolve_domain_value(domain: Optional[str], value: str, col) -> List:
+    """The values present in ``col`` that ``value`` denotes under ``domain``."""
+    if domain == "uk_region":
+        from .region_resolution import resolve
+        try:
+            return resolve(value, col.dropna().unique().tolist())
+        except Exception:                        # pragma: no cover - never fatal
+            return []
+    return []
+
+
+def _describe_domain_value(domain: Optional[str], value: str, resolved: List) -> str:
+    """Receipt text for a resolution. A resolution the reader cannot see is a
+    substitution, so this is not optional."""
+    if domain == "uk_region":
+        from .region_resolution import describe
+        try:
+            return describe(value, resolved)
+        except Exception:                        # pragma: no cover
+            pass
+    return f"{value} → {resolved!r}"
 
 
 def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
-                   warnings: List[str]) -> pd.DataFrame:
+                   warnings: List[str],
+                   applied: Optional[List[str]] = None) -> pd.DataFrame:
+    """Narrow the frame, and record WHICH fields actually narrowed it.
+
+    ``applied`` collects the semantic field key of every filter this function
+    ran. It is execution evidence, not spec echo: a key reaches the list only
+    after ``_require_column`` has confirmed the book carries the column and the
+    mask has been applied. `reconcile_facets` reads it to stamp a population
+    facet on the point-in-time path, which before this had no evidence source at
+    all and therefore refused every population that reached it.
+    """
     if not spec.filters:
         return work
     from .mi_dataset_profile import PERCENT_FRACTION, percent_storage_scale
@@ -430,6 +524,14 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
         _require_column(work, canonical, field_key)
         before = len(work)
         col = work[canonical]
+        # Recorded HERE, after the column is confirmed and before the branch
+        # split, so every filter shape counts once and none is missed by a
+        # branch added later. `_require_column` raises for an absent column, so
+        # reaching this line means the predicate ran against a real column.
+        if applied is not None:
+            applied.append(field_key)
+            if canonical != field_key:
+                applied.append(canonical)
         if isinstance(value, dict) and ("op" in value or "value" in value
                                         or "min" in value or "max" in value):
             # Structured numeric comparison filter: {"op": ">", "value": 70}.
@@ -470,7 +572,32 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
             # Case-/whitespace-insensitive categorical match so a normalised
             # value ("South West") matches the prepared dimension value robustly.
             target = value.strip().casefold()
-            work = work[col.astype(str).str.strip().str.casefold() == target]
+            mask = col.astype(str).str.strip().str.casefold() == target
+            if not mask.any():
+                # VALUE RESOLUTION. The exact match reached nothing, which is
+                # not the same as there being nothing to reach: "London" matches
+                # no row on a book whose region column holds TLI43. A raw loan
+                # tape does not generally carry ITL codes at all — it carries a
+                # partial postcode, a county, or the lender's own grouping — and
+                # the code is DERIVED by the canonical transformation. So the
+                # value is resolved through the same governed mapping that
+                # transformation used, against the values this column actually
+                # holds.
+                #
+                # The executor does not know what a region is. It asks the
+                # semantics what domain the field's values are drawn from, and
+                # the domain resolves the term. Adding a second domain is a
+                # registry entry and a resolver, not a change here.
+                resolved = _resolve_domain_value(
+                    entry.get("value_domain"), value, col)
+                if resolved:
+                    wanted = {str(v).strip().casefold() for v in resolved}
+                    mask = col.astype(str).str.strip().str.casefold().isin(wanted)
+                    warnings.append(
+                        f"filter {field_key}: "
+                        + _describe_domain_value(entry.get("value_domain"),
+                                                 value, resolved))
+            work = work[mask]
             warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
         else:
             work = work[col == value]
@@ -697,6 +824,284 @@ def _metric_aggregation(spec: MIQuerySpec) -> str:
     if agg in ("loan_level",):  # not meaningful for grouped/summary metric
         return "sum"
     return agg
+
+
+# --------------------------------------------------------------------------- #
+# P1E — multi-measure composition
+# --------------------------------------------------------------------------- #
+# One analytical request carrying several governed measures over ONE population.
+# The population is filtered ONCE and every measure is computed from that same
+# frame, which is the property that makes the answer coherent: a balance for
+# London beside an LTV for the whole book is four numbers that do not describe
+# the same thing.
+
+
+class ResolvedMeasure(NamedTuple):
+    """One governed measure, resolved against the semantic registry."""
+
+    key: str                      # semantic field key as requested
+    field: Optional[str]          # canonical column, None for a bare count
+    aggregation: str
+    weight_field: Optional[str]
+    column: str                   # output column name
+    label: str                    # business name, for the answer and receipt
+
+
+def resolve_measures(spec: MIQuerySpec, semantics: dict, columns
+                     ) -> Tuple[List[ResolvedMeasure], List[str]]:
+    """``(resolved, unavailable_notes)`` for the spec's measure set.
+
+    The AGGREGATION IS GOVERNED, not chosen by whoever wrote the question: it
+    comes from the registry's ``default_aggregation`` for the field unless the
+    request names one the registry also allows. An aggregation the registry does
+    not allow for a measure is refused for that measure rather than silently
+    downgraded — reporting a simple mean where a weighted average is governed is
+    a different number, not a rounding difference.
+    """
+    available = set(columns) if columns is not None else set()
+    resolved: List[ResolvedMeasure] = []
+    notes: List[str] = []
+    seen: set = set()
+
+    for measure in spec.measures or []:
+        key = str(measure.get("field") or "").strip()
+        if not key:
+            continue
+        requested_agg = str(measure.get("aggregation") or "").strip().lower()
+
+        if key in ("loan_count", "count", "loans"):
+            if "count" not in seen:
+                seen.add("count")
+                resolved.append(ResolvedMeasure(
+                    key="loan_count", field=None, aggregation="count",
+                    weight_field=None, column="loan_count", label="Loans"))
+            continue
+
+        try:
+            entry = resolve_semantic_field(key, semantics)
+        except Exception:  # noqa: BLE001 - an unknown measure is disclosed
+            notes.append(f"{key} is not a governed measure in this dataset")
+            continue
+        canonical = entry.get("canonical_field") or key
+        if canonical not in available:
+            notes.append(f"{entry.get('business_name') or key} is not available "
+                         f"in this dataset")
+            continue
+
+        allowed = set(entry.get("allowed_aggregations") or ())
+        governed = str(entry.get("default_aggregation") or "sum").lower()
+        if requested_agg and allowed and requested_agg not in allowed:
+            notes.append(
+                f"{entry.get('business_name') or key} cannot be aggregated as "
+                f"{requested_agg!r} — the registry allows "
+                f"{', '.join(sorted(allowed))}")
+            continue
+        aggregation = requested_agg or governed
+        if aggregation in ("distribution", "loan_level"):
+            notes.append(f"{entry.get('business_name') or key} is not a scalar "
+                         f"measure ({aggregation})")
+            continue
+
+        weight = None
+        if aggregation == "weighted_avg":
+            weight = resolve_weight_field(spec, entry, semantics, available)
+            if not weight:
+                notes.append(f"{entry.get('business_name') or key} needs a "
+                             f"governed weight and none is available")
+                continue
+
+        signature = (canonical, aggregation)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        resolved.append(ResolvedMeasure(
+            key=key, field=canonical, aggregation=aggregation,
+            weight_field=weight,
+            column=_metric_col_name(canonical, aggregation),
+            label=entry.get("business_name") or canonical))
+    return resolved, notes
+
+
+def _measure_values(frame: pd.DataFrame,
+                    measures: Sequence[ResolvedMeasure]) -> Dict[str, Any]:
+    """Every measure, computed from ONE frame."""
+    out: Dict[str, Any] = {}
+    for measure in measures:
+        out[measure.column] = aggregate_series(
+            frame, measure.field, measure.aggregation, measure.weight_field)
+    return out
+
+
+def _execute_measure_set(spec, work, semantics, warnings, measures
+                         ) -> Tuple[pd.DataFrame, str]:
+    """Portfolio-level multi-measure summary: one row, every measure."""
+    row: Dict[str, Any] = {"loan_count": int(len(work))}
+    row.update(_measure_values(work, measures))
+    return pd.DataFrame([row]), "summary"
+
+
+def _execute_grouped_measure_set(spec, work, semantics, warnings,
+                                 group_field_keys, measures
+                                 ) -> Tuple[pd.DataFrame, str, List[str]]:
+    """One table carrying every measure per group — not one table per measure."""
+    group_cols: List[str] = []
+    for key in group_field_keys:
+        group_cols.append(_resolve_group_column(key, semantics, work, warnings,
+                                                use_bucket=False))
+    work, bucketed = _bucket_missing(work, group_cols)
+    if bucketed:
+        warnings.append(
+            f"{bucketed:,} row(s) with a missing/blank grouping value were "
+            f"grouped under '{MISSING_BUCKET_LABEL}' (not dropped) so totals "
+            f"reconcile")
+
+    rows: List[Dict[str, Any]] = []
+    for keys, group in work.groupby(group_cols, sort=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        row: Dict[str, Any] = dict(zip(group_cols, keys))
+        row["loan_count"] = int(len(group))
+        row.update(_measure_values(group, measures))
+        rows.append(row)
+
+    columns = (list(group_cols) + ["loan_count"]
+               + [m.column for m in measures if m.column != "loan_count"])
+    out = pd.DataFrame(rows, columns=columns)
+    lead = next((m for m in measures if m.aggregation in ("sum", "balance_sum")),
+                measures[0] if measures else None)
+    if lead is not None and lead.column in out.columns:
+        out = out.sort_values(lead.column, ascending=False, kind="stable")
+    return out.reset_index(drop=True), "grouped", group_cols
+
+
+def _execute_share(spec, df, work, semantics, warnings, balance_col):
+    """A governed share: the filtered population over the WHOLE-BOOK population.
+
+    Two populations, both computed here from the same frame, so the denominator
+    can never drift from the numerator. Basis is the balance measure when one is
+    named and loan count otherwise. Returns None when the denominator is zero or
+    unavailable — a share with no denominator is refused, never reported as 0%.
+    """
+    if spec.metric:
+        entry = resolve_semantic_field(spec.metric, semantics)
+        canonical = entry.get("canonical_field")
+        _require_column(work, canonical, spec.metric)
+        numerator = float(coerce_numeric(work[canonical]).sum())
+        denominator = float(coerce_numeric(df[canonical]).sum())
+        basis, col = canonical, f"{canonical}_share_pct"
+    else:
+        numerator, denominator = float(len(work)), float(len(df))
+        basis, col = "loan_count", "loan_count_share_pct"
+    if not denominator:
+        return None, None
+    share_pct = numerator / denominator * 100.0
+    warnings.append(
+        f"share basis {basis}: {numerator:,.2f} of {denominator:,.2f} "
+        f"({share_pct:.2f}%)")
+    data = pd.DataFrame([{
+        "loan_count": int(len(work)),
+        "population_total": int(len(df)),
+        f"{basis}_numerator": numerator,
+        f"{basis}_denominator": denominator,
+        col: share_pct,
+    }])
+    return data, "summary"
+
+
+def _execute_contribution(spec, work, semantics, warnings, balance_col):
+    """Each group's CONTRIBUTION to the portfolio weighted aggregate.
+
+    A portfolio weighted average is ``sum(w*v) / sum(w)``. That sum decomposes
+    exactly across any partition of the book::
+
+        contribution_g = sum over g of (w * v) / sum over the BOOK of w
+                       = weight_share_g * value_g
+
+    and the contributions sum back to the portfolio figure — which is checked
+    here and disclosed if it does not hold.
+
+    This is deliberately NOT the same as ranking groups by their own weighted
+    average. A small group with a high value has a high value and a negligible
+    contribution; presenting one as the other answers a different question.
+    Both figures are returned in every row so the reader can see the difference.
+
+    Returns ``(None, None)`` when the portfolio weight is zero or the columns
+    are unavailable — a contribution with no denominator is refused, never
+    reported as zero.
+    """
+    if not spec.metric:
+        return None, None
+    entry = resolve_semantic_field(spec.metric, semantics)
+    canonical = entry.get("canonical_field")
+    _require_column(work, canonical, spec.metric)
+
+    weight_col = resolve_weight_field(spec, entry, semantics, work.columns)
+    if not weight_col or weight_col not in work.columns:
+        return None, None
+
+    group_keys = _all_group_dims(spec)
+    if not group_keys:
+        return None, None
+    group_col = _resolve_group_column(group_keys[0], semantics, work, warnings,
+                                      use_bucket=False)
+
+    # Missing grouping values are BUCKETED, not dropped, exactly as every other
+    # grouped path does — otherwise the contributions would not sum back to the
+    # portfolio figure the answer quotes.
+    work, bucketed = _bucket_missing(work, [group_col])
+    if bucketed:
+        warnings.append(
+            f"{bucketed:,} row(s) with a missing grouping value were grouped "
+            f"under '{MISSING_BUCKET_LABEL}' (not dropped) so the "
+            f"contributions reconcile")
+
+    values = coerce_numeric(work[canonical])
+    weights = coerce_numeric(work[weight_col])
+    frame = pd.DataFrame({
+        "_group": work[group_col],
+        "_value": values,
+        "_weight": weights,
+        "_wv": values * weights,
+    }).dropna(subset=["_value", "_weight"])
+
+    total_weight = float(frame["_weight"].sum())
+    if not total_weight:
+        return None, None
+
+    grouped = frame.groupby("_group", dropna=False).agg(
+        loan_count=("_value", "size"),
+        weight=("_weight", "sum"),
+        weighted_value=("_wv", "sum"))
+    grouped["contribution"] = grouped["weighted_value"] / total_weight
+    grouped["weight_share_pct"] = grouped["weight"] / total_weight * 100.0
+    grouped["group_value"] = (grouped["weighted_value"]
+                              / grouped["weight"].replace(0.0, pd.NA))
+
+    portfolio = float(frame["_wv"].sum()) / total_weight
+    reconciled = float(grouped["contribution"].sum())
+    if abs(reconciled - portfolio) > max(1e-6, abs(portfolio) * 1e-9):
+        warnings.append(
+            f"contribution reconciliation off by {reconciled - portfolio:.6g} "
+            f"against the portfolio figure {portfolio:.6g}")
+    else:
+        warnings.append(
+            f"contributions sum to the portfolio "
+            f"{entry.get('business_name') or canonical} of {portfolio:,.4f} "
+            f"(weight basis {weight_col})")
+
+    contribution_col = f"{canonical}_contribution"
+    data = (grouped.reset_index()
+            .rename(columns={"_group": group_col,
+                             "contribution": contribution_col,
+                             "group_value": f"{canonical}_weighted_avg"})
+            .loc[:, [group_col, contribution_col,
+                     f"{canonical}_weighted_avg", "weight_share_pct",
+                     "loan_count"]]
+            .sort_values(contribution_col, ascending=False, kind="stable")
+            .reset_index(drop=True))
+    if spec.top_n:
+        data = data.head(int(spec.top_n))
+    return data, "grouped"
 
 
 def _execute_summary(spec, work, semantics, warnings, balance_col):
@@ -1030,7 +1435,8 @@ def execute_mi_query(
     # Duplicate column names make a single-name selection return a DataFrame
     # (crashing numeric coercion). Fail fast with a controlled, explained error.
     _guard_duplicate_columns(spec, work, semantics)
-    work = _apply_filters(work, spec, semantics, warnings)
+    applied_filter_fields: List[str] = []
+    work = _apply_filters(work, spec, semantics, warnings, applied_filter_fields)
 
     balance_col = resolve_default_balance_field(semantics, work.columns)
     scale, scale_median = _detect_percent_scale(df, semantics)
@@ -1060,7 +1466,57 @@ def execute_mi_query(
     coverage: Dict[str, Any] = {}
 
     # ---- dispatch -------------------------------------------------------- #
-    if spec.intent == "summary" or (spec.intent == "chart" and spec.chart_type == "none"):
+    # ---- P1E: a request carrying more than one governed measure ---------- #
+    # Dispatched FIRST so the measure set is honoured whole. A single-measure
+    # spec normalises to a one-element list and falls through to the existing
+    # paths unchanged, so nothing about today's behaviour moves.
+    multi = [m for m in (spec.measures or []) if m.get("field")]
+    if len(multi) > 1 and spec.aggregation not in ("share", "contribution"):
+        resolved, unavailable = resolve_measures(spec, semantics, work.columns)
+        for note in unavailable:
+            warnings.append(f"measure unavailable: {note}")
+        if not resolved:
+            raise MIQueryExecutionError(
+                "none of the requested measures could be calculated: "
+                + "; ".join(unavailable))
+        metadata["measures_requested"] = [m.get("field") for m in multi]
+        metadata["measures_executed"] = [
+            {"field": m.key, "canonical_field": m.field,
+             "aggregation": m.aggregation, "weight_field": m.weight_field,
+             "column": m.column, "label": m.label} for m in resolved]
+        metadata["measures_unavailable"] = list(unavailable)
+        keys = _all_group_dims(spec)
+        if keys:
+            data_out, result_type, group_cols = _execute_grouped_measure_set(
+                spec, work, semantics, warnings, keys, resolved)
+            metadata["group_field_keys"] = list(keys)
+            metadata["group_columns"] = group_cols
+        else:
+            data_out, result_type = _execute_measure_set(
+                spec, work, semantics, warnings, resolved)
+
+    elif spec.aggregation == "contribution":
+        data_out, result_type = _execute_contribution(
+            spec, work, semantics, warnings, balance_col)
+        if data_out is None:
+            raise MIQueryExecutionError(
+                "a contribution cannot be calculated: the portfolio weight is "
+                "zero, or the metric, weight or grouping field is unavailable")
+        metadata["contribution_weight_field"] = spec.weight_field
+        metadata["group_field_keys"] = list(_all_group_dims(spec))
+
+    elif spec.aggregation == "share":
+        # A share needs BOTH populations, so it receives the unfiltered frame as
+        # well as the filtered one. Everything else sees only ``work``.
+        data_out, result_type = _execute_share(
+            spec, df, work, semantics, warnings, balance_col)
+        if data_out is None:
+            raise MIQueryExecutionError(
+                "a share cannot be calculated: the whole-book denominator is "
+                "zero or unavailable")
+        metadata["share_basis"] = spec.metric or "loan_count"
+
+    elif spec.intent == "summary" or (spec.intent == "chart" and spec.chart_type == "none"):
         data_out, result_type = _execute_summary(spec, work, semantics, warnings, balance_col)
 
     elif spec.intent == "table" and spec.ranking_mode == "loan_level":
@@ -1180,6 +1636,9 @@ def execute_mi_query(
     metadata["reconciliation"] = _build_reconciliation(
         df, work, balance_col, spec, coverage, result_type, metadata,
         measure_cols=measure_cols)
+    # EVIDENCE, distinct from `reconciliation.filters`, which echoes the spec.
+    # These are the fields a predicate actually ran against, in this book.
+    metadata["applied_filter_fields"] = list(dict.fromkeys(applied_filter_fields))
 
     # Surface the governed derived-metric definition (e.g. "average loan balance"
     # = sum(current_outstanding_balance)/count(loans)) so the computed figure is

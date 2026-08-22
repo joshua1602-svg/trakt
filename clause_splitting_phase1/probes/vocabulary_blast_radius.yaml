@@ -1,0 +1,81 @@
+# Vocabulary blast-radius test — §4.0(b)
+#
+# The benefit that compounds, and the only one that is directly measurable
+# today: does adding a client's word stop being dangerous?
+#
+# Five synonyms of the kind a client introduces in their first fortnight. They
+# are added to the SAME registry both trees read, in memory only — no file on
+# disk is touched, and the tagged release candidate is left exactly as tagged.
+# Both banks then run on both trees, perturbed and unperturbed, and the
+# regressions on each side are counted.
+#
+# The baseline this is calibrated against already exists: a vocabulary addition
+# in Tranche D made `balance by LTV bucket` type as a RATE question. The
+# expectation stated before any result is seen is non-zero regressions on the
+# release candidate and zero on the branch.
+#
+# The five are not chosen to be harmless. Three carry deliberate collision
+# potential with words the whole-string scans key on — 'balance', 'leverage',
+# 'gearing' — because that collision IS the blast radius being measured. Two
+# are ordinary, so the test also shows what a quiet addition costs.
+version: 1
+instrument: vocabulary_blast_radius
+authored_before_splitter: true
+synonyms:
+
+- id: vocab_01
+  term: "drawn balance"
+  field: current_outstanding_balance
+  role: metric
+  why: >-
+    A commercial-lending client's word for the funded amount. It contains
+    'balance', the token three of the four known whole-string scans key on, so
+    adding it puts a new string in front of every scan that reads the sentence
+    whole.
+  collision_risk: high
+
+- id: vocab_02
+  term: "gearing"
+  field: current_loan_to_value
+  role: metric
+  why: >-
+    A standard UK synonym for loan-to-value. It introduces a second way to name
+    the measure that produced defect occurrences 1 and 4, without introducing
+    the letters L, T or V that the existing scans match on.
+  collision_risk: high
+
+- id: vocab_03
+  term: "leverage band"
+  field: ltv_bucket
+  role: dimension
+  why: >-
+    The direct analogue of the Tranche D failure: a DIMENSION synonym whose
+    text reads like a MEASURE. This is the addition that typed
+    `balance by LTV bucket` as a RATE question.
+  collision_risk: high
+
+- id: vocab_04
+  term: "coupon"
+  field: current_interest_rate
+  role: metric
+  why: "An ordinary securitisation term for the rate. No obvious collision."
+  collision_risk: low
+
+- id: vocab_05
+  term: "territory"
+  field: collateral_geography
+  role: dimension
+  why: "An ordinary distribution-side word for region. No obvious collision."
+  collision_risk: low
+
+# The banks the perturbation is measured over. The brief names 'the calibration
+# bank and the 44-variation bank'; this repository has the curated calibration
+# bank and the registry-driven generated harness. Both are run, and the naming
+# discrepancy is recorded in the report rather than papered over.
+banks:
+- id: calibration_bank
+  runner: mi_agent.mi_calibration:run_bank
+  size: 252
+- id: generated_harness
+  runner: mi_agent.mi_query_harness:run_suite
+  size: 249

@@ -407,7 +407,14 @@ def compute_forecast_bridge(
                             "forecast equals the current funded balance.")]
 
     forecast_balance = funded_balance + weighted
-    forecast_loan_count = funded_loan_count + pipeline_case_count
+    # The forward case count must describe the SAME population as the forward
+    # amount. Cases the governed config excludes — settled or withdrawn — do not
+    # contribute to the expected amount, so counting them here would say the
+    # book grows by cases whose balance was deliberately left out. The excluded
+    # count comes from the probability summary the prep layer already reports.
+    excluded_cases = int((prob_summary or {}).get("excluded_count") or 0)
+    eligible_case_count = max(pipeline_case_count - excluded_cases, 0)
+    forecast_loan_count = funded_loan_count + eligible_case_count
 
     bridge = {
         "portfolioId": f"{client_id}/{run_id}",
@@ -420,6 +427,11 @@ def compute_forecast_bridge(
         "pipelineAvailable": pipeline_available,
         "pipelineAmount": round(pipeline_amount, 2),
         "pipelineCaseCount": pipeline_case_count,
+        #: Cases eligible for the FORWARD forecast, i.e. after the governed
+        #: stage exclusion. Distinct from pipelineCaseCount, which is every case
+        #: the extract carries. ``excludedCaseCount`` is already reported below
+        #: from the same source and is not repeated here.
+        "eligibleCaseCount": eligible_case_count,
         "weightedExpectedFundedAmount": round(weighted, 2),
         "forecastFundedBalance": round(forecast_balance, 2),
         "forecastLoanCount": forecast_loan_count,
