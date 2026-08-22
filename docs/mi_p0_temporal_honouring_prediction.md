@@ -33,10 +33,20 @@ was simply silent about time. A guard reading `dimensionsApplied` would pass T5
 unchanged. So the check opens the artifact and counts distinct values in the
 rows.
 
-**One deviation from the brief's literal wording, declared here rather than
-discovered later.** The brief says *"A `period` column with three distinct
-points proves a time axis; nothing else does."* Applied literally, that refuses
-three answers that are correct today:
+**A CORRECTION TO THE RULE, ruled on and accepted.** The brief said *"A
+`period` column with three distinct points proves a time axis; nothing else
+does."* This was pre-registered as a deviation; the ruling was that the WORDING
+was wrong and this section records the correction against the rule rather than a
+departure from it:
+
+> *"'A period column with three distinct points and nothing else' would have
+> refused three correct answers. You kept the binding principle — proof from the
+> artifact, not the receipt — and admitted the column-pair form. Record the
+> correction against my rule rather than as a deviation from it."*
+
+The rule as corrected: **a time axis is proven by the rendered rows, in whatever
+form the answer renders it.** Applied in its original wording it refuses three
+answers that are correct today:
 
 | question | route | artifact columns | why the literal rule is wrong |
 |---|---|---|---|
@@ -242,8 +252,20 @@ its own recorded expectation. The alternative would be to carve B9 out of a rule
 that otherwise catches it, which would make the property a set of exceptions
 rather than a contract.
 
-**This is flagged for a ruling.** If the ruling is that B9 stays open, the carve-out
-has to be written explicitly and the routed surface stays at one declared failure.
+**RULED: let B9 close.** In the ruling's own words:
+
+> *"It is a member of the class the contract now covers, reached by a third
+> route, and its bank entry already recorded refuse as correct. A carve-out to
+> keep it artificially open would be worse than closing it. Record it as closed
+> by the contract rather than by a fix."*
+
+So the backlog entry for B9 is **closed by the contract, not by a fix**. Nothing
+was written for `geo_exposure`, nothing was written for a series, and no line of
+code names B9. What changed is that an answer which could not prove a requested
+time axis from its rows stopped shipping — and B9 was one such answer, found by
+the property rather than by anybody looking for it. That distinction is the
+whole argument for stating this as a property: a fix closes the case you aimed
+at, a contract closes the ones you did not know about.
 
 ---
 
@@ -256,7 +278,8 @@ Implementation stops and reports, rather than continuing, at the first of:
 * any time-series **rating** improving (P0 must not add capability);
 * any Q8 robustness variation moving on either book;
 * the shipped shapes falling below 15/15;
-* the estate failure count moving from 60, by name and not only by count;
+* the estate failing a test that did not fail at the base commit, BY NAME —
+  see §13 on why the count of 60 is not the comparison;
 * a movement in any surface I cannot attribute to a named cause.
 
 ---
@@ -347,3 +370,58 @@ No capability was added. Every time-series shape carries the rating it carried
 before: T1 proven, T2 partial, T3–T8 absent. Three answers that were confident
 and wrong are now refusals that say what was lost. The eight shapes are no
 closer to working than they were at `99ea9ca`; they are only no longer silent.
+
+
+---
+
+## 13. The estate is compared by NAME, and why 60 is not the number
+
+**Ruled:** *"Estate by name, not by count — agreed, and state why in the pack.
+60 was never portable; it came from an environment carrying lxml, python-pptx
+and pyarrow, which this box lacks. Any figure quoted from that number needs the
+environment named alongside it."*
+
+The full suite on this box reports **189 failed, 9560 passed, 36 skipped,
+8 xfailed, 43 errors** in 39 minutes. The 43 are collection errors, and they are
+imports rather than defects:
+
+| missing module | tests it takes out |
+|---|---|
+| `lxml` | the Annex 2 XML builder and XSD suites |
+| `python-pptx` | every `tests/mi_agent_pptx/` module |
+| `pyarrow` / `fastparquet` | parquet-backed serving paths |
+
+So **189 and 60 are not two measurements of the same thing**, and neither number
+is portable on its own. A failure count is only meaningful beside the
+environment that produced it, and the standing 60 was never recorded with one.
+Any future quotation of either figure must name its environment.
+
+What IS portable is the SET of failing test names, compared between two trees in
+one environment. That is the comparison P0 is held to: every failure at the P0
+head must also fail at `99ea9ca`, with the same name.
+
+### Two P0-adjacent names, attributed before the long run
+
+Five failures carried names close enough to this work to check immediately
+rather than wait:
+
+    tests/test_p0_cohort_identity.py::test_a_sourcing_cohort_still_answers
+        [Compare the direct and acquired books on balance, loan count,
+         weighted-average LTV and average borrower age.]
+        [How does the direct book compare with the acquired book on borrower age?]
+    mi_agent/tests/test_p0_execution_receipt.py
+        ::test_receipt_discloses_a_requested_dimension_the_dataset_lacks
+        ::test_an_unavailable_dimension_is_never_replaced_by_another_field
+        ::test_an_unavailable_dimension_never_simply_disappears
+
+The first two name `direct` and `acquired` — the exact governed values limb 2
+reads — so they were the ones to rule out first. **All five reproduce identically
+at `99ea9ca`.** The cohort pair never reaches the property at all: neither
+sentence asks the answer to vary over time, so `time_axis_request` returns
+``None`` and neither limb fires. They fail on `KeyError: 'facets'`, which is
+older than this stage.
+
+### The set difference
+
+Recorded below when the base-commit run lands. **The estate criterion is not
+called met before then.**
