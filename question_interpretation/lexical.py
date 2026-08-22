@@ -529,3 +529,94 @@ def comparator_alternation(ops: "Tuple[str, ...]" = ()) -> str:
 def comparator_ops() -> "Tuple[str, ...]":
     """Every operator the vocabulary can express, in a stable order."""
     return tuple(dict.fromkeys(op for _, op in COMPARATOR_PHRASES))
+
+
+# --------------------------------------------------------------------------- #
+# THE THRESHOLD SUBJECT — which noun a threshold is on
+# --------------------------------------------------------------------------- #
+#: Item 3. "Which field is this threshold on?" had TWO owners with near-identical
+#: vocabularies and DIFFERENT RULES:
+#:
+#:   llm_query_parser._filter_field_of    -> a field key, by the subject NEAREST
+#:                                           BEFORE the comparator
+#:   execution_receipt._threshold_subject -> a display name, by the FIRST entry
+#:                                           in a fixed priority list
+#:
+#: They disagree whenever a measure is named earlier in the sentence than the
+#: threshold's own noun. "What is the LTV for loans with a balance above
+#: £150,000" bound `current_outstanding_balance` and disclosed "LTV over
+#: 150000" — the receipt naming a field execution did not filter. Three of eight
+#: probed sentences did that.
+#:
+#: And the same decision, never asked, is why "the LTV for loan TICKETS above
+#: £150k" refused: `ticket` names a registry dimension, `dimension_role` had no
+#: source for "this word is the subject of a threshold", so the role fell to
+#: UNRESOLVED and the guard clarified — over a question whose measure, filter
+#: and 5,857-loan population were all already resolved.
+#:
+#: ONE FACT: which noun the threshold is on. Proximity to the comparator, which
+#: is the rule `_filter_field_of` documents and item 1 hardened. TWO: the
+#: renderings — a field key is not a display name, exactly as an operator was not
+#: a receipt word in item 1.
+#:
+#: This owner returns the KIND. Each consumer renders it.
+THRESHOLD_SUBJECT_PATTERNS: "Tuple[Tuple[str, str], ...]" = (
+    (r"\bltv\b|\bloan[- ]to[- ]value\b", "ltv"),
+    (r"\b(?:age|aged|youngest|borrowers?|years?|yrs?|yo|year[- ]?old|older|"
+     r"younger)\b", "age"),
+    (r"\brate\b|\binterest\b|\bcoupon\b", "rate"),
+    (r"\bbalance\b|\boutstanding\b|\bexposure\b|\bloan size\b|\bticket\b|"
+     r"\btickets\b", "balance"),
+    (r"\bvaluation\b|\bproperty value\b|\bcollateral\b", "valuation"),
+)
+
+#: kind -> the word a receipt uses for it. The receipt renders the KIND; it does
+#: not keep a second list of patterns mapping to names.
+THRESHOLD_SUBJECT_WORD = {
+    "ltv": "LTV", "age": "borrower age", "rate": "interest rate",
+    "balance": "balance", "valuation": "valuation",
+}
+
+
+def threshold_subject_kind(text: "Optional[str]",
+                           anchor: "Optional[int]" = None,
+                           value_end: "Optional[int]" = None) -> "Optional[str]":
+    """The kind of field a threshold is on, or ``None``.
+
+    ``anchor`` is the comparator's offset. When given, THE SUBJECT NEAREST
+    BEFORE IT WINS — which is what a reader does and what the predicate means.
+    Without it the whole text is searched and the nearest match to the end wins,
+    which is the same rule with the end of the text as the anchor.
+
+    Priority order is NOT used to break ties, and that is the correction: the
+    receipt used to return the first entry of an ordered list, so "the LTV for
+    loans with a balance above £150,000" disclosed a threshold on LTV while
+    execution filtered the balance.
+    """
+    if not text:
+        return None
+    text = str(text)
+
+    # POSTFIX BINDS TIGHTEST. "above 50% LTV" names its subject AFTER the value,
+    # and that subject is the threshold's, not whatever was mentioned earlier.
+    # `_filter_field_of` has always had this rule; the first version of this
+    # owner shared the vocabulary and implemented only the nearest-BEFORE half,
+    # which silently dropped the subject from "What percentage of the book is
+    # above 50% LTV?" — the facet label went from "LTV over 50" to "over 50".
+    #
+    # One corpus answer moved and that is how it was found. Item 1's rule again:
+    # a consolidation is complete when the consumers have been exercised across
+    # the full range, and prefix-only was not the full range.
+    if value_end is not None:
+        tail = text[value_end:value_end + 28]
+        for pattern, kind in THRESHOLD_SUBJECT_PATTERNS:
+            if re.search(pattern, tail, re.IGNORECASE):
+                return kind
+
+    head = text[:anchor] if anchor is not None else text
+    best = None
+    for pattern, kind in THRESHOLD_SUBJECT_PATTERNS:
+        for match in re.finditer(pattern, head, re.IGNORECASE):
+            if best is None or match.start() > best[0]:
+                best = (match.start(), kind)
+    return best[1] if best else None

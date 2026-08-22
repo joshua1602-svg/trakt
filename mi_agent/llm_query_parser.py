@@ -1567,13 +1567,12 @@ def _age_equality_value(clause: str) -> Optional[float]:
 
 
 #: Subject keyword -> resolver, for proximity-based threshold binding.
-_FILTER_SUBJECT_PATTERNS = (
-    (r"\bltv\b|\bloan to value\b", "ltv"),
-    (r"\b(?:age|aged|youngest|borrowers?|years?|yrs?|yo|year[- ]?old|older|younger)\b", "age"),
-    (r"\brate\b|\binterest\b|\bcoupon\b", "rate"),
-    (r"\bbalance\b|\boutstanding\b|\bexposure\b|\bloan size\b|\bticket\b", "balance"),
-    (r"\bvaluation\b|\bproperty value\b", "valuation"),
-)
+#: Item 3 — THE PATTERNS COME FROM `question_interpretation.lexical`, which owns
+#: "which noun is this threshold on". `execution_receipt._threshold_subject` held
+#: a near-identical list and applied a DIFFERENT rule — first entry of a fixed
+#: priority list, against this module's nearest-subject-before-the-comparator —
+#: so the receipt disclosed a threshold on a field execution had not filtered.
+_FILTER_SUBJECT_PATTERNS = _lexical.THRESHOLD_SUBJECT_PATTERNS
 
 
 def _resolve_subject(kind: str, semantics: dict, available_columns=None):

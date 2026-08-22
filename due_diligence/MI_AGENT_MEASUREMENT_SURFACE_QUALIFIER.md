@@ -105,6 +105,39 @@ Q1.1  How has the profile of our new lending changed over the last few months?
 Three of three mutated answers graded **CORRECT, unchanged** — loan counts
 trebled, dates mangled into `6,078.00-12.00-90.00`.
 
+### THE SAME RESULT FROM THE OPPOSITE GRADER — matching a haystack is not checking a claim
+
+The first attempt to verify the 44's figures against the book did the opposite of
+what `nl_score` did, and reached the identical wrong answer.
+
+It collected every low-cardinality dimension's count and balance into a
+**322-value truth set**, then asked whether each answer quotes *at least one*
+figure matching any of them within 2%:
+
+```
+  20 of 20 answered Q1/Q7/Q8 rows quote at least one figure that matches the book
+  CAN-FAIL: 20 of 20 TREBLED answers still match -> the check is WEAK
+```
+
+**One grader read no figures. The other read every figure. Both called a trebled
+answer correct.**
+
+The reason is the same in both: neither was checking a claim. `nl_score` graded
+the route and the plan and never looked at a number; the haystack check looked at
+every number and never asked what any of them was *for*. With 322 values and a
+2% tolerance, almost any figure finds a neighbour.
+
+> **A tolerance against a large value set is not a check.** A figure is verified
+> only when it is bound to the claim it makes — this population, this count,
+> this balance.
+
+The result was discarded. It is recorded here rather than deleted because it is
+the clearest illustration available of what "verified against the book" must not
+mean. What replaced it binds each figure to the population it labels — *"Direct,
+7,126 loans: Current Outstanding Balance £1.36bn → £1.39bn"* — and a trebled
+answer fails it 8 times out of 8.
+
+
 The cause was upstream of the grader: `_capture` handed it ten keys and
 `executionSummary` was not among them. For the LTV question that returns the
 whole book, the service knew `population=11035, filtersApplied=[]` and **the
@@ -173,38 +206,6 @@ capability, the population it measured and the whole-book total it measured
 against — the same two numbers the point-in-time path already publishes. That is
 a receipt change on the analytical path, not a grader change. **Recorded, not
 opened.**
-
-### THE DISCARDED FIRST VERIFICATION — why a tolerance against a large value set proves nothing
-
-The first attempt at verifying the 44 collected every low-cardinality dimension's
-count and balance into a **322-value truth set**, then asked whether each answer
-quotes *at least one* figure matching any of them within 2%:
-
-```
-  20 of 20 answered Q1/Q7/Q8 rows quote at least one figure that matches the book
-```
-
-That reads like verification. It is not. The can-fail:
-
-```
-  CAN-FAIL: the same check on TREBLED figures
-  20 of 20 TREBLED answers still match some book figure
-  -> the check is WEAK: a wrong answer passes
-```
-
-**Every figure multiplied by three, and the check still passed all twenty.** With
-322 values and a 2% tolerance, almost any number finds a neighbour.
-
-This is the same class as the trebling demonstration that exposed `nl_score`,
-one level up: there, a grader that read no figures called a trebled answer
-CORRECT; here, a grader that read *every* figure did the same, because it was
-matching against a haystack rather than against a claim. **A tolerance against a
-large value set is not a check.** The result was discarded, and it is recorded
-here rather than deleted because it is the clearest illustration available of
-what "verified against the book" must not mean.
-
-What replaced it binds each figure to the claim it labels — one population, one
-count, one balance — and a trebled answer fails it 8 times out of 8.
 
 ### The same failure mode, found in a surface built to avoid it
 

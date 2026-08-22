@@ -587,8 +587,15 @@ def _detect_thresholds(q: str) -> List[RequestedFacet]:
     for pattern, word in _THRESHOLD_PATTERNS:
         for match in re.finditer(pattern, q, re.I):
             number = match.group(1)
-            span = q[max(0, match.start() - 42):match.end() + 18]
-            subject = _threshold_subject(span)
+            # The comparator's own offset is the anchor, so the subject
+            # NEAREST BEFORE it wins. The window is still bounded — a subject
+            # two clauses away is not this threshold's — but the rule inside it
+            # is proximity rather than list order.
+            start = max(0, match.start() - 42)
+            span = q[start:match.end() + 18]
+            subject = _threshold_subject(
+                span, anchor=match.start() - start,
+                value_end=match.end() - start)
             label = (f"{subject} {word} {number}" if subject
                      else f"{word} {number}").strip()
             found.append(RequestedFacet(kind=KIND_THRESHOLD, label=label,
@@ -614,20 +621,22 @@ def _detect_thresholds(q: str) -> List[RequestedFacet]:
     return unique
 
 
-_THRESHOLD_SUBJECTS: Tuple[Tuple[str, str], ...] = (
-    (r"\bltv\b|\bloan[- ]to[- ]value\b", "LTV"),
-    (r"\bage[ds]?\b|\bborrower[s]? (?:aged|age)\b|\bborrowers\b|\byears? old\b", "borrower age"),
-    (r"\bbalance\b|\bexposure\b|\bloan size\b|\bticket\b", "balance"),
-    (r"\brate\b|\bcoupon\b|\binterest\b", "interest rate"),
-    (r"\bvaluation\b|\bproperty value\b|\bcollateral\b", "valuation"),
-)
+def _threshold_subject(span: str, anchor: Optional[int] = None,
+                       value_end: Optional[int] = None) -> str:
+    """The subject a threshold is on, RENDERED for a reader.
 
+    Item 3 — the vocabulary and the rule are `question_interpretation.lexical`'s,
+    the same ones the parser binds the filter with. This used to hold its own
+    near-identical list and take the FIRST entry of a fixed priority order, so
+    "what is the LTV for loans with a balance above £150,000" disclosed
+    "LTV over 150000" while execution filtered `current_outstanding_balance`.
+    Three of eight probed sentences named a field execution had not filtered.
 
-def _threshold_subject(span: str) -> str:
-    for pattern, name in _THRESHOLD_SUBJECTS:
-        if re.search(pattern, span, re.I):
-            return name
-    return ""
+    Only the RENDERING stays here: a display name is not a field key, which is
+    the same split item 1 made between an operator and a receipt word.
+    """
+    kind = _lexical.threshold_subject_kind(span, anchor, value_end)
+    return _lexical.THRESHOLD_SUBJECT_WORD.get(kind, "") if kind else ""
 
 
 def _detect_stress(q: str) -> List[RequestedFacet]:
@@ -1883,7 +1892,75 @@ def dimension_role(facet: RequestedFacet, *, question: Optional[str],
             for k in candidates)
         if not expressible:
             return ROLE_AXIS, None
+
+    # ---- SOURCE 5: the word NAMES THE THING A THRESHOLD IS ON ------------- #
+    #
+    # "What is the LTV for loan TICKETS above £150k?" resolved everything —
+    # measure Current LTV, filter Balance > 150000, 5,857 loans — and then
+    # refused, because `ticket` is a registry synonym for `ticket_bucket` and
+    # none of sources 1-4 covers a word that is the SUBJECT of a threshold.
+    # Source 1 cannot reach it: the facet's candidate keys are the BUCKET, and
+    # the applied filter is on the balance FIELD.
+    #
+    # Naming the thing being thresholded is a settled role. It is a filter — the
+    # reader used the word to say which quantity the £150k applies to.
+    #
+    # The mapping is not duplicated here. `question_interpretation.lexical` owns
+    # "which noun is this threshold on", and the parser binds the filter with
+    # the same vocabulary and the same nearest-before rule.
+    subject_key = _threshold_subject_filter_key(question, facet, filters)
+    if subject_key is not None:
+        return ROLE_FILTER, subject_key
+
     return ROLE_UNRESOLVED, None
+
+
+#: kind -> the registry fields a threshold of that kind can bind to. Read only to
+#: recognise an ALREADY-APPLIED filter as this word's doing; it never chooses a
+#: field, so it cannot introduce a binding of its own.
+_SUBJECT_KIND_FIELDS: Dict[str, Tuple[str, ...]] = {
+    "balance": ("current_outstanding_balance", "current_principal_balance",
+                "original_principal_balance"),
+    "ltv": ("current_loan_to_value", "original_loan_to_value"),
+    "age": ("youngest_borrower_age", "oldest_borrower_age", "borrower_age"),
+    "rate": ("current_interest_rate", "interest_rate"),
+    "valuation": ("collateral_valuation", "property_valuation"),
+}
+
+
+def _threshold_subject_filter_key(question: Optional[str],
+                                  facet: RequestedFacet,
+                                  filters: Mapping[str, Any]) -> Optional[str]:
+    """The applied filter this dimension word is the SUBJECT of, or ``None``.
+
+    Both halves are required and neither is sufficient:
+
+      * the word must sit where a threshold's subject sits, by the owner's
+        nearest-before rule — so a dimension merely mentioned elsewhere in the
+        sentence is untouched;
+      * an applied filter must already exist on a field of that kind — so this
+        can only EXPLAIN a narrowing execution performed, never request one.
+
+    That second condition is what keeps source 5 from becoming a way to invent
+    filters. It reads `filters`; it does not write them.
+    """
+    if not question or not filters:
+        return None
+    span = _named_term_span(question, facet.label)
+    if span is None:
+        return None
+    # Is this word the subject of a threshold? Anchor the owner just past the
+    # word, so the "nearest before the comparator" rule sees it.
+    kind = _lexical.threshold_subject_kind(question, anchor=span[1])
+    if kind is None:
+        return None
+    if _lexical.threshold_subject_kind(question[span[0]:span[1]]) != kind:
+        # The nearest subject before the comparator is some OTHER word.
+        return None
+    for key in _SUBJECT_KIND_FIELDS.get(kind, ()):
+        if key in filters:
+            return key
+    return None
 
 
 def _split_named_dimension_roles(facets: Sequence[RequestedFacet], spec,

@@ -669,6 +669,24 @@ else, which is the only mechanical form that claim has.
 
 ## Backlog
 
+### The analytical path publishes no population — scope stated, not opened
+
+The extended grader's figure check compares the population an answer covers
+against the narrowing the sentence states. It is **vacuous across all 44**, and
+for two reasons rather than one:
+
+* none of the 44 states a row-level threshold, so the check never fires; and
+* **the analytical route emits no `executionSummary.population` at all**, so on
+  that path there is nothing to compare against even when a question does state
+  one. The check is unexerciseable there, not merely unexercised.
+
+**What closing it would take:** the analytical composition layer emitting, per
+composed capability, the population it measured and the whole-book total it
+measured against — the same two numbers the point-in-time path already
+publishes. A receipt change on the analytical path, not a grader change.
+
+**Not now.** Recorded so the size is known before anyone decides.
+
 ### Item 1 follow-ons — recorded during the fix, deliberately not opened inside it
 
 * **The bare `N+` threshold is applied but never disclosed.** *"how many

@@ -105,3 +105,68 @@ may reach them**, and that is the half worth watching.
   whole-book total it measured against — the two numbers the point-in-time path
   already publishes. A receipt change on the analytical path, not a grader
   change. **Not now.**
+
+---
+
+# MEASURED — appended after implementation
+
+## 7. Results against §5
+
+| declared | measured | |
+|---|---|---|
+| B1 answered, 5,857 loans | **answered, `Balance > 150000`, 5,857 loans** | ✅ |
+| B4 answered, 5,857 loans | **answered, identical** | ✅ |
+| the disagreeing labels name the bound field | all eight probed sentences agree | ✅ |
+| A5 unchanged | unchanged | ✅ |
+| shipped shapes **14 / 0 / 0 / 1** | **14 / 0 / 0 / 1** | ✅ |
+| `answer_diff` 729 identical | **729 of 729** *(after §8)* | ✅ |
+| the 44, both books 32/6/4/2 | unmoved; seasoning Q1 4, Q7 4, Q8 12 | ✅ |
+| calibration 259/259, routed 32/32 | both | ✅ |
+| `test_the_detectors_stay_separate` | passes; `_detect_thresholds(q)` unchanged | ✅ |
+| lexical decisions | **697 of 697 identical** | ✅ |
+
+## 8. The stop condition fired, and it was a REGRESSION — caught by one corpus answer
+
+The prediction named the label corrections as "the half that may reach the
+corpora, and that is the half worth watching". One did:
+
+```
+  service_path/ranking_concentration_023
+    "What percentage of the book is above 50% LTV?"
+      threshold facet label:  "LTV over 50"  ->  "over 50"
+```
+
+**The subject was lost, not corrected.** `"above 50% LTV"` is a POSTFIX
+construction — the subject follows the value — and `_filter_field_of` has always
+had a rule for it: *"a subject stated immediately AFTER the number binds
+tightest"*. I shared the vocabulary and implemented only the nearest-BEFORE half
+of the rule.
+
+So the owner now carries both halves, postfix first. This is **item 1's lesson a
+second time**: a consolidation is complete when the consumers have been exercised
+across the vocabulary's full range, and *prefix-only was not the full range*. The
+difference is that here the surface caught it — one corpus answer, on the differ,
+before it shipped.
+
+Recorded as a can-fail: `test_a_postfix_subject_binds_tightest`.
+
+## 9. A test that measured nothing
+
+`test_a_word_naming_a_threshold_subject_is_a_filter` failed on its first run
+while the end-to-end path worked. The fixture used the label `"ticket size"`; the
+sentence says `"loan tickets"`, so `_named_term_span` found nothing and source 5
+correctly declined. **A unit test whose fixture does not match the data the
+function receives measures nothing** — the real label is `"ticket"`, which the
+refusal message had been printing all along.
+
+## 10. Constructed coverage
+
+> **729 of 729 identical means the fix did not reach the corpora — nothing
+> more.** B1 and B4 are constructed; the corpus contains no question naming a
+> bucketed dimension as a threshold's subject. The claim rests on the 12 tests
+> here and the shipped-shapes surface.
+
+**The label half did reach the corpora**, once, and it reached them as a
+regression that the differ caught. That is the corpora doing the one job this
+pack says they can do: not proving a fix correct, but catching a change that
+touches them.
