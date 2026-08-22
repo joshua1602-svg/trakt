@@ -349,13 +349,56 @@ _DISCLAIMERS = (
     "not including", "leaving out", "outside of", "before any", "except",
 )
 
-_DISCLAIMED_SCOPE_RE = re.compile(
-    r"\b(?:" + "|".join(re.escape(d) for d in
-                        sorted(_DISCLAIMERS, key=len, reverse=True)) + r")\b"
-    r"[^.;?!]{0,24}?"
+#: The disclaiming window, defined ONCE. Every reader that asks "did the
+#: sentence rule this out?" measures the same distance and stops at the same
+#: sentence boundary, so a term ruled out for one reader is ruled out for all.
+_DISCLAIMER_ALT = "|".join(re.escape(d) for d in
+                           sorted(_DISCLAIMERS, key=len, reverse=True))
+_DISCLAIMER_GAP = r"[^.;?!]{0,24}?"
+
+#: The same window, read BACKWARDS from a span the caller already located.
+_DISCLAIMER_BEFORE_RE = re.compile(
+    r"\b(?:" + _DISCLAIMER_ALT + r")\b" + _DISCLAIMER_GAP + r"$", re.IGNORECASE)
+
+
+def is_disclaimed_span(text: Optional[str], start: int) -> bool:
+    """True when the sentence RULES OUT the term beginning at ``start``.
+
+    B21. THE primitive, for a reader that has already located its own term —
+    a regex match, a vocabulary hit, a substring position. It exists because
+    "does this question ask for a forecast?" turned out to have FOUR
+    independent readers, each with its own vocabulary and its own way of
+    locating a hit, and only the window and the boundary rule are common to
+    them. Sharing the window is what makes "ignoring the forecast" mean the
+    same thing to the frame resolver, the dataset resolver, the intent
+    classifier and the facet raiser.
+    """
+    if not text or start <= 0:
+        return False
+    return bool(_DISCLAIMER_BEFORE_RE.search(str(text)[:start]))
+
+
+def _disclaimed_span_re(target: str) -> "re.Pattern":
+    """The disclaiming test, ONCE, over whichever target pattern is passed.
+
+    B21. Parameterised by vocabulary the same way `_qualified_span_re` is, and
+    for the same reason: hard-coding one vocabulary into the qualified-mention
+    test is exactly what dropped five governed phrases in B22, and this test has
+    the same two-caller shape. The scope resolver asks *is this book scope ruled
+    out?*; `resolve_active_view` asks *is this view word ruled out?* — one
+    question, two vocabularies.
+
+    ``target`` is captured as group 1 so a caller can locate the ruled-out term
+    itself, not merely the phrase containing it. ``group(0)`` still spans the
+    disclaimer and the target together, which is the wording a receipt quotes.
+    """
+    return re.compile(r"\b(?:" + _DISCLAIMER_ALT + r")\b" + _DISCLAIMER_GAP
+                      + r"(" + target + r")", re.IGNORECASE)
+
+
+_DISCLAIMED_SCOPE_RE = _disclaimed_span_re(
     r"(?:" + "|".join(re.escape(q) for q in _SCOPE_QUALIFIERS) + r")\s+"
-    r"(?:" + "|".join(re.escape(n) for n in _SCOPE_NOUNS) + r")\b",
-    re.IGNORECASE)
+    r"(?:" + "|".join(re.escape(n) for n in _SCOPE_NOUNS) + r")\b")
 
 
 def disclaimed_scope_phrase(text: Optional[str]) -> Optional[str]:
@@ -375,6 +418,45 @@ def disclaimed_scope_phrase(text: Optional[str]) -> Optional[str]:
 def disclaims_scope(text: Optional[str]) -> bool:
     """True when the text RULES OUT a governed scope rather than selecting it."""
     return disclaimed_scope_phrase(text) is not None
+
+
+def undisclaimed_mention(text: Optional[str], term: Optional[str]) -> bool:
+    """True when ``text`` names ``term`` at least once WITHOUT ruling it out.
+
+    B21. THE test for "does this question ask for X", for any reader whose X is
+    a bare word rather than a qualified phrase. A word every one of whose
+    occurrences is disclaimed does not select: *"the balance by vintage,
+    ignoring the forecast"* is not a forecast question, and the clause saying so
+    is precisely what used to make it one. One undisclaimed occurrence is
+    enough, because *"the forecast excluding pipeline"* IS a forecast question —
+    a disclaiming construction declines; it does not select the opposite.
+
+    Substring semantics are deliberate, and preserved exactly where nothing is
+    disclaimed: the callers this replaces tested ``term in question``, so
+    "forecasts" and "forecasting" counted, and they still do. The ONLY behaviour
+    that changes is a mention the sentence rules out.
+
+    Why not `_qualified_span_re` — measured, and it does not transfer. B22's
+    doctrine is that a provenance word must QUALIFY a book noun, because
+    `acquired` is ordinary English about lending. `forecast` and `pipeline` are
+    NOUNS naming the subject: "How much pipeline is overdue?", "What is the
+    forecast?", "Which broker has the largest pipeline?". Requiring them to
+    qualify something would reject the corpus's own pipeline family. Only the
+    disclaiming half of the shape is shared.
+    """
+    if not text or not term:
+        return False
+    haystack = str(text)
+    low = haystack.lower()
+    needle = str(term).lower()
+    if needle not in low:
+        return False
+    at = low.find(needle)
+    while at != -1:
+        if not is_disclaimed_span(haystack, at):
+            return True
+        at = low.find(needle, at + 1)
+    return False
 
 
 def lens_from_term(term: Optional[str]) -> PortfolioLens:

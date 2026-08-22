@@ -1132,7 +1132,15 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
         facets.append(RequestedFacet(
             kind=KIND_RELATIONSHIP,
             label="one measure relative to another"))
-    if _PROJECTION_RE.search(q):
+    # B21 — THE FOURTH READER. A forecast word the sentence RULED OUT was still
+    # raising a requested-projection facet, so "the balance by vintage, ignoring
+    # the forecast" computed the right number over the right 11,035 loans and
+    # was then refused for not having applied the projection it declined. The
+    # honour-or-clarify guard was working exactly as designed on a request that
+    # had never been made.
+    from .portfolio_lens import is_disclaimed_span as _disclaimed_span
+    _projection = _PROJECTION_RE.search(q)
+    if _projection and not _disclaimed_span(q, _projection.start()):
         facets.append(RequestedFacet(
             kind=KIND_PROJECTION, label="a forward projection"))
     named = cohort_concepts_named(q)

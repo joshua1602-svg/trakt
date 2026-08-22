@@ -611,23 +611,23 @@ questions:
   # --- B21: a disclaimed view word must not choose the frame -----------------
   - id: rt_028
     question: What is the balance by vintage, ignoring the forecast?
-    expected_to_fail: >-
-      B21. THE CLAUSE SAYING TO IGNORE THE FORECAST IS WHAT LOADS THE FORECAST
-      FRAME. `resolve_active_view` is a substring test — "forecast" anywhere
-      selects the forecast view — and that view keeps 12 of the book's 71
-      columns, so `vintage_year` is not there and the question dies at
-      prepared-data validation.
+    note: >-
+      B21, DECLARED EXPECTED-TO-FAIL AT 61d8956 AND NOW FIXED. The clause saying
+      to IGNORE the forecast was what loaded the forecast frame — twelve of the
+      book's seventy-one columns — so the question died at prepared-data
+      validation on `vintage_year`, a column the funded book carries.
 
-      EVIDENCE THIS EXPECTATION RESTS ON, measured at 4b30fe3:
-      `resolve_active_view` returns "forecast"; `_resolve_query_frame("forecast")`
-      returns 12 columns against the funded 71 and carries no `vintage_year`;
-      the SAME question without the subordinate clause answers 13 groups over
-      11,035 loans. So the correct outcome is that answer, and the only thing
-      standing between them is a clause that rules the forecast OUT.
-
-      Correct outcome: the funded view, answered, 13 groups.
+      It took FOUR owners, not one. The frame resolver and the dataset resolver
+      were the two named in the prediction; fixing them left the question
+      computing the right number over the right 11,035 loans and then REFUSED,
+      because a fourth reader was still raising a requested-projection facet
+      from a forecast word the sentence had ruled out. The honour-or-clarify
+      guard was working exactly as designed on a request never made.
     expect_view: funded
     expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
 
   - id: rt_029
     question: Show forecast balance by region.
@@ -646,18 +646,21 @@ questions:
 
   - id: rt_030
     question: What is the balance by seasoning segment excluding pipeline cases?
-    expected_to_fail: >-
-      B21 on the PIPELINE half of the vocabulary, so the fix cannot be a special
-      case for one word.
+    note: >-
+      B21 ON THE PIPELINE HALF, declared expected-to-fail at 61d8956 and now
+      fixed — so the fix is not a special case for one word.
 
-      EVIDENCE: `resolve_active_view` returns "pipeline"; this book carries no
-      pipeline, so the answer is "No governed pipeline data is available for the
-      pipeline view" — for a question that explicitly EXCLUDES pipeline cases.
-      Measured at 4b30fe3.
-
-      Correct outcome: the funded view, answered over the seasoning segments.
+      This is the case that found the THIRD owner. With the frame and the
+      dataset both correctly sent to the funded book, the analytical intent
+      classifier still read "pipeline" and "cases" as a pipeline family, raised
+      the pipeline-dataset structural requirement, and refused: "this asks about
+      the pipeline ... which is a different governed dataset from the funded
+      book", for a question that EXCLUDES pipeline cases.
     expect_view: funded
     expect_ok: true
+    expect_verdict: ok
+    expect_facets:
+      - [grouping_dimension, applied]
 
   - id: rt_031
     question: How much pipeline is overdue?

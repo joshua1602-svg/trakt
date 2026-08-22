@@ -603,12 +603,18 @@ Given a new id, the differ reported it correctly: one case gone, one arrived.
 
 The view is chosen by a substring test on the raw question before anything has
 parsed it. B21 fixes the test; it does not ask whether the decision belongs
-there. That is a larger question — it touches when the frame is loaded, what a
+there. B21 is now closed and this remains open, narrowed: a DISCLAIMED
+word no longer chooses the frame, but an undisclaimed incidental mention still
+does — *"how does this compare with the forecast we ran last quarter"* still
+loads the forecast projection. B22's qualified-mention doctrine does not transfer
+(`forecast` and `pipeline` are nouns naming the subject, not qualifiers naming a
+scope), so nothing currently separates the word as SUBJECT from the word as
+passing reference. That distinction is this item's territory. That is a larger question — it touches when the frame is loaded, what a
 route may assume about it, and whether a view is a property of the question or of
 the workspace — and settling it inside a fix to the test would decide it by
 accident.
 
-### B21 — the view resolver  ·  **NEXT**, and it must close before real client data
+### B21 — the view resolver  ·  **CLOSED**, before real client data arrives
 
 Higher severity than B22 despite changing no number on this book, and the reason
 is a property of the book rather than the code: `build_forecast_view_frame` puts
@@ -617,6 +623,38 @@ different meaning — and with no pipeline data the two coincide exactly at
 £1,964,886,258.21. **On any book carrying a pipeline they diverge, and it becomes
 a wrong figure under the same field name, disclosed nowhere.** A defect waiting
 for a live portfolio rather than one this book exposes.
+
+**Closed. It took FOUR owners, not the one the diagnosis named.** Full record in
+`mi_b21_disclaimed_view_prediction.md`.
+
+| # | owner | decides | found by |
+|---|---|---|---|
+| 1 | `workspace.resolve_active_view` | the FRAME | the diagnosis |
+| 2 | `chat_routing._dataset_for` | the DATASET | the site-by-site enumeration, before any test failed |
+| 3 | `mi_workflows.analytical.intent` | the structural REQUIREMENT | rt_030, after 1 and 2 |
+| 4 | `execution_receipt._PROJECTION_RE` | the requested-projection FACET | rt_028, after 1 and 2 |
+
+With owners 1 and 2 fixed, *"the balance by vintage, ignoring the forecast"*
+computed **the right number over the right 11,035 loans** — Balance by Vintage,
+13 groups — and was then **refused**, because owner 4 still raised a
+forward-projection facet from a forecast word the sentence had ruled out. The
+honour-or-clarify guard was working exactly as designed on a request never made.
+A fix measured by "does the number come out right" would have stopped two owners
+early.
+
+What was consolidated is the WINDOW, not the vocabulary: `is_disclaimed_span`
+measures one distance and stops at one sentence boundary, and all four owners
+plus B22's scope resolver read it. Each keeps its own vocabulary, because they
+are genuinely different vocabularies — owner 2's includes `case`, `kfi`,
+`application`, `offer`, none of which owner 1 knows about.
+
+**The severity is constructed and should be read that way.** On this tape the
+divergence is £0.00; on a book with three constructed pipeline cases it is
+£770,000, arriving under `current_outstanding_balance` — the funded balance's own
+field name — and disclosed nowhere. 727 of 729 answers identical means the fix
+did not reach the corpora and nothing more: 0 of 683 corpus questions change
+view, and 1 of 661 × 14 vocabulary pairs stops signalling, both of them cases
+this work constructed.
 
 ### B22 — the lens resolver  ·  **CLOSED**
 

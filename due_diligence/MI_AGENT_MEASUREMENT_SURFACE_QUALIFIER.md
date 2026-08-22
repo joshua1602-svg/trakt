@@ -117,12 +117,34 @@ The same shape, three more times in the same programme:
 | a governed population's whole-book answer (`balance of new lending` → 11,035 loans) | the seasoning family enumerates the SEGMENT names, so the months-on-book windows were unreachable |
 | the front-book regression that cost 160 answers | the same family, the same enumeration |
 | a field reported unavailable that the book carries | the 27 forecast questions are built from the 12 fields the forecast projection carries, so the projection's own gap cannot be exercised |
+| a disclaimed view word choosing the frame (*"the balance by vintage, IGNORING the forecast"* loads the forecast frame) | 113 of 683 corpus questions mention a view word; **not one disclaims it**, so the entire disclaiming class was unreachable |
 
 The last is the mechanism at its most literal — a family enumerated from the very
 projection whose gap it would have to reach — but the seasoning instances are the
 same shape one step removed: the family was enumerated from the SEGMENT names a
 config declares, so the months-on-book windows that name the same population a
 different way were unreachable, and the whole-book answer sat behind them.
+
+### A SECOND LIMITATION, ON A CLEAN GREEN RESULT
+
+**A surface that asserts the right things about the wrong number of owners
+reports a partial fix as a complete one.**
+
+B21 was diagnosed as one decision — which frame a question loads — and two
+owners were named before the work began. There were **four**. The second was
+found by enumerating where the answer arrives, before any test failed. The third
+and fourth were found only because the constructed cases assert the VERDICT and
+not merely the number: with the frame and the dataset both corrected,
+*"the balance by vintage, ignoring the forecast"* computed the right figure over
+the right 11,035 loans and was **still refused**, because a fourth reader was
+raising a forward-projection facet from a word the sentence had ruled out.
+
+The consequence for reading any result in this pack: **"the number is right" and
+"the decision has one owner" are different claims, and only the second is what
+the contract asserts.** A fix verified by the first alone stops as soon as the
+arithmetic agrees, which in B21's case would have been two owners early — with
+the question still unanswerable and the receipt still describing a request
+nobody made.
 
 ### The strongest form: a decision with no corpus coverage at all
 

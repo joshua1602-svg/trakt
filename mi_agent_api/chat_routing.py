@@ -195,9 +195,25 @@ def _table_artifact(title: str, *, columns: List[Dict[str, Any]],
 # --------------------------------------------------------------------------- #
 # Dataset / metric resolution
 # --------------------------------------------------------------------------- #
+#: The words that make a routed question a PIPELINE question. Kept as data
+#: because B21's disclaiming test is applied per term: "excluding pipeline
+#: cases" rules out `pipeline` AND `case` with one clause.
+_PIPELINE_WORDS = ("pipeline", "case", "kfi", "application", "offer")
+
+
 def _dataset_for(question: str, view: str, default: str = "funded") -> str:
+    """Which dataset a routed answer is built from.
+
+    B21 — THE SECOND OWNER, found by enumerating where the view decision arrives
+    rather than by a failing test. `resolve_active_view` picks the frame and
+    this picks the dataset, and both were bare substring tests over overlapping
+    vocabulary; fixing only the first would have left "the balance by seasoning
+    segment excluding pipeline cases" reaching the evolution route with
+    `dataset="pipeline"` — narrowed to the very thing it excluded, by a wider
+    word list than the one that was fixed. It reads the same disclaiming test.
+    """
     q = question.lower()
-    if "pipeline" in q or "case" in q or "kfi" in q or "application" in q or "offer" in q:
+    if any(_portfolio_lens.undisclaimed_mention(q, w) for w in _PIPELINE_WORDS):
         return "pipeline"
     if view == "pipeline":
         return "pipeline"

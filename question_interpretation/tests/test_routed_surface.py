@@ -11,9 +11,18 @@ the checker is proven able to catch every kind of expectation it makes.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from question_interpretation import routed_surface as RS
+
+
+#: Every assertion `routed_surface.check` can make. Asserted against the checker
+#: itself by the test below, because this list silently fell two releases behind.
+EXPECTATION_KEYS = ("expect_route", "expect_ok", "expect_verdict", "expect_facets",
+                    "expect_answer_contains", "expect_view", "expect_population",
+                    "expect_filters")
 
 
 @pytest.fixture(scope="module")
@@ -76,12 +85,29 @@ def test_the_count_matches_the_questions(doc):
     assert doc["meta"]["count"] == len(doc["questions"])
 
 
+def test_the_expectation_list_is_every_assertion_the_checker_makes(doc):
+    """The guard below is only as good as its key list, and the key list had
+    fallen two releases behind the checker.
+
+    `expect_population` and `expect_filters` arrived in B22, `expect_view` in
+    B21, and none of the three was added here — so a case asserting ONLY the
+    view read as a case asserting nothing. That is the fifth instrument in this
+    programme found inadequate by the change it was meant to measure, and the
+    first one inside a meta-instrument: a test whose whole job is to notice
+    unmeasured cases was itself unmeasured. Derived from the checker now, so it
+    cannot fall behind again.
+    """
+    import inspect
+    declared = set(re.findall(r'"(expect_\w+)"', inspect.getsource(RS.check)))
+    assert declared == set(EXPECTATION_KEYS), (
+        "the checker asserts %s; this test's key list says %s"
+        % (sorted(declared), sorted(EXPECTATION_KEYS)))
+
+
 def test_every_case_states_at_least_one_expectation(doc):
     """A case with no expectation passes forever and measures nothing."""
-    keys = ("expect_route", "expect_ok", "expect_verdict", "expect_facets",
-            "expect_answer_contains")
     for case in doc["questions"]:
-        assert any(k in case for k in keys), case["id"]
+        assert any(k in case for k in EXPECTATION_KEYS), case["id"]
 
 
 def test_every_expected_failure_names_its_defect(doc):

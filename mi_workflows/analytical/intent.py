@@ -47,6 +47,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from mi_agent import portfolio_lens as _lens
 from mi_agent import seasoning as _seasoning
 
 # --------------------------------------------------------------------------- #
@@ -389,12 +390,37 @@ def normalise(question: Optional[str]) -> str:
     return " " + " ".join(text.split()) + " "
 
 
+def _matches(text: str, term: str) -> bool:
+    """Whether ``term`` occurs in ``text`` without the sentence ruling it out.
+
+    B21 — THE THIRD READER of "does this question ask about the pipeline?".
+    `resolve_active_view` picks the frame, `_dataset_for` picks the dataset,
+    and this picks the STRUCTURAL REQUIREMENT that makes the question refusable
+    — so "the balance by seasoning segment excluding pipeline cases" was
+    refused as a pipeline question after the first two had correctly sent it to
+    the funded book. Each of the three had its own vocabulary; none of them is
+    wrong about its own job; all three were reading a mention the sentence had
+    ruled out.
+
+    The disclaiming window is `portfolio_lens`'s, not a fourth copy. Measured
+    over all fourteen vocabularies here and all 661 corpus questions, exactly
+    one question/term pair stops signalling, and it is a constructed case.
+    """
+    at = text.find(term)
+    while at != -1:
+        # The vocabularies are space-padded, so the TERM starts one past the hit.
+        if not _lens.is_disclaimed_span(text, at + 1):
+            return True
+        at = text.find(term, at + 1)
+    return False
+
+
 def _any(text: str, terms: Sequence[str]) -> bool:
-    return any(term in text for term in terms)
+    return any(_matches(text, term) for term in terms)
 
 
 def _hits(text: str, terms: Sequence[str]) -> List[str]:
-    return [t.strip() for t in terms if t in text]
+    return [t.strip() for t in terms if _matches(text, t)]
 
 
 def is_comparative(question: Optional[str]) -> bool:
