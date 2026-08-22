@@ -126,6 +126,17 @@ KIND_STATISTIC = "requested_statistic"
 #: honour raised nothing at all and nothing downstream could act on it.
 KIND_GRANULARITY = "granularity"
 
+#: P0 — AN AXIS THE QUESTION ASKED THE ANSWER TO VARY OVER, ABSENT FROM THE
+#: OBJECT THAT SHIPPED.
+#:
+#: Distinct from KIND_GRANULARITY, which is the LEVEL a series is reported at
+#: and presupposes a series. This kind records that there is no series: the
+#: sentence asked for movement and the rendered rows carry a single position.
+#: Distinct from KIND_GROUPING, whose field_key is resolved against a registry —
+#: a time axis has no registry field, which is why the facet layer raised
+#: nothing for one across twenty-four time-series probes.
+KIND_SERIES_AXIS = "series_axis"
+
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
 #: The dataset does not carry the field the facet needs. Disclosable.
@@ -1466,6 +1477,11 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # A substituted statistic IS the number. There is no version of "here is the
     # weighted average, you asked for the median" that is a partial answer.
     KIND_STATISTIC,
+    # An axis the answer was asked to vary over, absent from what shipped. A
+    # single position presented for a question about movement is the same
+    # substitution as a whole-book figure presented for a narrowed question:
+    # the number is confident, it is not wrong, and it answers something else.
+    KIND_SERIES_AXIS,
     # A narrowing the sentence asked for and execution did not apply changes
     # WHICH ROWS were counted, exactly as a population does. Answering over the
     # whole book and disclosing it underneath is the substitution this contract
@@ -3915,6 +3931,146 @@ def check_period_grain(facets: Sequence[RequestedFacet],
 _SUPERLATIVE_RE = re.compile(
     r"\b(?:largest|biggest|highest|greatest|smallest|lowest|maximum|minimum|"
     r"max|min)\b", re.I)
+
+
+# --------------------------------------------------------------------------- #
+# P0 — TEMPORAL HONOURING. Proof from the ARTIFACT, never from the receipt.
+# --------------------------------------------------------------------------- #
+# THE PROPERTY
+#
+#     When the sentence asks the answer to vary over time, the rendered object
+#     that ships must prove that variation from its own rows. Where the rows do
+#     not prove it, the answer does not ship.
+#
+# Stated as a property rather than as route fixes on purpose. The two measured
+# instances arrive by different causes — one falls through to the generic
+# point-in-time executor and never had a time axis to lose, the other is claimed
+# by a route that tracks the whole book — and a rule shaped to those two would
+# be a pair of route fixes wearing a property's clothes. Written this way it
+# also closes instances nobody has found, and it found one while being written:
+# `geo_exposure` answering "regional concentration evolution over time" with a
+# current concentration table.
+#
+# WHY THE RECEIPT CANNOT BE THE PROOF
+#
+# The receipt was TRUTHFUL in the case that matters most. "Show me balance by
+# month by region and LTV band" returned an 88-group heatmap whose
+# `dimensionsApplied` read ['Region','LTV Bucket'] — exactly what the answer
+# did. It was simply silent about time. A guard reading `dimensionsApplied`
+# passes it unchanged. So nothing below reads `executionSummary`,
+# `dimensionsApplied`, `filtersApplied`, `notApplied` or the guard verdict.
+# It opens the rows.
+#
+# TWO FORMS OF PROOF, AND WHY THERE ARE TWO
+#
+# A series expresses its points as ROWS; a movement table expresses the same two
+# points as a COLUMN PAIR. Accepting only the first would refuse three answers
+# that are correct today — `period_change_analysis` returning
+# rank/category/start_value/end_value/movement, and `analytical_composition`
+# returning measure/population/period/prior/current/change. Both are the
+# rendered object the reader sees, not a claim about it, so both are proof.
+
+#: Column-name fragments that mean "this column is the TIME axis". Matched as
+#: fragments because routes name their columns for a reader.
+_ARTIFACT_TIME_FRAGMENTS: Tuple[str, ...] = (
+    "period", "month", "quarter", "week", "date", "as_of", "asof",
+    "reporting", "snapshot", "vintage_year",
+)
+
+#: Column-name pairs that name the two ENDS of a movement.
+#:
+#: `prior`/`current` and `start`/`end` were observed LIVE on shipped envelopes —
+#: `analytical_composition` renders measure/population/period/prior/current/change
+#: and `period_change_analysis` renders rank/category/start_value/end_value/…
+#: `opening`/`closing` and `previous`/`latest` are declared from column names
+#: this repository already renders elsewhere (`opening_balance`,
+#: `closing_balance`, `latest`), and NOT from a live envelope. The distinction
+#: is recorded rather than smoothed over: an accepted form that no answer
+#: produces is a hole in the wrong direction, and
+#: `test_every_end_pair_is_reachable` proves each is reachable while
+#: `docs/mi_p0_temporal_honouring_prediction.md` states which are evidenced.
+_ARTIFACT_END_PAIRS: Tuple[Tuple[str, str], ...] = (
+    ("prior", "current"), ("start", "end"), ("opening", "closing"),
+    ("previous", "latest"),
+)
+
+
+def _artifact_rows(artifacts: Optional[Iterable[Mapping[str, Any]]]
+                   ) -> List[List[Mapping[str, Any]]]:
+    """Every non-empty row set the answer shipped, in order."""
+    out: List[List[Mapping[str, Any]]] = []
+    for art in artifacts or ():
+        if not isinstance(art, Mapping):
+            continue
+        rows = art.get("rows")
+        if isinstance(rows, list) and rows and isinstance(rows[0], Mapping):
+            out.append(rows)
+    return out
+
+
+def _distinct_values(rows: Sequence[Mapping[str, Any]], key: str) -> int:
+    return len({str(r.get(key)) for r in rows if r.get(key) is not None})
+
+
+def _names_end(column: str, end: str) -> bool:
+    """Is this column one END of a movement pair?
+
+    Whole word, prefix or suffix — `prior`, `start_value`, `balance_opening` —
+    but never a substring, so `current_outstanding_balance` matches `current`
+    and `recurrent_fees` does not.
+    """
+    col = str(column or "").lower()
+    return col == end or col.startswith(end + "_") or col.endswith("_" + end)
+
+
+def artifact_time_axis(artifacts: Optional[Iterable[Mapping[str, Any]]]
+                       ) -> Optional[str]:
+    """The evidence that the SHIPPED ROWS carry more than one point in time.
+
+    Returns a short human statement of what proved it, or ``None``. Reads the
+    rendered object only.
+    """
+    for rows in _artifact_rows(artifacts):
+        columns = [str(c) for c in rows[0].keys()]
+        for column in columns:
+            if any(frag in column.lower() for frag in _ARTIFACT_TIME_FRAGMENTS):
+                count = _distinct_values(rows, column)
+                if count > 1:
+                    return "%d distinct values in %s" % (count, column)
+        for first, second in _ARTIFACT_END_PAIRS:
+            if (any(_names_end(c, first) for c in columns)
+                    and any(_names_end(c, second) for c in columns)):
+                return "columns naming %s and %s" % (first, second)
+    return None
+
+
+def temporal_honouring_facets(question: Optional[str],
+                              artifacts: Optional[Iterable[Mapping[str, Any]]]
+                              ) -> List[RequestedFacet]:
+    """Every axis this sentence asked the answer to vary over and did not get.
+
+    Empty when nothing was asked for, when nothing was shipped, or when the
+    rows prove it. An answer that ships NO rendered object is out of scope by
+    construction: "completions by month" replies "no weekly Completed extracts
+    are available yet" with no artifact and no figure, and refusing that would
+    replace an honest statement of incapacity with a refusal that says less.
+    If you ship an object, the object must prove the axis.
+    """
+    from question_interpretation.lexical import time_axis_request
+
+    wording = time_axis_request(question)
+    if not wording:
+        return []
+    if not (artifacts or ()):
+        return []
+    if artifact_time_axis(artifacts):
+        return []
+    return [RequestedFacet(
+        kind=KIND_SERIES_AXIS, label="a series %s" % wording,
+        # No em-dash in the reason: `disclosure()` already joins the label to it
+        # with one, and a sentence carrying two reads as three clauses.
+        reason=("the answer that was produced carries no time axis; it reports "
+                "a single position and cannot show movement"))]
 
 
 def detect_unranked_superlative(question: str, *, spec, query_result) -> Optional[str]:

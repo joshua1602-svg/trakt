@@ -788,6 +788,69 @@ def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
     return result
 
 
+def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str
+                              ) -> Dict[str, Any]:
+    """P0 — TEMPORAL HONOURING, enforced on the object that is about to ship.
+
+    Structural and post-execution, for the same reason `_fail_closed_analytical`
+    above is: the question is not what the answer was MEANT to be, it is what
+    the answer demonstrably carries.
+
+    WHY IT IS HERE AND NOT IN EITHER GUARD
+    --------------------------------------
+    The artifacts do not exist yet where the two semantic guards run. The
+    point-in-time guard runs inside `mi_agent_workflow` before the adapter
+    renders anything, and the routed guard runs before a route's envelope is
+    contextualised. A rule whose whole premise is "read the rendered rows"
+    cannot live where there are no rendered rows, and moving it earlier would
+    have forced it back onto the receipt — the one thing that cannot prove this.
+
+    So it runs LAST, on both paths, and the two call sites are enumerated in
+    `_run_analysis` immediately below. `test_both_paths_reach_the_temporal_guard`
+    is what keeps them at two.
+
+    Runs only on an answer that is about to STAND. An answer that already
+    refuses or clarifies has nothing to discard silently, and re-adjudicating it
+    would rewrite refusals this contract already gets right.
+    """
+    if not isinstance(envelope, dict) or not envelope.get("ok"):
+        return envelope
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+
+        facets = receipt_mod.temporal_honouring_facets(
+            question, envelope.get("artifacts"))
+        if not facets:
+            return envelope
+        # THE REFUSAL SENTENCE IS NOT WRITTEN HERE. It is produced by `assess`
+        # from a receipt carrying the lost facet, so it is the same sentence the
+        # eighteen refusals this surface already gets right are written in. A
+        # second author of that wording would be the defect this programme
+        # spent seven consolidations removing.
+        receipt = receipt_mod.ExecutionReceipt(facets=list(facets))
+        verdict, message = receipt_mod.assess(receipt)
+        if verdict != receipt_mod.VERDICT_REFUSE or not message:
+            return envelope
+        envelope["ok"] = False
+        envelope["error"] = message
+        envelope["answer"] = message
+        envelope["artifacts"] = []
+        envelope["controlledRefusal"] = True
+        # The receipt and the guard must tell the SAME story as the answer, and
+        # the execution summary must not leave the very figure the refusal says
+        # it will not substitute sitting on the envelope for a channel to render.
+        envelope["executionSummary"] = None
+        envelope["semanticGuard"] = {
+            "verdict": verdict, "message": message,
+            "route": (envelope.get("metadata") or {}).get("route"),
+            "facets": [f.to_dict() for f in facets]}
+        envelope.setdefault("warnings", []).append(message)
+    except Exception:  # noqa: BLE001 - the guard must never break a governed route
+        logger.exception("temporal honouring guard failed for question=%r",
+                         question)
+    return envelope
+
+
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
                   deps: CapabilityDependencies) -> Dict[str, Any]:
     """The analytical pipeline.
@@ -928,6 +991,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         routed = _guard_routed_answer(routed, question=req.question, route=route,
                                       semantics=semantics, frame=df,
                                       parsed=parsed)
+        # P0 SITE 1 OF 2 — temporal honouring, on the rendered routed envelope.
+        routed = _guard_temporal_honouring(routed, question=req.question)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
@@ -987,6 +1052,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # §7 — a materially analytical question must never leave here with a
     # confident current-position figure that answers something else.
     result = _fail_closed_analytical(result, question=req.question, view=view)
+    # P0 SITE 2 OF 2 — temporal honouring, on the rendered point-in-time result.
+    result = _guard_temporal_honouring(result, question=req.question)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))
