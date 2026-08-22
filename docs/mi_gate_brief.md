@@ -122,3 +122,32 @@ name, on both books:
 * Write the report to `docs/mi_gate_llm_arm_time_series.md`.
 
 Nothing else in that session.
+
+---
+
+## Recorded — why this brief exists as a file
+
+**A service-side issue, not a blocked task.** The Gate was staged to be started
+by `create_session` from the P0 session. That call failed nine times in a row
+with `failed to create session: the service is temporarily unavailable`, across
+backoffs of ten, twenty-five and forty minutes.
+
+Two facts narrow it, and both are recorded because they say where the fault is
+not:
+
+* **`list_environments` responded normally throughout**, returning both
+  environments in `active` state. The service is reachable; it is session
+  CREATION that is unavailable.
+* **Naming the environment explicitly made no difference.** The same failure
+  came back with `environment_id` inherited and with
+  `env_01XQ48hdMuDZut5zieS5d7Vx` passed directly, so it is not environment
+  resolution and not a permissions or scope problem on this side.
+
+Nothing about the Gate is blocked by it. The brief is on the branch precisely so
+the session can be started by hand with one instruction — *"Read
+`docs/mi_gate_brief.md` and follow it exactly"* — from any fresh session on this
+environment. A fresh session is required for an unrelated and correct reason: a
+container started before `ANTHROPIC_API_KEY` was set on the console never sees
+it, and a key offered in chat is refused by the permission layer through every
+route (scratchpad file, shell profile, inline on a command), which matches the
+standing constraint.
