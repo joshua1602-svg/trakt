@@ -108,7 +108,28 @@ def test_the_whole_corpus_is_unchanged():
     assert len(cases) == 697
     differing = [c["question"] for c in cases
                  if original(c["question"]) != lexical.subject_side(c["question"])]
-    assert differing == [], differing[:5]
+
+    #: ITEM 2 CHANGED THESE FOUR, DELIBERATELY, and they are listed rather than
+    #: tolerated. `original` above reproduces the pre-conversion rule, which cut
+    #: the subject span on `\bby\b` alone. "balance split by region" therefore
+    #: cut at offset 14 and left `split` inside the span that may name the
+    #: measure, giving the subject "balance split". `grouping_cut` now reads
+    #: `lexical.AXIS_MARKERS`, finds `split by` at offset 8, and the subject is
+    #: "balance" — which is what the sentence says.
+    #:
+    #: The guard is kept, not loosened: a FIFTH difference still fails, and the
+    #: four are named so that a future change silently reverting one of them
+    #: fails too.
+    ITEM2_CORRECTED = [
+        "balance split by region",
+        "balance split by borrower type",
+        "balance split by product type",
+        "balance split by broker",
+    ]
+    for question in ITEM2_CORRECTED:
+        assert lexical.subject_side(question) == "balance", (
+            "%r should now name the measure alone" % question)
+    assert sorted(differing) == sorted(ITEM2_CORRECTED), differing[:5]
 
 
 def test_the_object_carries_the_subject_side_span():
