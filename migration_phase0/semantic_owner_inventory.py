@@ -151,6 +151,11 @@ PASSTHROUGH_CALLEES: Set[str] = {
     # question travels on it for audit and prose, and the decisions were
     # already made. Audited rather than assumed.
     "PeriodChangeRequest",
+    # CONVERSION 1. The contract CONSUMER: it takes the interpretation and
+    # plans from it, and calls no resolver. The question travels on its
+    # signature for the deferral path and for nothing else. Audited, not
+    # assumed — `test_the_route_does_not_call_the_lens_resolver` pins it.
+    "_summary_population",
     # A local variable named `answer`, called as a formatter. Not a resolver.
     "answer",
 }
