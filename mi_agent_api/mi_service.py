@@ -565,27 +565,6 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             receipt_mod.book_columns(frame),
             question=question, settle_unresolved=False)
         granularity = receipt_mod.granularity_facets(question, route)
-        # PHASE 1E. A portfolio the question NAMED and the governed registry
-        # does not hold is raised here so honour-or-clarify refuses, rather than
-        # the route quietly answering for the whole book under that name.
-        #
-        # Built from THE FRAME THIS ANSWER WAS COMPUTED FROM, never from the
-        # process-wide active dataset. Two reasons, and the second was measured:
-        # the registry must describe the population that was actually queried;
-        # and `portfolio_context.build_registry()` with no frame calls
-        # `active_frame()`, which populates `data_source._ACTIVE_CACHE` under a
-        # TTL — reaching for it on every governed answer made five unrelated
-        # receipt tests fail by leaking one test's fixture frame into the next.
-        # A disclosure step has no business changing what the next request
-        # reads.
-        try:
-            from . import portfolio_context as _ctx_registry
-
-            granularity = list(granularity) + list(
-                receipt_mod.unresolved_scope_facets(
-                    question, registry=_ctx_registry.build_registry(frame)))
-        except Exception as exc:  # noqa: BLE001 - never break a governed answer
-            logger.info("unresolved-scope disclosure skipped: %s", exc)
         # P1L: the material row population the spec carries. Raised from the
         # governed spec, proven from execution evidence the route reports — a
         # route that reports nothing leaves these LOST and the answer refuses,
@@ -879,6 +858,71 @@ def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str,
     return envelope
 
 
+def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
+                            frame) -> Dict[str, Any]:
+    """PHASE 1E. A portfolio the question NAMED and the registry does not hold.
+
+    Applied at BOTH answer sites, for the reason Phase 0 recorded as a
+    governance prerequisite: a receipt proof that holds only on the routed path
+    is not a proof. Measured with the routed guard alone in place:
+
+        "What is the funded balance by region for the Highgate Mortgages Book?"
+        -> ok=True, "Total Balance, grouped by Region, 12 groups, 11,035 loans"
+
+    — the whole book, under the name of a book this platform has never
+    onboarded, because the question fell through to the point-in-time path and
+    the routed guard never saw it. Which route happens to claim a question is
+    not a fact about whether its scope resolved.
+
+    THE REFUSAL SENTENCE IS NOT WRITTEN HERE. `unresolved_scope_facets` raises
+    the request as a LOST narrowing and `assess` produces the wording, so this
+    refusal reads exactly like every other dropped-narrowing refusal on this
+    surface. A second author of that sentence would be the defect this
+    programme spent seven consolidations removing.
+
+    The registry is built from THE FRAME THIS ANSWER WAS COMPUTED FROM, never
+    from the process-wide active dataset: `build_registry()` with no frame
+    calls `active_frame()`, which populates a TTL cache, and a disclosure step
+    has no business changing what the next request reads.
+    """
+    if not isinstance(envelope, dict) or not envelope.get("ok"):
+        return envelope
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+
+        from . import portfolio_context as _ctx_registry
+
+        facets = receipt_mod.unresolved_scope_facets(
+            question, registry=_ctx_registry.build_registry(frame))
+        if not facets:
+            return envelope
+        receipt = receipt_mod.ExecutionReceipt(facets=list(facets))
+        verdict, message = receipt_mod.assess(receipt)
+        if verdict != receipt_mod.VERDICT_REFUSE or not message:
+            return envelope
+        envelope["ok"] = False
+        envelope["error"] = message
+        envelope["answer"] = message
+        envelope["artifacts"] = []
+        envelope["controlledRefusal"] = True
+        # The receipt and the guard must tell the SAME story as the answer, and
+        # the execution summary must not leave the very figure the refusal says
+        # it will not substitute sitting on the envelope for a channel to render.
+        envelope["executionSummary"] = None
+        envelope["semanticGuard"] = {
+            "verdict": verdict, "message": message,
+            "route": (envelope.get("metadata") or {}).get("route"),
+            "facets": [f.to_dict() for f in facets]}
+        envelope.setdefault("warnings", []).append(message)
+        meta = envelope.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            meta["controlledRefusal"] = True
+            meta["lensApplied"] = False
+    except Exception as exc:  # noqa: BLE001 - never break a governed answer
+        logger.info("unresolved-scope disclosure skipped: %s", exc)
+    return envelope
+
+
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
                   deps: CapabilityDependencies) -> Dict[str, Any]:
     """The analytical pipeline.
@@ -1022,6 +1066,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # P0 SITE 1 OF 2 — temporal honouring, on the rendered routed envelope.
         routed = _guard_temporal_honouring(routed, question=req.question,
                                           semantics=semantics, frame=df)
+        # PHASE 1E SITE 1 OF 2 — an unresolved portfolio scope, on the same terms.
+        routed = _guard_unresolved_scope(routed, question=req.question, frame=df)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
@@ -1084,6 +1130,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # P0 SITE 2 OF 2 — temporal honouring, on the rendered point-in-time result.
     result = _guard_temporal_honouring(result, question=req.question,
                                        semantics=semantics, frame=df)
+    # PHASE 1E SITE 2 OF 2 — an unresolved portfolio scope, on the same terms.
+    result = _guard_unresolved_scope(result, question=req.question, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))

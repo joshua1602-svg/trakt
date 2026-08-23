@@ -285,3 +285,81 @@ class TestKnownDefectALabelThatCollidesWithSeasoningVocabulary:
             os.environ.update(before)
         assert result.get("ok") is True
         assert "3,909" in (result.get("answer") or "")
+
+
+@pytest.fixture(scope="module")
+def live_book():
+    """The shipped governed book, for the end-to-end assertions below."""
+    import os
+    warnings.simplefilter("ignore")
+    os.environ.setdefault("TRAKT_RUNTIME_MODE", "development")
+    from demo_platform import config as cfg
+    before = dict(os.environ)
+    os.environ.update(cfg.mi_env(period_role="current"))
+    os.environ["MI_AGENT_LLM_PARSER"] = "off"
+    os.environ["MI_AGENT_LLM_ENABLED"] = "0"
+    try:
+        yield cfg.CLIENT_ID
+    finally:
+        os.environ.clear()
+        os.environ.update(before)
+
+
+def _ask(client_id, question):
+    from mi_agent_api.mi_service import (MiQueryRequest,
+                                         execute_governed_mi_query)
+    from trakt_core.context import ExecutionContext
+    ctx = ExecutionContext.for_internal(client_id)
+    return execute_governed_mi_query(MiQueryRequest(question=question),
+                                     ctx).result or {}
+
+
+class TestTheRefusalIsRouteIndependent:
+    """Phase 0 recorded this as a governance prerequisite: a receipt proof that
+    holds only on the routed path is not a proof.
+
+    Measured with the routed guard alone in place, before `_guard_unresolved_scope`
+    was applied at both sites:
+
+        "What is the funded balance by region for the Highgate Mortgages Book?"
+        -> ok=True, "Total Balance, grouped by Region, 12 groups, 11,035 loans"
+
+    The whole book, under the name of a book this platform has never onboarded,
+    because the question fell through to the point-in-time path. Which route
+    happens to claim a question is not a fact about whether its scope resolved.
+    """
+
+    @pytest.mark.parametrize("question,requested", [
+        # point-in-time path (route is None)
+        ("What is the funded balance by region for the Highgate Mortgages Book?",
+         "Highgate Mortgages Book"),
+        ("What is the funded balance of the acquired_001 book?", "acquired_001"),
+        # routed paths
+        ("Summarise the Highgate Mortgages Book", "Highgate Mortgages Book"),
+        ("How has the Highgate Mortgages Book evolved over time?",
+         "Highgate Mortgages Book"),
+    ])
+    def test_an_unheld_name_refuses_whichever_path_answers(
+            self, live_book, question, requested):
+        result = _ask(live_book, question)
+        answer = result.get("answer") or ""
+        assert result.get("ok") is False, answer
+        assert result.get("controlledRefusal") is True, answer
+        # The wording that asked is quoted back, so the reader can correct it.
+        assert requested in answer
+        # And no whole-book figure is substituted.
+        assert "11,035" not in answer
+        assert "1.96bn" not in answer
+
+    def test_a_held_name_is_not_refused_by_this_guard(self, live_book):
+        """The guard must fire on names the registry does NOT hold, and only
+        those. A guard that refused every named portfolio would be safe and
+        useless."""
+        result = _ask(live_book, "Summarise the ALP Origination Book")
+        assert result.get("ok") is True
+        assert "7,126" in (result.get("answer") or "")
+
+    def test_a_question_naming_no_portfolio_is_untouched(self, live_book):
+        result = _ask(live_book, "Please provide a portfolio summary")
+        assert result.get("ok") is True
+        assert "11,035" in (result.get("answer") or "")
