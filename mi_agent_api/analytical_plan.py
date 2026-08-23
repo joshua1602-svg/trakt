@@ -406,3 +406,105 @@ def period_movement(output_root, client_id: str, *, interpretation,
         output_root, client_id, to_run_id=to_run_id,
         lens_filters=lens_filters(plan), lens_label=label,
         span_periods=span_periods(plan))
+
+
+# --------------------------------------------------------------------------- #
+# CONVERSION 3 — `geo_exposure`, composed.
+#
+# The measurement conversion. Its route reads exactly ONE semantic fact from the
+# question — the source scope — and that fact was already bridged by Conversion
+# 1 and generalised by Conversion 2. So this section is the test of whether a
+# route whose semantics are already carried migrates through route wiring alone.
+#
+# It is also the first converted route handed a RESOLVED FRAME rather than an
+# output root, which is the one generic gap the re-baseline predicted.
+# --------------------------------------------------------------------------- #
+
+#: The ITL3 view truncates for legibility. The route's own long-standing
+#: constant, carried here rather than restated at the call site.
+TOP_AREAS = 15
+
+
+def scope_frame(plan: Plan, df: Any) -> Any:
+    """Narrow ONE already-resolved frame to the population a plan selects.
+
+    SHARED. `portfolio_summary` and `period_movement` reach `_scope_frame_lens`
+    through `funded_frames`, because they stack governed periods; a
+    point-in-time route is handed the frame instead. This is the entry point for
+    that case, and it is deliberately the SAME narrowing — `lens_filters` reads
+    governed portfolio ids off the plan and `evolution._scope_frame_lens`
+    applies them.
+
+    That matters more than its size. `chat_routing._apply_lens_filter` is a
+    second implementation of this narrowing, reached from a lens object rather
+    than from a plan. The two agree today. Routing the converted path through
+    the plan's own filters means the compositional layer has ONE narrowing, and
+    it is the one the governed population step decided.
+    """
+    from . import evolution as evolution_mod
+
+    return evolution_mod._scope_frame_lens(df, lens_filters(plan))
+
+
+def build_geo_exposure_plan(interpretation) -> Plan:
+    """The plan for a geographic-concentration question.
+
+    The question is NOT a parameter, and here that is nearly the whole story:
+    scope is the ONLY thing this route ever read from it. Everything else is the
+    route's identity — ITL3 is the grouping, balance is the measure, largest
+    first is the order.
+
+    No `stack_periods`: geographic concentration is a POINT-IN-TIME question,
+    answered from the frame the caller is working in. Declaring a period step
+    would claim a governance property this answer does not have.
+    """
+    steps: List[Step] = [
+        _population_step(getattr(interpretation, "source_scope", None)),
+        Step(RESOLVE_MEASURE, {"metric": "funded_balance", "aggregation": "sum"},
+             because="exposure is the funded balance"),
+        Step(RESOLVE_MEASURE, {"metric": "loan_count", "aggregation": "count"},
+             because="the count of loans behind each area's exposure"),
+        Step(GROUP, {"by": ["itl3_code"], "measure": "funded_balance",
+                     "aggregation": "sum", "share_of": "scope_total"},
+             because="ITL3 area is the governed geographic grain, and each "
+                     "area's share is a share of the SCOPE, not of the platform"),
+        Step(RANK, {"of": "itl3_code", "basis": "funded_balance",
+                    "direction": "desc", "top_n": TOP_AREAS, "residual": None},
+             because="largest first, truncated for legibility"),
+    ]
+    return Plan(tuple(steps), ("itl3_code",))
+
+
+def geo_exposure(df: Any, *, interpretation) -> Dict[str, Any]:
+    """Funded exposure by ITL3 area, COMPOSED.
+
+    Takes the frame the caller already resolved — this route answers at one
+    date — and returns the same engine result the shipped path returned, plus
+    the scope label and whether a narrowing was applied. Everything downstream
+    (the bar, the table, the prose, the envelope, the receipt) is therefore
+    unchanged by construction.
+    """
+    from . import geo as geo_mod
+
+    plan = build_geo_exposure_plan(interpretation)
+    label = lens_label(plan)
+    narrowed = lens_filters(plan) is not None
+    if plan.blocked:
+        return {"available": False, "lens": label, "narrowed": narrowed,
+                "reason": plan.blocked[0].blocked,
+                "planBlocked": [s.to_dict() for s in plan.blocked]}
+
+    scoped = scope_frame(plan, df)
+    if scoped is None or not len(scoped):
+        return {"available": False, "lens": label, "narrowed": narrowed,
+                "empty_scope": True,
+                "reason": f"no rows in scope for {label}"}
+
+    # EXISTING IMPLEMENTATION, reused. The ITL3 resolution, the per-area
+    # weighted LTV and the coverage arithmetic all already exist there, and a
+    # second copy would be a second owner of the same economics.
+    result = dict(geo_mod.exposure_by_itl3(scoped))
+    result["lens"] = label
+    result["narrowed"] = narrowed
+    result["declaredGroupedBy"] = list(plan.declares_grouped_by)
+    return result

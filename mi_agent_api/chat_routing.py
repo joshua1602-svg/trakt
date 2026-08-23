@@ -38,7 +38,6 @@ from . import temporal_compare as compare_mod
 from . import currency as currency_mod
 from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
-from . import geo as geo_mod
 from . import movement_summary as movement_mod
 from . import period_change_route as _period_change
 from . import analytical_plan as _plan
@@ -1951,7 +1950,8 @@ def _is_geo_exposure(question: str, *, spec: Any = None,
 
 
 def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
-               portfolio_id, as_of, source_lens=None) -> Dict[str, Any]:
+               portfolio_id, as_of, source_lens=None,
+               interpretation=None) -> Optional[Dict[str, Any]]:
     """Funded exposure by UK ITL3 area → a ranked bar + table, from the ITL3
     exposure engine (tape ITL3 field, else postcode-derived). Answers "largest
     geographic concentration / where is the book". Degrades honestly when the
@@ -1969,6 +1969,12 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
     platform. This route reads a dataframe, so it can honour a lens exactly as
     the point-in-time executor does; routes that read pre-aggregated run
     artefacts cannot, and disclose that instead (see ``try_route``)."""
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. The same rule Conversions 1
+        # and 2 settled: one population owner, or none. Keeping the
+        # lens-resolved path as a fallback would leave `_resolve_lens` reachable
+        # from here exactly when the contract failed.
+        return None
     if frame_resolver is None:
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
                          answer="I can't resolve the funded book for a geographic view here.",
@@ -1985,22 +1991,26 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
                          route="geo_exposure", lens_applied=True,
                          warnings=[f"insufficient-data: no funded frame for {scope}."])
 
-    # Narrow to the governed scope the caller is working in, using the SAME
-    # registry-resolved id list the point-in-time path filters on.
-    lens = _resolve_lens(question, source_lens)
-    lens_warnings: List[str] = []
-    if lens.filters:
-        df = _apply_lens_filter(df, lens)
-        if df is None or not len(df):
-            return _envelope(
-                ok=True, question=question, spec=spec_dict, artifacts=[],
-                answer=(f"There are no funded loans in {lens.label} to map, so I "
-                        "can't report a geographic concentration for it."),
-                route="geo_exposure", lens_applied=True,
-                warnings=[f"no rows in scope for {lens.label}."])
-        lens_warnings.append(f"portfolio scope applied: {lens.label}")
+    # CONVERSION 3 — the switch point, and the whole of it.
+    #
+    # The one semantic fact this route ever read from the question is the source
+    # scope, and it now comes from the contract. The plan narrows the frame with
+    # the SAME governed id list, through the plan's own filters rather than
+    # through a lens object — so `_apply_lens_filter` is no longer reachable
+    # from here and the compositional layer has one narrowing owner.
+    geo = _plan.geo_exposure(df, interpretation=interpretation)
+    scope_label, narrowed = geo["lens"], geo["narrowed"]
+    lens_warnings: List[str] = (
+        [f"portfolio scope applied: {scope_label}"] if narrowed else [])
+    if geo.get("empty_scope"):
+        return _envelope(
+            ok=True, question=question, spec=spec_dict, artifacts=[],
+            answer=(f"There are no funded loans in {scope_label} to map, so I "
+                    "can't report a geographic concentration for it."),
+            route="geo_exposure", lens_applied=True,
+            warnings=[f"no rows in scope for {scope_label}."])
 
-    result = geo_mod.exposure_by_itl3(df)
+    result = geo
     if not result.get("available"):
         reason = result.get("reason", "no ITL3 area or property postcode on the tape")
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
@@ -2029,7 +2039,7 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
             {"key": "share", "label": "Book share", "align": "right", "format": "text"},
         ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
     top_name = top["itl3_name"] or top["itl3_code"]
-    book = "the book" if not lens.filters else lens.label
+    book = "the book" if not narrowed else scope_label
     answer = (f"Largest geographic concentration: {top_name} at {_gbp(top['balance'])} "
               f"({top['sharePct']:.1f}% of {book}) across {result.get('areaCount', len(areas))} "
               f"ITL3 area(s). Basis: {result.get('basis', 'tape')}; "
@@ -2875,7 +2885,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             handle=lambda r: _route_geo(
                 r.question, r.spec_dict, client_id=r.client_id, run_id=r.run_id,
                 frame_resolver=r.frame_resolver, portfolio_id=r.portfolio_id,
-                as_of=r.as_of, source_lens=r.source_lens)),
+                as_of=r.as_of, source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
 
         # 6b. Portfolio Risk Comparison — the governed workflow layer's second
         #     workflow. Recognition, scope resolution and every calculation
