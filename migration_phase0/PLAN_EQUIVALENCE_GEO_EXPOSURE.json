@@ -1,0 +1,364 @@
+{
+  "comparisons": [
+    {
+      "case": "G1",
+      "scope": "None",
+      "question": "What is the geographic exposure?",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G1",
+      "scope": "direct",
+      "question": "What is the geographic exposure?",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G1",
+      "scope": "acquired",
+      "question": "What is the geographic exposure?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G2",
+      "scope": "None",
+      "question": "Where is the book concentrated geographically?",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G2",
+      "scope": "direct",
+      "question": "Where is the book concentrated geographically?",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G2",
+      "scope": "acquired",
+      "question": "Where is the book concentrated geographically?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G3",
+      "scope": "None",
+      "question": "Which region has the largest exposure?",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G3",
+      "scope": "direct",
+      "question": "Which region has the largest exposure?",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G3",
+      "scope": "acquired",
+      "question": "Which region has the largest exposure?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G4",
+      "scope": "None",
+      "question": "Funded exposure by ITL3 area",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G4",
+      "scope": "direct",
+      "question": "Funded exposure by ITL3 area",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G4",
+      "scope": "acquired",
+      "question": "Funded exposure by ITL3 area",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G5",
+      "scope": "None",
+      "question": "Where are we most exposed geographically?",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G5",
+      "scope": "direct",
+      "question": "Where are we most exposed geographically?",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G5",
+      "scope": "acquired",
+      "question": "Where are we most exposed geographically?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G6",
+      "scope": "None",
+      "question": "What is the largest geographic concentration?",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G6",
+      "scope": "direct",
+      "question": "What is the largest geographic concentration?",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G6",
+      "scope": "acquired",
+      "question": "What is the largest geographic concentration?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G7",
+      "scope": "None",
+      "question": "Which area has the biggest exposure?",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G7",
+      "scope": "direct",
+      "question": "Which area has the biggest exposure?",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G7",
+      "scope": "acquired",
+      "question": "Which area has the biggest exposure?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G8",
+      "scope": "None",
+      "question": "geographic exposure",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G8",
+      "scope": "direct",
+      "question": "geographic exposure",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "G8",
+      "scope": "acquired",
+      "question": "geographic exposure",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S1",
+      "scope": "None",
+      "question": "Geographic exposure for the acquired book",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S1",
+      "scope": "direct",
+      "question": "Geographic exposure for the acquired book",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S1",
+      "scope": "acquired",
+      "question": "Geographic exposure for the acquired book",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S2",
+      "scope": "None",
+      "question": "Geographic exposure for the direct book",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S2",
+      "scope": "direct",
+      "question": "Geographic exposure for the direct book",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S2",
+      "scope": "acquired",
+      "question": "Geographic exposure for the direct book",
+      "shippedRows": 7126,
+      "planRows": 7126,
+      "total": 1385508582.98,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S3",
+      "scope": "None",
+      "question": "Where is the acquired book most exposed geographically?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S3",
+      "scope": "direct",
+      "question": "Where is the acquired book most exposed geographically?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "S3",
+      "scope": "acquired",
+      "question": "Where is the acquired book most exposed geographically?",
+      "shippedRows": 3909,
+      "planRows": 3909,
+      "total": 579377675.23,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "R1",
+      "scope": "None",
+      "question": "Geographic exposure for the Highgate Mortgages Book",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "R1",
+      "scope": "direct",
+      "question": "Geographic exposure for the Highgate Mortgages Book",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    },
+    {
+      "case": "R1",
+      "scope": "acquired",
+      "question": "Geographic exposure for the Highgate Mortgages Book",
+      "shippedRows": 11035,
+      "planRows": 11035,
+      "total": 1964886258.21,
+      "areaCount": 172,
+      "differences": []
+    }
+  ]
+}
