@@ -22,20 +22,23 @@ THE HARD RULE THIS MODULE OBEYS
 NEVER receives, reads, inspects or is passed the raw question string. That is
 enforced by its signature and asserted by ``assert_no_question_read``.
 
-WHY IT IS BLOCKED
------------------
-The shipped route narrows by PORTFOLIO LENS (``direct`` / ``acquired`` / an SPV
-id), resolved by ``mi_agent.portfolio_lens.resolve_lens(question)`` — from the
-RAW QUESTION. The interpretation contract has no claim that carries it:
-measured, ``QuestionInterpretation.population`` is EMPTY for "Summarise the
-acquired book" while the route resolves ``source_portfolio_type=acquired``.
+THE BLOCKER, AND HOW IT WAS CLEARED (Phase 1A)
+----------------------------------------------
+Phase 0 blocked 9 of 9 cases here. The shipped route narrows by PORTFOLIO LENS
+(``direct`` / ``acquired`` / an SPV id) resolved by
+``mi_agent.portfolio_lens.resolve_lens(question)`` — from the RAW QUESTION — and
+the interpretation contract carried no claim for it, so an empty ``population``
+list could mean either "the whole book" or "nobody looked".
 
-An empty ``population`` therefore cannot be read as "no narrowing was asked
-for": absence-of-claim is not evidence-of-total when the concept is
-unrepresentable. So this plan DECLARES the lens unresolvable rather than
-assuming Total, and the equivalence run below reports which questions that
-blocks. Assuming Total would be the silent population widening the P1L work
-exists to prevent.
+Phase 1A added ``QuestionInterpretation.source_scope``, which carries THAT SAME
+OWNER's reading. ``mi_agent.portfolio_lens`` is still the only thing that decides
+what "the acquired book" means; the contract transports its answer, and this
+plan consumes the transported answer.
+
+What has NOT changed: ``state`` still decides. EMPTY and UNRESOLVABLE are not
+Total and still block. Only ``FILLED`` plans a selection, and ``scope=total`` is
+a positive reading — "the owner looked and found no source narrowing" — not an
+absence.
 
     python -m migration_phase0.shadow_portfolio_summary
 """
@@ -121,6 +124,32 @@ def build_plan(interpretation, *, region_column: Optional[str],
     ]
 
     # -- select population, from the contract ONLY --------------------------
+    #
+    # PHASE 1A. `source_scope` carries `mi_agent.portfolio_lens`'s reading, so
+    # this step is now planned from the contract. `state` is what decides:
+    # EMPTY and UNRESOLVABLE are NOT Total, and both block. Reading either as
+    # Total would widen a population the question may have narrowed.
+    scope = getattr(interpretation, "source_scope", None)
+    state = getattr(scope, "state", "empty")
+    if state == "filled":
+        steps.append(Step(
+            SELECT_POPULATION,
+            {"kind": "source_portfolio_lens", "scope": scope.scope,
+             "portfolio_ids": list(scope.portfolio_ids)},
+            because=("the contract carries a resolved source scope "
+                     f"({scope.scope!r})"
+                     + ("; it narrows nothing" if not scope.narrows else "")))) 
+    else:
+        steps.append(Step(
+            SELECT_POPULATION, {"kind": "source_portfolio_lens"},
+            because="the shipped route narrows by portfolio lens",
+            blocked=(BLOCKED_NO_CONTRACT_FIELD + ": source_scope is "
+                     f"{state!r}" + (f" ({scope.reason})" if getattr(
+                         scope, "reason", None) else "")
+                     + ". Absence of a resolved scope is NOT Total.")))
+
+    # A seasoning population is a DIFFERENT AXIS and is planned separately. A
+    # question can carry both, and neither implies the other.
     seasoning = [p for p in interpretation.population
                  if p.concept == "seasoning_segment" and p.state == "filled"]
     if seasoning:
@@ -128,16 +157,6 @@ def build_plan(interpretation, *, region_column: Optional[str],
             SELECT_POPULATION,
             {"kind": "seasoning_segment", "claim": seasoning[0].raw_text},
             because="the contract carries a filled seasoning population claim"))
-    else:
-        # THE BLOCKER. See the module docstring: an empty population list cannot
-        # be read as Total while the portfolio lens is unrepresentable.
-        steps.append(Step(
-            SELECT_POPULATION, {"kind": "portfolio_lens"},
-            because="the shipped route narrows by portfolio lens",
-            blocked=BLOCKED_NO_CONTRACT_FIELD + ": QuestionInterpretation has no "
-                    "claim for a source-portfolio lens (direct / acquired / SPV "
-                    "id); mi_agent.portfolio_lens.resolve_lens reads the raw "
-                    "question instead"))
 
     # -- the five governed headline measures --------------------------------
     for metric, aggregation in (("funded_balance", "sum"),
@@ -187,16 +206,49 @@ def assert_no_question_read(interpretation) -> None:
 # --------------------------------------------------------------------------- #
 # Execution — existing primitives, unmodified
 # --------------------------------------------------------------------------- #
-def execute_plan(plan: ShadowPlan, *, output_root: str, client_id: str,
-                 lens_filters: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def lens_for(plan: ShadowPlan):
+    """The governed lens this PLAN selects, or ``None`` if it selects none.
+
+    The scope name comes from the plan (which got it from the contract, which
+    got it from the owner). Turning that name into row filters is asked of the
+    SAME owner, through the path it already exposes for an explicit selection —
+    so no question text is read and no second resolver exists.
+
+    ``lens_from_selection`` falls back to Total for anything it does not
+    recognise, so the rebuilt lens is CHECKED against the scope the plan
+    claimed. A silent fallback to Total here would be the population widening
+    this whole exercise exists to prevent.
+    """
+    from mi_agent import portfolio_lens as lens_owner
+
+    step = next((s for s in plan.steps
+                 if s.primitive == SELECT_POPULATION
+                 and s.inputs.get("kind") == "source_portfolio_lens"
+                 and not s.blocked), None)
+    if step is None:
+        return None
+    scope = step.inputs.get("scope")
+    ids = step.inputs.get("portfolio_ids") or []
+    lens = lens_owner.lens_from_selection(ids if ids else scope)
+    if lens.name != scope:
+        raise AssertionError(
+            f"the lens owner rebuilt {lens.name!r} from a plan claiming "
+            f"{scope!r}; refusing rather than narrowing to the wrong population")
+    return lens
+
+
+def execute_plan(plan: ShadowPlan, *, output_root: str, client_id: str
+                 ) -> Dict[str, Any]:
     """Run the plan with the primitives that already ship.
 
-    ``lens_filters`` is supplied by the CALLER for the equivalence run only, and
-    the result records that it was supplied externally — it is exactly the value
-    the plan could not obtain from the contract.
+    Every input comes from the PLAN. Nothing is supplied by the caller, and the
+    raw question is not reachable from here.
     """
     from mi_agent_api import evolution as evolution_mod
     from mi_agent_api import movement_summary as summary_mod
+
+    lens = lens_for(plan)
+    lens_filters = (lens.filters or None) if lens is not None else None
 
     frames = evolution_mod.funded_frames(output_root, client_id, None)
     frames = [{**f, "df": evolution_mod._scope_frame_lens(f.get("df"), lens_filters)}
@@ -224,6 +276,7 @@ def execute_plan(plan: ShadowPlan, *, output_root: str, client_id: str,
         "topRegions": summary_mod._regional_exposure(df, region_col) if region_col else [],
         "cohorts": summary_mod._cohorts(df),
         "periodCount": len(periods),
-        "lensFiltersSuppliedExternally": lens_filters or {},
+        "lensFromPlan": {"scope": getattr(lens, "name", None),
+                         "filters": dict(lens_filters or {})},
         "declaredGroupedBy": list(plan.declares_grouped_by),
     }

@@ -94,6 +94,7 @@ def main() -> int:
     print("\nguard: build_plan's signature carries no question parameter — OK\n")
 
     blocked_cases: List[str] = []
+    externally_supplied: List[str] = []
     compared = 0
     differences: List[str] = []
 
@@ -112,13 +113,15 @@ def main() -> int:
         interpretation = projection.project(question, semantics=semantics, frame=df)
         plan = shadow.build_plan(interpretation, region_column=region_col,
                                  has_portfolio_column=has_portfolio)
-        # The lens the SHIPPED route derives from the raw question. Supplied to
-        # the shadow executor from outside, and recorded as such.
+        # What the SHIPPED route derives from the raw question. Used ONLY to run
+        # the shipped side and to check the two agree — never handed to the plan.
         lens = lens_mod.resolve_lens(question)
 
         print(f"--- {case_id}  {question!r}")
         print(f"    plan steps      : {[s.primitive for s in plan.steps]}")
         print(f"    declares grouped: {list(plan.declares_grouped_by)}")
+        print(f"    source_scope    : state={interpretation.source_scope.state!r} "
+              f"scope={interpretation.source_scope.scope!r}")
         if plan.blocked:
             blocked_cases.append(case_id)
             for step in plan.blocked:
@@ -129,8 +132,14 @@ def main() -> int:
         shipped = summary_mod.portfolio_summary(
             root, client_id, to_run_id=None,
             lens_filters=lens.filters or None, lens_label=lens.label)
-        shadowed = shadow.execute_plan(plan, output_root=root, client_id=client_id,
-                                       lens_filters=lens.filters or None)
+        # NOTHING is passed in. The plan derives its own population.
+        shadowed = shadow.execute_plan(plan, output_root=root, client_id=client_id)
+        from_plan = (shadowed.get("lensFromPlan") or {})
+        if from_plan.get("scope") != lens.name:
+            differences.append(
+                f"{case_id}: plan selected scope {from_plan.get('scope')!r}, "
+                f"shipped route used {lens.name!r}")
+            externally_supplied.append(case_id)
         compared += 1
 
         case_diffs: List[str] = []
@@ -174,14 +183,16 @@ def main() -> int:
     print(f"cases NOT claimed        : {len(not_claimed)} -> {not_claimed}")
     print(f"economic differences     : {len(differences)}")
     print(f"cases the plan BLOCKS    : {len(blocked_cases)} -> {blocked_cases}")
+    print(f"externally supplied lens : {len(externally_supplied)} -> "
+          f"{externally_supplied}")
     print("=" * 78)
     if differences:
         print("\nevery difference:")
         for d in differences:
             print(f"  {d}")
-    print("\nNOTE: where the plan is BLOCKED, the lens was supplied to the shadow")
-    print("executor FROM OUTSIDE for measurement only. Identical economics on a")
-    print("blocked case prove the COMPOSITION, not that the plan could be built.")
+    print("\nThe shadow executor receives NOTHING from this harness but the plan.")
+    print("`lensFromPlan` on each result records the scope the PLAN selected, and")
+    print("it is checked against what the shipped route resolved independently.")
     return 0
 
 
