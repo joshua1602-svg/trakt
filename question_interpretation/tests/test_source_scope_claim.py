@@ -191,3 +191,54 @@ def test_the_executor_rebuilds_the_lens_from_the_plan_not_the_question():
     names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     attrs = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
     assert "question" not in (names | attrs)
+
+
+# --------------------------------------------------------------------------- #
+# PHASE 1B PREREQUISITE — declared failing.
+#
+# The conversion of `portfolio_summary` stopped here. `source_scope` carries WHAT
+# scope the owner resolved; it does not carry WHETHER THE QUESTION NAMED ONE, and
+# that second fact is what decides precedence over a caller-supplied default:
+#
+#     portfolio_lens.resolve_lens_with_default(text, default):
+#         if mentions_portfolio(text): return resolve_lens(text)   # question wins
+#         return default or total_lens()                           # dropdown wins
+#
+# Two questions the route OWNS mention a portfolio and resolve to `total`:
+#
+#     "portfolio summary across all portfolios"
+#     "summarise the portfolio excluding the acquired book"
+#
+# For those, the shipped route answers the WHOLE BOOK even when the workspace
+# dropdown selects Acquired (verified end to end: £1.96bn / 11,035 loans with
+# source_portfolio_lens="acquired"). A plan reading only `source_scope` sees
+# `filled/total, narrows=False` — indistinguishable from "no portfolio named" —
+# falls back to the dropdown, and narrows to Acquired.
+#
+# That is a silent population narrowing on an owned question, so the conversion
+# stopped rather than working around it.
+# --------------------------------------------------------------------------- #
+@pytest.mark.xfail(strict=True,
+                   reason="Phase 1B blocker: the contract carries the resolved "
+                          "scope but not whether the question named one")
+@pytest.mark.parametrize("question", [
+    "portfolio summary across all portfolios",
+    "summarise the portfolio excluding the acquired book",
+])
+def test_the_contract_says_whether_the_question_named_a_source_scope(question, semantics):
+    """A question that SPEAKS to source scope must be distinguishable from one
+    that is silent about it, even when both resolve to `total`."""
+    from mi_agent import portfolio_lens as owner
+
+    named = _scope(question, semantics)
+    silent = _scope("Please provide a portfolio summary", semantics)
+
+    assert owner.mentions_portfolio(question) is True
+    assert owner.mentions_portfolio("Please provide a portfolio summary") is False
+    assert named.scope == SCOPE_TOTAL and silent.scope == SCOPE_TOTAL
+
+    # The property the conversion needs and the contract does not yet have.
+    assert named.as_dict() != silent.as_dict(), (
+        "the contract cannot tell 'the question said whole book' from 'the "
+        "question said nothing about source scope', so a plan cannot know "
+        "whether the question overrides a caller-supplied default")
