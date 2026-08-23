@@ -228,8 +228,34 @@ def lens_for(plan: ShadowPlan):
     if step is None:
         return None
     scope = step.inputs.get("scope")
-    ids = step.inputs.get("portfolio_ids") or []
-    lens = lens_owner.lens_from_selection(ids if ids else scope)
+    ids = list(step.inputs.get("portfolio_ids") or [])
+
+    # PHASE 1G §10 — GOVERNED IDS FIRST. The contract now resolves a CATEGORY
+    # through the registry to the ids it currently contains, so a plan claiming
+    # `acquired` arrives carrying every acquired portfolio by governed id and
+    # this selects on those.
+    #
+    # Why that matters, and why the shipped book cannot show it: the previous
+    # rebuild asked for `source_portfolio_type == 'acquired'`, a RAW column on
+    # the tape. Phase 1C measured the two paths on a two-portfolio fixture at
+    # GBP300.00 against GBP1,200.00 — the registry decides membership, the
+    # column does not. On a book with one portfolio per type they select
+    # identical rows, so no economic check here could ever have caught it.
+    if ids:
+        lens = lens_owner.lens_from_selection(ids)
+        selected = lens.cohort_ids or ((lens.cohort_id,) if lens.cohort_id else ())
+        if sorted(selected) != sorted(ids):
+            raise AssertionError(
+                f"the lens owner rebuilt {sorted(selected)!r} from a plan "
+                f"claiming {sorted(ids)!r}; refusing rather than narrowing to "
+                f"the wrong population")
+        return lens
+
+    # No ids: either the complete funded population, or a registry that could
+    # not enumerate the category. `lens_from_selection` falls back to Total for
+    # anything it does not recognise, so the rebuild is CHECKED — a silent
+    # fallback to Total is the widening this whole exercise exists to prevent.
+    lens = lens_owner.lens_from_selection(scope)
     if lens.name != scope:
         raise AssertionError(
             f"the lens owner rebuilt {lens.name!r} from a plan claiming "

@@ -49,7 +49,7 @@ from migration_phase0.route_ownership_portfolio_summary import (  # noqa: E402
 )
 
 
-def _plan_population(interpretation) -> Dict[str, Any]:
+def _plan_population(interpretation) -> Dict[str, Any]:  # noqa: D401
     """What a contract-only plan would select. No question, no caller default.
 
     `build_plan` takes the interpretation and nothing else — the structural
@@ -86,14 +86,17 @@ def capture(client_id: str) -> Dict[str, Any]:
     for case, question, provenance in CANDIDATES:
         if not routing._is_portfolio_summary(question):
             continue
-        qi = projection.project(question, semantics=semantics, registry=registry)
-        contract = _plan_population(qi)
         for default in DEFAULTS:
             # PRODUCTION: the shipped precedence decision.
             shipped = routing._resolve_lens(question, default)
-            # CONTRACT: what a plan could build. The caller default is NOT an
-            # input to `build_plan` and cannot be, because the contract carries
-            # no claim saying whether the question spoke to source scope.
+            # CONTRACT: what a plan can build. PHASE 1G — the caller context is
+            # now an input to the INTERPRETATION, not to the plan: the owner
+            # applies precedence once and the claim records both the outcome and
+            # its provenance, so `build_plan` still sees only the contract and
+            # still cannot reach the question.
+            qi = projection.project(question, semantics=semantics,
+                                   registry=registry, caller_scope=default)
+            contract = _plan_population(qi)
             rows.append({
                 "case": case, "question": question, "default": default,
                 "shippedScope": shipped.name,
@@ -104,6 +107,8 @@ def capture(client_id: str) -> Dict[str, Any]:
                 "claim": {"state": qi.source_scope.state,
                           "scope": qi.source_scope.scope,
                           "ids": list(qi.source_scope.portfolio_ids),
+                          "provenance": qi.source_scope.provenance,
+                          "base": qi.source_scope.base_population,
                           "narrows": qi.source_scope.narrows},
             })
     return {"rows": rows}
@@ -112,6 +117,9 @@ def capture(client_id: str) -> Dict[str, Any]:
 def classify(row: Dict[str, Any]) -> str:
     """How a contract-only plan would differ from the shipped route."""
     if row["contractBlocked"]:
+        # A blocked plan is a REFUSAL, not an answer with the step omitted, and
+        # production refuses these too. Named apart from a match so the record
+        # shows which cases construct and which deliberately decline.
         return "BLOCKED"
     shipped, planned = row["shippedScope"], row["contractScope"]
     if shipped == planned:
@@ -143,9 +151,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
           f"{'shipped':12s} verdict")
     print("-" * 118)
     for row in rows:
-        claim = f"{row['claim']['state']}/{row['claim']['scope']}"
-        if row["verdict"] != "match":
-            claim = claim  # printed the same; the verdict column carries the news
+        claim = f"{row['claim']['provenance']}/{row['claim']['scope']}"
         print(f"{row['case']:5s} {str(row['default']):9s} {claim[:22]:22s} "
               f"{str(row['contractScope'])[:12]:12s} {row['shippedScope'][:12]:12s} "
               f"{row['verdict']}")
@@ -165,7 +171,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # The pairs that prove it: identical claim, opposite required behaviour.
     by_claim: Dict[str, List[Tuple[str, Optional[str], str]]] = {}
     for row in rows:
-        key = f"{row['claim']['state']}/{row['claim']['scope']}/{row['claim']['ids']}"
+        key = (f"{row['claim']['state']}/{row['claim']['provenance']}/"
+               f"{row['claim']['scope']}/{row['claim']['ids']}")
         by_claim.setdefault(key, []).append(
             (row["case"], row["default"], row["shippedScope"]))
     print("\nIDENTICAL CONTRACT CLAIM, DIFFERENT SHIPPED POPULATION:")

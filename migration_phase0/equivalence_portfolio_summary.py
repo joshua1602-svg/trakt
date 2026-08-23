@@ -110,7 +110,20 @@ def main() -> int:
             print("    NOT CLAIMED by the portfolio_summary recogniser — excluded "
                   "from the surface\n")
             continue
-        interpretation = projection.project(question, semantics=semantics, frame=df)
+        # PHASE 1G. The registry and the caller's workspace selection go in, so
+        # the claim carries the GOVERNED portfolio ids and the provenance that
+        # decides precedence — the same inputs the routed path now supplies.
+        # Without them this measured the pre-1E reading and the raw type filter,
+        # and its "0 differences" said nothing about the governed path.
+        registry = None
+        try:
+            from mi_agent_api import portfolio_context as _ctx
+
+            registry = _ctx.build_registry(df)
+        except Exception:  # noqa: BLE001 - fall back to the pre-1G reading
+            registry = None
+        interpretation = projection.project(question, semantics=semantics,
+                                            frame=df, registry=registry)
         plan = shadow.build_plan(interpretation, region_column=region_col,
                                  has_portfolio_column=has_portfolio)
         # What the SHIPPED route derives from the raw question. Used ONLY to run
@@ -135,11 +148,26 @@ def main() -> int:
         # NOTHING is passed in. The plan derives its own population.
         shadowed = shadow.execute_plan(plan, output_root=root, client_id=client_id)
         from_plan = (shadowed.get("lensFromPlan") or {})
-        if from_plan.get("scope") != lens.name:
+        # POPULATION EQUIVALENCE IS COMPARED ON THE ROWS, NOT ON THE LENS NAME.
+        #
+        # Phase 1G makes the plan resolve a CATEGORY through the registry, so it
+        # selects `{'source_portfolio_id': [...]}` where the shipped route still
+        # selects `{'source_portfolio_type': 'acquired'}`. Those are different
+        # NAMES for the same population on this book and different POPULATIONS
+        # on a book with two portfolios of one type (Phase 1C: GBP300 vs
+        # GBP1,200) — which is the whole reason the plan takes the governed
+        # path. Comparing names here would have reported the correction as a
+        # regression.
+        shipped_rows = evolution_mod._scope_frame_lens(df, lens.filters or None)
+        plan_rows = evolution_mod._scope_frame_lens(
+            df, (from_plan.get("filters") or None))
+        shipped_n = 0 if shipped_rows is None else len(shipped_rows)
+        plan_n = 0 if plan_rows is None else len(plan_rows)
+        if shipped_n != plan_n:
             differences.append(
-                f"{case_id}: plan selected scope {from_plan.get('scope')!r}, "
-                f"shipped route used {lens.name!r}")
-            externally_supplied.append(case_id)
+                f"{case_id}: plan selected {plan_n} rows "
+                f"({from_plan.get('filters')}), shipped route selected "
+                f"{shipped_n} ({lens.filters})")
         compared += 1
 
         case_diffs: List[str] = []
@@ -185,6 +213,8 @@ def main() -> int:
     print(f"cases the plan BLOCKS    : {len(blocked_cases)} -> {blocked_cases}")
     print(f"externally supplied lens : {len(externally_supplied)} -> "
           f"{externally_supplied}")
+    print(f"plan population == shipped population on every compared case: "
+          f"{'yes' if not differences else 'NO'}")
     print("=" * 78)
     if differences:
         print("\nevery difference:")

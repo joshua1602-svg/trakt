@@ -1,0 +1,170 @@
+[
+  {
+    "kind": "changed",
+    "question": "Summarise the funded book",
+    "why": "now explicit \u2014 \u00a71",
+    "default": null,
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "changed",
+    "question": "Summarise the funded book",
+    "why": "now explicit \u2014 \u00a71",
+    "default": "acquired",
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "changed",
+    "question": "Summarise the funded book",
+    "why": "now explicit \u2014 \u00a71",
+    "default": "direct",
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "changed",
+    "question": "Summarise the funded portfolio",
+    "why": "now explicit \u2014 \u00a71",
+    "default": null,
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "changed",
+    "question": "Summarise the funded portfolio",
+    "why": "now explicit \u2014 \u00a71",
+    "default": "acquired",
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "changed",
+    "question": "Summarise the funded portfolio",
+    "why": "now explicit \u2014 \u00a71",
+    "default": "direct",
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Please provide a portfolio summary",
+    "why": "silent \u2014 must still defer",
+    "default": null,
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Please provide a portfolio summary",
+    "why": "silent \u2014 must still defer",
+    "default": "acquired",
+    "loans": "3,909",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Please provide a portfolio summary",
+    "why": "silent \u2014 must still defer",
+    "default": "direct",
+    "loans": "7,126",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "portfolio summary across all portfolios",
+    "why": "already explicit \u2014 must not move",
+    "default": null,
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "portfolio summary across all portfolios",
+    "why": "already explicit \u2014 must not move",
+    "default": "acquired",
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "portfolio summary across all portfolios",
+    "why": "already explicit \u2014 must not move",
+    "default": "direct",
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Summarise the acquired book",
+    "why": "explicit narrowing \u2014 must not move",
+    "default": null,
+    "loans": "3,909",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Summarise the acquired book",
+    "why": "explicit narrowing \u2014 must not move",
+    "default": "acquired",
+    "loans": "3,909",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Summarise the acquired book",
+    "why": "explicit narrowing \u2014 must not move",
+    "default": "direct",
+    "loans": "3,909",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "What is the funded balance?",
+    "why": "a MEASURE, not a scope",
+    "default": null,
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "What is the funded balance?",
+    "why": "a MEASURE, not a scope",
+    "default": "acquired",
+    "loans": "3,909",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "What is the funded balance?",
+    "why": "a MEASURE, not a scope",
+    "default": "direct",
+    "loans": "7,126",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Show funded balance by region",
+    "why": "a MEASURE, not a scope",
+    "default": null,
+    "loans": "11,035",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Show funded balance by region",
+    "why": "a MEASURE, not a scope",
+    "default": "acquired",
+    "loans": "3,909",
+    "ok": true
+  },
+  {
+    "kind": "control",
+    "question": "Show funded balance by region",
+    "why": "a MEASURE, not a scope",
+    "default": "direct",
+    "loans": "7,126",
+    "ok": true
+  }
+]

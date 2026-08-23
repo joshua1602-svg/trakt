@@ -13,6 +13,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "default",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -27,16 +29,22 @@
           "alp_acquired"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A1",
@@ -48,16 +56,22 @@
           "alp_origination"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A2",
@@ -72,6 +86,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "default",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -86,16 +102,22 @@
           "alp_acquired"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A2",
@@ -107,16 +129,22 @@
           "alp_origination"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A3",
@@ -131,6 +159,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "default",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -145,16 +175,22 @@
           "alp_acquired"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A3",
@@ -166,16 +202,22 @@
           "alp_origination"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A4",
@@ -190,6 +232,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "default",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -204,16 +248,22 @@
           "alp_acquired"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A4",
@@ -225,16 +275,22 @@
           "alp_origination"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A5",
@@ -249,6 +305,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "default",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -263,16 +321,22 @@
           "alp_acquired"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A5",
@@ -284,16 +348,22 @@
           "alp_origination"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A6",
@@ -308,6 +378,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "default",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -322,16 +394,22 @@
           "alp_acquired"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "A6",
@@ -343,16 +421,22 @@
           "alp_origination"
         ]
       },
-      "contractScope": "total",
-      "contractIds": [],
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
-        "scope": "total",
-        "ids": [],
-        "narrows": false
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "L1",
@@ -365,12 +449,18 @@
         ]
       },
       "contractScope": "acquired",
-      "contractIds": [],
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "acquired",
-        "ids": [],
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
         "narrows": true
       },
       "verdict": "match"
@@ -386,12 +476,18 @@
         ]
       },
       "contractScope": "acquired",
-      "contractIds": [],
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "acquired",
-        "ids": [],
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
         "narrows": true
       },
       "verdict": "match"
@@ -407,12 +503,18 @@
         ]
       },
       "contractScope": "acquired",
-      "contractIds": [],
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "acquired",
-        "ids": [],
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
         "narrows": true
       },
       "verdict": "match"
@@ -428,12 +530,18 @@
         ]
       },
       "contractScope": "direct",
-      "contractIds": [],
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "direct",
-        "ids": [],
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "direct",
         "narrows": true
       },
       "verdict": "match"
@@ -449,12 +557,18 @@
         ]
       },
       "contractScope": "direct",
-      "contractIds": [],
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "direct",
-        "ids": [],
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "direct",
         "narrows": true
       },
       "verdict": "match"
@@ -470,12 +584,18 @@
         ]
       },
       "contractScope": "direct",
-      "contractIds": [],
+      "contractIds": [
+        "alp_origination"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "direct",
-        "ids": [],
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "direct",
         "narrows": true
       },
       "verdict": "match"
@@ -491,12 +611,18 @@
         ]
       },
       "contractScope": "acquired",
-      "contractIds": [],
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "acquired",
-        "ids": [],
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
         "narrows": true
       },
       "verdict": "match"
@@ -512,12 +638,18 @@
         ]
       },
       "contractScope": "acquired",
-      "contractIds": [],
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "acquired",
-        "ids": [],
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
         "narrows": true
       },
       "verdict": "match"
@@ -533,12 +665,18 @@
         ]
       },
       "contractScope": "acquired",
-      "contractIds": [],
+      "contractIds": [
+        "alp_acquired"
+      ],
       "contractBlocked": null,
       "claim": {
         "state": "filled",
         "scope": "acquired",
-        "ids": [],
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
         "narrows": true
       },
       "verdict": "match"
@@ -556,6 +694,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -573,6 +713,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -590,6 +732,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -607,6 +751,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -624,6 +770,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -641,6 +789,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -666,6 +816,8 @@
         "ids": [
           "alp_origination"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -691,6 +843,8 @@
         "ids": [
           "alp_origination"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -716,6 +870,8 @@
         "ids": [
           "alp_origination"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -741,6 +897,8 @@
         "ids": [
           "alp_acquired"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -766,6 +924,8 @@
         "ids": [
           "alp_acquired"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -791,6 +951,8 @@
         "ids": [
           "alp_acquired"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -816,6 +978,8 @@
         "ids": [
           "alp_acquired"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -841,6 +1005,8 @@
         "ids": [
           "alp_acquired"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -866,6 +1032,8 @@
         "ids": [
           "alp_acquired"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -891,6 +1059,8 @@
         "ids": [
           "spv1_sponsored"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -916,6 +1086,8 @@
         "ids": [
           "spv1_sponsored"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -941,6 +1113,8 @@
         "ids": [
           "spv1_sponsored"
         ],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": true
       },
       "verdict": "match"
@@ -958,6 +1132,8 @@
         "state": "unresolvable",
         "scope": null,
         "ids": [],
+        "provenance": "unresolved",
+        "base": null,
         "narrows": false
       },
       "verdict": "BLOCKED"
@@ -975,6 +1151,8 @@
         "state": "unresolvable",
         "scope": null,
         "ids": [],
+        "provenance": "unresolved",
+        "base": null,
         "narrows": false
       },
       "verdict": "BLOCKED"
@@ -992,6 +1170,8 @@
         "state": "unresolvable",
         "scope": null,
         "ids": [],
+        "provenance": "unresolved",
+        "base": null,
         "narrows": false
       },
       "verdict": "BLOCKED"
@@ -1009,6 +1189,8 @@
         "state": "unresolvable",
         "scope": null,
         "ids": [],
+        "provenance": "unresolved",
+        "base": null,
         "narrows": false
       },
       "verdict": "BLOCKED"
@@ -1026,6 +1208,8 @@
         "state": "unresolvable",
         "scope": null,
         "ids": [],
+        "provenance": "unresolved",
+        "base": null,
         "narrows": false
       },
       "verdict": "BLOCKED"
@@ -1043,6 +1227,8 @@
         "state": "unresolvable",
         "scope": null,
         "ids": [],
+        "provenance": "unresolved",
+        "base": null,
         "narrows": false
       },
       "verdict": "BLOCKED"
@@ -1060,6 +1246,8 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
       "verdict": "match"
@@ -1068,12 +1256,8 @@
       "case": "F1",
       "question": "Summarise the funded book",
       "default": "acquired",
-      "shippedScope": "acquired",
-      "shippedFilters": {
-        "source_portfolio_id": [
-          "alp_acquired"
-        ]
-      },
+      "shippedScope": "total",
+      "shippedFilters": {},
       "contractScope": "total",
       "contractIds": [],
       "contractBlocked": null,
@@ -1081,20 +1265,18 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     },
     {
       "case": "F1",
       "question": "Summarise the funded book",
       "default": "direct",
-      "shippedScope": "direct",
-      "shippedFilters": {
-        "source_portfolio_id": [
-          "alp_origination"
-        ]
-      },
+      "shippedScope": "total",
+      "shippedFilters": {},
       "contractScope": "total",
       "contractIds": [],
       "contractBlocked": null,
@@ -1102,9 +1284,11 @@
         "state": "filled",
         "scope": "total",
         "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
         "narrows": false
       },
-      "verdict": "WIDENS"
+      "verdict": "match"
     }
   ]
 }
