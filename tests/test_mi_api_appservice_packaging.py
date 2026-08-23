@@ -294,5 +294,73 @@ class TestWorkflowWiring(unittest.TestCase):
         self.assertIn("deploy/trakt-mi-api/package_contents.txt", text)
 
 
+class TestStagedArtefactImports(unittest.TestCase):
+    """The App Service equivalent of the container's build-time smoke import.
+
+    ``TestArtefactCompleteness`` checks that the manifest LISTS every package the
+    import closure names. This checks the artefact the workflow actually builds
+    can be IMPORTED — which is a different question, and the one that was open.
+
+    The gap this closes, concretely: ``question_interpretation`` was reachable
+    from ``mi_agent_api.app`` and absent from ``package_contents.txt``, and
+    because ``mi_agent.llm_query_parser`` and ``mi_agent.execution_receipt``
+    import it at MODULE level, the App Service failed at STARTUP rather than on
+    the first request that reached it. The completeness test detects the missing
+    name; only an import proves the artefact runs.
+
+    Staging is the workflow's own loop (``cp -R --parents`` per manifest line,
+    then drop ``tests``/``__pycache__``) over ~13 MB, and the import runs in a
+    subprocess whose ``sys.path`` contains the staging directory ALONE — the
+    repo is not importable, or the test would pass on a manifest that stages
+    nothing.
+    """
+
+    def test_the_staged_artefact_imports_the_asgi_app(self):
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="mi-api-stage-") as stage:
+            stage_dir = Path(stage)
+            for path in _manifest_paths():
+                source = _REPO / path
+                self.assertTrue(source.exists(), (
+                    f"package_contents.txt lists {path!r}, which does not exist "
+                    "— the deploy workflow fails on this before it uploads"))
+                destination = stage_dir / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if source.is_dir():
+                    shutil.copytree(
+                        source, destination, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(
+                            "__pycache__", "tests", ".pytest_cache"))
+                else:
+                    shutil.copy2(source, destination)
+
+            # The REPO must not be importable, or this would pass on a manifest
+            # that stages nothing. Third-party site-packages stay reachable:
+            # whether the App Service can INSTALL them is
+            # TestRequirementsSufficiency's question, not this one.
+            probe = (
+                "import sys, os\n"
+                "stage, repo = %r, %r\n"
+                "sys.path = [p for p in sys.path\n"
+                "            if p and os.path.abspath(p) != repo]\n"
+                "sys.path.insert(0, stage)\n"
+                "assert repo not in [os.path.abspath(p) for p in sys.path], sys.path\n"
+                "import mi_agent_api.app\n"
+                "print('ok')\n" % (str(stage_dir), str(_REPO)))
+            completed = subprocess.run(
+                [sys.executable, "-c", probe],
+                cwd=str(stage_dir), capture_output=True, text=True,
+                env=dict(os.environ, TRAKT_RUNTIME_MODE="test", PYTHONPATH=""))
+
+        self.assertEqual(completed.returncode, 0, (
+            "the staged App Service artefact cannot import "
+            "mi_agent_api.app, so `bash startup.sh` -> gunicorn would fail at "
+            "STARTUP:\n"
+            f"{completed.stderr.strip()[-2000:]}"))
+        self.assertIn("ok", completed.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
