@@ -59,7 +59,7 @@ class TestThePlanCannotReadTheQuestion:
     rereads the question anyway. This is the structural guard against it."""
 
     def test_build_plan_takes_no_question_parameter(self):
-        from mi_agent_api import portfolio_summary_plan as plan_mod
+        from mi_agent_api import analytical_plan as plan_mod
         params = set(inspect.signature(plan_mod.build_plan).parameters)
         assert not params & {"question", "q", "text", "raw", "raw_question"}
 
@@ -72,7 +72,7 @@ class TestThePlanCannotReadTheQuestion:
         its own vocabulary teaches people to ignore it.
         """
         import ast
-        tree = ast.parse((_REPO / "mi_agent_api/portfolio_summary_plan.py")
+        tree = ast.parse((_REPO / "mi_agent_api/analytical_plan.py")
                          .read_text(encoding="utf-8"))
         reached = set()
         for node in ast.walk(tree):
@@ -132,7 +132,7 @@ class TestTheRoutedPathReallyBuildsAContract:
 class TestThePopulationIsGoverned:
     def test_a_category_selects_governed_ids_not_a_type_column(self, book):
         from mi_agent_api import portfolio_context as ctx_mod
-        from mi_agent_api import portfolio_summary_plan as plan_mod
+        from mi_agent_api import analytical_plan as plan_mod
         from mi_agent.mi_query_validator import load_mi_semantics
         from mi_agent_api.datasets import semantics_path
         from question_interpretation import projection
@@ -148,7 +148,7 @@ class TestThePopulationIsGoverned:
 
     def test_the_whole_book_carries_no_filter(self, book):
         from mi_agent_api import portfolio_context as ctx_mod
-        from mi_agent_api import portfolio_summary_plan as plan_mod
+        from mi_agent_api import analytical_plan as plan_mod
         from mi_agent.mi_query_validator import load_mi_semantics
         from mi_agent_api.datasets import semantics_path
         from question_interpretation import projection
@@ -188,7 +188,7 @@ class TestUnresolvableDoesNotBlockButDoesNotWiden:
         """The case that MUST block: nothing looked, so nothing can be planned,
         and reading it as Total would widen a population the question may have
         narrowed."""
-        from mi_agent_api import portfolio_summary_plan as plan_mod
+        from mi_agent_api import analytical_plan as plan_mod
         from question_interpretation.schema import QuestionInterpretation
 
         qi = QuestionInterpretation(question="anything")   # source_scope EMPTY

@@ -41,7 +41,7 @@ from . import forecast_extrapolation as fx_mod
 from . import geo as geo_mod
 from . import movement_summary as movement_mod
 from . import period_change_route as _period_change
-from . import portfolio_summary_plan as _summary_plan
+from . import analytical_plan as _plan
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
 from .recogniser_registry import (
@@ -480,7 +480,7 @@ def _summary_population(question, source_lens, interpretation, *, output_root,
         # moment for two owners to disagree. One owner, or none.
         return None, "", False
 
-    summary = _summary_plan.portfolio_summary(
+    summary = _plan.portfolio_summary(
         output_root, client_id, interpretation=interpretation,
         to_run_id=run_id)
     scope = getattr(interpretation, "source_scope", None)
@@ -608,19 +608,30 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
 
 
 def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
-                           output_root, portfolio_id, as_of, source_lens=None
-                           ) -> Optional[Dict[str, Any]]:
-    """Month-on-month movement across the governed metrics, with attribution."""
-    lens = _resolve_lens(question, source_lens)
-    # Honour the STATED period where the data covers it. A question that names
-    # "this year" and is answered over the latest month has had a declared
-    # element replaced, and disclosing the narrower window in the prose is not
-    # the same as honouring it.
-    span = _period_request.requested_span(question)
-    mv = movement_mod.period_movement(
-        output_root, client_id, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label,
-        span_periods=span.periods if span else 1)
+                           output_root, portfolio_id, as_of, source_lens=None,
+                           interpretation=None) -> Optional[Dict[str, Any]]:
+    """Month-on-month movement across the governed metrics, with attribution.
+
+    CONVERSION 2 — the switch point, and the whole of it.
+
+    Both semantic inputs this route used to re-read from the question now come
+    from the contract: the source scope (Phase 1G) and the STATED WINDOW's
+    magnitude (target-state closure). Honouring the stated period still matters
+    for the same reason it always did — a question that names "this year" and is
+    answered over the latest month has had a declared element replaced, and
+    disclosing the narrower window in the prose is not the same as honouring it
+    — but the window is now read once, upstream, and carried.
+    """
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. Same rule as Conversion 1:
+        # one population owner, or none. Keeping the lens-resolved path as a
+        # fallback would leave `_resolve_lens` reachable exactly when the
+        # contract failed.
+        return None
+
+    mv = _plan.period_movement(output_root, client_id,
+                               interpretation=interpretation, to_run_id=run_id)
+    span = _period_request.span_from_claim(interpretation.time)
     if not mv.get("available"):
         if span is not None and mv.get("spanRequested"):
             message = _period_request.clarification(
@@ -698,7 +709,7 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
         _summary_kpi_artifact(
             f"{mv['priorPeriod']} → {mv['currentPeriod']} movement", kpis,
             spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
-            description=f"Governed month-on-month movement ({lens.label}).")
+            description=f"Governed month-on-month movement ({mv['lens']}).")
     ]
 
     contributions = mv.get("regionContributions") or []
@@ -2925,7 +2936,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
-                source_lens=r.source_lens)),
+                source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
         Recogniser(
             name="portfolio_summary", priority=80, lens_aware=True,
             description="Current governed headline position.",

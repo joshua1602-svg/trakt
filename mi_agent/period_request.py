@@ -111,6 +111,30 @@ def governed_recent_months(config=None) -> int:
     return int(getattr(config, "recent_max_months", 3) or 3)
 
 
+def span_from_claim(time_claim) -> Optional[SpanRequest]:
+    """The span a `QuestionInterpretation.time` carries, rebuilt as a SpanRequest.
+
+    TARGET-STATE CLOSURE / CONVERSION 2. The contract carries this owner's own
+    reading — `trend_window.raw_text` is the label it produced,
+    `window_periods` the magnitude, `window_governed` whether a convention
+    settled it — and `clarification` below needs a `SpanRequest` to phrase
+    itself.
+
+    EVERY FIELD COMES FROM THE CLAIM. An earlier cut of this rebuilt the label
+    by guessing ("this year" for 12 periods), which would have made the route a
+    second author of wording this module owns. Nothing is inferred here.
+
+    Returns ``None`` when the question named no window, which is what that means
+    everywhere else in this module.
+    """
+    periods = getattr(time_claim, "window_periods", None)
+    if not periods:
+        return None
+    label = getattr(getattr(time_claim, "trend_window", None), "raw_text", None)
+    return SpanRequest(label or f"the last {int(periods)} months", int(periods),
+                       governed=bool(getattr(time_claim, "window_governed", False)))
+
+
 def requested_span(question: str, config=None) -> Optional[SpanRequest]:
     """The reporting span the question names, or a governed convention settles.
 

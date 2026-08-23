@@ -1,7 +1,16 @@
-"""mi_agent_api/portfolio_summary_plan.py — `portfolio_summary`, composed.
+"""mi_agent_api/analytical_plan.py — the compositional plan layer.
 
-CONVERSION 1. The first shipped route whose execution is a PLAN over derived
-primitives rather than a route-specific procedure.
+Shipped routes whose execution is a PLAN over derived primitives rather than a
+route-specific procedure:
+
+    Conversion 1   portfolio_summary
+    Conversion 2   period_movement
+
+Named for what it is. It arrived as `portfolio_summary_plan.py` because one
+route needed it; the plan artefact, the population step and the primitive
+vocabulary were never route-specific, and Conversion 2 reuses all three
+unchanged. Renamed rather than copied — a second plan layer would be the
+duplication this programme exists to remove.
 
     interpretation contract -> plan -> existing primitives -> the same result
 
@@ -28,13 +37,20 @@ All of it from the contract, none of it from the sentence:
     was it asked for      source_scope.provenance      decides caller precedence
     could it be resolved  source_scope.state           UNRESOLVABLE blocks
 
-THE PRIMITIVES (5 of 7 — `compare` and `project` are not needed)
----------------------------------------------------------------
+THE PRIMITIVES
+--------------
     stack periods      evolution.funded_frames
     select population  evolution._scope_frame_lens, over governed ids
     resolve measure    evolution.assemble_funded_evolution (x5 metrics)
     group              movement_summary._regional_exposure, _cohorts
     rank               the sort + head inside _regional_exposure
+    compare            movement_summary._delta, prior period vs current
+
+`portfolio_summary` uses five of the seven; `period_movement` adds `compare`.
+Both reuse EXISTING implementations — A2's fourth threshold is a NEW
+implementation of a primitive, and Phase 4 is already the consolidation of the
+four `group` implementations that exist. A fifth would make its own successor
+phase larger. `project` is unused by either.
 """
 from __future__ import annotations
 
@@ -47,6 +63,7 @@ SELECT_POPULATION = "select_population"
 RESOLVE_MEASURE = "resolve_measure"
 GROUP = "group"
 RANK = "rank"
+COMPARE = "compare"
 
 #: A plan step that cannot be built from the contract carries this. A plan with
 #: any blocked step is a REFUSAL, never an answer with the step omitted.
@@ -106,56 +123,8 @@ def build_plan(interpretation, *, region_column: Optional[str],
                      "the count of available periods is disclosed"),
     ]
 
-    scope = getattr(interpretation, "source_scope", None)
-    state = getattr(scope, "state", "empty")
-    if state == "unresolvable":
-        # THE QUESTION NAMED A SCOPE AND IT COULD NOT BE RESOLVED, and this does
-        # NOT block. The distinction matters and is easy to get backwards:
-        #
-        #   EMPTY          nobody looked. Nothing can be planned from it, and
-        #                  reading it as Total would widen a population the
-        #                  question may have narrowed. It blocks.
-        #   UNRESOLVABLE   the owner looked and found a name this book does not
-        #                  hold. That is a REFUSAL, and the refusal already has
-        #                  a single route-independent owner: the facet layer
-        #                  raises it as a LOST narrowing and `assess` declines
-        #                  the answer (Phase 1E, proved across three routes).
-        #
-        # Blocking here would put a SECOND refusal owner in the plan, and
-        # measured, it also cost route identity: the route deferred, the answer
-        # fell through to the point-in-time path, and 23 payload and receipt
-        # fields moved on a question that refuses either way.
-        #
-        # The step is recorded with `unresolved` so the plan still DECLARES what
-        # it could not do — the plan is auditable, and the receipt decides.
-        steps.append(Step(
-            SELECT_POPULATION,
-            {"kind": "source_portfolio_lens", "base_population": None,
-             "portfolio_ids": [], "provenance": scope.provenance,
-             "unresolved": True, "label": _label_for(scope)},
-            because=("the question named a scope this book does not hold; the "
-                     "receipt layer refuses it, and no narrowing is applied")))
-    elif state == "filled":
-        steps.append(Step(
-            SELECT_POPULATION,
-            {"kind": "source_portfolio_lens",
-             "base_population": scope.base_population,
-             "portfolio_ids": list(scope.portfolio_ids),
-             "provenance": scope.provenance,
-             "label": _label_for(scope)},
-            because=("the contract carries a resolved source scope "
-                     f"({scope.base_population!r}, {scope.provenance!r})")))
-    else:
-        # EMPTY and UNRESOLVABLE are NOT Total, and both block. Reading either
-        # as Total would widen a population the question may have narrowed —
-        # which is the defect the whole programme exists to remove.
-        steps.append(Step(
-            SELECT_POPULATION, {"kind": "source_portfolio_lens"},
-            because="the shipped route narrows by portfolio lens",
-            blocked=(BLOCKED_NO_CONTRACT_FIELD + ": source_scope is "
-                     f"{state!r}" + (f" ({scope.reason})" if getattr(
-                         scope, "reason", None) else "")
-                     + ". Absence of a resolved scope is NOT Total.")))
+    steps.append(_population_step(
+        getattr(interpretation, "source_scope", None)))
 
     for metric, aggregation in HEADLINE_MEASURES:
         steps.append(Step(RESOLVE_MEASURE, {"metric": metric,
@@ -178,6 +147,63 @@ def build_plan(interpretation, *, region_column: Optional[str],
                                   "measure": "funded_balance", "aggregation": "sum"},
                           because="the summary splits by source portfolio"))
     return Plan(tuple(steps), tuple(grouped_by))
+
+
+def _population_step(scope) -> Step:
+    """The `select_population` step — the ONE place the scope states are read.
+
+    Shared by every route plan, because the decision is not route-specific
+    and a second copy would drift apart from this one.
+    """
+    state = getattr(scope, "state", "empty")
+    if state == "unresolvable":
+        # THE QUESTION NAMED A SCOPE AND IT COULD NOT BE RESOLVED, and this does
+        # NOT block. The distinction matters and is easy to get backwards:
+        #
+        #   EMPTY          nobody looked. Nothing can be planned from it, and
+        #                  reading it as Total would widen a population the
+        #                  question may have narrowed. It blocks.
+        #   UNRESOLVABLE   the owner looked and found a name this book does not
+        #                  hold. That is a REFUSAL, and the refusal already has
+        #                  a single route-independent owner: the facet layer
+        #                  raises it as a LOST narrowing and `assess` declines
+        #                  the answer (Phase 1E, proved across three routes).
+        #
+        # Blocking here would put a SECOND refusal owner in the plan, and
+        # measured, it also cost route identity: the route deferred, the answer
+        # fell through to the point-in-time path, and 23 payload and receipt
+        # fields moved on a question that refuses either way.
+        #
+        # The step is recorded with `unresolved` so the plan still DECLARES what
+        # it could not do — the plan is auditable, and the receipt decides.
+        return Step(
+            SELECT_POPULATION,
+            {"kind": "source_portfolio_lens", "base_population": None,
+             "portfolio_ids": [], "provenance": scope.provenance,
+             "unresolved": True, "label": _label_for(scope)},
+            because=("the question named a scope this book does not hold; the "
+                     "receipt layer refuses it, and no narrowing is applied"))
+    elif state == "filled":
+        return Step(
+            SELECT_POPULATION,
+            {"kind": "source_portfolio_lens",
+             "base_population": scope.base_population,
+             "portfolio_ids": list(scope.portfolio_ids),
+             "provenance": scope.provenance,
+             "label": _label_for(scope)},
+            because=("the contract carries a resolved source scope "
+                     f"({scope.base_population!r}, {scope.provenance!r})"))
+
+    # EMPTY — nobody looked. The ONE state that blocks: reading it as Total
+    # would widen a population the question may have narrowed, which is the
+    # defect the whole programme exists to remove.
+    return Step(
+        SELECT_POPULATION, {"kind": "source_portfolio_lens"},
+        because="the route narrows by portfolio lens",
+        blocked=(BLOCKED_NO_CONTRACT_FIELD + ": source_scope is "
+                 f"{state!r}" + (f" ({scope.reason})" if getattr(
+                     scope, "reason", None) else "")
+                 + ". Absence of a resolved scope is NOT Total."))
 
 
 def _label_for(scope) -> str:  # noqa: D401
@@ -278,3 +304,105 @@ def portfolio_summary(output_root, client_id: str, *, interpretation,
         "sourceFiles": [f.get("source") for f in scoped],
         "declaredGroupedBy": list(plan.declares_grouped_by),
     }
+
+
+# --------------------------------------------------------------------------- #
+# CONVERSION 2 — period_movement
+# --------------------------------------------------------------------------- #
+#: The comparison window when the question names no span: one governed reporting
+#: period, i.e. month on month. The route's own long-standing default, carried
+#: here rather than restated at the call site.
+DEFAULT_SPAN_PERIODS = 1
+
+
+def build_period_movement_plan(interpretation, *, region_column: Optional[str],
+                               has_portfolio_column: bool) -> Plan:
+    """The plan for a period-movement question. The question is NOT a parameter.
+
+    The same population step as `build_plan`, plus the two things that make this
+    a movement rather than a position: a second period stacked, and a `compare`
+    across the pair.
+
+    THE WINDOW COMES FROM THE CONTRACT. `time.window_periods` carries what
+    `period_request.requested_span` read — the magnitude, not only the wording —
+    which the target-state closure added precisely because this route was asking
+    that owner a second time for it.
+    """
+    time = getattr(interpretation, "time", None)
+    span = getattr(time, "window_periods", None) or DEFAULT_SPAN_PERIODS
+    steps: List[Step] = [
+        Step(STACK_PERIODS,
+             {"dataset": "funded", "take": "pair", "span_periods": span,
+              "governed_window": bool(getattr(time, "window_governed", False)),
+              "disclose": "periodsAvailable"},
+             because=(f"a movement compares the current governed snapshot with "
+                      f"the one {span} reporting period(s) before it")),
+        _population_step(getattr(interpretation, "source_scope", None)),
+    ]
+    for metric, aggregation in HEADLINE_MEASURES:
+        steps.append(Step(RESOLVE_MEASURE, {"metric": metric,
+                                            "aggregation": aggregation},
+                          because="a governed headline metric, on both sides"))
+    steps.append(Step(COMPARE,
+                      {"of": [m for m, _a in HEADLINE_MEASURES],
+                       "between": "prior period and current period",
+                       "as": "absolute delta"},
+                      because="the movement IS the comparison"))
+
+    grouped_by: List[str] = []
+    if region_column:
+        grouped_by.append(region_column)
+        steps.append(Step(GROUP, {"by": [region_column], "measure": "funded_balance",
+                                  "aggregation": "sum", "of": "the delta"},
+                          because="the answer attributes the movement by region"))
+    if has_portfolio_column:
+        grouped_by.append("source_portfolio_id")
+        steps.append(Step(GROUP, {"by": ["source_portfolio_id"],
+                                  "measure": "funded_balance",
+                                  "aggregation": "sum", "of": "the delta"},
+                          because="the answer attributes the movement by source "
+                                  "portfolio"))
+    return Plan(tuple(steps), tuple(grouped_by))
+
+
+def span_periods(plan: Plan) -> int:
+    """The comparison window this plan stacks, from the plan alone."""
+    step = next((s for s in plan.steps if s.primitive == STACK_PERIODS), None)
+    return int((step.inputs.get("span_periods") if step else None)
+               or DEFAULT_SPAN_PERIODS)
+
+
+def period_movement(output_root, client_id: str, *, interpretation,
+                    to_run_id: Optional[str] = None) -> Dict[str, Any]:
+    """Movement across the governed metrics, COMPOSED.
+
+    A drop-in for `movement_summary.period_movement`: the population and the
+    window come from the interpretation contract instead of from two separate
+    reads of the question, and the same result dict comes back — so the prose,
+    the artifacts, the envelope and the receipt are unchanged by construction.
+    """
+    from . import evolution as evolution_mod
+    from . import movement_summary as summary_mod
+
+    frames = evolution_mod.funded_frames(output_root, client_id, to_run_id)
+    df0 = frames[0].get("df") if frames else None
+    region_column = summary_mod._region_column(df0) if df0 is not None else None
+    has_portfolio = (df0 is not None
+                     and summary_mod._PORTFOLIO_ID in getattr(df0, "columns", []))
+
+    plan = build_period_movement_plan(interpretation, region_column=region_column,
+                                      has_portfolio_column=has_portfolio)
+    label = lens_label(plan)
+    if plan.blocked:
+        return {"available": False, "lens": label,
+                "reason": plan.blocked[0].blocked,
+                "planBlocked": [s.to_dict() for s in plan.blocked]}
+
+    # EXISTING IMPLEMENTATION, reused. A2's fourth threshold is a NEW
+    # implementation of a primitive; the periods, deltas, regional bridge and
+    # cohort attribution all already exist there, and re-deriving them here
+    # would add a second owner of the same economics for no gain.
+    return summary_mod.period_movement(
+        output_root, client_id, to_run_id=to_run_id,
+        lens_filters=lens_filters(plan), lens_label=label,
+        span_periods=span_periods(plan))
