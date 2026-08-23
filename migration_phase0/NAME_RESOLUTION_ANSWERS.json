@@ -1,0 +1,102 @@
+[
+  {
+    "case": "named direct",
+    "question": "Summarise the ALP Origination Book",
+    "ok": true,
+    "route": "portfolio_summary",
+    "controlledRefusal": false,
+    "lensApplied": true,
+    "figure": "7,126 loans / \u00a31.39bn",
+    "answer": "At 30 June 2026 the portfolio (ALP Origination Book) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26."
+  },
+  {
+    "case": "named acquired",
+    "question": "Summarise the ALP Acquired Back Book",
+    "ok": false,
+    "route": "portfolio_summary",
+    "controlledRefusal": true,
+    "lensApplied": true,
+    "figure": null,
+    "answer": "I understood that you asked for the population seasoning_segment = Back Book, but that could not be applied to the calculation (the population seasoning_segment = Back Book \u2014 this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substitute"
+  },
+  {
+    "case": "governed id",
+    "question": "Summarise the alp_acquired book",
+    "ok": true,
+    "route": "portfolio_summary",
+    "controlledRefusal": false,
+    "lensApplied": true,
+    "figure": "3,909 loans / \u00a3579.4m",
+    "answer": "At 30 June 2026 the portfolio (ALP Acquired Back Book) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 2"
+  },
+  {
+    "case": "zero-row governed",
+    "question": "Summarise the spv1_sponsored portfolio",
+    "ok": true,
+    "route": "portfolio_summary",
+    "controlledRefusal": false,
+    "lensApplied": true,
+    "figure": null,
+    "answer": "There are no funded loans in spv1_sponsored at the current governed reporting date, so there is no position to summarise for it. I have not answered for the whole book instead.  Calculated: Governed analysis."
+  },
+  {
+    "case": "direct category",
+    "question": "Summarise the direct book",
+    "ok": true,
+    "route": "portfolio_summary",
+    "controlledRefusal": false,
+    "lensApplied": true,
+    "figure": "7,126 loans / \u00a31.39bn",
+    "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3"
+  },
+  {
+    "case": "acquired category",
+    "question": "Summarise the acquired book",
+    "ok": true,
+    "route": "portfolio_summary",
+    "controlledRefusal": false,
+    "lensApplied": true,
+    "figure": "3,909 loans / \u00a3579.4m",
+    "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London "
+  },
+  {
+    "case": "funded category",
+    "question": "Summarise the funded book",
+    "ok": true,
+    "route": "portfolio_summary",
+    "controlledRefusal": false,
+    "lensApplied": true,
+    "figure": "11,035 loans / \u00a31.96bn",
+    "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, "
+  },
+  {
+    "case": "storage id",
+    "question": "Summarise the acquired_001 book",
+    "ok": false,
+    "route": "portfolio_summary",
+    "controlledRefusal": true,
+    "lensApplied": true,
+    "figure": null,
+    "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 this narrowing was not applied, so the figure covers the whole book rather than only acquired_001). I have not substituted a broader figure."
+  },
+  {
+    "case": "unknown label",
+    "question": "Summarise the Highgate Mortgages Book",
+    "ok": false,
+    "route": "portfolio_summary",
+    "controlledRefusal": true,
+    "lensApplied": true,
+    "figure": null,
+    "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 this narrowing was not applied, so the figure covers the whole book rather than only Highgate Mortgages Book). I have not substituted a broader figure."
+  },
+  {
+    "case": "no scope named",
+    "question": "Please provide a portfolio summary",
+    "ok": true,
+    "route": "portfolio_summary",
+    "controlledRefusal": false,
+    "lensApplied": true,
+    "figure": "11,035 loans / \u00a31.96bn",
+    "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, "
+  }
+]
