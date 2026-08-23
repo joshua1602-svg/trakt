@@ -209,37 +209,44 @@ class TestTheContractDecidesPrecedence:
         assert loans in (_ask(question, default).get("answer") or "")
 
 
-class TestTheFallThroughIsBehaviourNotScaffolding:
-    def test_no_contract_still_answers(self, book):
-        """A route that lost its answer to a contract failure would be worse
-        than the route before it. The legacy population path stands when no
-        interpretation can be built."""
+class TestThereIsOnlyOnePopulationOwner:
+    """§5. The converted route must not retain `_resolve_lens` as a competing
+    semantic owner — and "unreachable in practice" is not the same as "gone"."""
+
+    def test_the_route_does_not_call_the_lens_resolver(self):
+        """Over the AST, not the source text: the function's docstring names
+        `_resolve_lens` in order to say it is NOT called, and a substring check
+        reads that sentence as the call it denies."""
+        import ast
+        import inspect
+        import textwrap
+
+        from mi_agent_api import chat_routing as routing
+        tree = ast.parse(textwrap.dedent(
+            inspect.getsource(routing._summary_population)))
+        called = {getattr(n.func, "id", "") for n in ast.walk(tree)
+                  if isinstance(n, ast.Call)}
+        assert "_resolve_lens" not in called
+
+    def test_no_contract_means_the_route_defers(self, book):
+        """One owner, or none. Keeping the lens path as a fallback would leave a
+        second population owner reachable exactly when the first one failed,
+        which is the worst moment for two owners to disagree."""
         from mi_agent_api import chat_routing as routing
         summary, label, narrowed = routing._summary_population(
             "Summarise the acquired book", None, None,
             output_root=os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"],
             client_id=os.environ["MI_AGENT_CLIENT_ID"], run_id=None)
-        assert summary.get("available") is True
-        assert label == "Acquired" and narrowed is True
+        assert summary is None and narrowed is False
 
-    def test_both_paths_agree_on_the_same_question(self, book):
-        from mi_agent_api import chat_routing as routing
-        from mi_agent_api import portfolio_context as ctx_mod
-        from mi_agent.mi_query_validator import load_mi_semantics
-        from mi_agent_api.datasets import semantics_path
-        from question_interpretation import projection
+    def test_the_other_routes_keep_their_owner(self):
+        """§5's last line: do not touch `_resolve_lens` uses owned by other
+        routes. Five remain, and this pins that the deletion was surgical."""
+        import ast
 
-        kw = dict(output_root=os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"],
-                  client_id=os.environ["MI_AGENT_CLIENT_ID"], run_id=None)
-        qi = projection.project("Summarise the acquired book",
-                                semantics=load_mi_semantics(semantics_path()),
-                                registry=ctx_mod.build_registry())
-        legacy, l_label, l_narrow = routing._summary_population(
-            "Summarise the acquired book", None, None, **kw)
-        planned, p_label, p_narrow = routing._summary_population(
-            "Summarise the acquired book", None, qi, **kw)
-        assert (l_label, l_narrow) == (p_label, p_narrow)
-        for key in ("available", "period", "reportingDate", "periodCount",
-                    "regionColumn", "metrics", "topRegions", "cohorts",
-                    "cohortBalances"):
-            assert legacy[key] == planned[key], key
+        from pathlib import Path
+        tree = ast.parse((_REPO / "mi_agent_api/chat_routing.py")
+                         .read_text(encoding="utf-8"))
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                 and getattr(n.func, "id", "") == "_resolve_lens"]
+        assert len(calls) >= 4, len(calls)

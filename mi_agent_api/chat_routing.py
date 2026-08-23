@@ -454,36 +454,39 @@ def _summary_population(question, source_lens, interpretation, *, output_root,
 
     CONVERSION 1 — the switch point, and the whole of it.
 
-    With an interpretation contract the population is PLANNED from it: governed
+    The population is PLANNED from the interpretation contract: governed
     portfolio ids, the base population, and the provenance that decides
-    precedence against a workspace selection. Without one the shipped
-    lens-resolved path stands, unchanged.
+    precedence against a workspace selection. `mi_agent.portfolio_lens` is still
+    the only thing that decides what "the acquired book" MEANS; the contract
+    transports its answer, and this consumes the transported answer rather than
+    asking the resolver a second time.
 
-    That fall-through is not scaffolding. `resolve_interpretation` returns
-    ``None`` when the contract cannot be built, and a route that lost its answer
-    to a contract failure would be a worse route than the one before it. The
-    seam is the behaviour, not a flag.
+    `_resolve_lens` is deliberately NOT reachable from here. It remains the
+    owner for the five other routes that call it, untouched.
 
-    Returns ``(summary, scope label, narrowed)`` — everything the prose, the
-    artifacts and the fall-through below need, and nothing else. The lens object
-    itself does not escape this function, so no consumer downstream can read a
-    second opinion off it.
+    Returns ``(summary, scope label, narrowed)``. ``summary is None`` means the
+    route defers. No lens object escapes, so no consumer downstream can read a
+    second opinion off one.
     """
-    if interpretation is not None:
-        summary = _summary_plan.portfolio_summary(
-            output_root, client_id, interpretation=interpretation,
-            to_run_id=run_id)
-        scope = getattr(interpretation, "source_scope", None)
-        label = summary.get("lens") or "Total"
-        narrowed = bool(getattr(scope, "portfolio_ids", ()) or ())
-        return summary, label, narrowed
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. It defers, which is the
+        # route's own pre-existing "I cannot answer this" behaviour and is what
+        # every portfolio-summary question did for the whole of Phase 1G, when
+        # the provider was raising and nobody noticed.
+        #
+        # The alternative — keeping the lens-resolved path here as a fallback —
+        # would leave `_resolve_lens` in this route as a SECOND POPULATION
+        # OWNER, reachable exactly when the first one failed, which is the worst
+        # moment for two owners to disagree. One owner, or none.
+        return None, "", False
 
-
-    lens = _resolve_lens(question, source_lens)
-    summary = movement_mod.portfolio_summary(
-        output_root, client_id, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label)
-    return summary, lens.label, bool(lens.filters)
+    summary = _summary_plan.portfolio_summary(
+        output_root, client_id, interpretation=interpretation,
+        to_run_id=run_id)
+    scope = getattr(interpretation, "source_scope", None)
+    label = summary.get("lens") or "Total"
+    narrowed = bool(getattr(scope, "portfolio_ids", ()) or ())
+    return summary, label, narrowed
 
 
 def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
@@ -493,6 +496,8 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
     summary, _scope_label, _narrowed = _summary_population(
         question, source_lens, interpretation, output_root=output_root,
         client_id=client_id, run_id=run_id)
+    if summary is None:
+        return None  # no contract: defer to the existing point-in-time path
     if not summary.get("available"):
         if _narrowed:
             # PHASE 1E. Deferring here hands a NARROWING question to a path that

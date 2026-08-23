@@ -99,6 +99,36 @@ def _diff(a: Any, b: Any, path: str = "") -> List[str]:
     return out
 
 
+class LegacyPathRemoved(Exception):
+    """The lens-resolved population path is gone from this route.
+
+    Raised rather than papered over. This instrument proved equivalence while
+    BOTH paths existed; once the duplicate owner is deleted there is no "before"
+    to render, and a comparison that silently compares the converted path
+    against a deferral would report 1,832 spurious differences and mean nothing.
+    The evidence stands at the commit where it was taken.
+    """
+
+
+def _legacy_path_exists() -> bool:
+    """Whether the route still CALLS the lens resolver.
+
+    Over the parsed AST, not over the source text: the function's docstring says
+    "`_resolve_lens` is deliberately NOT reachable from here", and a substring
+    check reads that sentence as the call it denies. The same mistake as the
+    plan module's first import guard, in the same session — a guard that reads
+    prose is not reading code.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from mi_agent_api import chat_routing as routing
+    tree = ast.parse(textwrap.dedent(inspect.getsource(routing._summary_population)))
+    return any(isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_resolve_lens"
+               for n in ast.walk(tree))
+
+
 def _render(question: str, default: Optional[str], client_id: str,
             compositional: bool) -> Dict[str, Any]:
     """One full governed answer, with the population taken either way.
@@ -117,6 +147,8 @@ def _render(question: str, default: Optional[str], client_id: str,
     ctx = ExecutionContext.for_internal(client_id)
     original = routing._summary_population
     seen = {"plan": 0, "legacy": 0}
+    if not compositional and not _legacy_path_exists():
+        raise LegacyPathRemoved()
 
     def _spy(question_, source_lens_, interpretation_, **kw):
         # ANTI-VACUITY. The first run of this instrument reported 0 differences
@@ -197,6 +229,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print("=" * 112)
     print(f"\n{len(owned)} route-owned cases x {len(DEFAULTS)} caller defaults "
           f"= {len(owned) * len(DEFAULTS)} rendered answer pairs\n")
+
+    if not _legacy_path_exists():
+        print("\nThe lens-resolved population path has been REMOVED from this "
+              "route,\nso there is no 'before' left to render. Equivalence was "
+              "proved while both\npaths existed — 54 pairs, 0 differences — and "
+              "that evidence stands at the\ncommit where it was taken. This "
+              "instrument reports rather than inventing a\ncomparison it can no "
+              "longer make.\n")
+        return 0
 
     rows: List[Dict[str, Any]] = []
     total_diffs = 0
