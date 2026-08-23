@@ -542,7 +542,9 @@
       "interpretation": {
         "state": "filled",
         "scope": "acquired",
-        "portfolioIds": [],
+        "portfolioIds": [
+          "alp_acquired"
+        ],
         "portfolioLabel": null,
         "rawText": "Acquired",
         "narrows": true,
@@ -628,7 +630,9 @@
       "interpretation": {
         "state": "filled",
         "scope": "direct",
-        "portfolioIds": [],
+        "portfolioIds": [
+          "alp_origination"
+        ],
         "portfolioLabel": null,
         "rawText": "Direct",
         "narrows": true,
@@ -714,7 +718,9 @@
       "interpretation": {
         "state": "filled",
         "scope": "acquired",
-        "portfolioIds": [],
+        "portfolioIds": [
+          "alp_acquired"
+        ],
         "portfolioLabel": null,
         "rawText": "Acquired",
         "narrows": true,
@@ -1634,13 +1640,16 @@
           "controlledRefusal": false,
           "lensApplied": true,
           "portfolioScope": {
-            "context_id": "acquired",
-            "context_kind": "type",
-            "label": "Acquired",
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
             "portfolio_ids": [
-              "alp_acquired"
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
             ],
             "portfolio_types": [
+              "direct",
               "acquired"
             ],
             "asset_classes": [
@@ -1649,7 +1658,7 @@
           },
           "verdict": null,
           "facets": [],
-          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
         },
         "direct": {
           "route": "portfolio_summary",
@@ -1657,14 +1666,17 @@
           "controlledRefusal": false,
           "lensApplied": true,
           "portfolioScope": {
-            "context_id": "direct",
-            "context_kind": "type",
-            "label": "Direct",
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
             "portfolio_ids": [
-              "alp_origination"
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
             ],
             "portfolio_types": [
-              "direct"
+              "direct",
+              "acquired"
             ],
             "asset_classes": [
               "equity_release"
@@ -1672,7 +1684,7 @@
           },
           "verdict": null,
           "facets": [],
-          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
         }
       }
     },
@@ -1794,7 +1806,9 @@
       "interpretation": {
         "state": "filled",
         "scope": "direct",
-        "portfolioIds": [],
+        "portfolioIds": [
+          "alp_origination"
+        ],
         "portfolioLabel": null,
         "rawText": "Direct",
         "narrows": true,
