@@ -172,7 +172,9 @@ refuse again, exactly as before.
 
 **Root 1 and root 2 are coupled through the line path's default.** That coupling
 is a finding in its own right and belongs to whatever separate argument root 2
-gets — it is not settled here.
+gets — it is not settled here. It is recorded standing, with what it means for
+that argument, in `docs/mi_dual_mechanism_pattern.md` under *"A coupling that
+widening inherits"*.
 
 ### 2. The widening nearly shipped a WRONG ANSWER
 
@@ -194,10 +196,13 @@ distribution presented as a reporting-period series.
 The parser's own note at that path had already warned: *"a VINTAGE is a cohort
 label (2014, 2015, …), not a point on a time axis."*
 
-**This is instance 5 of the dual-mechanism pattern**
-(`docs/mi_dual_mechanism_pattern.md`), found by attempting to fix root 1 — and it
-is the first instance where the weaker reader would have produced a confident
-WRONG ANSWER rather than a refusal. `_is_evolution` now consults the owner, so
+**This is instance 5 of the dual-mechanism pattern**, and it is recorded as a
+DISTINCT CLASS rather than a fifth of the same: instances 1-4 produce refusals a
+user can inspect, this one produced an answer to a different question that
+passed its own rater. `docs/mi_dual_mechanism_pattern.md` carries the split and
+the two practices that catch it — count the readers of a decision before
+widening any of them, and treat a rater whose hint list overlaps the decision
+under change as compromised for that change. `_is_evolution` now consults the owner, so
 the chart type and the route are decided by one reading.
 
 ### 3. And the guard itself over-reached, once
