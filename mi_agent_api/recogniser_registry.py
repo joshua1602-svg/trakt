@@ -139,6 +139,41 @@ class RouteRequest:
     #: otherwise-identical requests still compare equal.
     _history_memo: Dict[str, Any] = field(
         default_factory=dict, repr=False, compare=False)
+    #: PHASE 1G. Builds this request's :class:`QuestionInterpretation` on demand.
+    #:
+    #: Phase 1F found that the routed path constructs no interpretation at all —
+    #: the single production construction site is on the point-in-time path, and
+    #: a routed question never reaches it. A compositional plan must be built
+    #: from the contract and nothing else, so the contract has to BE here.
+    #:
+    #: A provider rather than an eager value, the same shape `history_model`
+    #: uses and for the same reason: assembling it detects the request's facets,
+    #: which reads the frame. Recognition never touches it; only a handler that
+    #: needs it pays.
+    interpretation_provider: Optional[Callable[[], Any]] = None
+    #: Memo for :meth:`resolve_interpretation`.
+    _interpretation_memo: Dict[str, Any] = field(
+        default_factory=dict, repr=False, compare=False)
+
+    def resolve_interpretation(self) -> Optional[Any]:
+        """This request's governed interpretation contract, built on first use.
+
+        THE SEMANTIC HANDOFF. A handler that plans from this must not also read
+        `self.question` for meaning: two readers of one sentence is the defect
+        this programme has spent its length removing.
+
+        Memoised per request. A provider that raises yields ``None`` rather than
+        failing the request — a plan that cannot be built must refuse on the
+        contract's own terms, not by losing the answer to an exception.
+        """
+        if self.interpretation_provider is None:
+            return None
+        if "value" not in self._interpretation_memo:
+            try:
+                self._interpretation_memo["value"] = self.interpretation_provider()
+            except Exception:  # noqa: BLE001 - the plan refuses; the request lives
+                self._interpretation_memo["value"] = None
+        return self._interpretation_memo["value"]
 
     def resolve_history_model(self) -> Optional[Mapping[str, Any]]:
         """The historical completion model for this request, built on first use.

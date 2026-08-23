@@ -95,10 +95,13 @@ class TestTheRouteSurfaceIsWhatWeThinkItIs:
         assert routing._is_portfolio_summary(question) is False
 
 
-class TestThePhase1BBlockerIsStillOpen:
-    """The contract carries WHICH scope was resolved, not WHETHER the question
-    named one — and the second fact is what decides precedence against a
-    caller-supplied default."""
+class TestThePhase1BBlockerIsClosed:
+    """CLOSED IN PHASE 1G. This class pinned the blocker; it now pins the fix.
+
+    The contract carried WHICH scope was resolved and not WHETHER the question
+    named one, and the second fact is what decides precedence against a
+    caller-supplied default. `SourceScopeClaim.provenance` now carries it.
+    """
 
     def test_a_silent_question_defers_to_the_caller_default(self, book):
         """`source_portfolio_lens` is a live field on MiQueryRequest, populated
@@ -110,49 +113,54 @@ class TestThePhase1BBlockerIsStillOpen:
     def test_an_explicit_whole_book_question_overrides_the_caller_default(self, book):
         assert _shipped_scope("portfolio summary across all portfolios", "acquired") == "total"
 
-    def test_both_produce_the_same_contract_claim(self, book):
-        """The blocker in one assertion: byte-identical claims, opposite
-        required populations."""
+    def test_the_two_readings_resolve_to_the_same_scope(self, book):
+        """Both still resolve to `total` — the scope was never the problem."""
         silent = _claim("Please provide a portfolio summary", book)
         explicit = _claim("portfolio summary across all portfolios", book)
         assert silent.scope == explicit.scope == "total"
         assert silent.state == explicit.state == "filled"
-        assert silent.as_dict() == explicit.as_dict()
-        # ... while production answers them differently under the same default.
+        # ... and production answers them differently under the same default.
         assert _shipped_scope("Please provide a portfolio summary", "acquired") == "acquired"
         assert _shipped_scope("portfolio summary across all portfolios", "acquired") == "total"
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "Phase 1B blocker, still open at Phase 1F: the contract cannot say "
-        "whether the question named a source scope, so a plan reading only "
-        "`source_scope` widens 14 of 54 (question, caller default) combinations. "
-        "See migration_phase0/CONTRACT_SUFFICIENCY_PORTFOLIO_SUMMARY.json."))
     def test_the_contract_can_decide_precedence(self, book):
+        """The Phase 1F stop condition, closed. Same scope, different claim."""
         silent = _claim("Please provide a portfolio summary", book)
         explicit = _claim("portfolio summary across all portfolios", book)
         assert silent.as_dict() != explicit.as_dict()
+        assert silent.provenance == "default"
+        assert explicit.provenance == "explicit_user"
+        assert silent.stated_by_user is False
+        assert explicit.stated_by_user is True
 
 
-class TestTheTotalScopeVocabularyIsUneven:
-    """A finding, not a fix. Two explicit whole-book phrasings, opposite
-    precedence — because one is in `_TOTAL_TERMS` and the other is not.
+class TestTheTotalScopeVocabularyIsEven:
+    """LEVELLED IN PHASE 1G, by decision and with authorisation.
 
-    Reported rather than corrected: adding a term changes which population a
-    shipped question answers over, which is a user-visible product decision and
-    needs its own authorisation, exactly like the arity disclosure defect.
+    Phase 1F reported this as a finding it would not fix: two explicit
+    whole-book phrasings had opposite precedence, because "across all
+    portfolios" was in `_TOTAL_TERMS` and "the funded book" was not. Phase 1G §1
+    makes the business meaning authoritative — Funded Book is the complete
+    funded population — so the phrase is now explicit and wins, like its synonym.
+
+    The client-visible effect is measured by name in
+    `migration_phase0/funded_book_precedence_change.py`.
     """
 
     def test_across_all_portfolios_overrides_the_dropdown(self, book):
         assert _shipped_scope("portfolio summary across all portfolios", "acquired") == "total"
 
-    def test_the_funded_book_does_not(self, book):
-        """"Funded Book" is the business term for the COMPLETE funded
-        population — Direct and Acquired together — and the route owns the
-        question. With the workspace scoped to Acquired it answers 3,909 of
-        11,035 loans, and the contract records the same `filled/total` claim it
-        records for a question that named no scope at all."""
-        assert _shipped_scope("Summarise the funded book", "acquired") == "acquired"
-        assert _claim("Summarise the funded book", book).scope == "total"
+    def test_the_funded_book_now_does_too(self, book):
+        assert _shipped_scope("Summarise the funded book", "acquired") == "total"
+        assert _claim("Summarise the funded book", book).provenance == "explicit_user"
+
+    def test_a_funded_MEASURE_is_still_not_a_scope(self, book):
+        """The constraint that keeps the vocabulary honest. Bare "funded" names
+        a MEASURE — "funded balance", "funded amount" — and reading a measure as
+        a scope is the silent mutation the lens vocabulary exists to prevent.
+        Only the noun phrases that name the BOOK were added."""
+        assert _shipped_scope("What is the funded balance?", "acquired") == "acquired"
+        assert _shipped_scope("Show funded balance by region", "acquired") == "acquired"
 
 
 class TestPhase1EPopulationSemanticsHold:
@@ -235,17 +243,19 @@ class TestThePlanMustResolveThroughTheRegistry:
         assert set(rebuilt.filters) == set(governed.filters)
 
 
-class TestTheRoutedPathBuildsNoInterpretation:
-    """The plan needs a contract object; the route it would replace never
-    constructs one.
+class TestTheRoutedPathBuildsAnInterpretation:
+    """WIRED IN PHASE 1G §9. This class pinned the gap; it now pins the wiring.
 
-    The single production construction site is on the POINT-IN-TIME path
-    (`mi_agent_workflow`), where it is explicitly carried and not read, and it
-    is called without a registry — so even there the claim is the pre-1E
-    reading. A routed question never reaches it.
+    Phase 1F found that a routed question never built a `QuestionInterpretation`
+    — the single construction site was on the point-in-time path, which routing
+    bypasses. `try_route` now supplies one through `RouteRequest`, built with the
+    governed registry and the caller's workspace selection, so a converted
+    handler has a contract to plan from.
+
+    NOTHING READS IT YET: it is carried, exactly as the workflow's has been.
     """
 
-    def test_the_only_production_construction_site_is_the_workflow(self):
+    def test_the_routed_path_now_has_a_construction_site(self):
         """Searched by IMPORT of the projection entry points, not by call name:
         the workflow aliases `from_parts` to `_qi_build`, so a call-name search
         misses the one site that matters and matches the projection module's
@@ -264,10 +274,41 @@ class TestTheRoutedPathBuildsNoInterpretation:
                 continue
             if pattern.search(path.read_text(encoding="utf-8", errors="ignore")):
                 hits.append(rel)
-        assert hits == ["mi_agent/mi_agent_workflow.py"], hits
+        assert sorted(hits) == ["mi_agent/mi_agent_workflow.py",
+                                "mi_agent_api/chat_routing.py"], hits
 
-    def test_that_site_does_not_pass_the_governed_registry(self):
-        text = (_REPO / "mi_agent/mi_agent_workflow.py").read_text(encoding="utf-8")
-        call = text[text.index("_qi_build("):]
-        call = call[:call.index(")")]
-        assert "registry" not in call
+    def test_the_routed_site_passes_the_registry_and_the_caller_scope(self):
+        """The two inputs that make the claim usable: the governed identity, and
+        the provenance that decides precedence. The point-in-time site still
+        passes neither, which is a known and separate gap."""
+        text = (_REPO / "mi_agent_api/chat_routing.py").read_text(encoding="utf-8")
+        call = text[text.index("return _qi_build("):]
+        call = call[:call.index("\n\n")]
+        assert "registry=" in call and "caller_scope=" in call
+
+    def test_a_route_request_carries_the_contract(self):
+        """The handoff itself: one object, resolved lazily, memoised per
+        request — the same shape `history_model` uses, so adding it changed no
+        handler signature."""
+        from mi_agent_api.recogniser_registry import RouteRequest
+        assert hasattr(RouteRequest, "resolve_interpretation")
+        marker = object()
+        request = RouteRequest(
+            question="q", spec=None, spec_dict={}, semantics={}, view="funded",
+            client_id="c", run_id=None, portfolio_id=None,
+            interpretation_provider=lambda: marker)
+        assert request.resolve_interpretation() is marker
+
+    def test_a_provider_that_raises_does_not_cost_the_answer(self):
+        """A plan that cannot be built must refuse on the contract's own terms,
+        not lose the request to an exception."""
+        from mi_agent_api.recogniser_registry import RouteRequest
+
+        def _boom():
+            raise RuntimeError("no contract")
+
+        request = RouteRequest(
+            question="q", spec=None, spec_dict={}, semantics={}, view="funded",
+            client_id="c", run_id=None, portfolio_id=None,
+            interpretation_provider=_boom)
+        assert request.resolve_interpretation() is None

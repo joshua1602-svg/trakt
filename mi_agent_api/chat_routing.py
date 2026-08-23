@@ -3021,6 +3021,47 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         _logger.warning("analytical intent boundary failed: %s", exc)
         analytical_reading, analytical_flags = None, {}
 
+    # PHASE 1G §9 — THE SEMANTIC HANDOFF for the routed path.
+    #
+    # Phase 1F found that a routed question never builds a
+    # `QuestionInterpretation`: the single production construction site is on
+    # the point-in-time path, which routing bypasses. A compositional plan may
+    # read the contract and nothing else, so the contract has to exist here
+    # before a handler can be converted onto it.
+    #
+    # Assembled from the SAME spec and facets the receipt layer already
+    # produces, and from the SAME owners — it re-interprets nothing and decides
+    # nothing. The registry and the caller's workspace selection go in, so the
+    # claim carries the governed identity and the provenance that decides
+    # precedence, rather than the pre-1E/pre-1G readings.
+    #
+    # NOTHING READS IT YET. It is carried so the first route conversion has a
+    # contract to plan from; every handler below is byte-for-byte unaffected.
+    def _build_interpretation() -> Any:
+        from question_interpretation.projection import from_parts as _qi_build
+
+        from mi_agent import execution_receipt as _receipt
+
+        frame = None
+        if base_frame_resolver is not None:
+            frame = base_frame_resolver(view, portfolio_id)
+        elif frame_resolver is not None:
+            frame = frame_resolver(view, portfolio_id)
+        columns = list(getattr(frame, "columns", []) or []) or None
+        dim_terms = _receipt.requested_dimension_terms(question, semantics, columns)
+        facets = _receipt.detect_requested_facets(
+            question, semantics, frame=frame, requested_dimensions=dim_terms)
+        registry_for_scope = None
+        try:
+            from . import portfolio_context as _ctx
+
+            registry_for_scope = _ctx.build_registry(frame)
+        except Exception as exc:  # noqa: BLE001 - identity never breaks routing
+            _logger.info("governed registry unavailable for interpretation: %s", exc)
+        return _qi_build(question, spec=spec, facets=list(facets),
+                         dim_terms=dim_terms, semantics=semantics,
+                         registry=registry_for_scope, caller_scope=source_lens)
+
     request = RouteRequest(
         question=question, spec=spec, spec_dict=spec.to_dict(),
         semantics=semantics, view=view, client_id=client_id, run_id=run_id,
@@ -3029,6 +3070,7 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         history_model_provider=history_model_provider, as_of=as_of,
         source_lens=source_lens, frame_resolver=frame_resolver,
         base_frame_resolver=base_frame_resolver,
+        interpretation_provider=_build_interpretation,
         parse_meta=parsed.meta, semantics_context=parsed.semantics_context)
 
     # The governed scope this request runs in, resolved lazily and AT MOST ONCE
