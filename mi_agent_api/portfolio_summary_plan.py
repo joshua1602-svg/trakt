@@ -1,0 +1,280 @@
+"""mi_agent_api/portfolio_summary_plan.py — `portfolio_summary`, composed.
+
+CONVERSION 1. The first shipped route whose execution is a PLAN over derived
+primitives rather than a route-specific procedure.
+
+    interpretation contract -> plan -> existing primitives -> the same result
+
+What this replaces is exactly one call: `movement_summary.portfolio_summary`.
+Everything after it — the prose, the KPI/chart/table artifacts, the envelope,
+the receipt — is untouched, and that is deliberate. The economics were proven
+equivalent in Phase 0 and re-proven on the governed population path in Phase 1G;
+the boundary this conversion has to hold is the one a shadow could not reach,
+which is that the RESULT SHAPE feeding all of that is identical.
+
+THE HARD RULE
+-------------
+`build_plan` receives a :class:`QuestionInterpretation` and a frame context. It
+never receives, reads or is passed the raw question. `assert_no_question_read`
+enforces it structurally, so an edit that reintroduces a second semantic owner
+fails loudly rather than silently.
+
+WHERE EACH SEMANTIC FACT COMES FROM
+-----------------------------------
+All of it from the contract, none of it from the sentence:
+
+    which portfolios      source_scope.portfolio_ids   governed registry ids
+    which population      source_scope.base_population funded / direct / acquired
+    was it asked for      source_scope.provenance      decides caller precedence
+    could it be resolved  source_scope.state           UNRESOLVABLE blocks
+
+THE PRIMITIVES (5 of 7 — `compare` and `project` are not needed)
+---------------------------------------------------------------
+    stack periods      evolution.funded_frames
+    select population  evolution._scope_frame_lens, over governed ids
+    resolve measure    evolution.assemble_funded_evolution (x5 metrics)
+    group              movement_summary._regional_exposure, _cohorts
+    rank               the sort + head inside _regional_exposure
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
+#: Primitive ids, as derived by the scoping study.
+STACK_PERIODS = "stack_periods"
+SELECT_POPULATION = "select_population"
+RESOLVE_MEASURE = "resolve_measure"
+GROUP = "group"
+RANK = "rank"
+
+#: A plan step that cannot be built from the contract carries this. A plan with
+#: any blocked step is a REFUSAL, never an answer with the step omitted.
+BLOCKED_NO_CONTRACT_FIELD = "no contract field"
+
+#: The five governed headline measures, and how each is resolved.
+HEADLINE_MEASURES: Tuple[Tuple[str, str], ...] = (
+    ("funded_balance", "sum"),
+    ("loan_count", "count"),
+    ("wa_ltv", "weighted_avg"),
+    ("wa_interest_rate", "weighted_avg"),
+    ("avg_borrower_age", "avg"),
+)
+
+
+@dataclass(frozen=True)
+class Step:
+    primitive: str
+    inputs: Dict[str, Any] = field(default_factory=dict)
+    because: str = ""
+    blocked: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {"primitive": self.primitive,
+                               "inputs": dict(self.inputs), "because": self.because}
+        if self.blocked:
+            out["blocked"] = self.blocked
+        return out
+
+
+@dataclass(frozen=True)
+class Plan:
+    steps: Tuple[Step, ...]
+    declares_grouped_by: Tuple[str, ...] = ()
+
+    @property
+    def blocked(self) -> Tuple[Step, ...]:
+        return tuple(s for s in self.steps if s.blocked)
+
+    @property
+    def executable(self) -> bool:
+        return not self.blocked
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"steps": [s.to_dict() for s in self.steps],
+                "declaresGroupedBy": list(self.declares_grouped_by),
+                "blocked": [s.to_dict() for s in self.blocked]}
+
+
+def build_plan(interpretation, *, region_column: Optional[str],
+               has_portfolio_column: bool) -> Plan:
+    """The plan for a portfolio-summary question. The question is NOT a parameter."""
+    steps: List[Step] = [
+        Step(STACK_PERIODS,
+             {"dataset": "funded", "take": "latest", "disclose": "periodCount"},
+             because="the headline position is the latest governed snapshot, and "
+                     "the count of available periods is disclosed"),
+    ]
+
+    scope = getattr(interpretation, "source_scope", None)
+    state = getattr(scope, "state", "empty")
+    if state == "unresolvable":
+        # THE QUESTION NAMED A SCOPE AND IT COULD NOT BE RESOLVED, and this does
+        # NOT block. The distinction matters and is easy to get backwards:
+        #
+        #   EMPTY          nobody looked. Nothing can be planned from it, and
+        #                  reading it as Total would widen a population the
+        #                  question may have narrowed. It blocks.
+        #   UNRESOLVABLE   the owner looked and found a name this book does not
+        #                  hold. That is a REFUSAL, and the refusal already has
+        #                  a single route-independent owner: the facet layer
+        #                  raises it as a LOST narrowing and `assess` declines
+        #                  the answer (Phase 1E, proved across three routes).
+        #
+        # Blocking here would put a SECOND refusal owner in the plan, and
+        # measured, it also cost route identity: the route deferred, the answer
+        # fell through to the point-in-time path, and 23 payload and receipt
+        # fields moved on a question that refuses either way.
+        #
+        # The step is recorded with `unresolved` so the plan still DECLARES what
+        # it could not do — the plan is auditable, and the receipt decides.
+        steps.append(Step(
+            SELECT_POPULATION,
+            {"kind": "source_portfolio_lens", "base_population": None,
+             "portfolio_ids": [], "provenance": scope.provenance,
+             "unresolved": True, "label": _label_for(scope)},
+            because=("the question named a scope this book does not hold; the "
+                     "receipt layer refuses it, and no narrowing is applied")))
+    elif state == "filled":
+        steps.append(Step(
+            SELECT_POPULATION,
+            {"kind": "source_portfolio_lens",
+             "base_population": scope.base_population,
+             "portfolio_ids": list(scope.portfolio_ids),
+             "provenance": scope.provenance,
+             "label": _label_for(scope)},
+            because=("the contract carries a resolved source scope "
+                     f"({scope.base_population!r}, {scope.provenance!r})")))
+    else:
+        # EMPTY and UNRESOLVABLE are NOT Total, and both block. Reading either
+        # as Total would widen a population the question may have narrowed —
+        # which is the defect the whole programme exists to remove.
+        steps.append(Step(
+            SELECT_POPULATION, {"kind": "source_portfolio_lens"},
+            because="the shipped route narrows by portfolio lens",
+            blocked=(BLOCKED_NO_CONTRACT_FIELD + ": source_scope is "
+                     f"{state!r}" + (f" ({scope.reason})" if getattr(
+                         scope, "reason", None) else "")
+                     + ". Absence of a resolved scope is NOT Total.")))
+
+    for metric, aggregation in HEADLINE_MEASURES:
+        steps.append(Step(RESOLVE_MEASURE, {"metric": metric,
+                                            "aggregation": aggregation},
+                          because="a governed headline metric"))
+
+    grouped_by: List[str] = []
+    if region_column:
+        grouped_by.append(region_column)
+        steps.append(Step(GROUP, {"by": [region_column], "measure": "funded_balance",
+                                  "aggregation": "sum", "share_of": "scope_total"},
+                          because="the summary names the largest regional exposures"))
+        steps.append(Step(RANK, {"of": region_column, "basis": "funded_balance",
+                                 "direction": "desc", "top_n": "TOP_REGIONS",
+                                 "residual": None},
+                          because="largest first, truncated for legibility"))
+    if has_portfolio_column:
+        grouped_by.append("source_portfolio_id")
+        steps.append(Step(GROUP, {"by": ["source_portfolio_id"],
+                                  "measure": "funded_balance", "aggregation": "sum"},
+                          because="the summary splits by source portfolio"))
+    return Plan(tuple(steps), tuple(grouped_by))
+
+
+def _label_for(scope) -> str:  # noqa: D401
+    """The scope's name as the ANSWER says it.
+
+    `portfolio_label` is the governed display label a named portfolio resolved
+    to; `raw_text` is the category name the owner produced ("Direct",
+    "Acquired"); Total carries neither, because it is the absence of a
+    narrowing. Taken from the contract rather than rebuilt, so the prose says
+    what the shipped route says.
+    """
+    return (getattr(scope, "portfolio_label", None)
+            or getattr(scope, "raw_text", None) or "Total")
+
+
+def lens_filters(plan: Plan) -> Optional[Dict[str, Any]]:
+    """The row filters this plan selects, or ``None`` for the whole population.
+
+    Governed portfolio ids, never a raw type column: the registry decides group
+    membership, and Phase 1C measured the two paths diverging at GBP300 against
+    GBP1,200 on a book with two portfolios of one type.
+    """
+    step = next((s for s in plan.steps
+                 if s.primitive == SELECT_POPULATION
+                 and s.inputs.get("kind") == "source_portfolio_lens"
+                 and not s.blocked), None)
+    if step is None:
+        return None
+    ids = list(step.inputs.get("portfolio_ids") or [])
+    return {"source_portfolio_id": ids} if ids else None
+
+
+def lens_label(plan: Plan) -> str:
+    step = next((s for s in plan.steps
+                 if s.primitive == SELECT_POPULATION and not s.blocked), None)
+    return (step.inputs.get("label") if step else None) or "Total"
+
+
+def portfolio_summary(output_root, client_id: str, *, interpretation,
+                      to_run_id: Optional[str] = None) -> Dict[str, Any]:
+    """The current reporting period's headline position, COMPOSED.
+
+    A drop-in for `movement_summary.portfolio_summary`: same arguments except
+    that the population comes from the interpretation contract instead of a lens
+    the caller resolved, and the same result dict. Everything downstream — prose,
+    artifacts, envelope, receipt — is therefore unchanged by construction, which
+    is most of the equivalence argument and the reason the switch is one line.
+    """
+    from . import evolution as evolution_mod
+    from . import movement_summary as summary_mod
+
+    frames = evolution_mod.funded_frames(output_root, client_id, to_run_id)
+    df0 = frames[0].get("df") if frames else None
+    region_column = summary_mod._region_column(df0) if df0 is not None else None
+    has_portfolio = (df0 is not None
+                     and summary_mod._PORTFOLIO_ID in getattr(df0, "columns", []))
+
+    plan = build_plan(interpretation, region_column=region_column,
+                      has_portfolio_column=has_portfolio)
+    label = lens_label(plan)
+    if plan.blocked:
+        # A blocked plan REFUSES. The shape matches the unavailable branch the
+        # route already knows how to handle, so the refusal travels the path
+        # that exists rather than a new one.
+        return {"available": False, "lens": label,
+                "reason": plan.blocked[0].blocked,
+                "planBlocked": [s.to_dict() for s in plan.blocked]}
+
+    filters = lens_filters(plan)
+    scoped = [{**f, "df": evolution_mod._scope_frame_lens(f.get("df"), filters)}
+              for f in frames]
+    scoped = [f for f in scoped if f["df"] is not None and len(f["df"])]
+    if not scoped:
+        return {"available": False, "lens": label,
+                "reason": "no governed reporting period is available for this scope"}
+
+    evo = evolution_mod.assemble_funded_evolution(scoped, client_id, to_run_id)
+    periods = evo.get("periods") or []
+    if not periods:
+        return {"available": False, "lens": label,
+                "reason": "no governed reporting period is available for this scope"}
+
+    current = periods[-1]
+    df = scoped[-1]["df"]
+    region_col = summary_mod._region_column(df)
+    return {
+        "available": True,
+        "lens": label,
+        "period": current.get("period"),
+        "reportingDate": current.get("reporting_date"),
+        "metrics": summary_mod._metrics(current),
+        "regionColumn": region_col,
+        "topRegions": (summary_mod._regional_exposure(df, region_col)
+                       if region_col else []),
+        "cohorts": summary_mod._cohorts(df),
+        "cohortBalances": summary_mod.cohort_balances(df),
+        "periodCount": len(periods),
+        "sourceFiles": [f.get("source") for f in scoped],
+        "declaredGroupedBy": list(plan.declares_grouped_by),
+    }

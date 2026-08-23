@@ -41,6 +41,7 @@ from . import forecast_extrapolation as fx_mod
 from . import geo as geo_mod
 from . import movement_summary as movement_mod
 from . import period_change_route as _period_change
+from . import portfolio_summary_plan as _summary_plan
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
 from .recogniser_registry import (
@@ -447,16 +448,53 @@ def _summary_kpi_artifact(title: str, kpis: List[Dict[str, str]], *, spec, portf
     }
 
 
-def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
-                             output_root, portfolio_id, as_of, source_lens=None
-                             ) -> Optional[Dict[str, Any]]:
-    """The current reporting period's governed headline position."""
+def _summary_population(question, source_lens, interpretation, *, output_root,
+                        client_id, run_id) -> Tuple[Dict[str, Any], str, bool]:
+    """The governed headline position, and the scope it was computed over.
+
+    CONVERSION 1 — the switch point, and the whole of it.
+
+    With an interpretation contract the population is PLANNED from it: governed
+    portfolio ids, the base population, and the provenance that decides
+    precedence against a workspace selection. Without one the shipped
+    lens-resolved path stands, unchanged.
+
+    That fall-through is not scaffolding. `resolve_interpretation` returns
+    ``None`` when the contract cannot be built, and a route that lost its answer
+    to a contract failure would be a worse route than the one before it. The
+    seam is the behaviour, not a flag.
+
+    Returns ``(summary, scope label, narrowed)`` — everything the prose, the
+    artifacts and the fall-through below need, and nothing else. The lens object
+    itself does not escape this function, so no consumer downstream can read a
+    second opinion off it.
+    """
+    if interpretation is not None:
+        summary = _summary_plan.portfolio_summary(
+            output_root, client_id, interpretation=interpretation,
+            to_run_id=run_id)
+        scope = getattr(interpretation, "source_scope", None)
+        label = summary.get("lens") or "Total"
+        narrowed = bool(getattr(scope, "portfolio_ids", ()) or ())
+        return summary, label, narrowed
+
+
     lens = _resolve_lens(question, source_lens)
     summary = movement_mod.portfolio_summary(
         output_root, client_id, to_run_id=run_id,
         lens_filters=lens.filters or None, lens_label=lens.label)
+    return summary, lens.label, bool(lens.filters)
+
+
+def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
+                             output_root, portfolio_id, as_of, source_lens=None,
+                             interpretation=None) -> Optional[Dict[str, Any]]:
+    """The current reporting period's governed headline position."""
+    summary, _scope_label, _narrowed = _summary_population(
+        question, source_lens, interpretation, output_root=output_root,
+        client_id=client_id, run_id=run_id)
     if not summary.get("available"):
-        if lens.filters:
+        if _narrowed:
             # PHASE 1E. Deferring here hands a NARROWING question to a path that
             # cannot see the narrowing. Measured before this branch existed,
             # "Summarise the spv1_sponsored portfolio" — a governed portfolio
@@ -470,18 +508,18 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
             # rather than replaced by a broader population.
             return _envelope(
                 ok=True, question=question, spec=spec_dict, artifacts=[],
-                answer=(f"There are no funded loans in {lens.label} at the "
+                answer=(f"There are no funded loans in {_scope_label} at the "
                         f"current governed reporting date, so there is no "
                         f"position to summarise for it. I have not answered "
                         f"for the whole book instead."),
                 route="portfolio_summary", lens_applied=True,
-                warnings=[f"no rows in scope for {lens.label}: "
+                warnings=[f"no rows in scope for {_scope_label}: "
                           f"{summary.get('reason', 'scope is empty')}."])
         return None  # defer to the existing point-in-time summary path
 
     m = summary["metrics"]
     cut_off = _date_label(summary.get("reportingDate"))
-    scope = "" if lens.name == _portfolio_lens.LENS_TOTAL else f" ({lens.label})"
+    scope = "" if not _narrowed else f" ({_scope_label})"
 
     parts = [
         f"At {cut_off} the portfolio{scope} holds {_count(m['loan_count'])} loans "
@@ -510,7 +548,7 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
 
     cohorts = summary.get("cohortBalances") or {}
     labels = {c["id"]: c["label"] for c in (summary.get("cohorts") or [])}
-    if len(cohorts) > 1 and lens.name == _portfolio_lens.LENS_TOTAL:
+    if len(cohorts) > 1 and not _narrowed:
         split = [f"{labels.get(cid, cid)} {_gbp(bal)}"
                  for cid, bal in sorted(cohorts.items(), key=lambda kv: -kv[1])]
         parts.append(f"By source portfolio: {_sentence_join(split)}.")
@@ -530,7 +568,7 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
             f"Portfolio summary — {cut_off}", kpis, spec=spec_dict,
             portfolio_id=portfolio_id, as_of=as_of,
             description=f"Governed position at the {summary.get('period')} "
-                        f"reporting date ({lens.label}).")
+                        f"reporting date ({_scope_label}).")
     ]
     if regions:
         artifacts.append(_chart_artifact(
@@ -2891,7 +2929,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
-                source_lens=r.source_lens)),
+                source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
 
         # 8b. Governed Period Change Analysis — the first workflow layer built on
         #     the Business Semantics Registry. It sits AFTER the two composite
@@ -3047,7 +3086,15 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
             frame = base_frame_resolver(view, portfolio_id)
         elif frame_resolver is not None:
             frame = frame_resolver(view, portfolio_id)
-        columns = list(getattr(frame, "columns", []) or []) or None
+        # `frame.columns` is a pandas Index, and `Index or []` RAISES rather
+        # than falling back — "The truth value of a Index is ambiguous". The
+        # first cut of this wiring wrote exactly that, so the provider raised on
+        # every routed question and the try/except around it returned None
+        # silently: a construction site that never constructed. Tested only
+        # against a lambda, it looked wired. `test_the_routed_path_really_builds
+        # _a_contract` now exercises it against a real frame.
+        cols = getattr(frame, "columns", None)
+        columns = list(cols) if cols is not None else None
         dim_terms = _receipt.requested_dimension_terms(question, semantics, columns)
         facets = _receipt.detect_requested_facets(
             question, semantics, frame=frame, requested_dimensions=dim_terms)

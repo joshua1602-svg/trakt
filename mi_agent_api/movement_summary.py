@@ -194,6 +194,22 @@ def _completions_balance(df: pd.DataFrame, reporting_date: str,
 # --------------------------------------------------------------------------- #
 # Portfolio summary (current period)
 # --------------------------------------------------------------------------- #
+def cohort_balances(df) -> Dict[str, float]:
+    """Funded balance per source portfolio, keyed by governed id.
+
+    EXTRACTED, NOT COPIED. `portfolio_summary` computed this inline and the
+    compositional path needs the same numbers; a second copy would be a second
+    owner of one calculation, which is the defect this programme removes rather
+    than adds. Both callers now reach this.
+    """
+    if df is None or _PORTFOLIO_ID not in df.columns or _BALANCE not in df.columns:
+        return {}
+    ids = df[_PORTFOLIO_ID].astype(str).str.strip()
+    return {c["id"]: round(float(_num(df.loc[ids == c["id"], _BALANCE])
+                                 .fillna(0.0).sum()), 2)
+            for c in _cohorts(df)}
+
+
 def portfolio_summary(output_root, client_id: str, *,
                       to_run_id: Optional[str] = None,
                       lens_filters: Optional[Dict[str, str]] = None,
@@ -227,12 +243,7 @@ def portfolio_summary(output_root, client_id: str, *,
         "regionColumn": region_col,
         "topRegions": _regional_exposure(df, region_col) if region_col else [],
         "cohorts": _cohorts(df),
-        "cohortBalances": (
-            {c["id"]: round(float(_num(
-                df.loc[df[_PORTFOLIO_ID].astype(str).str.strip() == c["id"], _BALANCE]
-            ).fillna(0.0).sum()), 2) for c in _cohorts(df)}
-            if _PORTFOLIO_ID in df.columns and _BALANCE in df.columns else {}
-        ),
+        "cohortBalances": cohort_balances(df),
         "periodCount": len(periods),
         "sourceFiles": [f.get("source") for f in frames],
     }
