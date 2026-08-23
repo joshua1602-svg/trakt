@@ -1,0 +1,692 @@
+{
+  "rows": [
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": null,
+      "effectiveScope": "total",
+      "wonBy": "neither",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "Please provide a portfolio summary",
+      "defaultSelection": null,
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": "acquired",
+      "effectiveScope": "acquired",
+      "wonBy": "default",
+      "contextId": "acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "acquired"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "Please provide a portfolio summary",
+      "defaultSelection": "acquired",
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": "direct",
+      "effectiveScope": "direct",
+      "wonBy": "default",
+      "contextId": "direct",
+      "governedPortfolioIds": [
+        "alp_origination"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "direct"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "Please provide a portfolio summary",
+      "defaultSelection": "direct",
+      "rows": 7126,
+      "balance": 1385508582.98
+    },
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": "cohort",
+      "effectiveScope": "cohort",
+      "wonBy": "default",
+      "contextId": "alp_acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_id": "alp_acquired"
+      },
+      "contextKind": "portfolio",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "Please provide a portfolio summary",
+      "defaultSelection": "alp_acquired",
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": null,
+      "effectiveScope": "total",
+      "wonBy": "neither",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "summarise the portfolio",
+      "defaultSelection": null,
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": "acquired",
+      "effectiveScope": "acquired",
+      "wonBy": "default",
+      "contextId": "acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "acquired"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "summarise the portfolio",
+      "defaultSelection": "acquired",
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": "direct",
+      "effectiveScope": "direct",
+      "wonBy": "default",
+      "contextId": "direct",
+      "governedPortfolioIds": [
+        "alp_origination"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "direct"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "summarise the portfolio",
+      "defaultSelection": "direct",
+      "rows": 7126,
+      "balance": 1385508582.98
+    },
+    {
+      "questionMentionsPortfolio": false,
+      "questionScope": "total",
+      "defaultScope": "cohort",
+      "effectiveScope": "cohort",
+      "wonBy": "default",
+      "contextId": "alp_acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_id": "alp_acquired"
+      },
+      "contextKind": "portfolio",
+      "fellBackToTotal": false,
+      "label": "silent",
+      "question": "summarise the portfolio",
+      "defaultSelection": "alp_acquired",
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "direct",
+      "defaultScope": null,
+      "effectiveScope": "direct",
+      "wonBy": "question",
+      "contextId": "direct",
+      "governedPortfolioIds": [
+        "alp_origination"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "direct"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit direct",
+      "question": "Summarise the direct book",
+      "defaultSelection": null,
+      "rows": 7126,
+      "balance": 1385508582.98
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "direct",
+      "defaultScope": "acquired",
+      "effectiveScope": "direct",
+      "wonBy": "question",
+      "contextId": "direct",
+      "governedPortfolioIds": [
+        "alp_origination"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "direct"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit direct",
+      "question": "Summarise the direct book",
+      "defaultSelection": "acquired",
+      "rows": 7126,
+      "balance": 1385508582.98
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "direct",
+      "defaultScope": "direct",
+      "effectiveScope": "direct",
+      "wonBy": "question",
+      "contextId": "direct",
+      "governedPortfolioIds": [
+        "alp_origination"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "direct"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit direct",
+      "question": "Summarise the direct book",
+      "defaultSelection": "direct",
+      "rows": 7126,
+      "balance": 1385508582.98
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "direct",
+      "defaultScope": "cohort",
+      "effectiveScope": "direct",
+      "wonBy": "question",
+      "contextId": "direct",
+      "governedPortfolioIds": [
+        "alp_origination"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "direct"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit direct",
+      "question": "Summarise the direct book",
+      "defaultSelection": "alp_acquired",
+      "rows": 7126,
+      "balance": 1385508582.98
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "acquired",
+      "defaultScope": null,
+      "effectiveScope": "acquired",
+      "wonBy": "question",
+      "contextId": "acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "acquired"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit acquired",
+      "question": "Summarise the acquired book",
+      "defaultSelection": null,
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "acquired",
+      "defaultScope": "acquired",
+      "effectiveScope": "acquired",
+      "wonBy": "question",
+      "contextId": "acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "acquired"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit acquired",
+      "question": "Summarise the acquired book",
+      "defaultSelection": "acquired",
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "acquired",
+      "defaultScope": "direct",
+      "effectiveScope": "acquired",
+      "wonBy": "question",
+      "contextId": "acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "acquired"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit acquired",
+      "question": "Summarise the acquired book",
+      "defaultSelection": "direct",
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "acquired",
+      "defaultScope": "cohort",
+      "effectiveScope": "acquired",
+      "wonBy": "question",
+      "contextId": "acquired",
+      "governedPortfolioIds": [
+        "alp_acquired"
+      ],
+      "governedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "rawLensFilters": {
+        "source_portfolio_type": "acquired"
+      },
+      "contextKind": "type",
+      "fellBackToTotal": false,
+      "label": "explicit acquired",
+      "question": "Summarise the acquired book",
+      "defaultSelection": "alp_acquired",
+      "rows": 3909,
+      "balance": 579377675.23
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "cohort",
+      "defaultScope": null,
+      "effectiveScope": "cohort",
+      "wonBy": "question",
+      "contextId": "acquired_001",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {
+        "source_portfolio_id": "acquired_001"
+      },
+      "contextKind": "total",
+      "fellBackToTotal": true,
+      "label": "explicit cohort",
+      "question": "Summarise the acquired_001 book",
+      "defaultSelection": null,
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "cohort",
+      "defaultScope": "acquired",
+      "effectiveScope": "cohort",
+      "wonBy": "question",
+      "contextId": "acquired_001",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {
+        "source_portfolio_id": "acquired_001"
+      },
+      "contextKind": "total",
+      "fellBackToTotal": true,
+      "label": "explicit cohort",
+      "question": "Summarise the acquired_001 book",
+      "defaultSelection": "acquired",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "cohort",
+      "defaultScope": "direct",
+      "effectiveScope": "cohort",
+      "wonBy": "question",
+      "contextId": "acquired_001",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {
+        "source_portfolio_id": "acquired_001"
+      },
+      "contextKind": "total",
+      "fellBackToTotal": true,
+      "label": "explicit cohort",
+      "question": "Summarise the acquired_001 book",
+      "defaultSelection": "direct",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "cohort",
+      "defaultScope": "cohort",
+      "effectiveScope": "cohort",
+      "wonBy": "question",
+      "contextId": "acquired_001",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {
+        "source_portfolio_id": "acquired_001"
+      },
+      "contextKind": "total",
+      "fellBackToTotal": true,
+      "label": "explicit cohort",
+      "question": "Summarise the acquired_001 book",
+      "defaultSelection": "alp_acquired",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": null,
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "explicit total",
+      "question": "portfolio summary across all portfolios",
+      "defaultSelection": null,
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": "acquired",
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "explicit total",
+      "question": "portfolio summary across all portfolios",
+      "defaultSelection": "acquired",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": "direct",
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "explicit total",
+      "question": "portfolio summary across all portfolios",
+      "defaultSelection": "direct",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": "cohort",
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "explicit total",
+      "question": "portfolio summary across all portfolios",
+      "defaultSelection": "alp_acquired",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": null,
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "disclaimed",
+      "question": "summarise the portfolio excluding the acquired book",
+      "defaultSelection": null,
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": "acquired",
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "disclaimed",
+      "question": "summarise the portfolio excluding the acquired book",
+      "defaultSelection": "acquired",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": "direct",
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "disclaimed",
+      "question": "summarise the portfolio excluding the acquired book",
+      "defaultSelection": "direct",
+      "rows": 11035,
+      "balance": 1964886258.21
+    },
+    {
+      "questionMentionsPortfolio": true,
+      "questionScope": "total",
+      "defaultScope": "cohort",
+      "effectiveScope": "total",
+      "wonBy": "question",
+      "contextId": "total",
+      "governedPortfolioIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "governedFilters": {},
+      "rawLensFilters": {},
+      "contextKind": "total",
+      "fellBackToTotal": false,
+      "label": "disclaimed",
+      "question": "summarise the portfolio excluding the acquired book",
+      "defaultSelection": "alp_acquired",
+      "rows": 11035,
+      "balance": 1964886258.21
+    }
+  ],
+  "divergences": [
+    "'portfolio summary across all portfolios' + default='acquired': question wins with total; a contract carrying only the resolved scope would fall back to 'acquired'",
+    "'portfolio summary across all portfolios' + default='direct': question wins with total; a contract carrying only the resolved scope would fall back to 'direct'",
+    "'portfolio summary across all portfolios' + default='alp_acquired': question wins with total; a contract carrying only the resolved scope would fall back to 'alp_acquired'",
+    "'summarise the portfolio excluding the acquired book' + default='acquired': question wins with total; a contract carrying only the resolved scope would fall back to 'acquired'",
+    "'summarise the portfolio excluding the acquired book' + default='direct': question wins with total; a contract carrying only the resolved scope would fall back to 'direct'",
+    "'summarise the portfolio excluding the acquired book' + default='alp_acquired': question wins with total; a contract carrying only the resolved scope would fall back to 'alp_acquired'"
+  ]
+}
