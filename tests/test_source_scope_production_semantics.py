@@ -102,23 +102,43 @@ class TestProductionPrecedence:
         assert scope.filters == {}          # no narrowing at all
         assert len(scope.portfolio_ids) > 1  # the whole book
 
-    def test_case_d_the_widening_is_not_disclosed_to_the_reader(self, book):
-        """And nothing downstream tells the reader. The answer carries the
-        requested scope's NAME against whole-book figures."""
+    def test_case_d_the_widening_is_now_refused_rather_than_printed(self, book):
+        """CLOSED IN PHASE 1E. This test used to pin the opposite.
+
+        What it recorded in Phase 1C, verbatim from the run:
+
+            ok=True, "At 30 June 2026 the portfolio (acquired_001) holds
+            11,035 loans with a funded balance of GBP1.96bn", facets [],
+            warnings [], portfolioScope.fell_back_to_total True
+
+        — the requested scope's NAME against the WHOLE BOOK's figures, with the
+        one object that knew (the scope) never reaching the reader. `acquired_001`
+        is a storage folder name (Phase 1D), so it names no governed portfolio at
+        all, and the answer presented it as though it did.
+
+        1E resolves the lens against the governed registry, which can now say "I
+        do not hold this" instead of selecting nothing and falling back. The
+        request is raised as a LOST narrowing and honour-or-clarify refuses.
+
+        The `fell_back_to_total` assertion above is DELIBERATELY KEPT in
+        `test_case_d_an_unresolvable_scope_widens_to_the_whole_book`: the
+        governed contract still widens, and still only discloses. What changed
+        is that the answer no longer prints the widening as a result.
+        """
         from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
         from trakt_core.context import ExecutionContext
 
         ctx = ExecutionContext.for_internal(os.environ["MI_AGENT_CLIENT_ID"])
         result = execute_governed_mi_query(
             MiQueryRequest(question="Summarise the acquired_001 book"), ctx).result or {}
-        summary = result.get("executionSummary") or {}
-        assert result.get("ok") is True
-        assert "acquired_001" in (result.get("answer") or "")
-        assert "11,035" in (result.get("answer") or "")     # the WHOLE book
-        assert (summary.get("facets") or []) == []
-        assert (result.get("warnings") or []) == []
-        # The scope object knew, and the answer does not say.
-        assert (result.get("portfolioScope") or {}).get("fell_back_to_total") is True
+        answer = result.get("answer") or ""
+        assert result.get("ok") is False
+        assert result.get("controlledRefusal") is True
+        # The wording that asked is quoted back, so the reader can correct it.
+        assert "acquired_001" in answer
+        # And the whole book's figure appears nowhere.
+        assert "11,035" not in answer
+        assert "1.96bn" not in answer
 
 
 class TestGovernedVsRawResolution:

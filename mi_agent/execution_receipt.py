@@ -3577,6 +3577,46 @@ def time_axis_disclosure(unit: Optional[str], route: Optional[str]
                           concepts=(unit, grain))
 
 
+def unresolved_scope_facets(question: Optional[str], *, registry=None
+                            ) -> List[RequestedFacet]:
+    """A facet for a portfolio scope the question NAMED and nothing resolves.
+
+    PHASE 1E, and a safety correction rather than a capability.
+
+    Measured before it: `resolve_scope` falls back to Total for a portfolio the
+    registry does not hold, `_resolve_lens` keeps the lens NAME and takes the
+    EMPTY filters, and the answer prints the requested scope's label against
+    whole-book figures with `lensApplied=True` and nothing disclosed
+    (docs/mi_phase1c_report.md).
+
+    This raises the request as a facet so the mechanism that already exists
+    adjudicates it. The facet is LOST — the status that fails closed — and
+    `reconcile_routed_facets` promotes a narrowing facet only on execution
+    evidence, which a scope that resolved to nothing cannot produce. The answer
+    therefore refuses and quotes the wording back, instead of widening.
+
+    Returns [] whenever the scope resolves, so a question naming a portfolio
+    that EXISTS is untouched.
+    """
+    if not question or registry is None:
+        return []
+    try:
+        from . import portfolio_lens as _lens_owner
+
+        lens = _lens_owner.resolve_lens(question, registry=registry)
+    except Exception:  # noqa: BLE001 - disclosure must never break an answer
+        return []
+    if getattr(lens, "name", None) != _lens_owner.LENS_UNRESOLVED:
+        return []
+    requested = lens.label or "that portfolio"
+    return [RequestedFacet(
+        kind=KIND_LOST_NARROWING, label=requested,
+        field_key="source_portfolio_id",
+        status=LOST,
+        reason=("%r is not a governed portfolio for this book, so the answer "
+                "was not narrowed to it" % (requested,)))]
+
+
 def granularity_facets(question: str, route: Optional[str]
                        ) -> List[RequestedFacet]:
     """Every reporting GRAIN this question names, spatial and temporal.

@@ -565,6 +565,27 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             receipt_mod.book_columns(frame),
             question=question, settle_unresolved=False)
         granularity = receipt_mod.granularity_facets(question, route)
+        # PHASE 1E. A portfolio the question NAMED and the governed registry
+        # does not hold is raised here so honour-or-clarify refuses, rather than
+        # the route quietly answering for the whole book under that name.
+        #
+        # Built from THE FRAME THIS ANSWER WAS COMPUTED FROM, never from the
+        # process-wide active dataset. Two reasons, and the second was measured:
+        # the registry must describe the population that was actually queried;
+        # and `portfolio_context.build_registry()` with no frame calls
+        # `active_frame()`, which populates `data_source._ACTIVE_CACHE` under a
+        # TTL — reaching for it on every governed answer made five unrelated
+        # receipt tests fail by leaking one test's fixture frame into the next.
+        # A disclosure step has no business changing what the next request
+        # reads.
+        try:
+            from . import portfolio_context as _ctx_registry
+
+            granularity = list(granularity) + list(
+                receipt_mod.unresolved_scope_facets(
+                    question, registry=_ctx_registry.build_registry(frame)))
+        except Exception as exc:  # noqa: BLE001 - never break a governed answer
+            logger.info("unresolved-scope disclosure skipped: %s", exc)
         # P1L: the material row population the spec carries. Raised from the
         # governed spec, proven from execution evidence the route reports — a
         # route that reports nothing leaves these LOST and the answer refuses,
