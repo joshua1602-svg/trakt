@@ -147,6 +147,61 @@ This pack does **not** yet prove, and does not claim:
 
 ---
 
+## 6a. How the numbers in this pack are made trustworthy
+
+Every figure here comes from an instrument, and an instrument that cannot be
+wrong about itself is not evidence. Two practices are what make the numbers
+quotable, and one worked example shows why they are not ceremony.
+
+### The worked example: 70% became 33%
+
+Measuring where 61 lender phrasings fail, a first pass read the answer straight
+off the parse: if the parser did not resolve the dimension a question named, the
+question was scored **not understood**. That pass reported **70% recognition
+failure** — that most of what does not work is cheap wording, not missing
+product.
+
+**It was wrong, and it would have moved a build's worth of work into the cheap
+column.** `Show me balance by month by region` resolves no dimension, but the
+vocabulary knows "region" perfectly well: the spec cannot hold a time axis and a
+dimension at once, and the refusal quotes the word back — *"I understood that
+you asked for region, but that could not be applied."* Understood, and not
+carryable. That is the expensive category wearing the cheap one's clothes.
+
+Two controls separate them, and the corrected figure is **33%**:
+
+1. **A sibling sharing shape AND target.** If another phrasing of the *same
+   request* delivers, the capability exists and the wording is the barrier.
+   Sharing the shape alone is not enough — "which region grew fastest" and
+   "which LTV band moved most" are one shape and two different questions
+   (`docs/mi_sibling_rule.md`).
+2. **Naming back.** The honour-or-clarify refusal quotes what it could not
+   apply. If the system names the element it dropped, it understood it.
+
+Neither control is optional: without the first the wrong wordings are counted as
+capability gaps; without the second the capability gaps are counted as wordings.
+`tests/test_mi_recognition_diagnosis.py` pins both — the mutation that reads the
+parse alone breaks three tests, including the decisive one.
+
+### The two practices behind every figure
+
+* **Pre-registration.** Predictions are written and committed before the change
+  is made and before anything is re-measured, then scored against the outcome —
+  including the ones that fail. The time-axis widening pre-registered eight
+  predictions; one was violated on the first attempt, and the record says so
+  (`docs/mi_time_axis_vocabulary_prediction.md`).
+* **Re-run, never patch the numbers.** When an instrument is corrected after
+  seeing its output, every book is re-measured from scratch on the corrected
+  instrument rather than the affected figures being edited. Two instruments have
+  been re-run twice each under this rule.
+
+**What this means for a number in this pack:** it was predicted before it was
+measured, measured on both books, and produced by an instrument with a test
+proving it can fail. Where an instrument was found wrong, the correction is
+recorded next to the figure it changed rather than replacing it silently.
+
+---
+
 ## 7. Suggested demo script
 
 A simple, honest 5-step narrative for a live or recorded demo:

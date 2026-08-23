@@ -2045,7 +2045,26 @@ def _is_evolution(question: str, spec) -> bool:
     # A filter no longer forces the within-snapshot path: _route_evolution applies
     # the filter WITHIN each period for a funded series (and defers otherwise).
     q = question.lower()
-    return any(m in q for m in _EVOLUTION_MARKERS)
+    if any(m in q for m in _EVOLUTION_MARKERS):
+        return True
+    # THE AXIS QUESTION IS THE OWNER'S. `_EVOLUTION_MARKERS` above is a third
+    # copy of "did this sentence ask for a time axis?" — after
+    # `lexical.time_axis_request` (which owns it) and `llm_query_parser`'s
+    # `is_line` (which sets the chart type). Two of the three deciding
+    # differently is not academic: with only the chart type widened, "balance by
+    # period" became a line, failed THIS list, missed the evolution route, and
+    # was answered by the generic line executor as 13 VINTAGE YEARS — a cohort
+    # distribution, not a reporting-period series. The parser's own note at that
+    # path already warns a vintage "is a cohort label, not a point on a time
+    # axis".
+    #
+    # Consulting the owner here keeps the chart type and the route on one
+    # reading. See docs/mi_dual_mechanism_pattern.md.
+    try:
+        from question_interpretation.lexical import time_axis_request
+    except Exception:  # noqa: BLE001 - routing must never break on an import
+        return False
+    return bool(time_axis_request(question))
 
 
 # --------------------------------------------------------------------------- #

@@ -397,6 +397,25 @@ SERIES_PHRASES: Tuple[str, ...] = (
     "across periods", "across the periods",
     "over successive periods",
     "month by month", "quarter by quarter", "period by period",
+    # LENDER VOICE. Each added with a phrasing from the measured banks that
+    # needed it — no term here without evidence. See
+    # docs/mi_time_axis_vocabulary_prediction.md for the evidence table.
+    #
+    # "x to x" and "x on x" are the same series request as "x by x", which was
+    # already held; only the preposition differs.
+    "month to month", "month on month", "month-on-month",
+    "quarter to quarter", "quarter on quarter", "quarter-on-quarter",
+    "year on year", "year-on-year",
+    "period to period", "period on period", "period-on-period",
+    # A DISTRIBUTIVE determiner over a time noun names the axis: "balances per
+    # region each month". `_AXIS_FILLER_RE` already treats each/every as
+    # transparent AFTER an axis marker ("by each month"); these are the same
+    # words with no marker in front, which is how a lender writes it.
+    "each month", "every month", "each quarter", "every quarter",
+    "each period", "every period",
+    # "between periods" names two ends of one axis. Kept to the PLURAL: "between
+    # January and March" is a span, not a series request, and must not match.
+    "between periods", "between the periods", "between reporting periods",
 )
 
 _SERIES_PHRASE_RE = re.compile(

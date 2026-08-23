@@ -2931,11 +2931,42 @@ def _deterministic_parse(question: str, semantics: dict,
             _det_meta("high" if "scatter" in q else "medium", explicit, dim_terms))
 
     # ---- line (trend over time) -------------------------------------------
-    is_line = ("over time" in q or "trend" in q or "monthly" in q
-               or "by month" in q or "evolution" in q or "by reporting date" in q
-               or "over the months" in q or "by reporting month" in q
-               or "reporting month" in q or "by week" in q or "per week" in q
-               or "weekly" in q or "by reporting period" in q)
+    # THE TIME-AXIS QUESTION IS ASKED OF ITS OWNER, not of a second list here.
+    #
+    # `question_interpretation.lexical.time_axis_request` owns "did this sentence
+    # ask the answer to vary over time?", and `period_request.requested_unit`
+    # already delegates to it. Its docstring recorded the gap this closes:
+    # the owner "is already correct for every time-series probe, including 'by
+    # quarter' and 'each month', which the deterministic parser does not
+    # recognise as a time axis at all — and what has been missing is the
+    # CARRIAGE, not the comprehension."
+    #
+    # The inline list below is NOT a second time-axis vocabulary. It is the
+    # grain-agnostic TREND words the owner deliberately does not hold — "trend",
+    # "evolution", "monthly", "weekly" name a shape rather than an axis and
+    # carry no time noun for the owner to read. They are kept so this change is
+    # purely additive; every phrase that names an AXIS is the owner's to decide.
+    #
+    # Adding a new axis wording HERE instead of to the owner would recreate the
+    # split this removes — see docs/mi_dual_mechanism_pattern.md.
+    from question_interpretation.lexical import time_axis_request as _axis_owner
+
+    # The ORIGINAL vocabulary, verbatim and unguarded, so nothing that produced
+    # a line before this change stops producing one. The first draft of this
+    # edit moved "over time" out of here and behind the metric guard below,
+    # which silently stopped "Show pipeline by stage over time" — a question
+    # with no resolvable metric — from being a line at all. Caught by
+    # test_pipeline_by_stage_over_time_e2e.
+    _legacy_line_words = ("over time" in q or "trend" in q or "monthly" in q
+                          or "by month" in q or "evolution" in q
+                          or "by reporting date" in q or "over the months" in q
+                          or "by reporting month" in q or "reporting month" in q
+                          or "by week" in q or "per week" in q or "weekly" in q
+                          or "by reporting period" in q)
+    _axis_named = bool(_axis_owner(q))
+    # `is_line` is settled AFTER the metric is resolved, a few lines below,
+    # because a newly-carried axis must not on its own make a question that
+    # named NO MEASURE answerable. See the guard at its assignment.
     # NOTE: a vintage request used to force a line here. It must not: a VINTAGE
     # is a cohort label (2014, 2015, …), not a point on a time axis, and the
     # line path coerces its x to a date — turning every integer year into epoch
@@ -2956,6 +2987,23 @@ def _deterministic_parse(question: str, semantics: dict,
     metric, agg, _matched = _detect_metric(_metric_slot(metric_part), semantics)
     if metric is None and not _matched:
         metric, agg, _ = _detect_metric(_metric_slot(remaining), semantics)
+
+    # THE GUARD. The line path below defaults a missing metric to Total Balance
+    # (`elif metric is None`). That default predates this reading and is left
+    # exactly as it was — but a question reaching the line path ONLY because the
+    # axis vocabulary widened must not inherit it, or widening the time
+    # vocabulary would quietly answer questions that name no measure.
+    #
+    # Measured: with the axis alone deciding, "how is the loan book tracking
+    # month to month" and "how is the front book tracking over the periods" —
+    # neither of which names a measure — began answering "Total Balance". That
+    # is the substitution the no-silent-substitution rule exists to prevent, and
+    # it is a SEPARATE question from carrying the axis. Both refuse again with
+    # this guard, exactly as they did before.
+    #
+    # The pre-existing trend-shape words keep their old behaviour unchanged,
+    # default and all: this narrows nothing that worked before.
+    is_line = _legacy_line_words or (_axis_named and metric is not None)
     if is_line:
         x = ("origination_date" if "origination_date" in _fields(semantics)
              else None)

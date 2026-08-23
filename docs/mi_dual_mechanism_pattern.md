@@ -49,6 +49,47 @@ A docstring is not a mechanism.
 
 ---
 
+## Instance 5 — three readers of the time axis, found while fixing root 1
+
+**The first instance where the weaker reader would have produced a confident
+WRONG ANSWER rather than a refusal.** Full record:
+`docs/mi_time_axis_vocabulary_prediction.md`.
+
+Three readers ask *"did this sentence request a time axis?"*:
+
+| reader | what it decides | vocabulary |
+|---|---|---|
+| `lexical.time_axis_request` | **owns the question** | the full one |
+| `llm_query_parser.is_line` | the CHART TYPE | its own inline list |
+| `chat_routing._EVOLUTION_MARKERS` | the ROUTE | a third list |
+
+Widening only the first two produced this:
+
+```
+balance over time   -> route=evolution   3 rows   [period, value]       correct
+balance by period   -> route=None       13 rows   [vintage_year, sum]   WRONG
+```
+
+`by period` became a line, missed the evolution route, and the generic executor
+answered it as **13 origination vintages** — a cohort distribution presented as a
+reporting-period series. The parser's own note at that path had already warned
+that *"a VINTAGE is a cohort label, not a point on a time axis"*.
+
+Worse, the measuring instrument scored it **PROVEN**, because `vintage_year` sits
+in its own `_TIME_HINTS` list. A wrong answer that passed its own check.
+
+`_is_evolution` now consults the owner, so chart type and route are decided by
+one reading.
+
+**The lesson is sharper than the previous four.** Instances 1–4 produced
+refusals: the user was told something was impossible. This one produces an
+answer to a different question, with no refusal to inspect, and it survived a
+purpose-built rater. Counting the readers **before** widening any of them is the
+only thing that would have caught it earlier — the third list was found by
+tracing a wrong answer backwards.
+
+---
+
 ## Why word lists lose
 
 The strong reader resolves against **the book** — the values the data actually
