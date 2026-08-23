@@ -106,6 +106,24 @@ UNSUPPLIED_TARGET_SOURCES = (CONFIGURED,)
 #: Time grains a question can name.
 GRAINS = ("day", "week", "month", "quarter", "year")
 
+#: Which SOURCE PORTFOLIO(s) a question scopes to.
+#:
+#: PHASE 1A. Added because the compositional plan layer could not be built
+#: without it: `mi_agent.portfolio_lens.resolve_lens` resolved
+#: `source_portfolio_type=acquired` for "Summarise the acquired book" while this
+#: object emitted nothing, so a downstream plan could not tell Total from
+#: Acquired and an empty `population` list had to be read as "we do not know".
+#:
+#: `mi_agent.portfolio_lens` REMAINS THE SINGLE OWNER of this reading. The claim
+#: below carries that owner's answer; it never re-derives one, and there is no
+#: vocabulary here for a planner to match against.
+SCOPE_TOTAL = "total"
+SCOPE_DIRECT = "direct"
+SCOPE_ACQUIRED = "acquired"
+#: One or more named books (an SPV, a cohort id) chosen explicitly.
+SCOPE_COHORT = "cohort"
+SOURCE_SCOPES = (SCOPE_TOTAL, SCOPE_DIRECT, SCOPE_ACQUIRED, SCOPE_COHORT)
+
 
 @dataclass(frozen=True)
 class Span:
@@ -340,6 +358,63 @@ class TargetClaim(Slot):
 
 
 @dataclass
+class SourceScopeClaim(Slot):
+    """Which source portfolio(s) the question scopes to, as its OWNER read it.
+
+    Separate from `population` deliberately, and the separation is the point:
+
+    * a source-portfolio lens and a seasoning segment are DIFFERENT AXES. "the
+      front book" is a seasoning population; "the acquired book" is a source
+      lens; a question can name both, and neither implies the other.
+    * `population` is a LIST of narrowings, and `total` is not a narrowing.
+      Putting "no source narrowing" in a list of narrowings is how absence and
+      Total become indistinguishable, which is exactly the ambiguity this claim
+      exists to remove.
+
+    THE FIVE STATES A CONSUMER MUST BE ABLE TO TELL APART:
+
+        state=FILLED, scope=total      the owner READ the question and found no
+                                       source narrowing. Explicitly unrestricted.
+        state=FILLED, scope=direct     the direct book
+        state=FILLED, scope=acquired   the acquired book
+        state=FILLED, scope=cohort     named book(s); `portfolio_ids` carries them
+        state=EMPTY                    the owner was NOT consulted. NOT Total.
+        state=UNRESOLVABLE             consulted and could not resolve; `reason`
+                                       says why. NOT Total.
+
+    A consumer that treats EMPTY as Total has widened a population the question
+    may have narrowed — the P1L defect. `state` is what distinguishes them, and
+    `scope` is meaningful only when `state` is FILLED.
+    """
+
+    scope: Optional[str] = None
+    #: The explicitly named book ids, when `scope` is `cohort`. Empty otherwise.
+    portfolio_ids: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.scope is not None and self.scope not in SOURCE_SCOPES:
+            raise ValueError("unknown source scope %r" % (self.scope,))
+        if self.state == FILLED and self.scope is None:
+            raise ValueError("a filled source-scope claim must name a scope")
+
+    @property
+    def narrows(self) -> bool:
+        """Whether this claim narrows the population at all.
+
+        `total` is a resolved reading AND not a narrowing; both are true and a
+        consumer usually needs the second.
+        """
+        return self.state == FILLED and self.scope != SCOPE_TOTAL
+
+    def as_dict(self) -> Dict[str, Any]:
+        d = super().as_dict()
+        d.update({"scope": self.scope, "portfolio_ids": list(self.portfolio_ids),
+                  "narrows": self.narrows})
+        return d
+
+
+@dataclass
 class PopulationClaim(Slot):
     """A governed population the question names — "the back book", "new lending".
 
@@ -370,6 +445,9 @@ class QuestionInterpretation:
     time: TimeClaim = field(default_factory=TimeClaim)
     target: TargetClaim = field(default_factory=TargetClaim)
     population: List[PopulationClaim] = field(default_factory=list)
+    #: PHASE 1A. Which source portfolio(s) the question scopes to, carried from
+    #: `mi_agent.portfolio_lens`. Single-valued: a question has at most one.
+    source_scope: SourceScopeClaim = field(default_factory=SourceScopeClaim)
     #: Wording no interpreter claimed. Never folded into the subject.
     residue: List[str] = field(default_factory=list)
     #: Stage 1 diagnostics: which interpreters were consulted, and what they
@@ -386,6 +464,7 @@ class QuestionInterpretation:
             "time": self.time.as_dict(),
             "target": self.target.as_dict(),
             "population": [p.as_dict() for p in self.population],
+            "source_scope": self.source_scope.as_dict(),
             "residue": list(self.residue),
             "notes": list(self.notes),
         }
@@ -398,7 +477,7 @@ class QuestionInterpretation:
 
     def unresolvable_slots(self) -> List[Tuple[str, Slot]]:
         out: List[Tuple[str, Slot]] = []
-        for name in ("operation", "subject", "target"):
+        for name in ("operation", "subject", "target", "source_scope"):
             slot = getattr(self, name)
             if slot.state == UNRESOLVABLE:
                 out.append((name, slot))

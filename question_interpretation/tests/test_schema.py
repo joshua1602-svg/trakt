@@ -293,8 +293,11 @@ def test_an_empty_interpretation_is_valid_and_says_nothing():
 def test_as_dict_round_trips_every_slot():
     qi = QuestionInterpretation(question="q")
     keys = set(qi.as_dict())
+    # `source_scope` is the PHASE 1A addition: the source-portfolio lens, carried
+    # from mi_agent.portfolio_lens. Pre-registered movement, not a drift.
     assert keys == {"question", "operation", "subject", "dimensions", "filters",
-                    "time", "target", "population", "residue", "notes"}
+                    "time", "target", "population", "source_scope", "residue",
+                    "notes"}
 
 
 # --------------------------------------------------------------------------- #

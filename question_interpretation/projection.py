@@ -25,6 +25,7 @@ Sources consulted, and what each supplies:
     answer_type.asked                       operation type, independently
     period_request.requested_unit/span      time grain and window
     population / seasoning                  population concepts
+    portfolio_lens.resolve_lens             source-portfolio scope (Phase 1A)
 """
 from __future__ import annotations
 
@@ -33,10 +34,11 @@ from typing import Any, Dict, List, Optional
 
 from .schema import (
     AMOUNT, AVERAGE, BOUND, COUNT, EMPTY, FIELD, FILLED, FILTER, FORWARD,
-    GRAINS, GROUPING, MOVEMENT, NEUTRAL, RANKING, ROLE_UNATTRIBUTED, STATED,
+    GRAINS, GROUPING, MOVEMENT, NEUTRAL, RANKING, ROLE_UNATTRIBUTED,
+    SCOPE_COHORT, SCOPE_TOTAL, SOURCE_SCOPES, STATED,
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
-    OperationClaim, PopulationClaim, QuestionInterpretation, Slot, Span,
-    SubjectClaim, TargetClaim, TimeClaim,
+    OperationClaim, PopulationClaim, QuestionInterpretation, Slot,
+    SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
 )
 
 #: How the parser's aggregation reads as an operation type. `coverage` has no
@@ -100,6 +102,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     _time(qi, spec, PR)
     _target(qi, spec, facets)
     _population(qi, spec, facets)
+    _source_scope(qi)
     _note_join_state(qi)
     return qi
 
@@ -332,6 +335,58 @@ def _target(qi, spec, facets) -> None:
     # projection is a reading the projection invented, not one it observed, and
     # this one never fired on the real corpus anyway. The slot stays empty until
     # an interpreter supplies it.
+
+
+def _source_scope(qi) -> None:
+    """Carry `mi_agent.portfolio_lens`'s reading. It stays the single owner.
+
+    One call, to the resolver that already decides this for every route today.
+    Nothing here matches a phrase, and no vocabulary lives in this module or
+    downstream of it: if the owner widens what it recognises, this widens with
+    it, and if the owner is unavailable the claim is UNRESOLVABLE rather than
+    silently Total.
+
+    `resolve_lens` returns a resolved `total` lens when it reads the question and
+    finds no source narrowing, so Total arrives as a POSITIVE reading. That is
+    what lets a consumer tell "explicitly the whole book" from "nobody looked",
+    which the empty `population` list could not.
+    """
+    try:
+        from mi_agent import portfolio_lens as _lens_owner
+    except Exception as exc:  # noqa: BLE001 - the claim records the gap
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
+            reason="the source-portfolio lens owner is unavailable: %s" % exc)
+        return
+    try:
+        lens = _lens_owner.resolve_lens(qi.question)
+    except Exception as exc:  # noqa: BLE001
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
+            reason="the source-portfolio lens could not be resolved: %s" % exc)
+        return
+
+    name = getattr(lens, "name", None)
+    if name not in SOURCE_SCOPES:
+        # A lens kind this contract has no member for. Recorded as unresolvable
+        # rather than mapped onto the nearest one — a substitution here would be
+        # invisible downstream.
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
+            reason="the owner resolved a lens this contract cannot carry: %r"
+                   % (name,))
+        return
+
+    ids = tuple(getattr(lens, "cohort_ids", ()) or ())
+    if not ids and name == SCOPE_COHORT and getattr(lens, "cohort_id", None):
+        ids = (lens.cohort_id,)
+    label = getattr(lens, "label", None)
+    # Only a NARROWING has wording in the question to point at; `total` is the
+    # absence of a scope phrase, so it carries no raw_text and no span.
+    raw = None if name == SCOPE_TOTAL else label
+    qi.source_scope = SourceScopeClaim(
+        state=FILLED, raw_text=raw, span=_span_of(qi.question, raw),
+        scope=name, portfolio_ids=ids, source="mi_agent.portfolio_lens")
 
 
 def _population(qi, spec, facets) -> None:
