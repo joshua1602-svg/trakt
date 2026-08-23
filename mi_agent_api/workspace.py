@@ -38,6 +38,27 @@ _SHARED_DIMS = [
 ]
 
 
+def view_named_by_question(question: str) -> Optional[str]:
+    """The view the QUESTION itself names, or ``None`` if it names none.
+
+    TARGET-STATE CLOSURE. `resolve_active_view` below answers "which view runs"
+    by folding the question and the tab together, and a caller cannot recover
+    from its answer WHICH OF THE TWO decided — including when they agree, which
+    is exactly when precedence matters least and is hardest to see.
+
+    Exposed here rather than re-derived by the caller, because this half of the
+    reading is already made below and a second copy of the vocabulary is the
+    defect B21 fixed. `funded` is returned like any other view: it is the
+    default AND a thing a question can name outright, and collapsing those two
+    is how an explicit "the funded book" becomes indistinguishable from silence.
+    """
+    q = (question or "").lower()
+    for view in ("forecast", "pipeline", "funded"):
+        if lens_mod.undisclaimed_mention(q, view):
+            return view
+    return None
+
+
 def resolve_active_view(question: str, dataset_context: Optional[str]) -> str:
     """The dataset/view a query runs against. Explicit wording in the question
     overrides the active tab; otherwise the tab (``dataset_context``) wins.
@@ -57,10 +78,9 @@ def resolve_active_view(question: str, dataset_context: Optional[str]) -> str:
     Substring semantics are unchanged for every mention the sentence does not
     rule out, which on this corpus is all 697 of them.
     """
-    q = (question or "").lower()
-    for view in ("forecast", "pipeline", "funded"):
-        if lens_mod.undisclaimed_mention(q, view):
-            return view
+    named = view_named_by_question(question)
+    if named is not None:
+        return named
     ctx = (dataset_context or "").strip().lower()
     return ctx if ctx in VIEWS else DEFAULT_VIEW
 

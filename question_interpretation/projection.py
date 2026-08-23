@@ -43,6 +43,7 @@ from .schema import (
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
     OperationClaim, PopulationClaim, QuestionInterpretation, Slot,
     SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
+    DatasetClaim,
 )
 
 #: How the parser's aggregation reads as an operation type. `coverage` has no
@@ -81,7 +82,7 @@ def _span_of(question: str, needle: Optional[str]) -> Optional[Span]:
 
 def from_parts(question: str, *, spec, facets, dim_terms,
                semantics: dict, registry=None,
-               caller_scope=None) -> QuestionInterpretation:
+               caller_scope=None, caller_dataset=None) -> QuestionInterpretation:
     """Assemble the object from interpreter output that ALREADY EXISTS.
 
     This is the Stage 2 entry point. It re-interprets nothing: the spec and the
@@ -108,6 +109,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     _target(qi, spec, facets)
     _population(qi, spec, facets)
     _source_scope(qi, registry, caller_scope)
+    _dataset(qi, caller_dataset)
     _note_join_state(qi)
     return qi
 
@@ -133,7 +135,8 @@ def _note_join_state(qi: QuestionInterpretation) -> None:
 
 
 def project(question: str, *, semantics: dict, frame=None,
-            registry=None, caller_scope=None) -> QuestionInterpretation:
+            registry=None, caller_scope=None,
+            caller_dataset=None) -> QuestionInterpretation:
     """Build a QuestionInterpretation by asking the existing interpreters.
 
     The read-only Stage 1 path: runs the interpreters itself, then assembles.
@@ -149,7 +152,7 @@ def project(question: str, *, semantics: dict, frame=None,
                                        requested_dimensions=dim_terms)
     return from_parts(question, spec=spec, facets=facets, dim_terms=dim_terms,
                       semantics=semantics, registry=registry,
-                      caller_scope=caller_scope)
+                      caller_scope=caller_scope, caller_dataset=caller_dataset)
 
 
 # --------------------------------------------------------------------------- #
@@ -320,6 +323,11 @@ def _time(qi, spec, PR) -> None:
     if span is not None:
         qi.time.trend_window = Slot(state=FILLED, raw_text=getattr(span, "label", None),
                                     source="period_request.requested_span")
+        # TARGET-STATE CLOSURE. The MAGNITUDE, not only the wording. The slot
+        # above says a window was named; these say which one, and without them
+        # `chat_routing._route_period_movement` had to ask the owner again.
+        qi.time.window_periods = getattr(span, "periods", None)
+        qi.time.window_governed = bool(getattr(span, "governed", False))
     if getattr(spec, "compare_periods", None):
         qi.time.comparison_period = Slot(
             state=FILLED, raw_text=", ".join(str(p) for p in spec.compare_periods),
@@ -505,6 +513,51 @@ def _source_scope(qi, registry=None, caller_scope=None) -> None:
         base_population=_BASE_FOR_SCOPE.get(name),
         provenance=provenance,
         source="mi_agent.portfolio_lens")
+
+
+def _dataset(qi, caller_dataset=None) -> None:
+    """Carry `mi_agent_api.workspace`'s reading of which dataset to run against.
+
+    TARGET-STATE CLOSURE. The owner already existed and was already single; what
+    was missing is that nothing CARRIED its answer, so `chat_routing._dataset_for`
+    re-derived the same decision over a wider vocabulary — a duplicate its own
+    docstring names "THE SECOND OWNER", and the reason "the balance by seasoning
+    segment excluding pipeline cases" could reach a route with
+    `dataset='pipeline'`, narrowed to the very thing it excluded.
+
+    Precedence is the owner's and is applied once: a view the QUESTION names
+    wins; otherwise the workspace tab; otherwise the default. The provenance
+    vocabulary is `source_scope`'s, reused rather than duplicated, because it is
+    the same distinction.
+    """
+    try:
+        from mi_agent_api.workspace import (DEFAULT_VIEW, VIEWS,
+                                            view_named_by_question)
+    except Exception as exc:  # noqa: BLE001 - the claim records the gap
+        qi.dataset = DatasetClaim(
+            state=UNRESOLVABLE, source="mi_agent_api.workspace",
+            reason="the dataset/view owner is unavailable: %s" % exc)
+        return
+    try:
+        named = view_named_by_question(qi.question)
+    except Exception as exc:  # noqa: BLE001
+        qi.dataset = DatasetClaim(
+            state=UNRESOLVABLE, source="mi_agent_api.workspace",
+            reason="the dataset/view could not be resolved: %s" % exc)
+        return
+
+    if named is not None:
+        dataset, provenance, raw = named, PROV_EXPLICIT_USER, named
+    else:
+        tab = (caller_dataset or "").strip().lower()
+        if tab in VIEWS:
+            dataset, provenance, raw = tab, PROV_CALLER_CONTEXT, None
+        else:
+            dataset, provenance, raw = DEFAULT_VIEW, PROV_DEFAULT, None
+    qi.dataset = DatasetClaim(
+        state=FILLED, dataset=dataset, provenance=provenance, raw_text=raw,
+        span=_span_of(qi.question, raw),
+        source="mi_agent_api.workspace.view_named_by_question")
 
 
 def _population(qi, spec, facets) -> None:

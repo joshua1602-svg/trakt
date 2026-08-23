@@ -293,11 +293,22 @@ def test_an_empty_interpretation_is_valid_and_says_nothing():
 def test_as_dict_round_trips_every_slot():
     qi = QuestionInterpretation(question="q")
     keys = set(qi.as_dict())
-    # `source_scope` is the PHASE 1A addition: the source-portfolio lens, carried
-    # from mi_agent.portfolio_lens. Pre-registered movement, not a drift.
+    # Every addition here is PRE-REGISTERED MOVEMENT, not drift, and this test
+    # is the guard that makes the distinction enforceable — a claim added
+    # without a decision fails here.
+    #
+    #   source_scope  PHASE 1A. The source-portfolio lens, carried from
+    #                 `mi_agent.portfolio_lens`.
+    #   dataset       TARGET-STATE CLOSURE. Which governed tape the answer is
+    #                 built from, carried from `mi_agent_api.workspace`. A
+    #                 DIFFERENT AXIS from source_scope: a question picks a tape
+    #                 and, within it, a portfolio scope. Added because
+    #                 `chat_routing._dataset_for` was re-deriving the same
+    #                 decision over a wider vocabulary — a duplicate its own
+    #                 docstring names "THE SECOND OWNER".
     assert keys == {"question", "operation", "subject", "dimensions", "filters",
-                    "time", "target", "population", "source_scope", "residue",
-                    "notes"}
+                    "time", "target", "population", "source_scope", "dataset",
+                    "residue", "notes"}
 
 
 # --------------------------------------------------------------------------- #

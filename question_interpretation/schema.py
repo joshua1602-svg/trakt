@@ -364,16 +364,86 @@ class TimeClaim:
     trend_window: Slot = field(default_factory=Slot)
     #: The grain value itself, when requested_grain is filled.
     grain: Optional[str] = None
+    #: TARGET-STATE CLOSURE. How many governed reporting periods the window
+    #: reaches back — 1 for month-on-month, 12 for "this year".
+    #:
+    #: `trend_window` carried the WORDING and not the MAGNITUDE, so a consumer
+    #: that needed the number had to ask the owner again. Measured:
+    #: `chat_routing._route_period_movement` calls
+    #: `period_request.requested_span(question)` for exactly this, which is a
+    #: second read of the sentence for a fact the contract had already claimed.
+    window_periods: Optional[int] = None
+    #: True when the question named a VAGUE recency ("recently", "lately") and a
+    #: governed convention settled the window. The answer owes the reader a
+    #: disclosure in that case, and the two are not distinguishable from the
+    #: period count alone.
+    window_governed: bool = False
 
     def __post_init__(self) -> None:
         if self.grain is not None and self.grain not in GRAINS:
             raise ValueError("unknown grain %r" % (self.grain,))
+        if self.window_periods is not None and self.window_periods < 1:
+            raise ValueError("a window must reach at least one period back, "
+                             "not %r" % (self.window_periods,))
 
     def as_dict(self) -> Dict[str, Any]:
         return {"comparison_period": self.comparison_period.as_dict(),
                 "requested_grain": self.requested_grain.as_dict(),
                 "trend_window": self.trend_window.as_dict(),
-                "grain": self.grain}
+                "grain": self.grain,
+                "window_periods": self.window_periods,
+                "window_governed": self.window_governed}
+
+
+#: TARGET-STATE CLOSURE — which governed DATASET the answer is built from.
+#:
+#: Not the same axis as the source portfolio, and conflating them is how "the
+#: balance by seasoning segment excluding pipeline cases" reached a route with
+#: `dataset='pipeline'` — narrowed to the very thing it excluded. A question
+#: selects a TAPE (funded loans, pipeline cases, the derived forecast view) and
+#: separately a PORTFOLIO SCOPE within it.
+#:
+#: `mi_agent_api.workspace.resolve_active_view` is the owner. It was already the
+#: single owner of the reading; what was missing is that nothing carried its
+#: answer, so `chat_routing._dataset_for` re-derived it over a wider vocabulary
+#: — a duplicate its own docstring names "THE SECOND OWNER".
+DATASET_FUNDED = "funded"
+DATASET_PIPELINE = "pipeline"
+DATASET_FORECAST = "forecast"
+DATASETS = (DATASET_FUNDED, DATASET_PIPELINE, DATASET_FORECAST)
+
+
+@dataclass
+class DatasetClaim(Slot):
+    """Which governed dataset the question is about, and who chose it.
+
+    Provenance matters here for the same reason it does for source scope: an
+    explicitly named tape overrides the workspace tab, and a tab-derived one
+    does not override anything. Reusing `SCOPE_PROVENANCES` rather than
+    inventing a parallel vocabulary — it is the same distinction.
+    """
+
+    dataset: Optional[str] = None
+    provenance: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.dataset is not None and self.dataset not in DATASETS:
+            raise ValueError("unknown dataset %r" % (self.dataset,))
+        if self.provenance is not None and self.provenance not in SCOPE_PROVENANCES:
+            raise ValueError("unknown dataset provenance %r" % (self.provenance,))
+        if self.state == FILLED and self.dataset is None:
+            raise ValueError("a filled dataset claim must name a dataset")
+
+    @property
+    def stated_by_user(self) -> bool:
+        return self.provenance == PROV_EXPLICIT_USER
+
+    def as_dict(self) -> Dict[str, Any]:
+        d = super().as_dict()
+        d.update({"dataset": self.dataset, "provenance": self.provenance,
+                  "stated_by_user": self.stated_by_user})
+        return d
 
 
 @dataclass
@@ -556,6 +626,11 @@ class QuestionInterpretation:
     #: PHASE 1A. Which source portfolio(s) the question scopes to, carried from
     #: `mi_agent.portfolio_lens`. Single-valued: a question has at most one.
     source_scope: SourceScopeClaim = field(default_factory=SourceScopeClaim)
+    #: TARGET-STATE CLOSURE. Which governed dataset the answer is built from,
+    #: carried from `mi_agent_api.workspace.resolve_active_view`. A DIFFERENT
+    #: AXIS from `source_scope`: a question picks a tape and, within it, a
+    #: portfolio scope.
+    dataset: DatasetClaim = field(default_factory=DatasetClaim)
     #: Wording no interpreter claimed. Never folded into the subject.
     residue: List[str] = field(default_factory=list)
     #: Stage 1 diagnostics: which interpreters were consulted, and what they
@@ -573,6 +648,7 @@ class QuestionInterpretation:
             "target": self.target.as_dict(),
             "population": [p.as_dict() for p in self.population],
             "source_scope": self.source_scope.as_dict(),
+            "dataset": self.dataset.as_dict(),
             "residue": list(self.residue),
             "notes": list(self.notes),
         }
