@@ -120,6 +120,19 @@ _TOTAL_TERMS = (
     "sponsored book", "sponsored portfolio", "sponsored platform",
     "sponsored aum", "sponsored loan book", "sponsor book", "sponsor portfolio",
     "sponsor aum",
+    # PHASE 1G. "Funded Book" is the business term for the COMPLETE funded
+    # population — Direct AND Acquired together, and every other governed funded
+    # category. Its absence here was measured in Phase 1F: with the workspace
+    # scoped to Acquired, "Summarise the funded book" answered 3,909 of 11,035
+    # loans, while "across all portfolios" — the same request in different words
+    # — correctly answered for the whole book. Two explicit whole-book phrasings
+    # with opposite precedence.
+    #
+    # QUALIFIED FORMS ONLY, for the reason the module records throughout: bare
+    # "funded" names a MEASURE ("funded balance", "funded amount"), and reading
+    # a measure as a scope is the silent mutation this vocabulary exists to
+    # prevent. Only the noun phrases that name the BOOK are here.
+    "funded book", "funded portfolio", "funded loan book",
 )
 
 _COMPARISON_TERMS = (" vs ", " vs. ", " versus ", "compare", "comparison",
@@ -419,6 +432,71 @@ _GENERIC_BOOK_WORDS = frozenset({
 })
 
 
+#: A token shaped like a member of a NUMBERED naming family — `spv1`, `spv12`,
+#: `fund3`. The alphabetic stem and the digits are captured separately so the
+#: stem can be checked against the registry's OWN labels; there is no family
+#: vocabulary in this module and none is added when a client onboards a new one.
+_FAMILY_TOKEN_RE = re.compile(r"^([a-z][a-z]*)(\d+)$")
+
+
+def _registry_name_families(registry) -> set:
+    """The numbered naming families the registry ITSELF demonstrates.
+
+    A registry holding `spv1` and `spv2` establishes that this client names
+    portfolios `spv<n>`. `spv9` is then a member of a family MI can see, and a
+    question naming it is a portfolio reference — one this registry does not
+    hold, so it must be clarified rather than answered for the whole book.
+
+    Derived per call from the registry's ids and labels, so there is no `spv`
+    literal anywhere in this module: a client whose portfolios are `pool1` and
+    `pool2` gets `pool7` recognised for exactly the same reason, and a client
+    with no numbered family gets no families and no behaviour change at all.
+    """
+    families = set()
+    if registry is None:
+        return families
+    for pid in registry.ids():
+        record = registry.get(pid)
+        label = getattr(record, "display_label", None) if record else None
+        for token in (pid, label):
+            for word in _clean_token(token).split():
+                match = _FAMILY_TOKEN_RE.match(word)
+                if match:
+                    families.add(match.group(1))
+    return families
+
+
+def _unknown_family_member(text: Optional[str], registry) -> Optional[PortfolioLens]:
+    """A member of a registry naming family that the registry does not hold.
+
+    PHASE 1G. `_unknown_named_book` below needs a "Book"/"Portfolio" head noun
+    to recognise a name, and "Summarise SPV9" has none — measured, it resolved
+    to Total and answered for all five portfolios under the name of one that
+    does not exist. Naming a portfolio MI cannot find is a question to clarify,
+    whether or not the sentence spells out the word "portfolio".
+
+    Fires ONLY on a token whose stem the registry itself uses, so it cannot
+    reach ordinary English: `q4`, `top10` and `h1` are inert unless this client
+    genuinely has portfolios named `q<n>`, `top<n>` or `h<n>`.
+    """
+    if registry is None or not text:
+        return None
+    families = _registry_name_families(registry)
+    if not families:
+        return None
+    held = set()
+    for pid in registry.ids():
+        record = registry.get(pid)
+        held.add(_clean_token(pid))
+        held.add(_clean_token(getattr(record, "display_label", None) if record else None))
+    for word in re.findall(r"[A-Za-z]+\d+", str(text)):
+        token = _clean_token(word)
+        match = _FAMILY_TOKEN_RE.match(token)
+        if match and match.group(1) in families and token not in held:
+            return _unresolved_lens(word)
+    return None
+
+
 def _unknown_named_book(text: Optional[str], registry) -> Optional[PortfolioLens]:
     """A capitalised book NAME the governed registry does not hold.
 
@@ -696,6 +774,11 @@ def resolve_lens(text: Optional[str], *, registry=None) -> PortfolioLens:
     unknown = _unknown_named_book(text, registry)
     if unknown is not None:
         return unknown
+    # ... and a member of a naming family the registry uses but does not hold,
+    # which carries no book noun for the check above to find.
+    unknown = _unknown_family_member(text, registry)
+    if unknown is not None:
+        return unknown
     if not lens_phrase_spans(text) and not _COHORT_ID_RE.search(low):
         return total_lens()
 
@@ -872,14 +955,34 @@ def mentions_portfolio(text: Optional[str]) -> bool:
     return _contains_any(low, _DIRECT_TERMS + _ACQUIRED_TERMS + _TOTAL_TERMS)
 
 
-def lens_from_selection(value: Any) -> PortfolioLens:
+def lens_from_selection(value: Any, *, registry=None) -> PortfolioLens:
     """Build a lens from an explicit UI/API selection.
 
     Accepts ``None`` / ``"total"`` → total; ``"direct"`` / ``"acquired"`` →
     the type lens; an exact cohort id (``direct_001`` / ``acquired_002``) → the
     cohort lens. A dict like ``{"id": "acquired_001"}`` is also accepted.
     Unrecognised selections fall back to *total* (never an error).
+
+    PHASE 1G — ``registry``. THE REGISTRY DECIDES WHAT IS SELECTABLE, not a
+    naming convention. Measured before this: `_SELECTABLE_COHORT_ID_RE` requires
+    an underscore, so a governed portfolio registered as `spv1` fell through
+    every branch below and became **Total** — a workspace scoped to SPV1
+    answering for the whole book, silently, on every question that did not name
+    a scope itself.
+
+    That is the same defect class as Phase 1D's: MI recognising a STORAGE naming
+    convention rather than the governed identity. The registry is asked first,
+    so an id it holds is selectable whatever it is called, and `spv4` needs a
+    registry entry rather than a pattern change.
     """
+    if registry is not None:
+        picked = value
+        if isinstance(picked, Mapping):
+            picked = picked.get("id") or picked.get("lens") or picked.get("value")
+        if isinstance(picked, str):
+            candidate = picked.strip().lower()
+            if candidate and registry.get(candidate) is not None:
+                return _cohort_lens(candidate)
     if isinstance(value, Mapping):
         value = value.get("id") or value.get("lens") or value.get("value")
     if isinstance(value, (list, tuple, set, frozenset)):
@@ -935,6 +1038,8 @@ def names_governed_portfolio(text: Optional[str], registry=None) -> bool:
         return False
     low = " " + str(text).strip().lower() + " "
     if _named_portfolio_lens(low, registry) is not None:
+        return True
+    if _unknown_family_member(text, registry) is not None:
         return True
     # An UNKNOWN name is still a name. It has to count as naming a scope, or a
     # caller-supplied default would answer in its place — which is the widening

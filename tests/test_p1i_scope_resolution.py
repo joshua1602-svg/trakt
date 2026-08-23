@@ -189,12 +189,41 @@ def test_funded_scope_creates_no_row_predicate(ask, book, question):
     assert len(scope_ids(envelope)) >= 2, "the funded book was narrowed"
 
 
-def test_funded_scope_keeps_the_active_selection(ask):
-    """Product ruling: "funded book" names the active dataset, not a scope
-    override. With one book selected the answer stays on that book."""
+def test_funded_scope_overrides_the_active_selection(ask):
+    """SUPERSEDED PRODUCT RULING — changed in Phase 1G, deliberately.
+
+    This test previously asserted the opposite, under the P1I ruling:
+
+        "funded book" names the ACTIVE DATASET, not a scope override.
+        With one book selected the answer stays on that book.
+
+    That reading took "funded" to distinguish the funded TAPE from the pipeline
+    tape, which says nothing about portfolio scope — so a workspace selection
+    survived it.
+
+    Phase 1G §1 rules the other way and states the business meaning as
+    authoritative: **Funded Book = all funded assets across both the Direct and
+    the Acquired book.** Under that reading the phrase names a POPULATION, and
+    naming a population explicitly is what overrides a caller's selection —
+    which is what its synonym "across all portfolios" already did. The two
+    phrasings having opposite precedence was reported as a defect in
+    docs/mi_phase1f_report.md §4c and is what this closes.
+
+    The rest of the P1I ruling is UNTOUCHED and still asserted, immediately
+    above and below: "the funded book" creates no `funded_status` row predicate,
+    no geography filter, and no grouping axis. What changed is only whether the
+    phrase overrides a workspace selection.
+
+    Measured effect, by name:
+    migration_phase0/funded_book_precedence_change.py — with the workspace on
+    Acquired, "Summarise the funded book" moves from 3,909 loans to 11,035,
+    while "What is the funded balance?" (a MEASURE, not a scope) stays at 3,909.
+    """
     envelope = ask("How many loans are in the funded book?", ACQUIRED_ID)
     assert envelope["ok"] is True, envelope.get("error")
-    assert scope_ids(envelope) == [ACQUIRED_ID]
+    assert len(scope_ids(envelope)) >= 2, "the funded book was narrowed"
+    assert ACQUIRED_ID in scope_ids(envelope)
+    # The half of the P1I ruling that did NOT change.
     assert "funded_status" not in spec_filters(envelope)
 
 
