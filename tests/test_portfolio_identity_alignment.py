@@ -161,3 +161,76 @@ class TestMultipleAcquiredBooks:
         assert set(got.portfolio_ids) == {"alp_acquired", "nbs_acquired"}
         assert set(wanted.portfolio_ids) == {"alp_acquired"}
         assert set(got.portfolio_ids) != set(wanted.portfolio_ids)
+
+
+class TestVintageIsNotPortfolioIdentity:
+    """§4/§10 — vintage is a cohort/time filter WITHIN a population, and the
+    year only survives on the progression path.
+
+    Measured, not desired. `_cohort_vintage` is reachable only from
+    `_cohort_progression_recognizer`, which requires a PROGRESSION MARKER first
+    (`evolve|progress|season|over time|trend|...`). A point-in-time vintage
+    question therefore never sets `spec.cohort_vintage`.
+    """
+
+    @staticmethod
+    def _spec(question):
+        from mi_agent.llm_query_parser import parse_with_repair
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.data_source import semantics_path
+        spec, _meta = parse_with_repair(question, load_mi_semantics(semantics_path()),
+                                        llm_enabled=False)
+        return spec
+
+    def test_vintage_does_not_change_the_portfolio_scope(self, book):
+        """A vintage narrows within whatever population the scope selected."""
+        from mi_agent import portfolio_lens as lens_mod
+        assert lens_mod.resolve_lens(
+            "Show the 2023 vintage of the acquired book").name == "acquired"
+        assert lens_mod.resolve_lens("Summarise the 2023 vintage").name == "total"
+
+    def test_the_year_survives_only_with_a_progression_marker(self, book):
+        with_marker = self._spec("How has the 2023 vintage evolved over time?")
+        without = self._spec("Summarise the 2023 vintage")
+        assert with_marker.cohort_vintage == "2023"
+        assert with_marker.cohort_progression is True
+        # Same year, same word "vintage", no progression marker -> dropped.
+        assert without.cohort_vintage is None
+        assert without.cohort_progression is False
+
+    def test_a_point_in_time_vintage_year_is_dropped_without_disclosure(self, book):
+        """The client asks for ONE vintage and is shown ALL of them.
+
+        The answer groups by vintage across every cohort the book holds, and the
+        only facet raised is the grouping DIMENSION. The requested YEAR — a
+        narrowing — is not represented and nothing says it was dropped.
+        """
+        from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+        from trakt_core.context import ExecutionContext
+
+        ctx = ExecutionContext.for_internal(os.environ["MI_AGENT_CLIENT_ID"])
+        result = execute_governed_mi_query(
+            MiQueryRequest(question="Summarise the 2023 vintage"), ctx).result or {}
+        summary = result.get("executionSummary") or {}
+        facets = summary.get("facets") or []
+
+        assert result.get("ok") is True
+        assert "group(s)" in (result.get("answer") or "")
+        assert any(f.get("kind") == "grouping_dimension"
+                   and f.get("label") == "vintage" for f in facets)
+        # Nothing anywhere mentions the year that was asked for and dropped.
+        assert not any("2023" in str(f.get("label")) for f in facets), facets
+        assert not any("2023" in str(w) for w in (result.get("warnings") or []))
+
+    def test_the_progression_path_refuses_honestly(self, book):
+        """By contrast, where the vintage IS carried and cannot be applied, the
+        product says so — which is the behaviour the other path lacks."""
+        from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+        from trakt_core.context import ExecutionContext
+
+        ctx = ExecutionContext.for_internal(os.environ["MI_AGENT_CLIENT_ID"])
+        result = execute_governed_mi_query(
+            MiQueryRequest(question="How has the 2023 vintage evolved over time?"),
+            ctx).result or {}
+        assert result.get("ok") is False
+        assert "vintage" in (result.get("answer") or "").lower()

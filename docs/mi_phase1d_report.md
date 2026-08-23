@@ -91,7 +91,7 @@ constraint warns against.
 | **Funded / Direct Book** | `direct` is the type group. **"Funded" is NOT a synonym for it** — `funded` is the *dataset* (funded vs pipeline), orthogonal to source type. Measured: *"Summarise the funded book"* resolves to `total`, not `direct`, and an acquired source also carries `dataset: funded` | `source_registry.example.yaml`; lens probe |
 | **Named portfolio** | one `source_portfolio_id` with a governed `display_label` | `PortfolioRegistry` |
 | **SPV** | a named portfolio like any other. `spv1_sponsored` is typed `None`, so it is in **no** category group | measured, §1 |
-| **Vintage** | a **cohort/time filter within** a population, not a portfolio identity — `spec.cohort_vintage` / `vintage_year`, applied by `cohort_progression` | `mi_query_spec.py`, `mi_agent_api/cohorts.py` |
+| **Vintage** | a **cohort/time filter within** a population, not a portfolio identity. Measured: the source lens is resolved independently and is unchanged by a vintage — *"the 2023 vintage of the acquired book"* still resolves scope `acquired`. **But the year only survives on the progression path** — see §5b | `mi_query_spec.py`; parser + service probe |
 
 **Worth flagging:** `spv1_sponsored` is untyped, so `Total` includes it while
 neither `Direct` nor `Acquired` does. "Direct + Acquired" ≠ "Total" on this
@@ -118,6 +118,36 @@ With a second acquired book in the registry:
 This is the **third** fixture coincidence this programme has found — after
 raw-vs-governed filters and Phase 1A's economics. All three have the same
 shape: *one member per group makes a wrong mapping produce a right number.*
+
+---
+
+## 5b. Vintage — validated, and a fourth silent drop
+
+§10 asked for vintage validation. Running it found that the vintage **year** is
+only extracted on one path.
+
+`_cohort_vintage` is reachable **only** from `_cohort_progression_recognizer`,
+which requires a progression marker first
+(`evolve|progress|season|over time|trend|…`). So:
+
+| question | `cohort_vintage` | outcome |
+|---|---|---|
+| *"How has the 2023 vintage evolved over time?"* | `'2023'` | routes to `cohort_progression`, then **refuses honestly** — *"I understood that you asked for vintage, but that could not be applied"* |
+| *"Summarise the 2023 vintage"* | **`None`** | `ok=True` — a bar **grouped by vintage across 13 cohorts** |
+
+**The client asks for one vintage and is shown all of them.** The only facet
+raised is the grouping *dimension* (`grouping_dimension · vintage · applied`);
+the requested **year** — a narrowing — is not represented anywhere and nothing
+says it was dropped. No facet or warning mentions `2023`.
+
+The contrast is the point: where the vintage **is** carried, the product refuses
+and names what it lost. Where it is dropped at parse, the answer ships.
+
+A third phrasing, *"Show the 2023 vintage of the acquired book"*, refuses for the
+**wrong reason** — *"'acquired' is not a governed measure in this dataset"* — the
+provenance word read as a measure.
+
+Pinned in `TestVintageIsNotPortfolioIdentity` (4 tests).
 
 ---
 
@@ -200,6 +230,8 @@ moved. Verified rather than asserted:
 | calibration bank | **267 passed** |
 | shipped shapes | 15 correct, **0 wrong** |
 | routed surface | 31 passed, `rt_004` (known) |
+| robustness 44 | **32 / 6 / 4 / 2**; seasoning **Q1 4 · Q7 4 · Q8 12** |
+| recognition (61) | **15 / 7 / 10 / 29**, 13 no-route; by-shape row for row |
 | time-series surface | T1 PROVEN … T8 ABSENT, **silent drops 0** |
 | interpretation + portfolio-scope + 1C/1D tests | **591 passed, 7 xfailed**, 1 pre-existing failure |
 | introduced failing names | **0** |
