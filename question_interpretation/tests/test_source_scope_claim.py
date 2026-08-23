@@ -218,9 +218,10 @@ def test_the_executor_rebuilds_the_lens_from_the_plan_not_the_question():
 # That is a silent population narrowing on an owned question, so the conversion
 # stopped rather than working around it.
 # --------------------------------------------------------------------------- #
-@pytest.mark.xfail(strict=True,
-                   reason="Phase 1B blocker: the contract carries the resolved "
-                          "scope but not whether the question named one")
+# CLOSED IN PHASE 1G. The `xfail(strict=True)` that stood here from Phase 1B is
+# removed rather than relaxed: `SourceScopeClaim.provenance` now records whether
+# the question named the scope, so the two readings are distinguishable and this
+# asserts the property instead of pre-registering its absence.
 @pytest.mark.parametrize("question", [
     "portfolio summary across all portfolios",
     "summarise the portfolio excluding the acquired book",

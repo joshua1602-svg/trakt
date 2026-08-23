@@ -92,10 +92,21 @@ class TestTheClaimCarriesGovernedIdentity:
         assert claim.portfolio_ids == ("nbs_acquired",)
 
     def test_a_category_still_arrives_as_a_category(self, semantics, registry):
+        """PHASE 1G changed the second half of this test, by decision.
+
+        The category is still a category — `scope` and `base_population` both
+        say `acquired` — but `portfolio_ids` now carries the governed ids the
+        registry currently classifies that way, instead of being empty. The
+        empty list was what forced a consumer to re-derive membership from the
+        raw `source_portfolio_type` column, and Phase 1C measured that raw path
+        selecting a portfolio the registry does not place in the group
+        (GBP1,200 against GBP300 on a two-portfolio fixture).
+        """
         claim = _scope("Summarise the acquired book", semantics, registry)
         assert claim.state == FILLED
         assert claim.scope == SCOPE_ACQUIRED
-        assert claim.portfolio_ids == ()
+        assert claim.base_population == "acquired"
+        assert set(claim.portfolio_ids) == {"alp_acquired", "nbs_acquired"}
 
 
 class TestAnUnheldNameIsUnresolvableNotTotal:
@@ -133,9 +144,20 @@ class TestTheSchemaRefusesAnIdentitylessCohort:
 
     def test_a_cohort_claim_with_an_id_is_accepted(self):
         claim = SourceScopeClaim(state=FILLED, scope=SCOPE_COHORT,
-                                 portfolio_ids=("nbs_acquired",))
+                                 portfolio_ids=("nbs_acquired",),
+                                 provenance="explicit_user")
         assert claim.narrows is True
         assert claim.as_dict()["portfolio_ids"] == ["nbs_acquired"]
+
+    def test_a_filled_claim_must_say_where_the_scope_came_from(self):
+        """PHASE 1G. A resolved scope with no provenance is the Phase 1F blocker
+        in object form: a consumer reading it cannot tell a scope the user
+        STATED from one that was DEFAULTED, and the two require opposite
+        precedence against a workspace selection. Refused rather than allowed
+        to default, because defaulting it here would pick a side."""
+        with pytest.raises(ValueError):
+            SourceScopeClaim(state=FILLED, scope=SCOPE_COHORT,
+                             portfolio_ids=("nbs_acquired",))
 
 
 class TestWithoutARegistryNothingChanged:

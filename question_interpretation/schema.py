@@ -124,6 +124,51 @@ SCOPE_ACQUIRED = "acquired"
 SCOPE_COHORT = "cohort"
 SOURCE_SCOPES = (SCOPE_TOTAL, SCOPE_DIRECT, SCOPE_ACQUIRED, SCOPE_COHORT)
 
+#: PHASE 1G — the BROAD BUSINESS POPULATION, kept separate from the specific
+#: portfolio selection.
+#:
+#: The two are different concepts and conflating them is what produced the
+#: hard-coded hierarchy this phase removes: Funded -> Acquired -> Acquired Book
+#: 1 -> SPV1 -> ... . A request is instead a base population, optionally
+#: narrowed to specific governed portfolios:
+#:
+#:     "the funded book"      base=funded    portfolios=()          (unrestricted)
+#:     "the acquired book"    base=acquired  portfolios=(every acquired id)
+#:     "SPV2"                 base=funded    portfolios=('spv2',)
+#:
+#: `SPV2` is NOT `base=acquired`: which category a named portfolio belongs to is
+#: a property of the PORTFOLIO, held by the registry, not a property of the
+#: request. Reading it as its category is the widening §8 forbids.
+BASE_FUNDED = "funded"
+BASE_DIRECT = "direct"
+BASE_ACQUIRED = "acquired"
+BASE_POPULATIONS = (BASE_FUNDED, BASE_DIRECT, BASE_ACQUIRED)
+
+#: PHASE 1G — WHERE the resolved scope came from.
+#:
+#: Phase 1F stopped because the contract could not answer this. It carried WHICH
+#: scope was resolved and not WHETHER THE USER ASKED FOR IT, and those are
+#: different facts: "portfolio summary" and "portfolio summary across all
+#: portfolios" both resolve to `total`, and production answers them differently
+#: when the workspace carries a selection — the first defers to it, the second
+#: overrides it. Measured across the owned surface, a plan that could not tell
+#: them apart widened 14 of 54 (question, caller) combinations.
+#:
+#:     explicit_user   the QUESTION named this scope. It wins over any caller
+#:                     context — that is the whole reason this value exists.
+#:     caller_context  the question said nothing; this is the workspace
+#:                     selection the caller supplied.
+#:     default         the question said nothing and no caller context was
+#:                     supplied, so the complete funded population applies.
+#:     unresolved      the question NAMED a scope and it could not be resolved.
+#:                     Never Funded — see `UNRESOLVABLE`.
+PROV_EXPLICIT_USER = "explicit_user"
+PROV_CALLER_CONTEXT = "caller_context"
+PROV_DEFAULT = "default"
+PROV_UNRESOLVED = "unresolved"
+SCOPE_PROVENANCES = (PROV_EXPLICIT_USER, PROV_CALLER_CONTEXT, PROV_DEFAULT,
+                     PROV_UNRESOLVED)
+
 
 @dataclass(frozen=True)
 class Span:
@@ -414,11 +459,39 @@ class SourceScopeClaim(Slot):
     #: the second while an audit of what was asked needs the first. Collapsing
     #: them loses one of the two.
     portfolio_label: Optional[str] = None
+    #: PHASE 1G. The broad business population this request is about, kept
+    #: separate from `portfolio_ids`. See `BASE_POPULATIONS`.
+    base_population: Optional[str] = None
+    #: PHASE 1G. Where the resolved scope came from. See `SCOPE_PROVENANCES`.
+    #: This is the fact Phase 1F stopped for.
+    provenance: Optional[str] = None
+
+    @property
+    def stated_by_user(self) -> bool:
+        """Whether the QUESTION named this scope.
+
+        The precedence fact, exposed as one boolean so a consumer never has to
+        re-derive it by comparing strings. True also for an unresolved scope: a
+        name MI cannot find is still a name the user said, and forgetting that
+        is how it becomes Total.
+        """
+        return self.provenance in (PROV_EXPLICIT_USER, PROV_UNRESOLVED)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.scope is not None and self.scope not in SOURCE_SCOPES:
             raise ValueError("unknown source scope %r" % (self.scope,))
+        if (self.base_population is not None
+                and self.base_population not in BASE_POPULATIONS):
+            raise ValueError("unknown base population %r" % (self.base_population,))
+        if self.provenance is not None and self.provenance not in SCOPE_PROVENANCES:
+            raise ValueError("unknown scope provenance %r" % (self.provenance,))
+        # A resolved scope with no provenance is the Phase 1F blocker in object
+        # form: a consumer reading it cannot tell a stated scope from a defaulted
+        # one, and the two require opposite precedence. Refused rather than
+        # allowed to default, because defaulting it here would pick a side.
+        if self.state == FILLED and self.provenance is None:
+            raise ValueError("a filled source-scope claim must carry provenance")
         if self.state == FILLED and self.scope is None:
             raise ValueError("a filled source-scope claim must name a scope")
         # PHASE 1E. A cohort claim with no id names nothing resolvable. Allowing
@@ -442,6 +515,9 @@ class SourceScopeClaim(Slot):
         d = super().as_dict()
         d.update({"scope": self.scope, "portfolio_ids": list(self.portfolio_ids),
                   "portfolio_label": self.portfolio_label,
+                  "base_population": self.base_population,
+                  "provenance": self.provenance,
+                  "stated_by_user": self.stated_by_user,
                   "narrows": self.narrows})
         return d
 

@@ -33,9 +33,13 @@ import re
 from typing import Any, Dict, List, Optional
 
 from .schema import (
-    AMOUNT, AVERAGE, BOUND, COUNT, EMPTY, FIELD, FILLED, FILTER, FORWARD,
-    GRAINS, GROUPING, MOVEMENT, NEUTRAL, RANKING, ROLE_UNATTRIBUTED,
-    SCOPE_COHORT, SCOPE_TOTAL, SOURCE_SCOPES, STATED,
+    AMOUNT, AVERAGE, BASE_ACQUIRED, BASE_DIRECT, BASE_FUNDED, BOUND, COUNT,
+    EMPTY, FIELD, FILLED, FILTER, FORWARD,
+    GRAINS, GROUPING, MOVEMENT, NEUTRAL,
+    PROV_CALLER_CONTEXT, PROV_DEFAULT, PROV_EXPLICIT_USER, PROV_UNRESOLVED,
+    RANKING, ROLE_UNATTRIBUTED,
+    SCOPE_ACQUIRED, SCOPE_COHORT, SCOPE_DIRECT, SCOPE_TOTAL, SOURCE_SCOPES,
+    STATED,
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
     OperationClaim, PopulationClaim, QuestionInterpretation, Slot,
     SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
@@ -76,7 +80,8 @@ def _span_of(question: str, needle: Optional[str]) -> Optional[Span]:
 
 
 def from_parts(question: str, *, spec, facets, dim_terms,
-               semantics: dict, registry=None) -> QuestionInterpretation:
+               semantics: dict, registry=None,
+               caller_scope=None) -> QuestionInterpretation:
     """Assemble the object from interpreter output that ALREADY EXISTS.
 
     This is the Stage 2 entry point. It re-interprets nothing: the spec and the
@@ -102,7 +107,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     _time(qi, spec, PR)
     _target(qi, spec, facets)
     _population(qi, spec, facets)
-    _source_scope(qi, registry)
+    _source_scope(qi, registry, caller_scope)
     _note_join_state(qi)
     return qi
 
@@ -128,7 +133,7 @@ def _note_join_state(qi: QuestionInterpretation) -> None:
 
 
 def project(question: str, *, semantics: dict, frame=None,
-            registry=None) -> QuestionInterpretation:
+            registry=None, caller_scope=None) -> QuestionInterpretation:
     """Build a QuestionInterpretation by asking the existing interpreters.
 
     The read-only Stage 1 path: runs the interpreters itself, then assembles.
@@ -143,7 +148,8 @@ def project(question: str, *, semantics: dict, frame=None,
     facets = R.detect_requested_facets(question, semantics, frame=frame,
                                        requested_dimensions=dim_terms)
     return from_parts(question, spec=spec, facets=facets, dim_terms=dim_terms,
-                      semantics=semantics, registry=registry)
+                      semantics=semantics, registry=registry,
+                      caller_scope=caller_scope)
 
 
 # --------------------------------------------------------------------------- #
@@ -338,7 +344,44 @@ def _target(qi, spec, facets) -> None:
     # an interpreter supplies it.
 
 
-def _source_scope(qi, registry=None) -> None:
+def _governed_ids(scope_name, lens, registry):
+    """The governed portfolio IDs a resolved scope selects.
+
+    PHASE 1G §10. A CATEGORY is resolved through the registry to the ids it
+    currently contains, so "the acquired book" carries every acquired portfolio
+    and cannot collapse onto whichever one happens to exist first. A NAMED
+    portfolio carries exactly itself.
+
+    `total` carries no ids on purpose: the complete funded population is
+    UNRESTRICTED, not an enumeration, and listing today's members would make a
+    newly onboarded portfolio silently absent from a question that asked for the
+    whole book. `base_population` is what says which population it is.
+
+    Never `resolve_scope`'s fallback list: that returns EVERY id with
+    `fell_back_to_total=True` for a scope it could not resolve, and taking it
+    here is precisely the widening the claim exists to prevent.
+    """
+    if registry is None or scope_name == SCOPE_TOTAL:
+        return ()
+    if scope_name == SCOPE_COHORT:
+        ids = tuple(getattr(lens, "cohort_ids", ()) or ())
+        if not ids and getattr(lens, "cohort_id", None):
+            ids = (lens.cohort_id,)
+        return tuple(i for i in ids if registry.get(i) is not None)
+    try:
+        return tuple(p.portfolio_id for p in registry.of_type(scope_name))
+    except Exception:  # noqa: BLE001 - a registry that cannot answer carries none
+        return ()
+
+
+#: Which BROAD POPULATION a resolved scope is about. A named portfolio sits
+#: inside the funded population; its category belongs to the portfolio, not to
+#: the request (§8).
+_BASE_FOR_SCOPE = {SCOPE_TOTAL: BASE_FUNDED, SCOPE_DIRECT: BASE_DIRECT,
+                   SCOPE_ACQUIRED: BASE_ACQUIRED, SCOPE_COHORT: BASE_FUNDED}
+
+
+def _source_scope(qi, registry=None, caller_scope=None) -> None:
     """Carry `mi_agent.portfolio_lens`'s reading. It stays the single owner.
 
     One call, to the resolver that already decides this for every route today.
@@ -369,6 +412,13 @@ def _source_scope(qi, registry=None) -> None:
             reason="the source-portfolio lens owner is unavailable: %s" % exc)
         return
     try:
+        # PHASE 1G. The owner is asked TWO things, both of them its own:
+        # what the question resolves to, and whether the question named a scope
+        # at all. The second is the fact Phase 1F stopped for, and asking the
+        # owner for it is what keeps this module free of a second reader of the
+        # question — no phrase list is introduced here and none may be.
+        stated = bool(_lens_owner.mentions_portfolio(qi.question)
+                      or _lens_owner.names_governed_portfolio(qi.question, registry))
         lens = (_lens_owner.resolve_lens(qi.question, registry=registry)
                 if registry is not None else _lens_owner.resolve_lens(qi.question))
     except Exception as exc:  # noqa: BLE001
@@ -376,6 +426,22 @@ def _source_scope(qi, registry=None) -> None:
             state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
             reason="the source-portfolio lens could not be resolved: %s" % exc)
         return
+
+    # PRECEDENCE, applied once, here, from the owner's own reading:
+    #   the question named a scope   -> it wins, whatever the caller supplied
+    #   it did not, a caller did     -> the caller's selection
+    #   neither                      -> the complete funded population
+    # The rule is not re-decided downstream; the claim records the outcome AND
+    # which of the three happened, so no consumer has to re-derive it.
+    provenance = PROV_EXPLICIT_USER if stated else PROV_DEFAULT
+    if not stated and caller_scope is not None:
+        try:
+            supplied = _lens_owner.lens_from_selection(caller_scope,
+                                                       registry=registry)
+        except TypeError:                       # pre-1G signature
+            supplied = _lens_owner.lens_from_selection(caller_scope)
+        if supplied is not None and supplied.name != _lens_owner.LENS_TOTAL:
+            lens, provenance = supplied, PROV_CALLER_CONTEXT
 
     name = getattr(lens, "name", None)
     # PHASE 1E. The owner NAMED a scope and could not resolve it. That is the
@@ -387,6 +453,7 @@ def _source_scope(qi, registry=None) -> None:
             state=UNRESOLVABLE, raw_text=requested,
             span=_span_of(qi.question, requested),
             source="mi_agent.portfolio_lens",
+            provenance=PROV_UNRESOLVED,
             reason="the question names %r, which is not a governed portfolio "
                    "for this book" % (requested,))
         return
@@ -400,9 +467,11 @@ def _source_scope(qi, registry=None) -> None:
                    % (name,))
         return
 
-    ids = tuple(getattr(lens, "cohort_ids", ()) or ())
-    if not ids and name == SCOPE_COHORT and getattr(lens, "cohort_id", None):
-        ids = (lens.cohort_id,)
+    ids = _governed_ids(name, lens, registry)
+    if not ids and name == SCOPE_COHORT:
+        ids = tuple(getattr(lens, "cohort_ids", ()) or ())
+        if not ids and getattr(lens, "cohort_id", None):
+            ids = (lens.cohort_id,)
     label = getattr(lens, "label", None)
     # Only a NARROWING has wording in the question to point at; `total` is the
     # absence of a scope phrase, so it carries no raw_text and no span.
@@ -433,6 +502,8 @@ def _source_scope(qi, registry=None) -> None:
     qi.source_scope = SourceScopeClaim(
         state=FILLED, raw_text=raw, span=span,
         scope=name, portfolio_ids=ids, portfolio_label=portfolio_label,
+        base_population=_BASE_FOR_SCOPE.get(name),
+        provenance=provenance,
         source="mi_agent.portfolio_lens")
 
 
@@ -443,3 +514,25 @@ def _population(qi, spec, facets) -> None:
         qi.population.append(PopulationClaim(
             state=FILLED, raw_text=f.label, span=_span_of(qi.question, f.label),
             concept=f.field_key, source="facet.%s" % f.kind))
+
+    # PHASE 1G §13 — the ORIGINATION VINTAGE, carried from the owner that
+    # already reads it. `cohort_vintage` is set by the deterministic parser; it
+    # was simply never projected, so a question naming both a portfolio and a
+    # vintage arrived carrying only the portfolio.
+    #
+    # A SEPARATE CLAIM, not a source scope. Vintage is WHEN a loan was written
+    # and portfolio identity is WHERE IT CAME FROM: "the 2025 vintage for SPV2"
+    # is one of each, and neither implies the other. Collapsing them would
+    # recreate the hierarchy this phase exists to remove — a scope value per
+    # vintage, per portfolio.
+    #
+    # NOT NEW CAPABILITY: nothing here reads the question, and the point-in-time
+    # drop Phase 1D recorded (`cohort_vintage` is only set when the question
+    # also carries a progression marker) is unchanged and still open. This
+    # carries what the owner supplies, no more.
+    vintage = getattr(spec, "cohort_vintage", None)
+    if vintage:
+        qi.population.append(PopulationClaim(
+            state=FILLED, raw_text=str(vintage),
+            span=_span_of(qi.question, str(vintage)),
+            concept="cohort_vintage", source="parser.cohort_vintage"))
