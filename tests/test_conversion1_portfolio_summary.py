@@ -240,13 +240,32 @@ class TestThereIsOnlyOnePopulationOwner:
         assert summary is None and narrowed is False
 
     def test_the_other_routes_keep_their_owner(self):
-        """§5's last line: do not touch `_resolve_lens` uses owned by other
-        routes. Five remain, and this pins that the deletion was surgical."""
+        """§5's last line: do not touch `_resolve_lens` uses owned by OTHER
+        routes. The deletion must be surgical.
+
+        This used to assert a COUNT (">= 4 remain"). A count is the wrong
+        assertion here, because it is expected to fall by one on every
+        conversion and so has to be edited each time — which makes it a
+        changelog, not a guard. Conversion 3 retired geo's use and the count
+        became 3.
+
+        The invariant it was really protecting is asserted directly instead:
+        the resolver is unreachable from every CONVERTED route, and still
+        reachable from unconverted ones. That statement does not decay, and it
+        fails loudly if a conversion deletes a use it does not own.
+        """
         import ast
 
         from pathlib import Path
         tree = ast.parse((_REPO / "mi_agent_api/chat_routing.py")
                          .read_text(encoding="utf-8"))
-        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
-                 and getattr(n.func, "id", "") == "_resolve_lens"]
-        assert len(calls) >= 4, len(calls)
+        callers = {f.name for f in ast.walk(tree)
+                   if isinstance(f, ast.FunctionDef)
+                   and any(isinstance(n, ast.Call)
+                           and getattr(n.func, "id", "") == "_resolve_lens"
+                           for n in ast.walk(f))}
+        converted = {"_summary_population", "_route_portfolio_summary",
+                     "_route_period_movement", "_route_geo"}
+        assert not (callers & converted), sorted(callers & converted)
+        assert callers, "no route owns the lens resolver any more — this "\
+                        "conversion deleted uses it does not own"

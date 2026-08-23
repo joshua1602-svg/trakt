@@ -150,18 +150,35 @@ class TestTheSpanWordingStaysWithItsOwner:
 
 
 class TestThePlanLayerIsSharedNotCopied:
-    def test_both_routes_read_one_population_step(self):
+    def test_every_route_plan_reads_the_one_population_step(self):
         """Two copies of the EMPTY / UNRESOLVABLE / FILLED decision would drift,
         and Conversion 1 measured what getting it backwards costs: 23 payload
-        and receipt fields moved."""
+        and receipt fields moved.
+
+        This used to name the two plan builders that existed when it was
+        written. Conversion 3 added a third, and a test that lists the current
+        builders is a changelog rather than a guard. The invariant is asserted
+        instead: there is exactly ONE definition of the population step, and
+        EVERY plan builder reaches it. A fourth conversion that quietly copies
+        the decision fails here without anyone remembering to update a list.
+        """
         from mi_agent_api import analytical_plan as plan_mod
         tree = ast.parse(Path(plan_mod.__file__).read_text(encoding="utf-8"))
-        callers = [f.name for f in ast.walk(tree)
+        defs = [f.name for f in ast.walk(tree)
+                if isinstance(f, ast.FunctionDef) and f.name == "_population_step"]
+        assert defs == ["_population_step"], defs
+
+        builders = {f.name for f in ast.walk(tree)
+                    if isinstance(f, ast.FunctionDef)
+                    and f.name.startswith("build_") and f.name.endswith("plan")}
+        callers = {f.name for f in ast.walk(tree)
                    if isinstance(f, ast.FunctionDef)
                    and any(isinstance(n, ast.Call)
                            and getattr(n.func, "id", "") == "_population_step"
-                           for n in ast.walk(f))]
-        assert sorted(callers) == ["build_period_movement_plan", "build_plan"]
+                           for n in ast.walk(f))}
+        assert builders, "no plan builders found — the guard is not looking at "\
+                         "the plan module"
+        assert builders <= callers, sorted(builders - callers)
 
     def test_there_is_exactly_one_plan_module(self):
         modules = sorted(p.name for p in (_REPO / "mi_agent_api").glob("*plan*.py"))
