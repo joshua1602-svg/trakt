@@ -3577,7 +3577,29 @@ def time_axis_disclosure(unit: Optional[str], route: Optional[str]
                           concepts=(unit, grain))
 
 
-def unresolved_scope_facets(question: Optional[str], *, registry=None
+#: The head nouns `portfolio_lens` uses to recognise a book NAME. Stripped
+#: before a requested scope is compared against the book's own values, so
+#: "the London book" is tested as `london`.
+_SCOPE_HEAD_NOUNS = ("book", "portfolio", "books", "portfolios")
+
+
+def _names_a_governed_value(requested: str, known_values: Mapping[str, str]) -> bool:
+    """Whether a requested scope is really a VALUE this book carries.
+
+    "London Book" -> `london`, a value of `collateral_geography`; "South East
+    Book" -> `south east`, likewise. "Highgate Mortgages Book" -> `highgate
+    mortgages`, which no dimension carries, so it stays a book name.
+    """
+    text = " ".join(str(requested or "").lower().split())
+    for noun in _SCOPE_HEAD_NOUNS:
+        if text.endswith(" " + noun):
+            text = text[: -(len(noun) + 1)].strip()
+            break
+    return bool(text) and text in known_values
+
+
+def unresolved_scope_facets(question: Optional[str], *, registry=None,
+                            known_values: Optional[Mapping[str, str]] = None
                             ) -> List[RequestedFacet]:
     """A facet for a portfolio scope the question NAMED and nothing resolves.
 
@@ -3609,6 +3631,22 @@ def unresolved_scope_facets(question: Optional[str], *, registry=None
     if getattr(lens, "name", None) != _lens_owner.LENS_UNRESOLVED:
         return []
     requested = lens.label or "that portfolio"
+    # A NAME THIS BOOK CARRIES AS A VALUE IS A POPULATION, NOT A PORTFOLIO.
+    #
+    # Measured: "For the London book, give me balance, number of loans,
+    # weighted-average LTV and average borrower age" is a governed CFO question
+    # in this estate's own golden bank, and the lens layer — which has no
+    # vocabulary for what values the tape carries — reads "London Book" as a
+    # book name it cannot find. Refusing it would be a FALSE refusal on a
+    # question the system answers correctly, which is a worse failure than the
+    # widening this facet exists to stop.
+    #
+    # `dimension_values` is the existing owner of what values this book carries,
+    # built from the LOADED BOOK, so the check is the profiled-allowlist
+    # discipline rather than a word list maintained here. Callers with no frame
+    # pass nothing and the facet is raised as before.
+    if known_values and _names_a_governed_value(requested, known_values):
+        return []
     return [RequestedFacet(
         kind=KIND_LOST_NARROWING, label=requested,
         field_key="source_portfolio_id",

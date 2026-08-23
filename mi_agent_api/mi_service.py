@@ -859,7 +859,7 @@ def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str,
 
 
 def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
-                            frame) -> Dict[str, Any]:
+                            semantics: Dict[str, Any], frame) -> Dict[str, Any]:
     """PHASE 1E. A portfolio the question NAMED and the registry does not hold.
 
     Applied at BOTH answer sites, for the reason Phase 0 recorded as a
@@ -892,8 +892,15 @@ def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
 
         from . import portfolio_context as _ctx_registry
 
+        # The book's own value map, so a scope this tape carries as a VALUE
+        # ("the London book", "the South East book") is read as the population
+        # it is rather than as a portfolio nobody onboarded. The lens layer has
+        # no vocabulary for that; this guard does, and it is where the refusal
+        # is decided.
         facets = receipt_mod.unresolved_scope_facets(
-            question, registry=_ctx_registry.build_registry(frame))
+            question, registry=_ctx_registry.build_registry(frame),
+            known_values=(receipt_mod.dimension_values(frame, semantics)
+                          if frame is not None else None))
         if not facets:
             return envelope
         receipt = receipt_mod.ExecutionReceipt(facets=list(facets))
@@ -1067,7 +1074,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         routed = _guard_temporal_honouring(routed, question=req.question,
                                           semantics=semantics, frame=df)
         # PHASE 1E SITE 1 OF 2 — an unresolved portfolio scope, on the same terms.
-        routed = _guard_unresolved_scope(routed, question=req.question, frame=df)
+        routed = _guard_unresolved_scope(routed, question=req.question,
+                                         semantics=semantics, frame=df)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
@@ -1131,7 +1139,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     result = _guard_temporal_honouring(result, question=req.question,
                                        semantics=semantics, frame=df)
     # PHASE 1E SITE 2 OF 2 — an unresolved portfolio scope, on the same terms.
-    result = _guard_unresolved_scope(result, question=req.question, frame=df)
+    result = _guard_unresolved_scope(result, question=req.question,
+                                     semantics=semantics, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              view=view, run_required=bool(run_id))

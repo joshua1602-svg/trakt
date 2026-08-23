@@ -75,9 +75,9 @@
     "ok": false,
     "route": "portfolio_summary",
     "controlledRefusal": true,
-    "lensApplied": true,
+    "lensApplied": false,
     "figure": null,
-    "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 this narrowing was not applied, so the figure covers the whole book rather than only acquired_001). I have not substituted a broader figure."
+    "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 'acquired_001' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
   },
   {
     "case": "unknown label",
@@ -85,9 +85,9 @@
     "ok": false,
     "route": "portfolio_summary",
     "controlledRefusal": true,
-    "lensApplied": true,
+    "lensApplied": false,
     "figure": null,
-    "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 this narrowing was not applied, so the figure covers the whole book rather than only Highgate Mortgages Book). I have not substituted a broader figure."
+    "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
   },
   {
     "case": "no scope named",

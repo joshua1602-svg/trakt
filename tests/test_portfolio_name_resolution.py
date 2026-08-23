@@ -363,3 +363,27 @@ class TestTheRefusalIsRouteIndependent:
         result = _ask(live_book, "Please provide a portfolio summary")
         assert result.get("ok") is True
         assert "11,035" in (result.get("answer") or "")
+
+    @pytest.mark.parametrize("question", [
+        # A governed VALUE of collateral_geography, not a portfolio. Both of
+        # these are answered questions in this estate's own golden bank.
+        "For the London book, give me balance, number of loans, "
+        "weighted-average LTV and average borrower age.",
+        "What is the funded balance of the London book?",
+    ])
+    def test_a_value_this_book_carries_is_a_population_not_a_book_name(
+            self, live_book, question):
+        """The lens layer has no vocabulary for what values the tape carries, so
+        it reads "London Book" as a book name it cannot find. The guard has that
+        vocabulary and must not refuse on it.
+
+        Measured before the guard consulted `dimension_values`: eight tests
+        across `test_p1e_golden_bank`, `test_p1e_measure_safety` and
+        `test_p1e_multi_measure` failed, every one of them on "the London book".
+        A false refusal on a question the system answers correctly is a worse
+        failure than the widening this facet exists to stop.
+        """
+        result = _ask(live_book, question)
+        answer = result.get("answer") or ""
+        assert "not a governed portfolio" not in answer, answer
+        assert result.get("controlledRefusal") is not True, answer

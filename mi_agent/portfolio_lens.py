@@ -355,29 +355,30 @@ def _named_portfolio_lens(low: str, registry) -> Optional[PortfolioLens]:
     """
     if registry is None:
         return None
-    candidates: List[Tuple[str, str]] = []
+    #: (sayable token, governed id, governed display label or None)
+    candidates: List[Tuple[str, str, Optional[str]]] = []
     for pid in registry.ids():
         record = registry.get(pid)
         label = getattr(record, "display_label", None) if record else None
         for token in (label, pid):
             token = _clean_token(token)
             if token:
-                candidates.append((token, pid))
-    for token, pid in sorted(candidates, key=lambda t: -len(t[0])):
-        if _token_in(low, token):
-            lens = _cohort_lens(pid)
-            # Answer in the name the CLIENT sees. `_cohort_lens` labels a book
-            # with its id, which is the governed identity but not the product
-            # one — React renders `display_label`, and an answer that says
-            # "(alp_origination)" is naming infrastructure at a reader who
-            # selected "ALP Origination Book".
-            record = registry.get(pid)
-            label = getattr(record, "display_label", None) if record else None
-            if label:
-                lens = PortfolioLens(lens.name, str(label), dict(lens.filters),
-                                     cohort_id=lens.cohort_id,
-                                     cohort_ids=lens.cohort_ids)
+                candidates.append((token, pid, label))
+    for token, pid, label in sorted(candidates, key=lambda c: -len(c[0])):
+        if not _token_in(low, token):
+            continue
+        lens = _cohort_lens(pid)
+        if not label:
             return lens
+        # Answer in the name the CLIENT sees. `_cohort_lens` labels a book with
+        # its id, which is the governed identity but not the product one —
+        # React renders `display_label`, and an answer that says
+        # "(alp_origination)" is naming infrastructure at a reader who selected
+        # "ALP Origination Book". The FILTERS are untouched: the label is what
+        # the answer says, the id is what it selects on.
+        return PortfolioLens(lens.name, str(label), dict(lens.filters),
+                             cohort_id=lens.cohort_id,
+                             cohort_ids=lens.cohort_ids)
     return None
 
 
