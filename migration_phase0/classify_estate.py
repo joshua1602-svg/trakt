@@ -26,10 +26,11 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 _REPO = Path(__file__).resolve().parent.parent
 
@@ -65,8 +66,25 @@ def classify(nodeid: str) -> str:
     return "other / unclassified"
 
 
+def introduced(head: Path, base: Optional[Path]) -> Dict[str, List[str]]:
+    """The by-name diff A5 needs: what failing names HEAD has that base does not.
+
+    Counts are useless for attribution — two runs can total the same and share
+    nothing. Only the NAME SETS decide whether this work introduced a failure.
+    """
+    if base is None or not base.exists():
+        return {}
+    pattern = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)", flags=re.M)
+    head_names = set(pattern.findall(head.read_text(errors="ignore")))
+    base_names = set(pattern.findall(base.read_text(errors="ignore")))
+    return {"introduced": sorted(head_names - base_names),
+            "resolved": sorted(base_names - head_names),
+            "headCount": len(head_names), "baseCount": len(base_names)}
+
+
 def main(argv: List[str]) -> int:
-    capture = Path(argv[1]) if len(argv) > 1 else _REPO / "migration_phase0/estate_full.txt"
+    capture = Path(argv[1]).resolve() if len(argv) > 1 else \
+        (_REPO / "migration_phase0/estate_full.txt")
     text = capture.read_text(encoding="utf-8", errors="ignore")
 
     failures = re.findall(r"^(?:FAILED|ERROR)\s+(\S+)", text, flags=re.M)
@@ -101,9 +119,29 @@ def main(argv: List[str]) -> int:
         print("IN THE MI QUERY AGENT PATH — NONE.")
     print("-" * 78)
 
+    base_path = Path(argv[2]).resolve() if len(argv) > 2 else None
+    diff = introduced(capture, base_path)
+    if diff:
+        print("\n" + "-" * 78)
+        print(f"BY-NAME DIFF vs the clean base capture ({base_path})")
+        print(f"  HEAD failing names : {diff['headCount']}")
+        print(f"  BASE failing names : {diff['baseCount']}")
+        print(f"  INTRODUCED         : {len(diff['introduced'])}"
+              f"  <- required EMPTY")
+        for name in diff["introduced"]:
+            print(f"      {name}")
+        print(f"  RESOLVED           : {len(diff['resolved'])}")
+        for name in diff["resolved"]:
+            print(f"      {name}")
+        print("-" * 78)
+
     out = _REPO / "migration_phase0" / "estate.json"
     out.write_text(json.dumps({
-        "capture": str(capture.relative_to(_REPO)),
+        "capturedAtSha": subprocess.run(
+            ["git", "-C", str(_REPO), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True).stdout.strip(),
+        "capture": (str(capture.relative_to(_REPO))
+                    if capture.is_relative_to(_REPO) else str(capture)),
         "runner": ("pytest tests/ mi_agent/tests/ mi_agent_api/tests/ "
                    "-q -p no:randomly --tb=no -rf"),
         "tally": {
@@ -116,6 +154,7 @@ def main(argv: List[str]) -> int:
         "by_subsystem": {k: len(v) for k, v in sorted(buckets.items())},
         "mi_query_agent_path_failures_by_name": sorted(mi),
         "all_failures_by_name": sorted(failures),
+        "byNameDiffVsBase": diff,
         "note": ("Recorded at Phase 0 so A5 can compare BY NAME. A failure "
                  "present here is not the migration's; a failure absent here "
                  "that appears later is."),

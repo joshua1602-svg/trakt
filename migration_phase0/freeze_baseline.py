@@ -56,22 +56,40 @@ def fixture_hashes() -> Dict[str, Any]:
     return {"root": str(root), "files": files}
 
 
+
+def _frozen_git() -> Dict[str, Any]:
+    """The frozen git block: preserved if one already exists, else taken now."""
+    if OUT.exists() and "--refreeze" not in sys.argv:
+        try:
+            existing = json.loads(OUT.read_text()).get("git")
+            if existing:
+                return existing
+        except (OSError, ValueError):
+            pass
+    return {
+        "headSha": _git("rev-parse", "HEAD"),
+        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        "scopingStudyCommit": "9f2d256",
+        "measurementBaseCommit": "42cef00",
+        "productCodeIdenticalToBase": _git(
+            "diff", "--name-only", "42cef00", "HEAD",
+            "--", ":!docs", ":!compositional_plan_scoping",
+            ":!migration_phase0", ":!tests/test_migration_preregistered.py") == "",
+        "workingTreeClean": _git("status", "--porcelain") == "",
+    }
+
+
 def main() -> int:
     baseline: Dict[str, Any] = {
         "artefact": "MI compositional migration — Phase 0 baseline",
         "purpose": ("Attribution. Later migration movement must be separable from "
                     "behaviour that was already present at this commit."),
-        "git": {
-            "headSha": _git("rev-parse", "HEAD"),
-            "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-            "scopingStudyCommit": "9f2d256",
-            "measurementBaseCommit": "42cef00",
-            "productCodeIdenticalToBase": _git(
-                "diff", "--name-only", "42cef00", "HEAD",
-                "--", ":!docs", ":!compositional_plan_scoping",
-                ":!migration_phase0", ":!tests/test_migration_preregistered.py") == "",
-            "workingTreeClean": _git("status", "--porcelain") == "",
-        },
+        # THE FREEZE IS THE POINT. This block records the state the baseline was
+        # frozen at, and re-running this script must NOT re-stamp it to whatever
+        # HEAD happens to be — a "Phase 0 baseline" that silently follows HEAD
+        # cannot attribute anything. An existing block is preserved verbatim;
+        # only a first run writes it. Use --refreeze to deliberately re-take it.
+        "git": _frozen_git(),
         "fixture": fixture_hashes(),
         "environment": {
             "note": ("Measured with TRAKT_RUNTIME_MODE=development and the LLM "
@@ -244,7 +262,8 @@ def main() -> int:
 
     OUT.write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {OUT.relative_to(_REPO)}")
-    print(f"  head            : {baseline['git']['headSha'][:12]}")
+    print(f"  frozen at       : {baseline['git']['headSha'][:12]}"
+          f"  (preserved; --refreeze to re-take)")
     print(f"  product == base : {baseline['git']['productCodeIdenticalToBase']}")
     print(f"  fixture files   : {len(baseline['fixture']['files'])} hashed")
     print(f"  known failures  : {len(baseline['known_failures'])}")
