@@ -1,0 +1,2260 @@
+{
+  "cases": [
+    {
+      "case": "A1",
+      "question": "Please provide a portfolio summary",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "A2",
+      "question": "Give me a summary of the portfolio",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "A3",
+      "question": "Can you summarise the book for me?",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "A4",
+      "question": "portfolio summary",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "A5",
+      "question": "summarise the portfolio",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "A6",
+      "question": "overview of the portfolio",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "L1",
+      "question": "Summarise the acquired book",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "acquired",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": "Acquired",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "L2",
+      "question": "Summarise the direct book",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "direct",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": "Direct",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "L3",
+      "question": "portfolio summary for the acquired book",
+      "provenance": "phase0",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "acquired",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": "Acquired",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "P1",
+      "question": "portfolio summary across all portfolios",
+      "provenance": "phase1c",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "P2",
+      "question": "summarise the portfolio excluding the acquired book",
+      "provenance": "phase1c",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [
+            [
+              "lost_narrowing",
+              "excluding the acquired book",
+              null,
+              "lost"
+            ]
+          ],
+          "answer": "I understood that you asked for excluding the acquired book, but that could not be applied to the calculation (excluding the acquired book \u2014 this narrowing was not applied, so the figure covers the whole book rather than only excluding the acquired book). I have not substituted a broader figure."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [
+            [
+              "lost_narrowing",
+              "excluding the acquired book",
+              null,
+              "lost"
+            ]
+          ],
+          "answer": "I understood that you asked for excluding the acquired book, but that could not be applied to the calculation (excluding the acquired book \u2014 this narrowing was not applied, so the figure covers the whole book rather than only excluding the acquired book). I have not substituted a broader figure."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [
+            [
+              "lost_narrowing",
+              "excluding the acquired book",
+              null,
+              "lost"
+            ]
+          ],
+          "answer": "I understood that you asked for excluding the acquired book, but that could not be applied to the calculation (excluding the acquired book \u2014 this narrowing was not applied, so the figure covers the whole book rather than only excluding the acquired book). I have not substituted a broader figure."
+        }
+      }
+    },
+    {
+      "case": "N1",
+      "question": "Summarise the ALP Origination Book",
+      "provenance": "phase1e",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "cohort",
+        "portfolioIds": [
+          "alp_origination"
+        ],
+        "portfolioLabel": "ALP Origination Book",
+        "rawText": "ALP Origination Book",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (ALP Origination Book) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (ALP Origination Book) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (ALP Origination Book) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "N2",
+      "question": "Summarise the alp_acquired book",
+      "provenance": "phase1e",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "cohort",
+        "portfolioIds": [
+          "alp_acquired"
+        ],
+        "portfolioLabel": "ALP Acquired Back Book",
+        "rawText": "alp_acquired",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (ALP Acquired Back Book) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (ALP Acquired Back Book) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (ALP Acquired Back Book) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "N3",
+      "question": "Summarise the ALP Acquired Back Book",
+      "provenance": "phase1e",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "cohort",
+        "portfolioIds": [
+          "alp_acquired"
+        ],
+        "portfolioLabel": "ALP Acquired Back Book",
+        "rawText": "ALP Acquired Back Book",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [
+            [
+              "row_population",
+              "the population seasoning_segment = Back Book",
+              null,
+              "lost"
+            ]
+          ],
+          "answer": "I understood that you asked for the population seasoning_segment = Back Book, but that could not be applied to the calculation (the population seasoning_segment = Back Book \u2014 this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [
+            [
+              "row_population",
+              "the population seasoning_segment = Back Book",
+              null,
+              "lost"
+            ]
+          ],
+          "answer": "I understood that you asked for the population seasoning_segment = Back Book, but that could not be applied to the calculation (the population seasoning_segment = Back Book \u2014 this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [
+            [
+              "row_population",
+              "the population seasoning_segment = Back Book",
+              null,
+              "lost"
+            ]
+          ],
+          "answer": "I understood that you asked for the population seasoning_segment = Back Book, but that could not be applied to the calculation (the population seasoning_segment = Back Book \u2014 this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure."
+        }
+      }
+    },
+    {
+      "case": "Z1",
+      "question": "Summarise the spv1_sponsored portfolio",
+      "provenance": "phase1e",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "cohort",
+        "portfolioIds": [
+          "spv1_sponsored"
+        ],
+        "portfolioLabel": "spv1_sponsored",
+        "rawText": "spv1_sponsored",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "There are no funded loans in spv1_sponsored at the current governed reporting date, so there is no position to summarise for it. I have not answered for the whole book instead.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "There are no funded loans in spv1_sponsored at the current governed reporting date, so there is no position to summarise for it. I have not answered for the whole book instead.  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "There are no funded loans in spv1_sponsored at the current governed reporting date, so there is no position to summarise for it. I have not answered for the whole book instead.  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "U1",
+      "question": "Summarise the acquired_001 book",
+      "provenance": "phase1e",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "unresolvable",
+        "scope": null,
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": "acquired_001",
+        "narrows": false,
+        "reason": "the question names 'acquired_001', which is not a governed portfolio for this book"
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ],
+            "fell_back_to_total": true,
+            "requested_context_id": "acquired_001"
+          },
+          "verdict": "refuse",
+          "facets": [],
+          "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 'acquired_001' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ],
+            "fell_back_to_total": true,
+            "requested_context_id": "acquired_001"
+          },
+          "verdict": "refuse",
+          "facets": [],
+          "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 'acquired_001' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ],
+            "fell_back_to_total": true,
+            "requested_context_id": "acquired_001"
+          },
+          "verdict": "refuse",
+          "facets": [],
+          "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 'acquired_001' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
+        }
+      }
+    },
+    {
+      "case": "U2",
+      "question": "Summarise the Highgate Mortgages Book",
+      "provenance": "phase1e",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "unresolvable",
+        "scope": null,
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": "Highgate Mortgages Book",
+        "narrows": false,
+        "reason": "the question names 'Highgate Mortgages Book', which is not a governed portfolio for this book"
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [],
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [],
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "refuse",
+          "facets": [],
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure."
+        }
+      }
+    },
+    {
+      "case": "F1",
+      "question": "Summarise the funded book",
+      "provenance": "phase1e",
+      "recogniserClaims": true,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.  Calculated: Governed analysis."
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).  Calculated: Governed analysis."
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": null,
+          "facets": [],
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).  Calculated: Governed analysis."
+        }
+      }
+    },
+    {
+      "case": "X1",
+      "question": "Summarise the front book",
+      "provenance": "phase0-excluded",
+      "recogniserClaims": false,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "row_population",
+              "the population seasoning_segment = Front Book",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Here is the result for your query, covering 1 group(s).  Calculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 1,177 loans \u00b7 as at 30 June 2026."
+        },
+        "acquired": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "row_population",
+              "the population seasoning_segment = Front Book",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Here is the result for your query, covering 1 group(s).  Calculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 Source Portfolio in alp_acquired \u00b7 250 loans \u00b7 as at 30 June 2026."
+        },
+        "direct": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "row_population",
+              "the population seasoning_segment = Front Book",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Here is the result for your query, covering 1 group(s).  Calculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 Source Portfolio in alp_origination \u00b7 927 loans \u00b7 as at 30 June 2026."
+        }
+      }
+    },
+    {
+      "case": "X2",
+      "question": "What is the portfolio position for the direct book?",
+      "provenance": "phase0-excluded",
+      "recogniserClaims": false,
+      "interpretation": {
+        "state": "filled",
+        "scope": "direct",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": "Direct",
+        "narrows": true,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [],
+          "answer": "Here is the result for your query, covering 1 group(s).  Calculated: Count of loans \u00b7 Source Portfolio in alp_origination \u00b7 7,126 loans \u00b7 as at 30 June 2026."
+        },
+        "acquired": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [],
+          "answer": "Here is the result for your query, covering 1 group(s).  Calculated: Count of loans \u00b7 Source Portfolio in alp_origination \u00b7 7,126 loans \u00b7 as at 30 June 2026."
+        },
+        "direct": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [],
+          "answer": "Here is the result for your query, covering 1 group(s).  Calculated: Count of loans \u00b7 Source Portfolio in alp_origination \u00b7 7,126 loans \u00b7 as at 30 June 2026."
+        }
+      }
+    },
+    {
+      "case": "X3",
+      "question": "Summarise the portfolio by region",
+      "provenance": "stratification",
+      "recogniserClaims": false,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "grouping_dimension",
+              "region",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Here is the bar for your query, covering 12 group(s).  Calculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+        },
+        "acquired": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "grouping_dimension",
+              "region",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Here is the bar for your query, covering 12 group(s).  Calculated: Total Balance \u00b7 Source Portfolio in alp_acquired \u00b7 grouped by Region \u00b7 12 groups \u00b7 3,909 loans \u00b7 as at 30 June 2026."
+        },
+        "direct": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "grouping_dimension",
+              "region",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Here is the bar for your query, covering 12 group(s).  Calculated: Total Balance \u00b7 Source Portfolio in alp_origination \u00b7 grouped by Region \u00b7 12 groups \u00b7 7,126 loans \u00b7 as at 30 June 2026."
+        }
+      }
+    },
+    {
+      "case": "X4",
+      "question": "What changed in the portfolio since last month?",
+      "provenance": "movement",
+      "recogniserClaims": false,
+      "interpretation": {
+        "state": "filled",
+        "scope": "total",
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": null,
+        "narrows": false,
+        "reason": null
+      },
+      "byDefault": {
+        "None": {
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              null,
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Book contributed approximately +\u00a311.5m and ALP Acquired Back Book contributed approximately +\u00a36.6m of the movement.  Calculated: Month-on-month movement."
+        },
+        "acquired": {
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              null,
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month movement."
+        },
+        "direct": {
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": true,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              null,
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-month movement."
+        }
+      }
+    },
+    {
+      "case": "X5",
+      "question": "For the London book, give me balance, number of loans, weighted-average LTV and average borrower age.",
+      "provenance": "phase1e-control",
+      "recogniserClaims": false,
+      "interpretation": {
+        "state": "unresolvable",
+        "scope": null,
+        "portfolioIds": [],
+        "portfolioLabel": null,
+        "rawText": "London book",
+        "narrows": false,
+        "reason": "the question names 'London book', which is not a governed portfolio for this book"
+      },
+      "byDefault": {
+        "None": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "total",
+            "context_kind": "total",
+            "label": "Total",
+            "portfolio_ids": [
+              "alp_origination",
+              "alp_acquired",
+              "spv1_sponsored"
+            ],
+            "portfolio_types": [
+              "direct",
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "geographic_scope",
+              "London",
+              null,
+              "applied"
+            ],
+            [
+              "multi_measure",
+              "more than one measure (balance, ltv and age)",
+              null,
+              "applied"
+            ],
+            [
+              "requested_statistic",
+              "the weighted average",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Balance: \u00a3413.80m \u00b7 Loans: 1,380 \u00b7 Weighted-average Current LTV: 42.75% \u00b7 Average Borrower Age: 71.4  Calculated: Balance \u00b7 Loans \u00b7 Weighted-average Current LTV \u00b7 Average Borrower Age \u00b7 London \u00b7 1,380 loans \u00b7 as at 30 June 2026."
+        },
+        "acquired": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "acquired",
+            "context_kind": "type",
+            "label": "Acquired",
+            "portfolio_ids": [
+              "alp_acquired"
+            ],
+            "portfolio_types": [
+              "acquired"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "geographic_scope",
+              "London",
+              null,
+              "applied"
+            ],
+            [
+              "multi_measure",
+              "more than one measure (balance, ltv and age)",
+              null,
+              "applied"
+            ],
+            [
+              "requested_statistic",
+              "the weighted average",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Balance: \u00a3118.30m \u00b7 Loans: 479 \u00b7 Weighted-average Current LTV: 41.36% \u00b7 Average Borrower Age: 69.7  Calculated: Balance \u00b7 Loans \u00b7 Weighted-average Current LTV \u00b7 Average Borrower Age \u00b7 London \u00b7 Source Portfolio in alp_acquired \u00b7 479 loans \u00b7 as at 30 June 2026."
+        },
+        "direct": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "lensApplied": null,
+          "portfolioScope": {
+            "context_id": "direct",
+            "context_kind": "type",
+            "label": "Direct",
+            "portfolio_ids": [
+              "alp_origination"
+            ],
+            "portfolio_types": [
+              "direct"
+            ],
+            "asset_classes": [
+              "equity_release"
+            ]
+          },
+          "verdict": "ok",
+          "facets": [
+            [
+              "geographic_scope",
+              "London",
+              null,
+              "applied"
+            ],
+            [
+              "multi_measure",
+              "more than one measure (balance, ltv and age)",
+              null,
+              "applied"
+            ],
+            [
+              "requested_statistic",
+              "the weighted average",
+              null,
+              "applied"
+            ]
+          ],
+          "answer": "Balance: \u00a3295.50m \u00b7 Loans: 901 \u00b7 Weighted-average Current LTV: 43.30% \u00b7 Average Borrower Age: 72.3  Calculated: Balance \u00b7 Loans \u00b7 Weighted-average Current LTV \u00b7 Average Borrower Age \u00b7 London \u00b7 Source Portfolio in alp_origination \u00b7 901 loans \u00b7 as at 30 June 2026."
+        }
+      }
+    }
+  ]
+}
