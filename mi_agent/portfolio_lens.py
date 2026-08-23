@@ -29,6 +29,12 @@ LENS_TOTAL = "total"
 LENS_DIRECT = "direct"
 LENS_ACQUIRED = "acquired"
 LENS_COHORT = "cohort"
+#: PHASE 1E. The question NAMED a portfolio scope and the governed registry does
+#: not hold it. Distinct from `total` on purpose: "the whole book" and "I could
+#: not resolve what you named" are different answers, and collapsing the second
+#: into the first is how a question about one portfolio was answered with every
+#: portfolio (docs/mi_phase1c_report.md).
+LENS_UNRESOLVED = "unresolved"
 
 # An exact source-cohort id, e.g. direct_001 / acquired_002. Used for
 # NATURAL-LANGUAGE detection, where a narrow pattern is what keeps an unrelated
@@ -323,6 +329,166 @@ def _selection_lens(ids: Sequence[str]) -> PortfolioLens:
                          cohort_ids=ids)
 
 
+def _unresolved_lens(requested: str) -> PortfolioLens:
+    """A named scope the governed registry does not hold.
+
+    Carries the wording so a refusal can quote it back. It deliberately has NO
+    filters: a consumer that applies them gets an unnarrowed frame, so the
+    failure mode of ignoring this lens is a visible refusal upstream rather than
+    a silent whole-book answer.
+    """
+    return PortfolioLens(LENS_UNRESOLVED, str(requested).strip(), {})
+
+
+def _named_portfolio_lens(low: str, registry) -> Optional[PortfolioLens]:
+    """A GOVERNED portfolio the question names, by display label or by id.
+
+    The registry is the authority React already renders from
+    (``portfolio_context.context_index`` -> the workspace selector), so matching
+    against it is what makes MI and the UI mean the same thing by a portfolio
+    name. There is no alias table here and no vocabulary: add a portfolio to the
+    registry and it becomes sayable, rename it and the new name works.
+
+    LONGEST TOKEN FIRST, and checked BEFORE the category branch, because a
+    portfolio's label may contain a category word — "ALP **Acquired** Back Book"
+    must resolve to that book and not to every acquired book.
+    """
+    if registry is None:
+        return None
+    candidates: List[Tuple[str, str]] = []
+    for pid in registry.ids():
+        record = registry.get(pid)
+        label = getattr(record, "display_label", None) if record else None
+        for token in (label, pid):
+            token = _clean_token(token)
+            if token:
+                candidates.append((token, pid))
+    for token, pid in sorted(candidates, key=lambda t: -len(t[0])):
+        if _token_in(low, token):
+            lens = _cohort_lens(pid)
+            # Answer in the name the CLIENT sees. `_cohort_lens` labels a book
+            # with its id, which is the governed identity but not the product
+            # one — React renders `display_label`, and an answer that says
+            # "(alp_origination)" is naming infrastructure at a reader who
+            # selected "ALP Origination Book".
+            record = registry.get(pid)
+            label = getattr(record, "display_label", None) if record else None
+            if label:
+                lens = PortfolioLens(lens.name, str(label), dict(lens.filters),
+                                     cohort_id=lens.cohort_id,
+                                     cohort_ids=lens.cohort_ids)
+            return lens
+    return None
+
+
+#: The head noun that makes a capitalised phrase a BOOK NAME rather than an
+#: ordinary noun phrase. Matched case-insensitively; it is the capitalisation of
+#: the words BEFORE it that carries the "this is a proper name" signal.
+_BOOK_NOUN_RE = re.compile(r"\b(book|portfolio)\b", re.IGNORECASE)
+
+#: A token that is capitalised in the ORIGINAL text (so `Highgate`, `ALP`,
+#: `NBS`, but not `the`, `of`, `by`).
+_PROPER_TOKEN_RE = re.compile(r"^[A-Z][A-Za-z0-9&'\u2019-]*$")
+
+#: Words that may be capitalised in front of "Book"/"Portfolio" WITHOUT naming a
+#: particular book: governed scope vocabulary, seasoning/vintage vocabulary,
+#: ordinary lending nouns, and the sentence-initial verbs a question opens with.
+#: A capitalised run made only of these is not a proper name — "Summarise the
+#: Acquired Back Book" names a category and a seasoning segment, not a portfolio
+#: called "Acquired Back".
+_GENERIC_BOOK_WORDS = frozenset({
+    # governed scope vocabulary
+    "direct", "directly", "acquired", "purchased", "originated", "origination",
+    "funded", "unfunded", "total", "whole", "entire", "all", "combined",
+    "overall", "platform", "group", "consolidated", "aggregate", "source",
+    "sub", "book", "books", "portfolio", "portfolios",
+    # seasoning / vintage vocabulary — a different axis, owned elsewhere
+    "back", "backbook", "front", "legacy", "new", "newly", "current",
+    "existing", "historic", "historical", "seasoned", "recent", "live",
+    "active", "closed", "open", "run", "off",
+    # ordinary lending nouns
+    "loan", "loans", "lending", "mortgage", "mortgages", "asset", "assets",
+    "equity", "release", "retirement", "interest", "only", "product",
+    "products", "main", "master", "primary", "core", "full",
+    # question scaffolding that can be sentence-initial or capitalised
+    "summarise", "summarize", "summary", "show", "give", "tell", "what",
+    "how", "please", "provide", "list", "report", "describe", "explain",
+    "the", "this", "that", "a", "an", "our", "my", "its", "of", "for", "in",
+    "and", "or", "me", "us", "is", "are", "do", "does",
+})
+
+
+def _unknown_named_book(text: Optional[str], registry) -> Optional[PortfolioLens]:
+    """A capitalised book NAME the governed registry does not hold.
+
+    PHASE 1E. `_named_portfolio_lens` resolves the names the registry HAS; this
+    catches the ones it has not. Measured before it existed: "Summarise the
+    Highgate Mortgages Book" — a book this platform has never onboarded —
+    returned the whole book's 11,035 loans and 1.96bn with the name it was asked
+    for appearing nowhere in the answer. Naming a book MI cannot find is a
+    question to clarify, never a licence to answer for every book.
+
+    Deliberately narrow, in two ways that keep it off ordinary prose:
+
+      * it fires only on a run of tokens CAPITALISED IN THE ORIGINAL TEXT
+        immediately before "Book"/"Portfolio" — "the portfolio", "the acquired
+        book" and "a portfolio summary" carry no such run; and
+      * at least one token in that run must be outside `_GENERIC_BOOK_WORDS`,
+        so "the Acquired Back Book" resolves through the category and seasoning
+        vocabulary that owns it rather than being read as a proper name.
+
+    KNOWN LIMIT, stated rather than papered over: a book named entirely in lower
+    case ("summarise the highgate mortgages book") carries no proper-name signal
+    and is not caught here. Requiring capitalisation is what stops this refusing
+    ordinary questions; recognising lower-case unknown names needs a vocabulary
+    check this layer does not own.
+
+    Returns ``None`` when there is no registry to check against, so a caller
+    that supplies none keeps exactly its pre-1E behaviour.
+    """
+    if registry is None or not text:
+        return None
+    raw = str(text)
+    for match in _BOOK_NOUN_RE.finditer(raw):
+        head = raw[:match.start()].rstrip()
+        run: List[str] = []
+        while len(run) < 5:
+            token_match = re.search(r"([A-Za-z0-9&'\u2019-]+)$", head)
+            if not token_match:
+                break
+            token = token_match.group(1)
+            if not _PROPER_TOKEN_RE.match(token):
+                break
+            run.insert(0, token)
+            head = head[:token_match.start()].rstrip()
+        if not run:
+            continue
+        if all(tok.lower() in _GENERIC_BOOK_WORDS for tok in run):
+            continue
+        return _unresolved_lens(" ".join(run + [match.group(1)]))
+    return None
+
+
+def _clean_token(token: Optional[str]) -> str:
+    """A label/id reduced to the form a sentence would carry it in."""
+    if not token:
+        return ""
+    return re.sub(r"[\s_]+", " ", str(token).strip().lower()).strip()
+
+
+def _token_in(low: str, token: str) -> bool:
+    """Whether ``low`` names ``token``, tolerating `_` vs space in an id.
+
+    ``low`` is already space-padded and lowercased by the caller. Underscores in
+    the HAYSTACK are normalised too, so "the nbs_acquired book" matches the id
+    `nbs_acquired` and the label "NBS Acquired Book" matches either spelling.
+    """
+    if not token:
+        return False
+    haystack = re.sub(r"[\s_]+", " ", low)
+    return (" " + token + " ") in haystack
+
+
 def _type_lens(ptype: str) -> PortfolioLens:
     label = "Direct" if ptype == LENS_DIRECT else "Acquired"
     return PortfolioLens(ptype, label, {SOURCE_TYPE_FIELD: ptype})
@@ -477,8 +643,15 @@ def lens_from_term(term: Optional[str]) -> PortfolioLens:
     return _lens_from_text(" " + str(term).strip().lower() + " ")
 
 
-def resolve_lens(text: Optional[str]) -> PortfolioLens:
+def resolve_lens(text: Optional[str], *, registry=None) -> PortfolioLens:
     """Resolve a single portfolio lens from a QUESTION. Defaults to *total*.
+
+    PHASE 1E — ``registry``. When a governed :class:`PortfolioRegistry` is
+    supplied, a portfolio NAMED by its display label or its governed id resolves
+    to that portfolio, and a cohort-shaped id the registry does not hold becomes
+    ``LENS_UNRESOLVED`` instead of silently selecting nothing. Omitted, every
+    decision below is exactly what it was — the parameter adds resolution, it
+    never removes any.
 
     Precedence: explicit cohort id > a QUALIFIED acquired/direct mention > total.
     An explicit "total/whole book" phrase forces *total* even if other words
@@ -509,13 +682,26 @@ def resolve_lens(text: Optional[str]) -> PortfolioLens:
         # layer through `disclaims_scope`, not decided here.
         return total_lens()
     low = " " + str(text).strip().lower() + " "
+    # A governed portfolio named outright wins over everything below: it is the
+    # most specific thing the sentence can say, and its label may CONTAIN a
+    # category word. Checked before the qualified-noun gate because a governed
+    # label need not contain a noun the gate knows ("spv1_sponsored").
+    named = _named_portfolio_lens(low, registry)
+    if named is not None:
+        return named
+    # A book NAMED and not held. Checked before the qualified-noun gate for the
+    # same reason: an unknown proper name contains no vocabulary the gate knows,
+    # so the gate would pass it straight to `total` — the widening this catches.
+    unknown = _unknown_named_book(text, registry)
+    if unknown is not None:
+        return unknown
     if not lens_phrase_spans(text) and not _COHORT_ID_RE.search(low):
         return total_lens()
 
-    return _lens_from_text(low)
+    return _lens_from_text(low, registry=registry)
 
 
-def _lens_from_text(low: str) -> PortfolioLens:
+def _lens_from_text(low: str, *, registry=None) -> PortfolioLens:
     """The resolution itself, shared by both entry points.
 
     Neither qualification nor disclaiming is checked here: `resolve_lens` has
@@ -525,7 +711,14 @@ def _lens_from_text(low: str) -> PortfolioLens:
     # Exact cohort id always wins (most specific).
     m = _COHORT_ID_RE.search(low)
     if m:
-        return _cohort_lens(m.group(1))
+        requested = m.group(1)
+        # PHASE 1E. With a registry to check against, an id it does not hold is
+        # UNRESOLVED, not a cohort. Previously this returned a cohort lens whose
+        # governed scope then fell back to Total, so "the acquired_001 book"
+        # answered for every book under that label.
+        if registry is not None and registry.get(requested.lower()) is None:
+            return _unresolved_lens(requested)
+        return _cohort_lens(requested)
 
     has_direct = _contains_any(low, _DIRECT_TERMS)
     has_acquired = _contains_any(low, _ACQUIRED_TERMS)
@@ -623,6 +816,12 @@ def context_id(lens: PortfolioLens) -> str:
         return list(lens.cohort_ids)
     if lens.name == LENS_COHORT and lens.cohort_id:
         return lens.cohort_id
+    if lens.name == LENS_UNRESOLVED:
+        # Hand back the UNRESOLVED wording, never `total`. `resolve_scope` will
+        # not find it and will record `fell_back_to_total` with
+        # `requested_context_id` set — which is the evidence the facet layer
+        # refuses on. Returning `total` here would erase the request.
+        return lens.label or LENS_UNRESOLVED
     return lens.name
 
 
@@ -707,14 +906,39 @@ def lens_from_selection(value: Any) -> PortfolioLens:
 
 
 def resolve_lens_with_default(
-    text: Optional[str], default: Optional[PortfolioLens] = None
+    text: Optional[str], default: Optional[PortfolioLens] = None, *, registry=None
 ) -> PortfolioLens:
     """Resolve the effective lens: a portfolio scope named in ``text`` wins
     (natural-language override); otherwise the ``default`` (e.g. the dropdown
-    selection); otherwise *total*."""
-    if mentions_portfolio(text):
-        return resolve_lens(text)
+    selection); otherwise *total*.
+
+    ``registry`` is passed through to :func:`resolve_lens` — see PHASE 1E there.
+    The PRECEDENCE rule is unchanged: a registry lets the question resolve MORE
+    scopes, it does not change which side wins.
+    """
+    if mentions_portfolio(text) or names_governed_portfolio(text, registry):
+        return resolve_lens(text, registry=registry)
     return default or total_lens()
+
+
+def names_governed_portfolio(text: Optional[str], registry=None) -> bool:
+    """Whether ``text`` names a governed portfolio by label or id.
+
+    PHASE 1E. ``mentions_portfolio`` tests a fixed QUALIFIER vocabulary, so it
+    is blind to "ALP Origination Book" — a governed name it has never heard of.
+    Without this, such a question would resolve correctly on its own and then
+    lose to a caller-supplied default, because the precedence gate would not
+    count it as naming a scope.
+    """
+    if not text or registry is None:
+        return False
+    low = " " + str(text).strip().lower() + " "
+    if _named_portfolio_lens(low, registry) is not None:
+        return True
+    # An UNKNOWN name is still a name. It has to count as naming a scope, or a
+    # caller-supplied default would answer in its place — which is the widening
+    # by another door.
+    return _unknown_named_book(text, registry) is not None
 
 
 # NOTE: ``is_acquired_only()`` used to live here and decided, from an

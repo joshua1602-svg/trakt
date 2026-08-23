@@ -365,11 +365,28 @@ def _resolve_lens(question: str, source_lens) -> Any:
     """
     default_lens = (_portfolio_lens.lens_from_selection(source_lens)
                     if source_lens is not None else None)
-    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
+    # PHASE 1E. The governed registry is what React renders its portfolio
+    # selector from, so resolving against it is what makes a name the client can
+    # SEE a name MI can READ. Best-effort: if the registry is unavailable this
+    # falls back to exactly the pre-1E resolution rather than failing a route.
+    #
+    # Built ONCE and handed to `resolve_context` below, which would otherwise
+    # build its own. The scope a route discloses and the scope its lens resolved
+    # against are then the same object, not two registries that happen to agree.
+    registry = None
+    try:
+        from . import portfolio_context as _ctx_registry
+
+        registry = _ctx_registry.build_registry()
+    except Exception as exc:  # noqa: BLE001 - identity must never break routing
+        _logger.info("governed registry unavailable for lens resolution: %s", exc)
+    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens,
+                                                     registry=registry)
     try:
         from . import portfolio_context as _ctx
 
         scope = _ctx.resolve_context(_portfolio_lens.context_id(lens),
+                                     registry=registry,
                                      discover_pipeline=False).scope
         return _portfolio_lens.PortfolioLens(
             name=lens.name, label=lens.label, filters=dict(scope.filters),
@@ -439,6 +456,27 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
         output_root, client_id, to_run_id=run_id,
         lens_filters=lens.filters or None, lens_label=lens.label)
     if not summary.get("available"):
+        if lens.filters:
+            # PHASE 1E. Deferring here hands a NARROWING question to a path that
+            # cannot see the narrowing. Measured before this branch existed,
+            # "Summarise the spv1_sponsored portfolio" — a governed portfolio
+            # with no funded rows at this reporting date — came back with the
+            # whole book's 11,035 loans and £1.96bn, with the scope it was asked
+            # for mentioned nowhere. The scope was not unresolvable; it was
+            # resolved, found empty, and then dropped.
+            #
+            # An empty governed scope is a FACT about the book, so it is stated
+            # (the shape `geo_exposure` already uses for the same condition)
+            # rather than replaced by a broader population.
+            return _envelope(
+                ok=True, question=question, spec=spec_dict, artifacts=[],
+                answer=(f"There are no funded loans in {lens.label} at the "
+                        f"current governed reporting date, so there is no "
+                        f"position to summarise for it. I have not answered "
+                        f"for the whole book instead."),
+                route="portfolio_summary", lens_applied=True,
+                warnings=[f"no rows in scope for {lens.label}: "
+                          f"{summary.get('reason', 'scope is empty')}."])
         return None  # defer to the existing point-in-time summary path
 
     m = summary["metrics"]
