@@ -1,0 +1,659 @@
+[
+  {
+    "route": "portfolio_summary",
+    "kind": "generic",
+    "handler": "_route_portfolio_summary",
+    "line": 454,
+    "callee": "_resolve_lens",
+    "bucket": "B_SEMANTIC",
+    "concept": "source scope + caller precedence"
+  },
+  {
+    "route": "portfolio_summary",
+    "kind": "generic",
+    "handler": "_route_portfolio_summary",
+    "line": 559,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_summary",
+    "kind": "generic",
+    "handler": "_route_portfolio_summary",
+    "line": 471,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_movement",
+    "kind": "generic",
+    "handler": "_route_period_movement",
+    "line": 571,
+    "callee": "_resolve_lens",
+    "bucket": "B_SEMANTIC",
+    "concept": "source scope + caller precedence"
+  },
+  {
+    "route": "period_movement",
+    "kind": "generic",
+    "handler": "_route_period_movement",
+    "line": 576,
+    "callee": "requested_span",
+    "bucket": "B_SEMANTIC",
+    "concept": "time window"
+  },
+  {
+    "route": "period_movement",
+    "kind": "generic",
+    "handler": "_route_period_movement",
+    "line": 720,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_movement",
+    "kind": "generic",
+    "handler": "_route_period_movement",
+    "line": 589,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_movement",
+    "kind": "generic",
+    "handler": "_route_period_movement",
+    "line": 585,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "temporal_compare",
+    "kind": "generic",
+    "handler": "_route_compare",
+    "line": 751,
+    "callee": "_dataset_for",
+    "bucket": "B_SEMANTIC",
+    "concept": "dataset selection (funded vs pipeline)"
+  },
+  {
+    "route": "temporal_compare",
+    "kind": "generic",
+    "handler": "_route_compare",
+    "line": 804,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "temporal_compare",
+    "kind": "generic",
+    "handler": "_route_compare",
+    "line": 748,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "temporal_compare",
+    "kind": "generic",
+    "handler": "_route_compare",
+    "line": 765,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "evolution",
+    "kind": "generic",
+    "handler": "_route_evolution",
+    "line": 877,
+    "callee": "_dataset_for",
+    "bucket": "B_SEMANTIC",
+    "concept": "dataset selection (funded vs pipeline)"
+  },
+  {
+    "route": "evolution",
+    "kind": "generic",
+    "handler": "_route_evolution",
+    "line": 1021,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "evolution",
+    "kind": "generic",
+    "handler": "_route_evolution",
+    "line": 926,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "evolution",
+    "kind": "generic",
+    "handler": "_route_evolution",
+    "line": 955,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "evolution",
+    "kind": "generic",
+    "handler": "_route_evolution",
+    "line": 976,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "evolution",
+    "kind": "generic",
+    "handler": "_route_evolution",
+    "line": 894,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "evolution",
+    "kind": "generic",
+    "handler": "_route_evolution",
+    "line": 936,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "forecast_extrapolation",
+    "kind": "specialist",
+    "handler": "_route_forecast",
+    "line": 1190,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "forecast_extrapolation",
+    "kind": "specialist",
+    "handler": "_route_forecast",
+    "line": 1065,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "forecast_extrapolation",
+    "kind": "specialist",
+    "handler": "_route_forecast",
+    "line": 1143,
+    "callee": "requested_unit",
+    "bucket": "D_SPECIALIST",
+    "concept": "time grain"
+  },
+  {
+    "route": "forecast_extrapolation",
+    "kind": "specialist",
+    "handler": "_route_forecast",
+    "line": 1147,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "scenario",
+    "kind": "specialist",
+    "handler": "_route_scenario",
+    "line": 1252,
+    "callee": "_scenario_multiplier",
+    "bucket": "D_SPECIALIST",
+    "concept": "scenario magnitude"
+  },
+  {
+    "route": "scenario",
+    "kind": "specialist",
+    "handler": "_route_scenario",
+    "line": 1256,
+    "callee": "_scenario_target",
+    "bucket": "D_SPECIALIST",
+    "concept": "scenario target"
+  },
+  {
+    "route": "scenario",
+    "kind": "specialist",
+    "handler": "_route_scenario",
+    "line": 1319,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "scenario",
+    "kind": "specialist",
+    "handler": "_route_scenario",
+    "line": 1263,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_tests",
+    "kind": "specialist",
+    "handler": "_route_concentration_tests",
+    "line": 1356,
+    "callee": "answer",
+    "bucket": "A_EXECUTION",
+    "concept": "route delegation; audited"
+  },
+  {
+    "route": "concentration_tests",
+    "kind": "specialist",
+    "handler": "_route_concentration_tests",
+    "line": 1451,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "risk_limits",
+    "kind": "specialist",
+    "handler": "_route_risk",
+    "line": 1472,
+    "callee": "_route_concentration_tests",
+    "bucket": "A_EXECUTION",
+    "concept": "route delegation; audited"
+  },
+  {
+    "route": "risk_limits",
+    "kind": "specialist",
+    "handler": "_route_risk",
+    "line": 1573,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "risk_limits",
+    "kind": "specialist",
+    "handler": "_route_risk",
+    "line": 1486,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "risk_limits",
+    "kind": "specialist",
+    "handler": "_route_risk",
+    "line": 1499,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "funded_bridge",
+    "kind": "generic",
+    "handler": "_route_bridge",
+    "line": 1639,
+    "callee": "resolve_lens_with_default",
+    "bucket": "B_SEMANTIC",
+    "concept": "source scope + caller precedence"
+  },
+  {
+    "route": "funded_bridge",
+    "kind": "generic",
+    "handler": "_route_bridge",
+    "line": 1699,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "funded_bridge",
+    "kind": "generic",
+    "handler": "_route_bridge",
+    "line": 1633,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "funded_bridge",
+    "kind": "generic",
+    "handler": "_route_bridge",
+    "line": 1647,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "cohort_progression",
+    "kind": "specialist",
+    "handler": "_route_cohort_progression",
+    "line": 1741,
+    "callee": "resolve_lens_with_default",
+    "bucket": "D_SPECIALIST",
+    "concept": "source scope + caller precedence"
+  },
+  {
+    "route": "cohort_progression",
+    "kind": "specialist",
+    "handler": "_route_cohort_progression",
+    "line": 1807,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "cohort_progression",
+    "kind": "specialist",
+    "handler": "_route_cohort_progression",
+    "line": 1751,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "geo_exposure",
+    "kind": "generic",
+    "handler": "_route_geo",
+    "line": 1936,
+    "callee": "_resolve_lens",
+    "bucket": "B_SEMANTIC",
+    "concept": "source scope + caller precedence"
+  },
+  {
+    "route": "geo_exposure",
+    "kind": "generic",
+    "handler": "_route_geo",
+    "line": 1989,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "geo_exposure",
+    "kind": "generic",
+    "handler": "_route_geo",
+    "line": 1919,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "geo_exposure",
+    "kind": "generic",
+    "handler": "_route_geo",
+    "line": 1929,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "geo_exposure",
+    "kind": "generic",
+    "handler": "_route_geo",
+    "line": 1952,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "geo_exposure",
+    "kind": "generic",
+    "handler": "_route_geo",
+    "line": 1941,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "cohort_conversion",
+    "kind": "specialist",
+    "handler": "_route_conversion",
+    "line": 2065,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "cohort_conversion",
+    "kind": "specialist",
+    "handler": "_route_conversion",
+    "line": 2027,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2270,
+    "callee": "run_portfolio_risk_comparison",
+    "bucket": "B_SEMANTIC",
+    "concept": "whole-question delegation to a workflow"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2405,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2238,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2248,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2279,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2316,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2257,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "portfolio_risk_comparison",
+    "kind": "generic",
+    "handler": "_route_portfolio_comparison",
+    "line": 2364,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2562,
+    "callee": "run_concentration_analysis",
+    "bucket": "B_SEMANTIC",
+    "concept": "whole-question delegation to a workflow"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2603,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2522,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2532,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2572,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2541,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 301,
+    "callee": "recognise",
+    "bucket": "B_SEMANTIC",
+    "concept": "route shape"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 323,
+    "callee": "resolve_rank_intent",
+    "bucket": "B_SEMANTIC",
+    "concept": "ranking subject + direction"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 342,
+    "callee": "requested_span",
+    "bucket": "B_SEMANTIC",
+    "concept": "time window"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 368,
+    "callee": "PeriodChangeRequest",
+    "bucket": "A_EXECUTION",
+    "concept": "route delegation; audited"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 399,
+    "callee": "_render",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 306,
+    "callee": "_resolve_lens",
+    "bucket": "B_SEMANTIC",
+    "concept": "source scope + caller precedence"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 325,
+    "callee": "_rank_refusal_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 397,
+    "callee": "_rank_refusal_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 391,
+    "callee": "_failure_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 363,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "period_change_analysis",
+    "kind": "generic",
+    "handler": "route_period_change",
+    "line": 384,
+    "callee": "_rank_refusal_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  }
+]

@@ -1,0 +1,264 @@
+{
+  "cases": [
+    {
+      "case": "funded balance",
+      "question": "What is the funded balance?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "scope",
+        "dataset"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "acquired balance",
+      "question": "What is the balance of the acquired book?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "scope",
+        "portfolio_ids"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "direct balance",
+      "question": "What is the balance of the direct book?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "scope",
+        "portfolio_ids"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "named portfolio",
+      "question": "What is the balance of the ALP Origination Book?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "scope",
+        "portfolio_ids"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "funded by region",
+      "question": "Show funded balance by region",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "grouping",
+        "scope"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "acquired by month",
+      "question": "Show the acquired book balance by month",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "time_grain",
+        "scope",
+        "portfolio_ids"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "two dimensions",
+      "question": "average borrower age by region and LTV band",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "statistic",
+        "grouping"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "movement by region",
+      "question": "How has balance moved by region?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "grouping"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "ranked movement",
+      "question": "Which regions grew the most?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "ranking"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "trend window",
+      "question": "Show balance over the last 6 months",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "time_window"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "this year",
+      "question": "How has the funded balance moved this year?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "time_window"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "comparison sides",
+      "question": "How does the direct book compare with the acquired book?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "comparison"
+      ],
+      "missing": [
+        "comparison"
+      ],
+      "ok": false
+    },
+    {
+      "case": "filtered",
+      "question": "What is the balance for loans over 150k?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "measure",
+        "filters"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "vintage + portfolio",
+      "question": "How has the 2023 vintage of the alp_acquired book progressed?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "scope",
+        "portfolio_ids",
+        "vintage"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "explicit beats context",
+      "question": "Summarise the acquired book",
+      "callerScope": "direct",
+      "callerDataset": null,
+      "required": [
+        "scope",
+        "portfolio_ids",
+        "provenance"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "context applies",
+      "question": "Please provide a portfolio summary",
+      "callerScope": "acquired",
+      "callerDataset": null,
+      "required": [
+        "scope",
+        "portfolio_ids",
+        "provenance"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "no scope, no context",
+      "question": "Please provide a portfolio summary",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "scope",
+        "provenance"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "unknown portfolio",
+      "question": "Summarise the Highgate Mortgages Book",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "unresolved"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "pipeline dataset",
+      "question": "How many pipeline cases are there?",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "dataset",
+        "provenance"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "dataset from tab",
+      "question": "Show balance by region",
+      "callerScope": null,
+      "callerDataset": "pipeline",
+      "required": [
+        "dataset",
+        "provenance"
+      ],
+      "missing": [],
+      "ok": true
+    },
+    {
+      "case": "ambiguous measure",
+      "question": "Summarise the portfolio",
+      "callerScope": null,
+      "callerDataset": null,
+      "required": [
+        "scope"
+      ],
+      "missing": [],
+      "ok": true
+    }
+  ]
+}
