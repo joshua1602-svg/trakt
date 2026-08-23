@@ -382,6 +382,13 @@ class SourceScopeClaim(Slot):
         state=UNRESOLVABLE             consulted and could not resolve; `reason`
                                        says why. NOT Total.
 
+    PHASE 1E adds the case that made the last state load-bearing: a question
+    that NAMES a book the governed registry does not hold ("the Highgate
+    Mortgages Book", "acquired_001"). That is UNRESOLVABLE — the owner was
+    consulted, read a scope, and could not resolve it — and it is emphatically
+    not `scope=total`. Before the owner could tell the two apart, such a
+    question was answered for every book under the name of one.
+
     A consumer that treats EMPTY as Total has widened a population the question
     may have narrowed — the P1L defect. `state` is what distinguishes them, and
     `scope` is meaningful only when `state` is FILLED.
@@ -389,7 +396,24 @@ class SourceScopeClaim(Slot):
 
     scope: Optional[str] = None
     #: The explicitly named book ids, when `scope` is `cohort`. Empty otherwise.
+    #:
+    #: PHASE 1E — these are GOVERNED PORTFOLIO IDS, the identity the registry
+    #: keys on, and they are the only identity a consumer may filter or join on.
+    #: Phase 1D established that MI's text side used to recognise the STORAGE
+    #: convention (`acquired_001`, a blob folder name) and nothing else, so a
+    #: consumer that treated whatever wording arrived here as an id would have
+    #: been filtering on a name the governed model does not hold.
     portfolio_ids: Tuple[str, ...] = ()
+    #: PHASE 1E. The governed DISPLAY LABEL for `portfolio_ids`, when the owner
+    #: could supply one — the name React renders in its selector.
+    #:
+    #: Separate from `raw_text` on purpose, and the separation is the point:
+    #: `raw_text` is THE WORDING THAT ASKED ("the alp_acquired book"), and this
+    #: is WHAT IT RESOLVED TO ("ALP Acquired Back Book"). They are frequently
+    #: different, and a reader owed an explanation of what was answered needs
+    #: the second while an audit of what was asked needs the first. Collapsing
+    #: them loses one of the two.
+    portfolio_label: Optional[str] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -397,6 +421,13 @@ class SourceScopeClaim(Slot):
             raise ValueError("unknown source scope %r" % (self.scope,))
         if self.state == FILLED and self.scope is None:
             raise ValueError("a filled source-scope claim must name a scope")
+        # PHASE 1E. A cohort claim with no id names nothing resolvable. Allowing
+        # it would let `narrows` be True with nothing to narrow BY, and the
+        # honest reading of that state is UNRESOLVABLE, which the owner is
+        # required to state rather than leave to be inferred here.
+        if self.state == FILLED and self.scope == SCOPE_COHORT and not self.portfolio_ids:
+            raise ValueError("a filled cohort claim must carry at least one "
+                             "governed portfolio id")
 
     @property
     def narrows(self) -> bool:
@@ -410,6 +441,7 @@ class SourceScopeClaim(Slot):
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
         d.update({"scope": self.scope, "portfolio_ids": list(self.portfolio_ids),
+                  "portfolio_label": self.portfolio_label,
                   "narrows": self.narrows})
         return d
 

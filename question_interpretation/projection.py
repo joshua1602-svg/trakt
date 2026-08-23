@@ -76,7 +76,7 @@ def _span_of(question: str, needle: Optional[str]) -> Optional[Span]:
 
 
 def from_parts(question: str, *, spec, facets, dim_terms,
-               semantics: dict) -> QuestionInterpretation:
+               semantics: dict, registry=None) -> QuestionInterpretation:
     """Assemble the object from interpreter output that ALREADY EXISTS.
 
     This is the Stage 2 entry point. It re-interprets nothing: the spec and the
@@ -102,7 +102,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     _time(qi, spec, PR)
     _target(qi, spec, facets)
     _population(qi, spec, facets)
-    _source_scope(qi)
+    _source_scope(qi, registry)
     _note_join_state(qi)
     return qi
 
@@ -127,7 +127,8 @@ def _note_join_state(qi: QuestionInterpretation) -> None:
         % (len(wording), located, len(binding)))
 
 
-def project(question: str, *, semantics: dict, frame=None) -> QuestionInterpretation:
+def project(question: str, *, semantics: dict, frame=None,
+            registry=None) -> QuestionInterpretation:
     """Build a QuestionInterpretation by asking the existing interpreters.
 
     The read-only Stage 1 path: runs the interpreters itself, then assembles.
@@ -142,7 +143,7 @@ def project(question: str, *, semantics: dict, frame=None) -> QuestionInterpreta
     facets = R.detect_requested_facets(question, semantics, frame=frame,
                                        requested_dimensions=dim_terms)
     return from_parts(question, spec=spec, facets=facets, dim_terms=dim_terms,
-                      semantics=semantics)
+                      semantics=semantics, registry=registry)
 
 
 # --------------------------------------------------------------------------- #
@@ -337,7 +338,7 @@ def _target(qi, spec, facets) -> None:
     # an interpreter supplies it.
 
 
-def _source_scope(qi) -> None:
+def _source_scope(qi, registry=None) -> None:
     """Carry `mi_agent.portfolio_lens`'s reading. It stays the single owner.
 
     One call, to the resolver that already decides this for every route today.
@@ -350,6 +351,15 @@ def _source_scope(qi) -> None:
     finds no source narrowing, so Total arrives as a POSITIVE reading. That is
     what lets a consumer tell "explicitly the whole book" from "nobody looked",
     which the empty `population` list could not.
+
+    PHASE 1E — ``registry``. Handed a governed :class:`PortfolioRegistry`, the
+    owner resolves a book NAMED in the question to its governed id, and says
+    UNRESOLVED for a name it does not hold. Both readings are what make the
+    claim's identity canonical: without a registry the owner can only recognise
+    the storage convention, so `portfolio_ids` would carry a storage folder name
+    that the governed model does not key on (Phase 1D). The registry is PASSED
+    IN rather than discovered here — this module reaches into no application
+    state, and that is what keeps it a transport object.
     """
     try:
         from mi_agent import portfolio_lens as _lens_owner
@@ -359,7 +369,8 @@ def _source_scope(qi) -> None:
             reason="the source-portfolio lens owner is unavailable: %s" % exc)
         return
     try:
-        lens = _lens_owner.resolve_lens(qi.question)
+        lens = (_lens_owner.resolve_lens(qi.question, registry=registry)
+                if registry is not None else _lens_owner.resolve_lens(qi.question))
     except Exception as exc:  # noqa: BLE001
         qi.source_scope = SourceScopeClaim(
             state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
@@ -367,6 +378,18 @@ def _source_scope(qi) -> None:
         return
 
     name = getattr(lens, "name", None)
+    # PHASE 1E. The owner NAMED a scope and could not resolve it. That is the
+    # contract's UNRESOLVABLE, stated as such and carrying the wording that
+    # asked — never `total`, which is the widening this whole phase closes.
+    if name == getattr(_lens_owner, "LENS_UNRESOLVED", "unresolved"):
+        requested = getattr(lens, "label", None)
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, raw_text=requested,
+            span=_span_of(qi.question, requested),
+            source="mi_agent.portfolio_lens",
+            reason="the question names %r, which is not a governed portfolio "
+                   "for this book" % (requested,))
+        return
     if name not in SOURCE_SCOPES:
         # A lens kind this contract has no member for. Recorded as unresolvable
         # rather than mapped onto the nearest one — a substitution here would be
@@ -384,9 +407,33 @@ def _source_scope(qi) -> None:
     # Only a NARROWING has wording in the question to point at; `total` is the
     # absence of a scope phrase, so it carries no raw_text and no span.
     raw = None if name == SCOPE_TOTAL else label
+    span = _span_of(qi.question, raw)
+    # PHASE 1E. With a registry, `label` is the GOVERNED display label, which is
+    # frequently not the wording that asked — "the alp_acquired book" resolves
+    # to "ALP Acquired Back Book". Carry both, and do not pretend the governed
+    # label was the wording: when it is not a substring of the question there is
+    # no span, and `raw_text` falls back to the id that WAS named.
+    portfolio_label = label if name == SCOPE_COHORT else None
+    if name == SCOPE_COHORT and span is None:
+        named = next((pid for pid in ids
+                      if _span_of(qi.question, pid) is not None), None)
+        if named is not None:
+            raw, span = named, _span_of(qi.question, named)
+    if name == SCOPE_COHORT and not ids:
+        # A cohort reading with no governed id is not something this contract
+        # can carry as FILLED (the schema refuses it), and inventing one would
+        # be the substitution the claim exists to prevent.
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, raw_text=label,
+            span=_span_of(qi.question, label),
+            source="mi_agent.portfolio_lens",
+            reason="the owner read a named book (%r) but resolved no governed "
+                   "portfolio id for it" % (label,))
+        return
     qi.source_scope = SourceScopeClaim(
-        state=FILLED, raw_text=raw, span=_span_of(qi.question, raw),
-        scope=name, portfolio_ids=ids, source="mi_agent.portfolio_lens")
+        state=FILLED, raw_text=raw, span=span,
+        scope=name, portfolio_ids=ids, portfolio_label=portfolio_label,
+        source="mi_agent.portfolio_lens")
 
 
 def _population(qi, spec, facets) -> None:
