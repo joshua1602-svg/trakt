@@ -15,6 +15,12 @@ python -m compositional_plan_scoping.compose                   # the composition
 python -m compositional_plan_scoping.compose --book kestrelmoor
 ```
 
+**Follow-up:** `docs/mi_t3_now_versus_migration.md` scopes landing T3 under
+today's architecture against waiting for the migration. It corrects one reading
+of §2.1 below: the discarded per-period series is cut at ITL3 (172 categories),
+not at the readable region level (12) the request resolves to, so it is not
+T3's answer as it stands.
+
 ---
 
 ## 0. The finding, before the detail
