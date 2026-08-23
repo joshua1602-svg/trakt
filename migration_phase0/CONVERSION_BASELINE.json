@@ -1,0 +1,2114 @@
+{
+  "artefact": "portfolio_summary conversion baseline (Phase 1B)",
+  "purpose": "The EXACT production answer for every question the shipped recogniser owns, before the compositional switch. A conversion baseline only \u2014 no new interpretation or semantic baseline is created here.",
+  "headSha": "045fa17dbe7448a3bea289a794fbc38b692ff9fe",
+  "entrypoint": "mi_agent_api.mi_service.execute_governed_mi_query",
+  "volatileKeysStripped": [
+    "durationMs",
+    "duration_ms",
+    "elapsed",
+    "generatedAt",
+    "generated_at",
+    "queryId",
+    "query_id",
+    "requestId",
+    "request_id",
+    "runId",
+    "run_id",
+    "timestamp",
+    "traceId",
+    "trace_id"
+  ],
+  "cases": {
+    "A1": {
+      "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "11,035"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a31.96bn"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "43.2%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "71.4 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.26272,
+              "value": 516214136.58
+            },
+            {
+              "region": "London",
+              "share": 0.2106,
+              "value": 413804467.49
+            },
+            {
+              "region": "South West",
+              "share": 0.120827,
+              "value": 237410495.59
+            },
+            {
+              "region": "East of England",
+              "share": 0.108778,
+              "value": 213736192.37
+            },
+            {
+              "region": "North West",
+              "share": 0.065514,
+              "value": 128727079.34
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.062013,
+              "value": 121848183.49
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.053151,
+              "value": 104436198.85
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.049265,
+              "value": 96800530.68
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        },
+        {
+          "columns": [
+            "portfolio",
+            "balance"
+          ],
+          "kpis": null,
+          "rowKeys": [
+            "balance",
+            "portfolio"
+          ],
+          "rows": [
+            {
+              "balance": 1385508582.98,
+              "portfolio": "ALP Origination Book"
+            },
+            {
+              "balance": 579377675.23,
+              "portfolio": "ALP Acquired Back Book"
+            }
+          ],
+          "title": "Funded balance by source portfolio",
+          "type": "table"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "total",
+        "context_kind": "total",
+        "label": "Total",
+        "portfolio_ids": [
+          "alp_origination",
+          "alp_acquired",
+          "spv1_sponsored"
+        ],
+        "portfolio_types": [
+          "direct",
+          "acquired"
+        ]
+      },
+      "question": "Please provide a portfolio summary",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "A2": {
+      "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "11,035"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a31.96bn"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "43.2%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "71.4 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.26272,
+              "value": 516214136.58
+            },
+            {
+              "region": "London",
+              "share": 0.2106,
+              "value": 413804467.49
+            },
+            {
+              "region": "South West",
+              "share": 0.120827,
+              "value": 237410495.59
+            },
+            {
+              "region": "East of England",
+              "share": 0.108778,
+              "value": 213736192.37
+            },
+            {
+              "region": "North West",
+              "share": 0.065514,
+              "value": 128727079.34
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.062013,
+              "value": 121848183.49
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.053151,
+              "value": 104436198.85
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.049265,
+              "value": 96800530.68
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        },
+        {
+          "columns": [
+            "portfolio",
+            "balance"
+          ],
+          "kpis": null,
+          "rowKeys": [
+            "balance",
+            "portfolio"
+          ],
+          "rows": [
+            {
+              "balance": 1385508582.98,
+              "portfolio": "ALP Origination Book"
+            },
+            {
+              "balance": 579377675.23,
+              "portfolio": "ALP Acquired Back Book"
+            }
+          ],
+          "title": "Funded balance by source portfolio",
+          "type": "table"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "total",
+        "context_kind": "total",
+        "label": "Total",
+        "portfolio_ids": [
+          "alp_origination",
+          "alp_acquired",
+          "spv1_sponsored"
+        ],
+        "portfolio_types": [
+          "direct",
+          "acquired"
+        ]
+      },
+      "question": "Give me a summary of the portfolio",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "A3": {
+      "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "11,035"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a31.96bn"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "43.2%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "71.4 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.26272,
+              "value": 516214136.58
+            },
+            {
+              "region": "London",
+              "share": 0.2106,
+              "value": 413804467.49
+            },
+            {
+              "region": "South West",
+              "share": 0.120827,
+              "value": 237410495.59
+            },
+            {
+              "region": "East of England",
+              "share": 0.108778,
+              "value": 213736192.37
+            },
+            {
+              "region": "North West",
+              "share": 0.065514,
+              "value": 128727079.34
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.062013,
+              "value": 121848183.49
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.053151,
+              "value": 104436198.85
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.049265,
+              "value": 96800530.68
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        },
+        {
+          "columns": [
+            "portfolio",
+            "balance"
+          ],
+          "kpis": null,
+          "rowKeys": [
+            "balance",
+            "portfolio"
+          ],
+          "rows": [
+            {
+              "balance": 1385508582.98,
+              "portfolio": "ALP Origination Book"
+            },
+            {
+              "balance": 579377675.23,
+              "portfolio": "ALP Acquired Back Book"
+            }
+          ],
+          "title": "Funded balance by source portfolio",
+          "type": "table"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "total",
+        "context_kind": "total",
+        "label": "Total",
+        "portfolio_ids": [
+          "alp_origination",
+          "alp_acquired",
+          "spv1_sponsored"
+        ],
+        "portfolio_types": [
+          "direct",
+          "acquired"
+        ]
+      },
+      "question": "Can you summarise the book for me?",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "A4": {
+      "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "11,035"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a31.96bn"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "43.2%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "71.4 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.26272,
+              "value": 516214136.58
+            },
+            {
+              "region": "London",
+              "share": 0.2106,
+              "value": 413804467.49
+            },
+            {
+              "region": "South West",
+              "share": 0.120827,
+              "value": 237410495.59
+            },
+            {
+              "region": "East of England",
+              "share": 0.108778,
+              "value": 213736192.37
+            },
+            {
+              "region": "North West",
+              "share": 0.065514,
+              "value": 128727079.34
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.062013,
+              "value": 121848183.49
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.053151,
+              "value": 104436198.85
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.049265,
+              "value": 96800530.68
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        },
+        {
+          "columns": [
+            "portfolio",
+            "balance"
+          ],
+          "kpis": null,
+          "rowKeys": [
+            "balance",
+            "portfolio"
+          ],
+          "rows": [
+            {
+              "balance": 1385508582.98,
+              "portfolio": "ALP Origination Book"
+            },
+            {
+              "balance": 579377675.23,
+              "portfolio": "ALP Acquired Back Book"
+            }
+          ],
+          "title": "Funded balance by source portfolio",
+          "type": "table"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "total",
+        "context_kind": "total",
+        "label": "Total",
+        "portfolio_ids": [
+          "alp_origination",
+          "alp_acquired",
+          "spv1_sponsored"
+        ],
+        "portfolio_types": [
+          "direct",
+          "acquired"
+        ]
+      },
+      "question": "portfolio summary",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "A5": {
+      "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "11,035"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a31.96bn"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "43.2%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "71.4 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.26272,
+              "value": 516214136.58
+            },
+            {
+              "region": "London",
+              "share": 0.2106,
+              "value": 413804467.49
+            },
+            {
+              "region": "South West",
+              "share": 0.120827,
+              "value": 237410495.59
+            },
+            {
+              "region": "East of England",
+              "share": 0.108778,
+              "value": 213736192.37
+            },
+            {
+              "region": "North West",
+              "share": 0.065514,
+              "value": 128727079.34
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.062013,
+              "value": 121848183.49
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.053151,
+              "value": 104436198.85
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.049265,
+              "value": 96800530.68
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        },
+        {
+          "columns": [
+            "portfolio",
+            "balance"
+          ],
+          "kpis": null,
+          "rowKeys": [
+            "balance",
+            "portfolio"
+          ],
+          "rows": [
+            {
+              "balance": 1385508582.98,
+              "portfolio": "ALP Origination Book"
+            },
+            {
+              "balance": 579377675.23,
+              "portfolio": "ALP Acquired Back Book"
+            }
+          ],
+          "title": "Funded balance by source portfolio",
+          "type": "table"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "total",
+        "context_kind": "total",
+        "label": "Total",
+        "portfolio_ids": [
+          "alp_origination",
+          "alp_acquired",
+          "spv1_sponsored"
+        ],
+        "portfolio_types": [
+          "direct",
+          "acquired"
+        ]
+      },
+      "question": "summarise the portfolio",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "A6": {
+      "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "11,035"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a31.96bn"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "43.2%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "71.4 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.26272,
+              "value": 516214136.58
+            },
+            {
+              "region": "London",
+              "share": 0.2106,
+              "value": 413804467.49
+            },
+            {
+              "region": "South West",
+              "share": 0.120827,
+              "value": 237410495.59
+            },
+            {
+              "region": "East of England",
+              "share": 0.108778,
+              "value": 213736192.37
+            },
+            {
+              "region": "North West",
+              "share": 0.065514,
+              "value": 128727079.34
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.062013,
+              "value": 121848183.49
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.053151,
+              "value": 104436198.85
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.049265,
+              "value": 96800530.68
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        },
+        {
+          "columns": [
+            "portfolio",
+            "balance"
+          ],
+          "kpis": null,
+          "rowKeys": [
+            "balance",
+            "portfolio"
+          ],
+          "rows": [
+            {
+              "balance": 1385508582.98,
+              "portfolio": "ALP Origination Book"
+            },
+            {
+              "balance": 579377675.23,
+              "portfolio": "ALP Acquired Back Book"
+            }
+          ],
+          "title": "Funded balance by source portfolio",
+          "type": "table"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "total",
+        "context_kind": "total",
+        "label": "Total",
+        "portfolio_ids": [
+          "alp_origination",
+          "alp_acquired",
+          "spv1_sponsored"
+        ],
+        "portfolio_types": [
+          "direct",
+          "acquired"
+        ]
+      },
+      "question": "overview of the portfolio",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "L1": {
+      "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "3,909"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a3579.4m"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "42.7%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "70.0 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.253871,
+              "value": 147086946.18
+            },
+            {
+              "region": "London",
+              "share": 0.20419,
+              "value": 118303254.07
+            },
+            {
+              "region": "South West",
+              "share": 0.128217,
+              "value": 74285983.32
+            },
+            {
+              "region": "East of England",
+              "share": 0.110795,
+              "value": 64192018.99
+            },
+            {
+              "region": "North West",
+              "share": 0.066325,
+              "value": 38427115.89
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.058247,
+              "value": 33747142.15
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.053145,
+              "value": 30791312.12
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.05117,
+              "value": 29646536.09
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "acquired",
+        "context_kind": "type",
+        "label": "Acquired",
+        "portfolio_ids": [
+          "alp_acquired"
+        ],
+        "portfolio_types": [
+          "acquired"
+        ]
+      },
+      "question": "Summarise the acquired book",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "L2": {
+      "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest regional exposures are South East (\u00a3369.1m, 26.6%), London (\u00a3295.5m, 21.3%) and South West (\u00a3163.1m, 11.8%).\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "7,126"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a31.39bn"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "43.4%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.06%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "72.2 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.26642,
+              "value": 369127190.4
+            },
+            {
+              "region": "London",
+              "share": 0.21328,
+              "value": 295501213.42
+            },
+            {
+              "region": "South West",
+              "share": 0.117736,
+              "value": 163124512.27
+            },
+            {
+              "region": "East of England",
+              "share": 0.107934,
+              "value": 149544173.38
+            },
+            {
+              "region": "North West",
+              "share": 0.065175,
+              "value": 90299963.45
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.063588,
+              "value": 88101041.34
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.05398,
+              "value": 74789662.76
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.047643,
+              "value": 66009218.56
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "direct",
+        "context_kind": "type",
+        "label": "Direct",
+        "portfolio_ids": [
+          "alp_origination"
+        ],
+        "portfolio_types": [
+          "direct"
+        ]
+      },
+      "question": "Summarise the direct book",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "L3": {
+      "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest regional exposures are South East (\u00a3147.1m, 25.4%), London (\u00a3118.3m, 20.4%) and South West (\u00a374.3m, 12.8%).\n\nCalculated: Governed analysis.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "label": "Loans funded",
+              "value": "3,909"
+            },
+            {
+              "label": "Funded balance",
+              "value": "\u00a3579.4m"
+            },
+            {
+              "label": "WA current LTV",
+              "value": "42.7%"
+            },
+            {
+              "label": "WA interest rate",
+              "value": "0.07%"
+            },
+            {
+              "label": "Avg borrower age",
+              "value": "70.0 years"
+            },
+            {
+              "label": "Data cut-off",
+              "value": "30 June 2026"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Portfolio summary \u2014 30 June 2026",
+          "type": "kpi"
+        },
+        {
+          "columns": [],
+          "kpis": null,
+          "rowKeys": [
+            "region",
+            "share",
+            "value"
+          ],
+          "rows": [
+            {
+              "region": "South East",
+              "share": 0.253871,
+              "value": 147086946.18
+            },
+            {
+              "region": "London",
+              "share": 0.20419,
+              "value": 118303254.07
+            },
+            {
+              "region": "South West",
+              "share": 0.128217,
+              "value": 74285983.32
+            },
+            {
+              "region": "East of England",
+              "share": 0.110795,
+              "value": 64192018.99
+            },
+            {
+              "region": "North West",
+              "share": 0.066325,
+              "value": 38427115.89
+            },
+            {
+              "region": "West Midlands",
+              "share": 0.058247,
+              "value": 33747142.15
+            },
+            {
+              "region": "Yorkshire and The Humber",
+              "share": 0.053145,
+              "value": 30791312.12
+            },
+            {
+              "region": "East Midlands",
+              "share": 0.05117,
+              "value": 29646536.09
+            }
+          ],
+          "title": "Funded balance by region",
+          "type": "chart"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": null,
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [],
+        "groupCount": null,
+        "measure": "Governed analysis",
+        "narrowed": false,
+        "notApplied": [],
+        "parserConfidence": null,
+        "period": null,
+        "population": null,
+        "populationLabel": "loans",
+        "populationTotal": null,
+        "ranking": null,
+        "receipt": "Calculated: Governed analysis.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "",
+      "lensApplied": true,
+      "metadataKeys": [
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "engine",
+        "lensApplied",
+        "mock",
+        "parserProvenance",
+        "route",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "error",
+        "executionSummary",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioScope",
+        "question",
+        "reconciliation",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "acquired",
+        "context_kind": "type",
+        "label": "Acquired",
+        "portfolio_ids": [
+          "alp_acquired"
+        ],
+        "portfolio_types": [
+          "acquired"
+        ]
+      },
+      "question": "portfolio summary for the acquired book",
+      "reconciliation": {
+        "coverage_by_balance_pct": 100.0,
+        "dataset": "funded",
+        "missing_dimension_policy": "exclude"
+      },
+      "route": "portfolio_summary",
+      "sourceNotes": [
+        {
+          "field": "reporting_period",
+          "note": "2026-06 (2026-06-30); 3 governed period(s) available."
+        }
+      ],
+      "warnings": []
+    },
+    "X1": {
+      "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 1,177 loans \u00b7 as at 30 June 2026.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "field": "loan_count",
+              "label": "Loan",
+              "rawValue": 1177.0,
+              "value": "1,177",
+              "valueFormat": "number"
+            },
+            {
+              "field": "current_outstanding_balance_sum",
+              "label": "Current Outstanding Balance",
+              "rawValue": 171736116.72,
+              "value": "\u00a3171.7MM",
+              "valueFormat": "gbp"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Summary",
+          "type": "kpi"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": "sum",
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [
+          {
+            "field": "seasoning_segment",
+            "kind": "row_population",
+            "label": "the population seasoning_segment = Front Book",
+            "reason": "",
+            "status": "applied"
+          }
+        ],
+        "filtersApplied": [
+          "Seasoning Segment = Front Book"
+        ],
+        "groupCount": null,
+        "measure": "Balance",
+        "narrowed": true,
+        "notApplied": [],
+        "parserConfidence": "high",
+        "period": "30 June 2026",
+        "population": 1177,
+        "populationLabel": "loans",
+        "populationTotal": 11035,
+        "ranking": null,
+        "receipt": "Calculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 1,177 loans \u00b7 as at 30 June 2026.",
+        "scenario": null
+      },
+      "facets": [
+        [
+          "row_population",
+          "the population seasoning_segment = Front Book",
+          "seasoning_segment",
+          "applied"
+        ]
+      ],
+      "interpreted": "Chart: Summary (no chart) \u00b7 Metric: Balance \u00b7 Aggregation: Sum \u00b7 Filters: {'Seasoning Segment': 'Front Book'} \u00b7 Parser: deterministic \u00b7 Validation: Passed",
+      "lensApplied": null,
+      "metadataKeys": [
+        "asOfDate",
+        "chartType",
+        "controlledRefusal",
+        "controlledUnsupported",
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "diagnostics",
+        "engine",
+        "llm",
+        "llmConfig",
+        "mock",
+        "parserMode",
+        "parserModeDetail",
+        "parserProvenance",
+        "portfolioId",
+        "portfolioLens",
+        "repairAttempts",
+        "repairSkippedReason",
+        "resultType",
+        "rowCount",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source",
+        "unmappedQuestion"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "dimensionInvariant",
+        "error",
+        "executionSummary",
+        "filterInvariant",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioCoverage",
+        "portfolioScope",
+        "queryTrace",
+        "question",
+        "reconciliation",
+        "semanticGuard",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "total",
+        "context_kind": "total",
+        "label": "Total",
+        "portfolio_ids": [
+          "alp_origination",
+          "alp_acquired",
+          "spv1_sponsored"
+        ],
+        "portfolio_types": [
+          "direct",
+          "acquired"
+        ]
+      },
+      "question": "Summarise the front book",
+      "reconciliation": {
+        "balance_after_filters": 171736116.72,
+        "balance_excluded_missing": 0.0,
+        "balance_field": "current_outstanding_balance",
+        "balance_included": 171736116.72,
+        "balance_missing_measure": null,
+        "coverage_by_balance_pct": 8.7,
+        "dataset": null,
+        "filters": {
+          "seasoning_segment": "Front Book"
+        },
+        "filters_applied": true,
+        "missing_dimension_fields": [],
+        "missing_dimension_policy": "n/a",
+        "missing_measure_fields": [],
+        "records_after_filters": 1177,
+        "records_excluded_missing": 0,
+        "records_included": 1177,
+        "records_missing_measure": 0,
+        "total_balance": 1964886258.21,
+        "total_records": 11035
+      },
+      "route": null,
+      "sourceNotes": null,
+      "warnings": [
+        "auto-corrected the plan to a KPI/table (the metric-only query did not need a chart dimension)",
+        "Answered from alp_origination, alp_acquired. Excluded spv1_sponsored: no rows for this portfolio in the selected data. This is NOT a fully consolidated Total answer."
+      ]
+    },
+    "X2": {
+      "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Count of loans \u00b7 Source Portfolio in alp_origination \u00b7 7,126 loans \u00b7 as at 30 June 2026.",
+      "artifacts": [
+        {
+          "columns": [],
+          "kpis": [
+            {
+              "field": "loan_count",
+              "label": "Loan",
+              "rawValue": 7126.0,
+              "value": "7,126",
+              "valueFormat": "number"
+            },
+            {
+              "field": "current_outstanding_balance_sum",
+              "label": "Current Outstanding Balance",
+              "rawValue": 1385508582.98,
+              "value": "\u00a31.39BN",
+              "valueFormat": "gbp"
+            }
+          ],
+          "rowKeys": [],
+          "rows": null,
+          "title": "Summary",
+          "type": "kpi"
+        }
+      ],
+      "assumptions": [],
+      "engine": "mi_agent",
+      "error": null,
+      "executionSummary": {
+        "aggregation": "count",
+        "comparisonPeriod": null,
+        "dimensionsApplied": [],
+        "facets": [],
+        "filtersApplied": [
+          "Source Portfolio in alp_origination"
+        ],
+        "groupCount": null,
+        "measure": null,
+        "narrowed": true,
+        "notApplied": [],
+        "parserConfidence": "medium",
+        "period": "30 June 2026",
+        "population": 7126,
+        "populationLabel": "loans",
+        "populationTotal": 11035,
+        "ranking": null,
+        "receipt": "Calculated: Count of loans \u00b7 Source Portfolio in alp_origination \u00b7 7,126 loans \u00b7 as at 30 June 2026.",
+        "scenario": null
+      },
+      "facets": [],
+      "interpreted": "Chart: Summary (no chart) \u00b7 Aggregation: Count \u00b7 Filters: {'Source Portfolio': ['alp_origination']} \u00b7 Parser: deterministic \u00b7 Validation: Passed",
+      "lensApplied": null,
+      "metadataKeys": [
+        "asOfDate",
+        "chartType",
+        "controlledRefusal",
+        "controlledUnsupported",
+        "dataSourceKind",
+        "dataSourceLabel",
+        "datasetContext",
+        "diagnostics",
+        "engine",
+        "llm",
+        "llmConfig",
+        "mock",
+        "parserMode",
+        "parserModeDetail",
+        "parserProvenance",
+        "portfolioId",
+        "portfolioLens",
+        "repairAttempts",
+        "repairSkippedReason",
+        "resultType",
+        "rowCount",
+        "runRequired",
+        "selectedClient",
+        "selectedPortfolio",
+        "selectedRun",
+        "source",
+        "unmappedQuestion"
+      ],
+      "notApplied": [],
+      "ok": true,
+      "payloadKeys": [
+        "answer",
+        "artifacts",
+        "assumptions",
+        "diagnostics",
+        "dimensionInvariant",
+        "error",
+        "executionSummary",
+        "filterInvariant",
+        "interpreted",
+        "metadata",
+        "ok",
+        "portfolioCoverage",
+        "portfolioScope",
+        "queryTrace",
+        "question",
+        "reconciliation",
+        "semanticGuard",
+        "sourceNotes",
+        "spec",
+        "validation",
+        "warnings"
+      ],
+      "portfolioScope": {
+        "asset_classes": [
+          "equity_release"
+        ],
+        "context_id": "direct",
+        "context_kind": "type",
+        "label": "Direct",
+        "portfolio_ids": [
+          "alp_origination"
+        ],
+        "portfolio_types": [
+          "direct"
+        ]
+      },
+      "question": "What is the portfolio position for the direct book?",
+      "reconciliation": {
+        "balance_after_filters": 1385508582.98,
+        "balance_excluded_missing": 0.0,
+        "balance_field": "current_outstanding_balance",
+        "balance_included": 1385508582.98,
+        "balance_missing_measure": null,
+        "coverage_by_balance_pct": 70.5,
+        "dataset": null,
+        "filters": {
+          "source_portfolio_id": [
+            "alp_origination"
+          ]
+        },
+        "filters_applied": true,
+        "missing_dimension_fields": [],
+        "missing_dimension_policy": "n/a",
+        "missing_measure_fields": [],
+        "records_after_filters": 7126,
+        "records_excluded_missing": 0,
+        "records_included": 7126,
+        "records_missing_measure": 0,
+        "total_balance": 1964886258.21,
+        "total_records": 11035
+      },
+      "route": null,
+      "sourceNotes": null,
+      "warnings": [
+        "portfolio scope applied: Direct (alp_origination)"
+      ]
+    }
+  }
+}
