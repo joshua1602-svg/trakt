@@ -213,10 +213,31 @@ _RISK_PROFILE_TERMS: Tuple[str, ...] = (
 #: PIPELINE names the pre-funding dataset — applications, offers and the
 #: transition into funded. Deliberately excludes bare "funded"/"fund", which
 #: name the book itself rather than the flow into it.
+#:
+#: AND IT EXCLUDES A BARE `case`/`cases`, which it used to contain. That word is
+#: DATASET-NEUTRAL in this estate: it names a pipeline case and a funded loan
+#: about equally often, and the P1C golden bank uses it for the second —
+#:
+#:     "Which region gained the most cases since last month?"
+#:
+#: is filed there under `# -- loan count --`, beside "Which region added the
+#: most loans month-on-month?", and expects a ranked FUNDED movement. This
+#: layer read it as PIPELINE and so asserted `REQ_PIPELINE_DATASET` for it,
+#: which `unmet_requirements` then tests against a funded dataset and finds
+#: unmet. `workspace.resolve_dataset` — the authoritative dataset owner — does
+#: not read the bare word, so the two disagreed about the same sentence.
+#:
+#: Removing it costs this layer nothing measurable: all 7 corpus questions
+#: containing `case`/`cases` ALSO say "pipeline" outright, so every one of them
+#: still reaches this family through `" pipeline "` above. `caseload` stays —
+#: it is a different word and names the pipeline unambiguously.
+#:
+#: Explicit pipeline context still makes a case a pipeline case. That is the
+#: house rule, and it is the same one the dataset owner applies.
 _PIPELINE_TERMS: Tuple[str, ...] = (
     " pipeline ", " pipelines ", " application ", " applications ", " kfi ",
-    " kfis ", " offer ", " offers ", " offered ", " at offer ", " case ",
-    " cases ", " caseload ", " in flight ", " in-flight ", " underwriting ",
+    " kfis ", " offer ", " offers ", " offered ", " at offer ",
+    " caseload ", " in flight ", " in-flight ", " underwriting ",
     " decision in principle ", " dip ",
 )
 

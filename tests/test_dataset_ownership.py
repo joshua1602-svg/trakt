@@ -44,10 +44,14 @@ PIPELINE = (
     "How many applications are there?",
     "How many KFIs are there?",
     "How many offers are there?",
+    "How many offers are outstanding?",
     "What is the pipeline amount?",
     "How many pipeline cases are there?",
+    "pipeline cases by stage",
+    "open pipeline cases",
 )
 FORECAST = (
+    "Forecast application volumes next month",
     "Forecast application volumes next quarter",
     "Forecast case completions over the next three months",
     "Forecast funded volumes for the next quarter",
@@ -310,3 +314,129 @@ def test_no_production_module_re_decides_the_dataset_from_raw_text():
     assert sorted(set(callers)) == [owner], (
         "the disclaim-aware dataset reading must live in exactly one production "
         "module; it is called from %s" % sorted(set(callers)))
+
+
+# --------------------------------------------------------------------------- #
+# The `case` house rule, and the governed intent layer agreeing with it
+# --------------------------------------------------------------------------- #
+#: DATASET-NEUTRAL. A bare `case`/`cases` does not select the pipeline.
+CASE_NEUTRAL = (
+    "How many cases are there?",
+    "Which region gained the most cases since last month?",
+    "cases by region",
+    "How many cases completed?",
+)
+
+#: The subset where `case` is the ONLY pipeline-shaped word. "How many cases
+#: completed?" is excluded on purpose — see the test below.
+CASE_ONLY_SIGNAL = CASE_NEUTRAL[:3]
+
+#: EXPLICIT PIPELINE. Independent pipeline evidence in the same sentence.
+CASE_PIPELINE = (
+    "How many pipeline cases are there?",
+    "pipeline cases by stage",
+    "open pipeline cases",
+    "how many cases are in the pipeline",
+)
+
+
+@pytest.mark.parametrize("question", CASE_NEUTRAL)
+def test_a_bare_case_does_not_select_the_pipeline(question):
+    assert ws.resolve_dataset(question) == "funded", question
+    assert {ws.resolve_active_view(question, tab) for tab in TABS} == {"funded"}
+
+
+@pytest.mark.parametrize("question", CASE_PIPELINE)
+def test_explicit_pipeline_context_still_makes_a_case_a_pipeline_case(question):
+    assert ws.resolve_dataset(question) == "pipeline", question
+    assert {ws.resolve_active_view(question, tab) for tab in TABS} == {"pipeline"}
+
+
+@pytest.mark.parametrize("question", CASE_ONLY_SIGNAL)
+def test_the_governed_intent_layer_agrees_that_a_bare_case_is_neutral(question):
+    """THE TWO READERS NOW AGREE.
+
+    `mi_workflows.analytical.intent` used to carry a bare `case`/`cases` in
+    `_PIPELINE_TERMS`, so it asserted `REQ_PIPELINE_DATASET` for exactly these
+    sentences while the authoritative dataset owner called them funded. That
+    disagreement is what turned "How many cases are there?" into a controlled
+    refusal: the requirement was checked against a funded dataset and found
+    unmet.
+
+    This is the alignment, asserted on the intent layer rather than on the
+    refusal it produced, because the refusal is a symptom.
+    """
+    from mi_workflows.analytical import intent as it
+    reading = it.classify(question, spec=None)
+    assert it.REQ_PIPELINE_DATASET not in reading.requirements, (
+        question, reading.families, reading.requirements)
+
+
+@pytest.mark.parametrize("question", CASE_PIPELINE)
+def test_the_governed_intent_layer_still_reads_an_explicit_pipeline_case(question):
+    """The CAN-FAIL for the alignment: it must not have removed the family."""
+    from mi_workflows.analytical import intent as it
+    reading = it.classify(question, spec=None)
+    assert it.FAMILY_PIPELINE in reading.families, (question, reading.families)
+    assert it.REQ_PIPELINE_DATASET in reading.requirements, question
+
+
+@pytest.mark.parametrize("question", [
+    "How many applications are there?",
+    "How many KFIs are there?",
+    "How many offers are outstanding?",
+    "What is the pipeline amount by stage?",
+])
+def test_the_strong_artefacts_are_untouched_in_both_readers(question):
+    """`application`, `kfi`, `offer` and an explicit stage keep both readings."""
+    from mi_workflows.analytical import intent as it
+    assert ws.resolve_dataset(question) == "pipeline", question
+    assert it.FAMILY_PIPELINE in it.classify(question, spec=None).families
+
+
+@pytest.mark.parametrize("question", [
+    "Forecast application volumes next month",
+    "Forecast case completions next quarter",
+])
+def test_forecast_precedence_survives_the_alignment(question):
+    """Forecast still wins over pipeline vocabulary, on every tab."""
+    from mi_workflows.analytical import intent as it
+    assert ws.resolve_dataset(question) == "forecast", question
+    assert {ws.resolve_active_view(question, tab) for tab in TABS} == {"forecast"}
+    # The intent layer still recognises the forward-looking requirement; the
+    # alignment touched the pipeline vocabulary only.
+    assert it.REQ_FORECAST in it.classify(question, spec=None).requirements
+
+
+def test_a_completion_question_stays_a_pipeline_question_in_both_readers():
+    """THE LIMIT OF THE ALIGNMENT, asserted so it reads as a decision.
+
+    "How many cases completed?" has its DATASET decided as funded — the bare
+    `case` rule working — while the intent layer still calls it a PIPELINE
+    question. The two are not in conflict: the pipeline reading comes from
+    `completed`, not from `case`. A completion is the pipeline-to-funded
+    transition, an EVENT the funded point-in-time executor structurally cannot
+    count, and refusing it is the fail-closed rule doing its job — the sibling
+    case "How many loans are we completing at the moment?" is one of the four
+    measured defects that rule exists to stop, where it returned 11,035 loans
+    with a green guard.
+
+    So `_COMPLETION_TERMS` was deliberately not touched. Narrowing this task to
+    the bare word means leaving that refusal exactly where it was.
+    """
+    from mi_workflows.analytical import intent as it
+    q = "How many cases completed?"
+    assert ws.resolve_dataset(q) == "funded"
+    reading = it.classify(q, spec=None)
+    assert it.FAMILY_PIPELINE in reading.families
+    assert "completed" in reading.matched, reading.matched
+    assert "cases" not in reading.matched, reading.matched
+
+
+def test_the_intent_layer_no_longer_carries_a_bare_case():
+    """Structural, so a re-addition is caught before it decides anything."""
+    from mi_workflows.analytical import intent as it
+    bare = {t.strip().lower() for t in it._PIPELINE_TERMS}
+    assert "case" not in bare and "cases" not in bare, sorted(bare)
+    # `caseload` is a different word and names the pipeline unambiguously.
+    assert "caseload" in bare
