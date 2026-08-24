@@ -1,0 +1,121 @@
+{
+  "how many cases are in the pipeline": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "How many pipeline cases are there?": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "What is the pipeline case count by stage?": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "Show overdue pipeline cases.": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "Show pipeline case count evolution by week.": {
+    "route": "evolution",
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": true,
+    "answer": "I understood that you asked for week, but that could not be applied to the calculation (week \u2014 this answer is reported at month level, not by week). I have not substituted a broader figure."
+  },
+  "Show pipeline case count evolution by month.": {
+    "route": "evolution",
+    "ok": true,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No reporting periods are available to build a pipeline case count trend.\n\nCalculated: Metric evolution."
+  },
+  "Show pipeline cases by stage over time.": {
+    "route": "evolution_pipeline_stage",
+    "ok": true,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No weekly pipeline extracts are available to build a stage trend.\n\nCalculated: Governed analysis."
+  },
+  "Which region gained the most cases since last month?": {
+    "route": "period_change_analysis",
+    "ok": true,
+    "dataset": "funded",
+    "controlledRefusal": null,
+    "answer": "Between 31 May 2026 and 30 June 2026, ranked by loan-count movement across Collateral Geography, South East increased the most: South East 2,402 \u2192 2,420 (+18, +0.7%). Then East Midlands 797 \u2192 803 (+6,"
+  },
+  "How many cases are there?": {
+    "route": null,
+    "ok": false,
+    "dataset": "funded",
+    "controlledRefusal": true,
+    "answer": "I understood this as a pipeline question, but I have not answered it: this asks about the pipeline (applications, offers or completions), which is a different governed dataset from the funded book. I "
+  },
+  "cases by region": {
+    "route": null,
+    "ok": false,
+    "dataset": "funded",
+    "controlledRefusal": null,
+    "answer": "'cases' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a governed "
+  },
+  "pipeline cases by stage": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "open pipeline cases": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "How many applications are there?": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "How many KFIs are there?": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "How many offers are outstanding?": {
+    "route": null,
+    "ok": false,
+    "dataset": "pipeline",
+    "controlledRefusal": null,
+    "answer": "No governed pipeline data is available for the pipeline view."
+  },
+  "Forecast application volumes next month": {
+    "route": null,
+    "ok": false,
+    "dataset": "forecast",
+    "controlledRefusal": null,
+    "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size"
+  },
+  "Forecast case completions next quarter": {
+    "route": null,
+    "ok": false,
+    "dataset": "forecast",
+    "controlledRefusal": null,
+    "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size"
+  }
+}

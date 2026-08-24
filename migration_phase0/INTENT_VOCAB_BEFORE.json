@@ -1,0 +1,6331 @@
+{
+  "What is our total funded balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "total funded balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me the total balance of the book": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what is the total exposure": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans are in the book": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "number of loans": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many mortgages do we have": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average loan balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what is the mean loan balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what's the weighted average LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "portfolio weighted average loan to value": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "WA LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average interest rate": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what is the weighted average coupon": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average borrower age": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what is the average age of borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "mean borrower age": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what is the largest loan": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me the biggest loan": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "largest single loan by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what is the total collateral valuation": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "total property valuation": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "total original principal": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "what is the total original balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "portfolio summary": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "portfolio overview": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "book overview": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "key metrics": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average loan size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by account status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by origination channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by rate type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by occupancy type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by term bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by ticket size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by account status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by origination channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by rate type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by occupancy type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by term bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by ticket size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by account status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by rate type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by occupancy type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average borrower age by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average borrower age by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average borrower age by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average borrower age by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by rate type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me balance by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me balance by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me balance by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me balance by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "break down balance by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "break down balance by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "break down balance by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "break down balance by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance split by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance split by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance split by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance split by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "exposure by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "exposure by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "exposure by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "exposure by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "total valuation by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "total valuation by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "total valuation by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by borrower type by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV bucket by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by broker by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by account status by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by product type by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region by LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by occupancy type by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by rate type by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "WA LTV by product type and region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by region and age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average interest rate by product type and rate type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loan count by region and borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "count by age bucket and LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "number of loans by broker and product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by borrower type by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by broker by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by account status by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by term bucket by LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by ticket size by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by borrower type and region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by origination channel by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by rate type by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by borrower type by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "WA interest rate by broker and product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have LTV above 40%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many borrowers are over 70": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have a balance above \u00a3250k": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "total balance where LTV is above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how much balance is in loans with a balance above \u00a3250k": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many joint borrowers are there": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by broker where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by product type for loans above \u00a3250k": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where LTV between 40 and 60": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "count by borrower type where age is over 70": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "WA LTV by region for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average LTV by product type for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by broker for loans above \u00a3250k": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where LTV above 30%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where LTV above 40%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where LTV above 60%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where LTV above 70%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by product type where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by borrower type where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by age bucket where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region for loans above \u00a3250k": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have a balance above 200000": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have a balance above 300000": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by product type for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by broker for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where borrower age is over 70": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where borrower age is over 75": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region where borrower age is over 80": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "WA LTV by broker where LTV above 40%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "WA LTV by product type where LTV above 40%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 10 regions by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 brokers by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 10 products by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which region has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which broker has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which product type has the highest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "regions with the most loans": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "highest average LTV regions": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which region has the highest average LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "smallest region by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "largest loans": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show the largest loans": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "highest LTV loans": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 10 loans by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "biggest 20 loans": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 region by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 broker by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 10 product type by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 3 age bucket by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 account status by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which broker has the highest average LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which product type has the highest average LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which borrower type has the highest average LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "pipeline amount by stage": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "expected funded by stage": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "pipeline by broker": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "pipeline by stage": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "completions by month": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "pipeline conversion by stage": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "top brokers by expected funded amount": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "applications over the last four weeks": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "pipeline by stage for broker Alpha": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "weighted expected funded by week": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "how many cases are in the pipeline": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "pipeline amount by broker": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "forecast funded balance by month": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "expected funded amount by month": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "show projected completions": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "forecast by completion month": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "compare current funded balance to expected funded": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "forecast funded balance": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "what is the projected funded balance next quarter": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "expected completions over the next three months": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "run-rate forecast of funded balance": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "largest regional concentration": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how much balance is above 60% LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans are over 80 years old": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "exposure to London": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "exposure to the South East": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "concentration by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "concentration by product type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "concentration by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "concentration by account status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "concentration by LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "concentration by age bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans are above 70% LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how much balance sits above 50% LTV": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans are over 75 years old": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by property value band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "high age borrower exposure": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "coverage for region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "coverage by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "data coverage by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "reconciliation for balance by region where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "missing region count": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "missing borrower age count": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "missing LTV count": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loans excluded from LTV analysis": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which fields are unavailable for this query": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show defaulted balance by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "defaulted balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show NNEG by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "NNEG exposure by LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show credit score by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "average credit score by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show arrears by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "arrears balance by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show recoveries in period": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "indexed value by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show risky loans": {
+    "families": [
+      "MIX_PROFILE"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me the good loans": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which loans should I worry about": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "loans above 500000": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show best brokers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show bad regions": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show profitability by region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "show me interesting regions": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by region by borrower type by LTV bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance trend where LTV above 50%": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the funded balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the current funded balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is total current outstanding balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many funded loans are there?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans are in the funded book?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the weighted average current LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is WA LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the weighted average interest rate?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is WA current interest rate?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the simple average interest rate?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the average borrower age?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the weighted average borrower age?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the average loan balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the median loan balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the largest loan?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the smallest loan?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the total original balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the current valuation amount?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the average current valuation?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the weighted average current valuation?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show funded balance by collateral region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by obligor region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show average loan balance by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA LTV by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA interest rate by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show average borrower age by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show average loan balance by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA LTV by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA interest rate by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA interest rate by LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by borrower age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by borrower age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA LTV by borrower age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by origination channel.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by product type.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by account status.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by borrower structure.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by property type.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by occupancy type.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by age bucket and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by age bucket and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA interest rate by age bucket and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA LTV by region and age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by broker and region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by broker and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by broker and age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by region and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by broker and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show average loan balance by broker and region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA LTV by broker and region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA interest rate by broker and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by account status and LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by product type and broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many borrowers are aged 70 or above?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many borrowers are aged 75 or above?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many borrowers are aged 80 or above?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans have LTV above 30%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans have LTV above 40%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans have LTV above 50%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans have LTV above 60%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance of loans with LTV above 50%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance of loans with borrower age above 70?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance of loans with borrower age above 80?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans have borrower age 70+ and LTV above 50%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance of loans with borrower age 70+ and LTV above 50%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book has LTV above 50%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book has borrower age above 80?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans are in the South East?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance in the South East?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many South East loans have LTV above 50%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance of South East loans with LTV above 50%?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many joint borrowers are there?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance for joint borrowers?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What share of the book is joint borrowers?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many single borrowers are there?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance for single borrowers?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans where current balance is above \u00a3200,000.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans where current balance is below \u00a350,000.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with interest rate above 10%.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with interest rate below 7%.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans where valuation is above \u00a3500,000.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans where valuation is below \u00a3200,000.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which broker has the highest funded balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which broker has the highest average loan balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which broker has the most loans?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which broker has the highest WA LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which broker has the highest WA interest rate?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which region has the highest funded balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which region has the highest average LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which region has the highest interest rate?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which LTV bucket has the highest balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which age bucket has the highest balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What are the top 10 brokers by funded balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What are the top 10 regions by funded balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What are the top 10 loans by balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What are the top 10 loans by LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What are the oldest borrowers?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What are the highest interest rate loans?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the top 5 broker concentration?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the top 10 broker concentration?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the largest broker concentration?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the largest regional concentration?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book is in the top 5 brokers?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book is in the top 3 regions?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book is above 50% LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book is in borrowers aged 80+?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with LTV above 50%.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with LTV above 60%.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans where borrower age is above 80.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans in the South East.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans for Equity Release Supermarket Limited.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans for the largest broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans in the highest LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans in the highest age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with balance above \u00a3200,000.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with balance below \u00a350,000.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Drill into the 50%+ LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Drill into borrowers aged 80+.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Drill into South East loans.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Drill into broker Equity Release Supermarket Limited.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show the loan-level records behind the high LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show the loans included in Unknown / Missing age.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans missing LTV.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans missing interest rate.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by origination year.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by origination year.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA LTV by origination year.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA interest rate by origination year.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show average loan balance by origination year.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by vintage.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show vintage distribution.": {
+    "families": [
+      "MIX_PROFILE",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which vintage has the highest balance?": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which vintage has the highest WA LTV?": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show 2025 vintage by broker.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show 2025 vintage by region.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show 2025 vintage by LTV bucket.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show balance by origination month.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loan count by origination month.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show average loan balance by origination month.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show WA LTV by origination month.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show 2024 vintage performance.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show 2025 vintage concentration.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show origination cohort by broker.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show origination cohort by region.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show funded balance evolution by month.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show funded balance trend by reporting date.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show loan count evolution by month.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show WA LTV evolution by month.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show WA interest rate evolution by month.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show average borrower age evolution by month.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show funded balance evolution from October to November.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Compare October and November funded balance.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Compare October and November loan count.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Compare October and November WA LTV.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show monthly balance evolution by broker.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show monthly balance evolution by region.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show monthly balance evolution by LTV bucket.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show monthly loan count evolution by broker.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show October, November, December balance evolution.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show balance trend for Equity Release Supermarket Limited.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show LTV bucket evolution over time.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show age bucket evolution over time.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show regional concentration evolution over time.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show broker concentration evolution over time.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the pipeline amount?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How many pipeline cases are there?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the weighted expected funded amount?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the pipeline conversion rate?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the pipeline amount by stage?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the pipeline case count by stage?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the pipeline amount by broker?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the pipeline amount by region?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the pipeline amount by expected completion month?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Which broker has the largest pipeline?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Which stage has the largest pipeline?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How much pipeline is expected to complete next month?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How much pipeline is overdue?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How much pipeline is current month?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show overdue pipeline cases.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline by expected completion date.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline stage distribution.": {
+    "families": [
+      "MIX_PROFILE",
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline weighted expected amount by stage.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline weighted expected amount by broker.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline amount by product.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline amount by LTV bucket.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline amount by age bucket.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline amount by source file.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show current month pipeline completions expected.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline amount evolution by week.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline amount evolution by month.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline case count evolution by week.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline case count evolution by month.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline amount by stage over time.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline cases by stage over time.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show expected completions by month.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show weighted expected funded amount by month.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show pipeline conversion basis over time.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline by broker over time.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline by stage for October and November.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Compare October and November pipeline amount.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Compare latest pipeline with prior pipeline.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show pipeline growth from October to November.": {
+    "families": [
+      "PIPELINE",
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show stage migration over time.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the forecast funded balance?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "What is funded balance plus weighted pipeline?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the expected funded balance?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the weighted expected pipeline contribution?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the forecast loan count?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Show forecast balance by region.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Show forecast balance by broker.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Show forecast balance by LTV bucket.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Show forecast balance by expected completion month.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "How much of the forecast comes from funded book?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "How much of the forecast comes from pipeline?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "What is the forecast bridge?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Show funded vs pipeline contribution.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show forecast completion basis.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Show historical conversion basis.": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which stages use historical rates?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which stages use config fallback rates?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How much active pipeline is excluded from weighting?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How much pipeline is excluded because of missing probability?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How much pipeline is excluded because of withdrawn status?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Show forecast balance by stage.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Show forecast balance by broker and stage.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "When do we reach \u00a325m funded balance?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "When do we reach \u00a350m funded balance?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "When do we reach \u00a375m funded balance?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "When do we reach \u00a3100m funded balance?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "When do we reach \u00a3150m funded balance?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the current completion run rate?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the annualised completion run rate?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show the funded balance extrapolation curve.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show the scale-up forecast.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "What is the downside forecast?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "What is the base forecast?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "What is the upside forecast?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "How much pipeline is needed to reach \u00a3100m?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What happens if completion run rate falls by 25%?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What completion rate is assumed from KFI to completion?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What is the expected time to securitisation scale?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show milestone dates to funding thresholds.": {
+    "families": [
+      "LIMITS_CONCENTRATION",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Compare current weighted pipeline forecast with run-rate extrapolation.": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "What is the 8-week completion run rate?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the 12-week completion run rate?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Project funded balance over the next twelve months.": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "When does the book reach scale?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are we within our concentration limits?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which limits are breached?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show risk limit headroom.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show the Schedule 8 concentration tests.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the largest geographic concentration versus limit?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show geographic concentration against limits.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show broker concentration against limits.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which concentration test is closest to breach?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show the single largest loan against the large-loan limit.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are any regional limits breached?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show limit utilisation by category.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the headroom on the London concentration limit?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show concentration limit status.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which risk limits need review?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show concentration breaches.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are we over any limit?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show the risk limit pass/warn/fail summary.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What is the nearest limit breach?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which fields are missing?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which required MI fields are missing?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How complete is interest rate?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How complete is LTV?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How complete is borrower age?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How complete is broker?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How complete is region?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How much balance is missing age?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How much balance is missing LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How much balance is missing broker?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How much balance is missing interest rate?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Why does this chart not reconcile?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is excluded from this result?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What records are in Unknown / Missing?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which fields are sourced from funded files?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Which fields are sourced from pipeline files?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Is interest rate sourced from the funded book?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the source of current interest rate?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the source of current valuation?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the source of borrower age?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the source of LTV?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show data completeness by field.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show data completeness by balance.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show records missing required MI fields.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show source notes for this answer.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans are in arrears?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the arrears balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book is in arrears?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears balance by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears balance by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears balance by LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears balance by age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans more than 30 days in arrears.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans more than 60 days in arrears.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans more than 90 days in arrears.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the balance of loans more than 90 days in arrears?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show number of days in arrears by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears trend by month.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show arrears evolution over time.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show arrears by vintage.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears by origination year.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show defaulted loans.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans are defaulted?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What is the defaulted balance?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show default amount by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show default amount by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show default rate by vintage.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show default balance evolution over time.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show recoveries in period.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show cumulative recoveries.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loss amount by vintage.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show defaulted loans with LTV above 50%.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears by borrower age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show arrears by current LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How many loans have negative equity guarantee?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "What percentage of the book has NNEG?": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show NNEG exposure by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show NNEG exposure by LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show NNEG exposure by borrower age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show NNEG exposure by vintage.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with NNEG and LTV above 50%.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with NNEG and borrower age above 80.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show indexed LTV by age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show indexed LTV by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show indexed value by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show estimated equity by loan.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show equity by LTV bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with low remaining equity.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show loans with current balance above current valuation.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show no-negative-equity risk by age and LTV.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show NNEG risk concentration by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show NNEG risk concentration by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show NNEG risk by origination vintage.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show protected equity loans.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show protected equity flag by product.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show roll-up interest exposure.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show accrued interest by vintage.": {
+    "families": [
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show interest roll-up by age bucket.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Account Status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Account Status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by age band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Age Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by age band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Age Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by age band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by borrower type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by product": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by product": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by product": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by obligor region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by obligor region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by obligor region": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by rate type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by rate type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by ltv band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by ltv band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by ltv band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by occupancy": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by occupancy": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by occupancy": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by origination channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by origination channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by term band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by term band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by term band": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "valuation by ticket size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "original balance by ticket size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV Bucket by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV Bucket by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV Bucket by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV Bucket by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Age Bucket by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Borrower Type by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status by Broker by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have LTV above 30%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have LTV above 60%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have balance above 150000": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have balance above 200000": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have borrower age above 70": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have borrower age above 75": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by LTV Bucket where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Occupancy Type where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Origination Channel where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Term Bucket where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Ticket Size where LTV above 50%": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status where LTV between 40 and 60": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket where LTV between 40 and 60": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Borrower Type where LTV between 40 and 60": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker where LTV between 40 and 60": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type where LTV between 40 and 60": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) where LTV between 40 and 60": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Account Status for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Age Bucket for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Broker for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Product Type for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Obligor Region (NUTS3) for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "balance by Rate Type for joint borrowers": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans have Risk Score above 700": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Account Status by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Age Bucket by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Borrower Type by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Broker by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Product Type by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Obligor Region (NUTS3) by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Rate Type by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 LTV Bucket by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Occupancy Type by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Origination Channel by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Term Bucket by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "top 5 Ticket Size by balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Account Status has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Account Status has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Age Bucket has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Age Bucket has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Borrower Type has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Borrower Type has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Broker has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Broker has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Product Type has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Product Type has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Obligor Region (NUTS3) has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Obligor Region (NUTS3) has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Rate Type has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Rate Type has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which LTV Bucket has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which LTV Bucket has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Occupancy Type has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Occupancy Type has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Origination Channel has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Origination Channel has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Term Bucket has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Term Bucket has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Ticket Size has the largest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "which Ticket Size has the smallest balance": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Account Status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Age Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "weighted average interest rate by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Account Status": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Age Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Borrower Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Broker": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Product Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Obligor Region (NUTS3)": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Rate Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by LTV Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Occupancy Type": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Origination Channel": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Term Bucket": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "how many loans by Ticket Size": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show defaulted balance by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show credit score by broker.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "Show recoveries in period by region.": {
+    "families": [],
+    "requirements": [],
+    "materiallyAnalytical": false,
+    "dataset": "funded"
+  },
+  "How has the profile of our new lending changed over the last few months?": {
+    "families": [
+      "MIX_PROFILE",
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are we originating different types of loans now compared with a few months ago?": {
+    "families": [
+      "MIX_PROFILE",
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How does recent lending compare with what we were originating earlier in the year?": {
+    "families": [
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Has the risk and borrower profile of new business changed recently?": {
+    "families": [
+      "MIX_PROFILE",
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "When do we expect the funded book to reach \u00a3100m?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "At the current run rate, when should we get to \u00a3100m of loans?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "When are we forecast to cross \u00a3100m of funded balances?": {
+    "families": [
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Based on the current book and pipeline, how long until we reach \u00a3100m?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How much do we currently have at offer and how much of it is likely to complete?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What's the value of outstanding offers, and when do we expect them to fund?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Of the current offer pipeline, how much should convert and over what timeframe?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How much is sitting at offer today and what do we expect to complete from it and when?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What completion rate are we currently running at?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How many loans are we completing at the moment?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What's our recent run rate for completions?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Based on the last few weeks, what level of completions are we currently achieving?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "period_comparison",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are any of our concentration limits likely to breach over the next three months?": {
+    "families": [
+      "LIMITS_CONCENTRATION",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Do we expect to hit any concentration limits in the next quarter?": {
+    "families": [
+      "LIMITS_CONCENTRATION",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which concentration limits are at risk of being breached over the next three months?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Based on the forecast book, are any of our limits likely to come under pressure?": {
+    "families": [
+      "LIMITS_CONCENTRATION",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Which concentration limits have the least headroom?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Where are we closest to our limits?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which of our limits are currently most at risk?": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Show me the concentration limits we're closest to hitting.": {
+    "families": [
+      "LIMITS_CONCENTRATION"
+    ],
+    "requirements": [
+      "limit_evidence"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How does the front book compare with our older lending from a risk perspective?": {
+    "families": [
+      "MIX_PROFILE",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are older loans riskier than the loans we've originated recently?": {
+    "families": [
+      "MIX_PROFILE",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How different is the risk profile of recent originations versus the back book?": {
+    "families": [
+      "MIX_PROFILE",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Compare the credit profile of the front book with our seasoned loans.": {
+    "families": [
+      "MIX_PROFILE",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How has lending to direct changed compared with acquired?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How has the balance of direct loans moved relative to acquired loans?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are direct and acquired balances developing differently over time?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Compare how the direct and acquired books have changed over the last few months.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How has lending to the front book changed compared with the back book?": {
+    "families": [
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison",
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How has the balance of the front book loans moved relative to the back book loans?": {
+    "families": [
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison",
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are the front book and the back book balances developing differently over time?": {
+    "families": [
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison",
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Compare how the the front book and the back book books have changed over the last few months.": {
+    "families": [
+      "MOVEMENT_TREND",
+      "VINTAGE_COHORT"
+    ],
+    "requirements": [
+      "period_comparison",
+      "population_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How has lending to South East changed compared with London?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How has the balance of South East loans moved relative to London loans?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are South East and London balances developing differently over time?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Compare how the South East and London books have changed over the last few months.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "What do we expect the funded book to grow to based on the current pipeline?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Where is the funded balance forecast to get to from today's pipeline?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "If the current pipeline converts as expected, what will our funded balance be?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "What funded balance should we expect once the current pipeline flows through?": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How has lending to North West changed compared with Scotland?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How has the balance of North West loans moved relative to Scotland loans?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Are North West and Scotland balances developing differently over time?": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Compare how the North West and Scotland books have changed over the last few months.": {
+    "families": [
+      "MOVEMENT_TREND"
+    ],
+    "requirements": [
+      "period_comparison"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "Which region gained the most cases since last month?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "How many cases are there?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "cases by region": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "funded"
+  },
+  "pipeline cases by stage": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "open pipeline cases": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How many applications are there?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How many KFIs are there?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "How many offers are outstanding?": {
+    "families": [
+      "PIPELINE"
+    ],
+    "requirements": [
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "pipeline"
+  },
+  "Forecast application volumes next month": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  },
+  "Forecast case completions next quarter": {
+    "families": [
+      "PIPELINE",
+      "FORECAST_PROJECTION"
+    ],
+    "requirements": [
+      "forecast",
+      "pipeline_dataset"
+    ],
+    "materiallyAnalytical": true,
+    "dataset": "forecast"
+  }
+}
