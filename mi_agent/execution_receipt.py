@@ -3519,14 +3519,22 @@ _ROUTE_GRANULARITY = {"geo_exposure": ("postcode", "ITL3 area")}
 # --------------------------------------------------------------------------- #
 # The TIME axis, as an axis in its own right
 # --------------------------------------------------------------------------- #
-#: The grain each series-publishing route reports at. Every one of these reads
-#: the governed month-end funded snapshots, so every one publishes MONTHS, and
-#: a question asking for weeks or days receives months.
+#: The grain each series-publishing route reports at WHEN THE ANSWER DOES NOT SAY.
 #:
-#: Declared here rather than inferred from the answer, for the same reason
-#: `_ROUTE_GRANULARITY` is: a route's reporting grain is a property of the
-#: capability, and reading it back out of the prose would be the receipt
-#: checking the question against itself.
+#: This began as a flat assertion that every one of these reads the governed
+#: month-end funded snapshots and so publishes MONTHS. That was never true of
+#: three of them: the origination funnel and the by-stage series are keyed on
+#: the weekly pipeline extract date, and the single-metric series is weekly
+#: whenever the pipeline producer supplied it. The assertion and the data agreed
+#: only where they happened to coincide, and where they did not, this map won —
+#: refusing a correct weekly answer as monthly, and passing a weekly answer to a
+#: monthly question with nothing disclosed.
+#:
+#: A grain is therefore read from the ANSWER'S OWN DECLARATION first
+#: (`declared_series_grain`), which is execution evidence, not prose. This map
+#: remains the fallback for the seven routes that declare nothing, and it is
+#: still not inferred from the answer text — that would be the receipt checking
+#: the question against itself, which is what `_ROUTE_GRANULARITY` avoids too.
 _ROUTE_TIME_GRAIN = {
     "evolution": "month",
     "evolution_funnel": "month",
@@ -3546,7 +3554,22 @@ def route_time_grain(route: Optional[str]) -> Optional[str]:
     return _ROUTE_TIME_GRAIN.get(route or "")
 
 
-def time_axis_disclosure(unit: Optional[str], route: Optional[str]
+def declared_series_grain(envelope: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """The grain the ROUTE says it published, or None if it said nothing.
+
+    Read from the route's own declaration on the envelope, which is the route
+    reporting what it did — never from the prose, for the same reason
+    `declared_series_periods` is not read from the prose. A route that declares
+    nothing returns None and falls back to `_ROUTE_TIME_GRAIN`.
+    """
+    if not isinstance(envelope, Mapping):
+        return None
+    grain = (envelope.get("metadata") or {}).get("seriesGrain")
+    return str(grain) if grain else None
+
+
+def time_axis_disclosure(unit: Optional[str], route: Optional[str],
+                         envelope: Optional[Mapping[str, Any]] = None
                          ) -> Optional[RequestedFacet]:
     """A facet for the TIME grain a question named, or None.
 
@@ -3570,7 +3593,7 @@ def time_axis_disclosure(unit: Optional[str], route: Optional[str]
     """
     if not unit:
         return None
-    grain = route_time_grain(route)
+    grain = declared_series_grain(envelope) or route_time_grain(route)
     if not grain:
         return None
     return RequestedFacet(kind=KIND_GRANULARITY, label=unit,
@@ -3655,7 +3678,8 @@ def unresolved_scope_facets(question: Optional[str], *, registry=None,
                 "was not narrowed to it" % (requested,)))]
 
 
-def granularity_facets(question: str, route: Optional[str]
+def granularity_facets(question: str, route: Optional[str],
+                       envelope: Optional[Mapping[str, Any]] = None
                        ) -> List[RequestedFacet]:
     """Every reporting GRAIN this question names, spatial and temporal.
 
@@ -3679,7 +3703,7 @@ def granularity_facets(question: str, route: Optional[str]
     if spatial is not None:
         out.append(spatial)
     temporal = time_axis_disclosure(_period_request.requested_unit(question),
-                                    route)
+                                    route, envelope)
     if temporal is not None:
         out.append(temporal)
     return out

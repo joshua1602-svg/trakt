@@ -876,6 +876,29 @@ _FUNNEL_KEYWORDS = {"kfi": "KFI", "application": "APPLICATION", "offer": "OFFER"
                     "completion": "COMPLETED", "completed": "COMPLETED"}
 
 
+def _declare_grain(envelope: Dict[str, Any], grain: str) -> Dict[str, Any]:
+    """Record the reporting grain this answer was actually published at.
+
+    The receipt owns a SECOND claim about grain — a static route -> grain map
+    asserting that every series route reports months, on the premise that they
+    all read the month-end funded snapshots. Three do not: the funnel and the
+    by-stage series have always been keyed on the weekly extract date, and the
+    single-metric series is weekly whenever the pipeline producer supplied it.
+
+    While the two claims agreed by accident nobody noticed. Once the series was
+    keyed correctly they disagreed, in both directions at once: a question asking
+    for weeks was refused on the ground that the answer was monthly, and one
+    asking for months was answered weekly with nothing disclosed.
+
+    So the route says what it did, and the receipt reads that rather than an
+    assertion made about the route elsewhere — the same execution-evidence rule
+    `populationApplied` and `declared_series_periods` already follow. A route
+    that declares nothing keeps the static fallback and is unaffected.
+    """
+    envelope.setdefault("metadata", {})["seriesGrain"] = grain
+    return envelope
+
+
 def _funded_metric_value(df, metric_key: str) -> Optional[float]:
     """A single funded metric for one period frame — the SAME computation
     assemble_funded_evolution uses per period, so a filtered series reconciles to
@@ -986,10 +1009,11 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                   f"{_gbp(summ.get('latestStockValue'))}.")
         notes = [{"field": "weekly_extracts",
                   "note": f"{funnel.get('uniqueWeeklyExtractsUsed') or len(rows)} governed weekly extract(s)."}]
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[chart, table],
-                         reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
-                         source_notes=notes, route="evolution_funnel")
+        out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                        artifacts=[chart, table],
+                        reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
+                        source_notes=notes, route="evolution_funnel")
+        return _declare_grain(out, "week")
 
     # Pipeline amount by stage over time (multi-series).
     if dataset == "pipeline" and ("by stage" in q or "stage over time" in q or "stage migration" in q):
@@ -1015,14 +1039,14 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
             value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
         answer = (f"Pipeline amount by stage across {len(periods)} period(s): "
                   f"stages {', '.join(stages)}.")
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[chart],
-                         reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
-                         route="evolution_pipeline_stage")
+        out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                        artifacts=[chart],
+                        reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
+                        route="evolution_pipeline_stage")
+        return _declare_grain(out, "week")
 
     # Funded / pipeline single-metric evolution.
     metric_key, label, fmt = compare_mod.resolve_metric_key(dataset, spec.metric, spec.aggregation)
-    period_field = "period"
     if dataset == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
     elif filtered:
@@ -1040,6 +1064,15 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                          answer=f"No reporting periods are available to build a {label.lower()} trend.",
                          spec=spec_dict, artifacts=[], route="evolution",
                          warnings=["insufficient-data: no governed reporting periods."])
+    # The observation identity is whatever the series publishes as its own grain.
+    # The pipeline producer publishes a day-level `week` per governed weekly
+    # extract; the funded producers publish only a monthly `period`. Keying every
+    # series on `period` collapsed five distinct weekly extracts onto one x-axis
+    # point, under a chart this route already titled "by week" — the label and the
+    # data disagreed, and the label was right. Read from what the producer returns
+    # rather than from the dataset name, so a series is keyed by the grain it
+    # actually carries.
+    period_field = "week" if any("week" in p for p in periods) else "period"
     rows = [{"period": p.get(period_field), "value": (p.get("metrics") or {}).get(metric_key)}
             for p in periods]
     filter_txt = _filter_summary(spec) if filtered else ""
@@ -1084,6 +1117,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                     artifacts=[chart, table], reconciliation=last_recon,
                     source_notes=notes, warnings=warnings, route="evolution")
+    _declare_grain(out, "week" if period_field == "week" else "month")
     if filtered:
         # P1L: this route genuinely applies the population — per period, which is
         # what makes a filtered trend meaningful — so it DECLARES that it did.

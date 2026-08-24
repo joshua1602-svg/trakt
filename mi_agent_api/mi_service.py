@@ -572,7 +572,9 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             facets, getattr(parsed, "spec", None) or {}, semantics,
             receipt_mod.book_columns(frame),
             question=question, settle_unresolved=False)
-        granularity = receipt_mod.granularity_facets(question, route)
+        # The ROUTE'S OWN grain declaration, so the receipt adjudicates against
+        # what was published rather than an assertion made about the route.
+        granularity = receipt_mod.granularity_facets(question, route, routed)
         # P1L: the material row population the spec carries. Raised from the
         # governed spec, proven from execution evidence the route reports — a
         # route that reports nothing leaves these LOST and the answer refuses,
