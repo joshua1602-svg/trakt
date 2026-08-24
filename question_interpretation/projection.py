@@ -228,6 +228,14 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
     parser_groups = [d for d in ([getattr(spec, "dimension", None)]
                                  + list(getattr(spec, "dimensions", None) or [])) if d]
     parser_filters = set((getattr(spec, "filters", None) or {}).keys())
+    # The parser's OWN bridge attribution axis. `spec.bridge_dimension` is a
+    # governed field key, populated only on bridge questions, and it IS the
+    # grouping the waterfall attributes movement by — so the projection must
+    # carry that role rather than emit `unresolved` for a fact the parser already
+    # settled. This is projection, not reinterpretation: no raw text is read, the
+    # match below is governed-key to governed-key, and it fires for exactly the
+    # one claim whose key equals `spec.bridge_dimension`.
+    bridge_dim = getattr(spec, "bridge_dimension", None)
 
     seen = set()
     for key, term, _alt in dim_terms:
@@ -236,6 +244,8 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
         seen.add(key)
         if key in parser_groups:
             role, src = GROUPING, "parser.dimension"
+        elif bridge_dim is not None and key == bridge_dim:
+            role, src = GROUPING, "parser.bridge_dimension"
         elif key in parser_filters:
             role, src = FILTER, "parser.filters"
         else:
