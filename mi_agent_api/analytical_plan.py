@@ -635,7 +635,7 @@ def measure_request(interpretation) -> Tuple[Optional[str], str]:
     THE KNOWN LOSSY EDGE, stated rather than hidden: a question whose parser
     output was `metric="loan_count"` with a non-count aggregation projects to
     the same concept and would be read here as a count request. Measured across
-    all 26 readings of the owned `temporal_compare` surface, production and this
+    all 42 readings of the owned `temporal_compare` surface, production and this
     expansion agree on every one, so the edge is unreachable there today. It is
     a property of the contract collapsing two fields into one, and closing it
     means the claim carrying the aggregation — a contract change, not a route's
