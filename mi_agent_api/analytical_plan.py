@@ -206,6 +206,50 @@ def _population_step(scope) -> Step:
                  + ". Absence of a resolved scope is NOT Total."))
 
 
+def _whole_dataset_step(route: str, dataset: Optional[str] = None) -> Step:
+    """The `select_population` step for a route that DOES NOT NARROW.
+
+    The counterpart to :func:`_population_step`, and the reason it exists is an
+    independent audit finding: the first version of this rule let a plan builder
+    opt out of the governed population decision by writing the literal string
+    `"whole_dataset"`. A magic string is not a governed fact — a future route
+    that SHOULD narrow could claim it, and nothing would notice.
+
+    So the exemption is now CHECKED, against the one place the platform already
+    declares which routes narrow: `Recogniser.lens_aware`, from which
+    `chat_routing._lens_aware_routes` is derived and on which the product's own
+    "Scope not narrowed" disclosure already depends. A route that declares it
+    narrows cannot obtain this step; it gets a BLOCKED one naming the
+    contradiction, and the plan refuses rather than quietly widening.
+
+    Passing a route this registry does not know is also blocked. Not being able
+    to prove the claim is not the same as the claim being false, and a plan is
+    not the place to decide which.
+    """
+    inputs = {"kind": "whole_dataset", "dataset": dataset}
+    because = ("this route does not narrow by source portfolio; a named scope "
+               "is refused by the facet layer as a lost narrowing")
+    try:
+        from .chat_routing import REGISTRY  # local: chat_routing imports us
+        declared = {r.name: r.lens_aware for r in REGISTRY.ordered()}
+    except Exception as exc:  # noqa: BLE001 - unprovable is not the same as false
+        return Step(SELECT_POPULATION, inputs, because=because,
+                    blocked=(BLOCKED_NO_CONTRACT_FIELD + ": the route registry "
+                             "is unavailable, so a whole-dataset claim cannot "
+                             f"be proved ({exc})"))
+    if route not in declared:
+        return Step(SELECT_POPULATION, inputs, because=because,
+                    blocked=(BLOCKED_NO_CONTRACT_FIELD + f": route {route!r} is "
+                             "not in the governed registry, so its whole-dataset "
+                             "claim cannot be proved"))
+    if declared[route]:
+        return Step(SELECT_POPULATION, inputs, because=because,
+                    blocked=(BLOCKED_NO_CONTRACT_FIELD + f": route {route!r} is "
+                             "declared lens_aware — it NARROWS — so it may not "
+                             "plan the whole dataset. Use `_population_step`."))
+    return Step(SELECT_POPULATION, inputs, because=because)
+
+
 def _label_for(scope) -> str:  # noqa: D401
     """The scope's name as the ANSWER says it.
 
@@ -697,9 +741,7 @@ def build_temporal_compare_plan(interpretation) -> Plan:
 
     steps: List[Step] = [
         period_step,
-        Step(SELECT_POPULATION, {"kind": "whole_dataset", "dataset": dataset},
-             because=("this route does not narrow by source portfolio; a named "
-                      "scope is refused by the facet layer as a lost narrowing")),
+        _whole_dataset_step("temporal_compare", dataset),
         Step(RESOLVE_MEASURE, {"metric": metric, "aggregation": aggregation},
              because="the contract's subject concept, expanded for the resolver"),
         Step(COMPARE,

@@ -179,40 +179,40 @@ class TestThePlanLayerIsSharedNotCopied:
         assert builders, "no plan builders found — the guard is not looking at "\
                          "the plan module"
 
-        # A ROUTE THAT DOES NOT NARROW MUST SAY SO, not borrow the step.
+        # A ROUTE THAT DOES NOT NARROW MUST SAY SO, AND THE CLAIM IS CHECKED.
         #
-        # Conversion 5 added the first plan builder for a route with NO source-
-        # portfolio narrowing: the shipped `temporal_compare` never passed a
-        # scope to its engine and `lensApplied` is False on every owned case.
-        # Calling `_population_step` there would declare a narrowing the route
-        # does not apply — a false narrowing on the receipt — and would BLOCK on
-        # an empty scope, refusing questions that answer today.
+        # Conversion 5 added the first plan builder for a route with no
+        # source-portfolio narrowing. The first version of this rule let such a
+        # builder opt out by writing the literal string `"whole_dataset"`, and
+        # an independent audit showed a builder that SHOULD narrow could claim
+        # it and pass. A magic string is not a governed fact.
         #
-        # So the invariant is the one that was always meant: a builder must not
-        # keep a SECOND COPY of the population decision. It either reaches the
-        # one definition, or it declares `whole_dataset` and reads no scope
-        # field at all. Nothing may read the scope and decide for itself.
-        SCOPE_FIELDS = ("base_population", "portfolio_ids", "source_scope")
+        # So there are now exactly TWO governed constructors for the population
+        # step, and every builder must reach one of them:
+        #
+        #   _population_step       the route narrows; the scope states decide
+        #   _whole_dataset_step    the route does not narrow, AND it proves it
+        #                          against `Recogniser.lens_aware`, the single
+        #                          place the platform declares which routes
+        #                          narrow
+        #
+        # A builder can no longer exempt itself by assertion.
+        whole = {f.name for f in ast.walk(tree)
+                 if isinstance(f, ast.FunctionDef)
+                 and any(isinstance(n, ast.Call)
+                         and getattr(n.func, "id", "") == "_whole_dataset_step"
+                         for n in ast.walk(f))}
+        assert builders <= (callers | whole), sorted(builders - callers - whole)
 
-        def _declares_whole_dataset(fn):
-            src = ast.unparse(fn)
-            return '"whole_dataset"' in src or "'whole_dataset'" in src
-
-        def _touches_scope(fn):
-            src = ast.unparse(fn)
-            return any(f in src for f in SCOPE_FIELDS)
-
-        by_name = {f.name: f for f in ast.walk(tree)
-                   if isinstance(f, ast.FunctionDef)}
-        unnarrowed = {n for n in builders - callers
-                      if _declares_whole_dataset(by_name[n])
-                      and not _touches_scope(by_name[n])}
-        assert builders <= (callers | unnarrowed), sorted(
-            builders - callers - unnarrowed)
-        # And the exemption cannot be claimed silently by a builder that then
-        # goes on to read a scope field anyway.
-        for name in unnarrowed:
-            assert not _touches_scope(by_name[name]), name
+        # And the checked constructor may not be handed a literal that bypasses
+        # the registry: it takes a ROUTE NAME, and the step it returns is
+        # BLOCKED for a route the registry declares lens-aware.
+        from mi_agent_api import analytical_plan as plan_mod
+        assert plan_mod._whole_dataset_step("geo_exposure").blocked, (
+            "a route declared lens_aware must not obtain a whole-dataset step")
+        assert plan_mod._whole_dataset_step("temporal_compare").blocked is None
+        assert plan_mod._whole_dataset_step("not_a_route").blocked, (
+            "an unprovable claim must block rather than pass")
 
     def test_there_is_exactly_one_plan_module(self):
         modules = sorted(p.name for p in (_REPO / "mi_agent_api").glob("*plan*.py"))

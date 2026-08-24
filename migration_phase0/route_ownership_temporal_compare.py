@@ -50,6 +50,23 @@ CASES: Tuple[Tuple[str, str, Any], ...] = (
     # house rule settled during prerequisite closure, pinned here on the
     # delivered path rather than only at the resolver.
     ("A8", "Compare May and June case count.", None),
+    # --- THE RELATIVE-PERIOD PATH, delivered -------------------------------
+    #
+    # `temporal_compare._match_period` resolves `latest`/`current` to the last
+    # governed period and the `_RELATIVE_PRIOR` vocabulary to the one before it.
+    # The independent C5 audit found that branch exercised by NO delivered case:
+    # every relative-period case on the surface refused for an unrelated reason,
+    # so a whole resolution path sat behind a green equivalence. These two run
+    # it with real numbers, on the periods this fixture actually holds.
+    ("V2", "Compare this month and last month funded balance.", None),
+    # --- OMITTED BY THE ORIGINAL DECLARATION, found by the audit ------------
+    #
+    # Both parse to `temporal_mode == "compare"` and are owned at runtime, and
+    # neither was declared. They are refusals here — the periods and the tape
+    # are unavailable — but a surface that silently under-covers its own corpus
+    # is how a denominator stops meaning anything.
+    ("O1", "Compare October and November WA LTV.", None),
+    ("O2", "Compare latest pipeline with prior pipeline.", None),
     # --- the plain two-period comparison -----------------------------------
     ("T1", "Compare October and November funded balance.", None),
     ("T2", "Compare September and October funded balance", None),
@@ -83,6 +100,11 @@ CASES: Tuple[Tuple[str, str, Any], ...] = (
     ("X6", "Compare October and November forecast balance.",
      "analytical_composition claims it first — the third view never reaches "
      "this route by this phrasing, so `forecast` is NOT on the owned surface"),
+    # MEASURED CORRECTION. Declared owned; `period_change_analysis` sits at
+    # priority 85 and claims it first. The instrument caught the declaration,
+    # which is what it is for.
+    ("X8", "Compare the latest funded balance with the prior period.",
+     "period_change_analysis claims it first, at priority 85"),
     ("X7", "Compare Narnia and November funded balance.",
      "no route at all: an unresolvable period token leaves `compare_periods` "
      "short of two, so the recogniser never fires"),

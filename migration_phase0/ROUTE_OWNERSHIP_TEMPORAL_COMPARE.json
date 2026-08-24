@@ -249,6 +249,87 @@
       }
     },
     {
+      "case": "V2",
+      "question": "Compare this month and last month funded balance.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.96bn in 2026-06 to \u00a31.95bn in 2026-05 \u2014 a change of \u00a318.1m (-0.92%, down).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.96bn in 2026-06 to \u00a31.95bn in 2026-05 \u2014 a change of \u00a318.1m (-0.92%, down).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "O1",
+      "question": "Compare October and November WA LTV.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa current ltv: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa current ltv: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "O2",
+      "question": "Compare latest pipeline with prior pipeline.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare latest and prior pipeline for pipeline amount: requested period(s) unavailable: latest, prior pipeline. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare latest and prior pipeline for pipeline amount: requested period(s) unavailable: latest, prior pipeline. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
       "case": "T1",
       "question": "Compare October and November funded balance.",
       "expectedOther": null,
@@ -742,6 +823,37 @@
           "datasetInReconciliation": null,
           "answer": "No governed pipeline source is available for this book, so a forecast funded balance cannot be produced. The current funded balance above is not a forecast. No governed pipeline source is configured for this book. I have",
           "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "X8",
+      "question": "Compare the latest funded balance with the prior period.",
+      "expectedOther": "period_change_analysis claims it first, at priority 85",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a318.1m (\u00a31.95bn \u2192 \u00a31.96bn). No governed",
+          "artifactKinds": [
+            "kpi",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a318.1m (\u00a31.95bn \u2192 \u00a31.96bn). No governed",
+          "artifactKinds": [
+            "kpi",
+            "table"
+          ]
         }
       }
     },
