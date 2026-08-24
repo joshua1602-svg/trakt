@@ -1749,9 +1749,28 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
               "note": f"Opening {start.get('reporting_date') or start['period']}; "
                       f"closing {end.get('reporting_date') or end['period']} (latest); "
                       f"attributed by {dim_label.lower()}; deltas reconcile to the net change."}]
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
-                     route="funded_bridge")
+    envelope = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                         artifacts=[chart, table], reconciliation=recon,
+                         source_notes=notes, route="funded_bridge")
+    # D7: the route states the axis its bridge ACTUALLY attributed movement by,
+    # so `grouping_proven` can certify a requested grouping from execution
+    # evidence rather than from route identity. Without it this route declared
+    # nothing, `declared_group_fields` returned no registry field, and every
+    # question naming a dimension was refused with the grouping marked LOST —
+    # over a waterfall that had attributed by exactly that dimension.
+    #
+    # `dimensionCol` is what `evolution.funded_bridge` REPORTS IT GROUPED BY —
+    # the candidate it found present in the data, not the list it was offered
+    # and not the dimension the question asked for. Declaring the executed axis
+    # rather than the requested one is the safety property: a question naming a
+    # dimension the bridge could not use leaves its request correctly unproven
+    # and correctly refused. Reached only on a successful bridge, so an
+    # unavailable result certifies nothing — the same rule `risk_limits` follows
+    # for the tests that actually computed.
+    executed_dim = br.get("dimensionCol")
+    if executed_dim:
+        envelope.setdefault("metadata", {})["groupedBy"] = [str(executed_dim)]
+    return envelope
 
 
 # --------------------------------------------------------------------------- #
