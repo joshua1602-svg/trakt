@@ -178,7 +178,41 @@ class TestThePlanLayerIsSharedNotCopied:
                            for n in ast.walk(f))}
         assert builders, "no plan builders found — the guard is not looking at "\
                          "the plan module"
-        assert builders <= callers, sorted(builders - callers)
+
+        # A ROUTE THAT DOES NOT NARROW MUST SAY SO, not borrow the step.
+        #
+        # Conversion 5 added the first plan builder for a route with NO source-
+        # portfolio narrowing: the shipped `temporal_compare` never passed a
+        # scope to its engine and `lensApplied` is False on every owned case.
+        # Calling `_population_step` there would declare a narrowing the route
+        # does not apply — a false narrowing on the receipt — and would BLOCK on
+        # an empty scope, refusing questions that answer today.
+        #
+        # So the invariant is the one that was always meant: a builder must not
+        # keep a SECOND COPY of the population decision. It either reaches the
+        # one definition, or it declares `whole_dataset` and reads no scope
+        # field at all. Nothing may read the scope and decide for itself.
+        SCOPE_FIELDS = ("base_population", "portfolio_ids", "source_scope")
+
+        def _declares_whole_dataset(fn):
+            src = ast.unparse(fn)
+            return '"whole_dataset"' in src or "'whole_dataset'" in src
+
+        def _touches_scope(fn):
+            src = ast.unparse(fn)
+            return any(f in src for f in SCOPE_FIELDS)
+
+        by_name = {f.name: f for f in ast.walk(tree)
+                   if isinstance(f, ast.FunctionDef)}
+        unnarrowed = {n for n in builders - callers
+                      if _declares_whole_dataset(by_name[n])
+                      and not _touches_scope(by_name[n])}
+        assert builders <= (callers | unnarrowed), sorted(
+            builders - callers - unnarrowed)
+        # And the exemption cannot be claimed silently by a builder that then
+        # goes on to read a scope field anyway.
+        for name in unnarrowed:
+            assert not _touches_scope(by_name[name]), name
 
     def test_there_is_exactly_one_plan_module(self):
         modules = sorted(p.name for p in (_REPO / "mi_agent_api").glob("*plan*.py"))

@@ -785,18 +785,37 @@ def _sentence_join(items: Sequence[str]) -> str:
     return f"{', '.join(vals[:-1])} and {vals[-1]}"
 
 
-def _route_compare(question, spec, spec_dict, *, client_id, run_id, output_root,
-                   pipeline_root, portfolio_id, as_of) -> Dict[str, Any]:
-    periods = list(spec.compare_periods or [])
-    if len(periods) < 2:
+def _route_compare(question, spec_dict, *, client_id, run_id, output_root,
+                   pipeline_root, portfolio_id, as_of, interpretation
+                   ) -> Dict[str, Any]:
+    """THE PARSE IS NO LONGER A PARAMETER.
+
+    `spec` is gone from this signature, and that absence is the conversion's
+    real result: there is nothing left for this route to read from it. The
+    period pair, the measure and the dataset all arrive on the contract, and a
+    route that cannot reach the parse cannot quietly re-decide any of them.
+
+    `spec_dict` stays. It is echoed into the envelope for the receipt layer and
+    is not consulted for any semantic fact.
+    """
+    # CONVERSION 5. Composed. Every semantic fact this route used to read from
+    # the question now arrives on the contract: the dataset (the ownership
+    # remediation made `workspace.resolve_dataset` the single owner and the
+    # contract carries its answer), the measure (`subject`), and the period pair
+    # (carried structurally by the time contract). The plan states all three and
+    # the deterministic executor runs them.
+    #
+    # The two-period guard moves INTO the plan, which blocks rather than
+    # defaults; the refusal below is unchanged in wording so the envelope, the
+    # receipt and the prose are identical for a question naming one period.
+    out = _plan.temporal_compare(output_root, pipeline_root, client_id, run_id,
+                                 interpretation=interpretation)
+    if out.get("planBlocked"):
         return _envelope(ok=False, question=question,
                          answer="I need two periods to compare.", spec=spec_dict,
                          artifacts=[], route="temporal_compare", error="missing periods")
-    dataset = _workspace.resolve_dataset(question)
-    out = compare_mod.run_temporal_compare(
-        output_root, pipeline_root, client_id, run_id, dataset=dataset,
-        metric=spec.metric, aggregation=spec.aggregation,
-        period_a=periods[0], period_b=periods[1])
+    periods = list(_plan.comparison_periods(interpretation))
+    dataset = out.get("dataset")
     metric_key = out.get("metric", "funded_balance")
     label = out.get("metricLabel", metric_key)
 
@@ -3024,10 +3043,11 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             # `workspace.resolve_dataset` for it. Leaving the parameter here
             # would be a live wire back to the tab.
             handle=lambda r: _route_compare(
-                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                r.question, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
                 pipeline_root=r.pipeline_root,
-                portfolio_id=r.portfolio_id, as_of=r.as_of)),
+                portfolio_id=r.portfolio_id, as_of=r.as_of,
+                interpretation=r.resolve_interpretation())),
 
         # 10. Contractual risk limits.
         Recogniser(

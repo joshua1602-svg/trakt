@@ -31,6 +31,25 @@ if str(_REPO) not in sys.path:
 #: (case, question, expected_owner_or_None). ``None`` means "claimed by
 #: temporal_compare"; a string names why it should NOT be claimed.
 CASES: Tuple[Tuple[str, str, Any], ...] = (
+    # --- DELIVERED comparisons, on periods this book actually holds --------
+    #
+    # The cases below them ask for October/November/September, which this
+    # fixture does not carry, so every one of them REFUSES. An equivalence
+    # measured on refusals alone is vacuous — both sides decline for the same
+    # reason and nothing about the calculation is exercised — and Conversion 1
+    # already reported one vacuous pass of exactly that shape. These seven run
+    # the delivered path with real numbers, one per governed measure family.
+    ("A1", "Compare April and May funded balance.", None),
+    ("A2", "Compare May and June funded balance.", None),
+    ("A3", "Compare April and June funded balance.", None),
+    ("A4", "Compare May and June loan count.", None),
+    ("A5", "Compare May and June WA current LTV.", None),
+    ("A6", "Compare May and June average interest rate.", None),
+    ("A7", "Compare May and June borrower age.", None),
+    # A bare `case` is a funded loan, end to end and on real numbers — the
+    # house rule settled during prerequisite closure, pinned here on the
+    # delivered path rather than only at the resolver.
+    ("A8", "Compare May and June case count.", None),
     # --- the plain two-period comparison -----------------------------------
     ("T1", "Compare October and November funded balance.", None),
     ("T2", "Compare September and October funded balance", None),

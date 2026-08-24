@@ -598,6 +598,162 @@ def comparison_periods(interpretation) -> Tuple[str, ...]:
     return tuple(str(p) for p in periods)
 
 
+def dataset_of(interpretation) -> str:
+    """WHICH GOVERNED TAPE the answer is built from — funded, pipeline, forecast.
+
+    THE `dataset` AXIS BRIDGE. `mi_agent_api.workspace.resolve_dataset` is the
+    single semantic owner and the contract carries its answer; this reads that
+    answer and decides nothing. It does not see the question and it does not
+    see the caller's workspace tab — the tab was retired as a semantic input
+    precisely so a route could not reintroduce it here.
+
+    Falls back to the governed default when the claim is not FILLED, which is
+    the owner's own fallback rather than a second opinion: `resolve_dataset`
+    returns `funded` for a question naming no dataset, so an unfilled claim and
+    a defaulted one mean the same thing.
+    """
+    claim = getattr(interpretation, "dataset", None)
+    if claim is None or getattr(claim, "state", "empty") != "filled":
+        return "funded"
+    return str(getattr(claim, "dataset", None) or "funded")
+
+
+def measure_request(interpretation) -> Tuple[Optional[str], str]:
+    """The measure the question asked for, as `(metric, aggregation)`.
+
+    THE `subject` AXIS BRIDGE, and the shape is dictated by the existing
+    measure resolvers, which take the parser's two fields. The contract
+    deliberately collapses them onto ONE governed concept — resolution belongs
+    to the registry, not to the claim — so this expands that concept back into
+    the pair the resolver expects, and does so in one place instead of at every
+    call site.
+
+    `loan_count` is the concept the projection records when the parser named no
+    metric but asked for a count, so it expands to `(None, "count")`; every
+    other concept is a metric summed.
+
+    THE KNOWN LOSSY EDGE, stated rather than hidden: a question whose parser
+    output was `metric="loan_count"` with a non-count aggregation projects to
+    the same concept and would be read here as a count request. Measured across
+    all 26 readings of the owned `temporal_compare` surface, production and this
+    expansion agree on every one, so the edge is unreachable there today. It is
+    a property of the contract collapsing two fields into one, and closing it
+    means the claim carrying the aggregation — a contract change, not a route's
+    to make.
+    """
+    subject = getattr(interpretation, "subject", None)
+    if subject is None or getattr(subject, "state", "empty") != "filled":
+        return None, "sum"
+    concept = getattr(subject, "candidate_concept", None)
+    if concept == "loan_count":
+        return None, "count"
+    return (str(concept) if concept else None), "sum"
+
+
+# --------------------------------------------------------------------------- #
+# `temporal_compare`, composed.
+# --------------------------------------------------------------------------- #
+#: How many periods a comparison needs. Named because the refusal below turns
+#: on it and a bare `2` in a guard says nothing about why.
+COMPARE_PERIOD_COUNT = 2
+
+
+def build_temporal_compare_plan(interpretation) -> Plan:
+    """The plan for a governed two-period comparison.
+
+    The question is NOT a parameter. Every semantic fact this route ever read
+    from it now arrives on the contract: the dataset (the ownership
+    remediation), the measure (`subject`), and the period pair (carried
+    structurally by the time contract).
+
+    A plan with fewer than two periods is BLOCKED rather than defaulted. The
+    shipped route refused the same case in the same words, and defaulting a
+    missing period would answer a different question from the one asked.
+
+    THE POPULATION STEP IS DELIBERATELY NOT `_population_step`. This route does
+    not narrow by source portfolio — the shipped path never passed a scope to
+    the engine, and `lensApplied` is False on every owned case. Planning a
+    narrowing it does not apply would put a false narrowing on the receipt; a
+    question that NAMES a scope is already refused by the facet layer as a lost
+    one, which is the correct owner and is left alone. So the step declares
+    what actually happens: the whole dataset.
+    """
+    periods = comparison_periods(interpretation)
+    dataset = dataset_of(interpretation)
+    metric, aggregation = measure_request(interpretation)
+
+    period_step = Step(
+        STACK_PERIODS,
+        {"dataset": dataset, "take": "named_pair", "periods": list(periods),
+         "disclose": "availablePeriods"},
+        because="a comparison opens at the first named period and closes at the second")
+    if len(periods) < COMPARE_PERIOD_COUNT:
+        period_step = Step(
+            STACK_PERIODS,
+            {"dataset": dataset, "take": "named_pair", "periods": list(periods)},
+            because="a comparison needs two governed reporting periods",
+            blocked=(BLOCKED_NO_CONTRACT_FIELD + ": time.comparison_periods "
+                     f"names {len(periods)} period(s), not {COMPARE_PERIOD_COUNT}"))
+
+    steps: List[Step] = [
+        period_step,
+        Step(SELECT_POPULATION, {"kind": "whole_dataset", "dataset": dataset},
+             because=("this route does not narrow by source portfolio; a named "
+                      "scope is refused by the facet layer as a lost narrowing")),
+        Step(RESOLVE_MEASURE, {"metric": metric, "aggregation": aggregation},
+             because="the contract's subject concept, expanded for the resolver"),
+        Step(COMPARE,
+             {"of": ["period_a", "period_b"], "as": "absolute and percentage delta",
+              "direction": "b relative to a"},
+             because="the comparison reports the movement from the first period to the second"),
+    ]
+    return Plan(tuple(steps))
+
+
+def compare_period_pair(plan: Plan) -> Tuple[Optional[str], Optional[str]]:
+    """The ordered pair this plan compares, from the plan alone."""
+    step = next((s for s in plan.steps if s.primitive == STACK_PERIODS), None)
+    periods = list(step.inputs.get("periods") or ()) if step else []
+    if len(periods) < COMPARE_PERIOD_COUNT:
+        return None, None
+    return periods[0], periods[1]
+
+
+def compare_dataset(plan: Plan) -> Optional[str]:
+    """The tape this plan runs against, from the plan alone."""
+    step = next((s for s in plan.steps if s.primitive == SELECT_POPULATION), None)
+    return (step.inputs.get("dataset") if step else None)
+
+
+def temporal_compare(output_root, pipeline_root, client_id: str,
+                     to_run_id: Optional[str], *, interpretation) -> Dict[str, Any]:
+    """A governed two-period comparison, COMPOSED.
+
+    A drop-in for `temporal_compare.run_temporal_compare` as this route called
+    it: the dataset, the measure and the period pair all come from the contract,
+    and the same result dict comes back — so the prose, the chart, the table,
+    the envelope and the receipt are unchanged by construction.
+    """
+    from . import temporal_compare as compare_mod
+
+    plan = build_temporal_compare_plan(interpretation)
+    if plan.blocked:
+        return {"available": False, "reason": plan.blocked[0].blocked,
+                "planBlocked": [s.to_dict() for s in plan.blocked]}
+
+    period_a, period_b = compare_period_pair(plan)
+    metric_step = next(s for s in plan.steps if s.primitive == RESOLVE_MEASURE)
+    # EXISTING IMPLEMENTATION, reused. The period matching, the deltas, the
+    # direction and the insufficient-data response already live there;
+    # re-deriving them would add a second owner of the same economics.
+    return compare_mod.run_temporal_compare(
+        output_root, pipeline_root, client_id, to_run_id,
+        dataset=compare_dataset(plan),
+        metric=metric_step.inputs.get("metric"),
+        aggregation=metric_step.inputs.get("aggregation"),
+        period_a=period_a, period_b=period_b)
+
+
 # --------------------------------------------------------------------------- #
 # `funded_bridge`, composed.
 # --------------------------------------------------------------------------- #

@@ -1,6 +1,502 @@
 {
   "rows": [
     {
+      "case": "A1",
+      "question": "Compare April and May funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "May"
+      ],
+      "periodsContractRawText": "April, May",
+      "periodsContractStructural": [
+        "April",
+        "May"
+      ]
+    },
+    {
+      "case": "A1",
+      "question": "Compare April and May funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "May"
+      ],
+      "periodsContractRawText": "April, May",
+      "periodsContractStructural": [
+        "April",
+        "May"
+      ]
+    },
+    {
+      "case": "A2",
+      "question": "Compare May and June funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A2",
+      "question": "Compare May and June funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A3",
+      "question": "Compare April and June funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "June"
+      ],
+      "periodsContractRawText": "April, June",
+      "periodsContractStructural": [
+        "April",
+        "June"
+      ]
+    },
+    {
+      "case": "A3",
+      "question": "Compare April and June funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "June"
+      ],
+      "periodsContractRawText": "April, June",
+      "periodsContractStructural": [
+        "April",
+        "June"
+      ]
+    },
+    {
+      "case": "A4",
+      "question": "Compare May and June loan count.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A4",
+      "question": "Compare May and June loan count.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A5",
+      "question": "Compare May and June WA current LTV.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A5",
+      "question": "Compare May and June WA current LTV.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A6",
+      "question": "Compare May and June average interest rate.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A6",
+      "question": "Compare May and June average interest rate.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A7",
+      "question": "Compare May and June borrower age.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A7",
+      "question": "Compare May and June borrower age.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A8",
+      "question": "Compare May and June case count.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A8",
+      "question": "Compare May and June case count.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
       "case": "T1",
       "question": "Compare October and November funded balance.",
       "tab": "funded",

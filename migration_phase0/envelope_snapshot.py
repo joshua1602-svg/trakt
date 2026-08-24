@@ -81,6 +81,28 @@ def _cases(route: str):
         return ([(c, q) for c, q, expected_other in CASES
                  if expected_other is None
                  and routing._is_geo_exposure(q)], SCOPES)
+    if route == "temporal_compare":
+        # CONVERSION 5. The owned set comes from the ownership instrument's
+        # declared surface, filtered by the SHIPPED recogniser — `temporal_mode
+        # == "compare"` — so a case the route stops claiming drops out of the
+        # denominator loudly rather than silently comparing two refusals.
+        #
+        # The second axis is the WORKSPACE TAB, not the source lens, because
+        # this is the first converted route whose dataset decision was ever
+        # tab-sensitive. It no longer is, and snapshotting across tabs is how
+        # that stays true through the conversion.
+        from migration_phase0.route_ownership_temporal_compare import (
+            CASES, DATASETS)
+        from mi_agent.llm_query_parser import parse_with_repair
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.data_source import semantics_path
+        sem = load_mi_semantics(semantics_path())
+
+        def _claims(q):
+            spec, _m = parse_with_repair(q, sem, llm_enabled=False)
+            return getattr(spec, "temporal_mode", None) == "compare"
+        return ([(c, q) for c, q, other in CASES
+                 if other is None and _claims(q)], DATASETS)
     if route == "period_movement":
         from migration_phase0.route_ownership_period_movement import (
             CANDIDATES, DEFAULTS)
@@ -251,11 +273,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ctx = ExecutionContext.for_internal(client_id)
     owned, defaults = _cases(args.route)
     rows: List[Dict[str, Any]] = []
+    #: `temporal_compare`'s second axis is the workspace tab; every other
+    #: route's is the source-portfolio lens. Sending a tab as a lens would
+    #: silently collapse the axis and report a denominator it did not measure.
+    tab_axis = args.route == "temporal_compare"
     for case, question in owned:
         for default in defaults:
-            result = execute_governed_mi_query(
-                MiQueryRequest(question=question,
-                               source_portfolio_lens=default), ctx).result or {}
+            request = (MiQueryRequest(question=question, dataset_context=default)
+                       if tab_axis else
+                       MiQueryRequest(question=question,
+                                      source_portfolio_lens=default))
+            result = execute_governed_mi_query(request, ctx).result or {}
             rows.append({"case": case, "question": question,
                          "default": default,
                          "envelope": _strip(_shape(result))})
@@ -265,7 +293,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                          f"cannot be diffed against one taken earlier.")
     Path(args.out).write_text(json.dumps(rows, indent=2, default=str) + "\n",
                               encoding="utf-8")
-    print(f"{len(rows)} envelopes ({len(owned)} cases x {len(defaults)} scopes) "
+    axis = "tabs" if tab_axis else "scopes"
+    print(f"{len(rows)} envelopes ({len(owned)} cases x {len(defaults)} {axis}) "
           f"-> {args.out}")
     return 0
 

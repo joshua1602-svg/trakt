@@ -1,0 +1,3496 @@
+{
+  "rows": [
+    {
+      "case": "A1",
+      "question": "Compare April and May funded balance.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-05",
+        "valueA": 1932310991.2,
+        "valueB": 1946827440.6,
+        "absoluteDelta": 14516449.4,
+        "percentageDelta": 0.75,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-05",
+        "valueA": 1932310991.2,
+        "valueB": 1946827440.6,
+        "absoluteDelta": 14516449.4,
+        "percentageDelta": 0.75,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A1",
+      "question": "Compare April and May funded balance.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-05",
+        "valueA": 1932310991.2,
+        "valueB": 1946827440.6,
+        "absoluteDelta": 14516449.4,
+        "percentageDelta": 0.75,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-05",
+        "valueA": 1932310991.2,
+        "valueB": 1946827440.6,
+        "absoluteDelta": 14516449.4,
+        "percentageDelta": 0.75,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A2",
+      "question": "Compare May and June funded balance.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 1946827440.6,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 18058817.61,
+        "percentageDelta": 0.93,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 1946827440.6,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 18058817.61,
+        "percentageDelta": 0.93,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A2",
+      "question": "Compare May and June funded balance.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 1946827440.6,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 18058817.61,
+        "percentageDelta": 0.93,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 1946827440.6,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 18058817.61,
+        "percentageDelta": 0.93,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A3",
+      "question": "Compare April and June funded balance.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-06",
+        "valueA": 1932310991.2,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 32575267.01,
+        "percentageDelta": 1.69,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-06",
+        "valueA": 1932310991.2,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 32575267.01,
+        "percentageDelta": 1.69,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A3",
+      "question": "Compare April and June funded balance.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-06",
+        "valueA": 1932310991.2,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 32575267.01,
+        "percentageDelta": 1.69,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": "2026-04",
+        "periodB": "2026-06",
+        "valueA": 1932310991.2,
+        "valueB": 1964886258.21,
+        "absoluteDelta": 32575267.01,
+        "percentageDelta": 1.69,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-04-30/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-04-30",
+            "total_records": 10996,
+            "total_balance": 1932310991.2,
+            "records_included": 10996,
+            "balance_included": 1932310991.2,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A4",
+      "question": "Compare May and June loan count.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A4",
+      "question": "Compare May and June loan count.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A5",
+      "question": "Compare May and June WA current LTV.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.4288,
+        "valueB": 0.4316,
+        "absoluteDelta": 0.0028,
+        "percentageDelta": 0.65,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.4288,
+        "valueB": 0.4316,
+        "absoluteDelta": 0.0028,
+        "percentageDelta": 0.65,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A5",
+      "question": "Compare May and June WA current LTV.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.4288,
+        "valueB": 0.4316,
+        "absoluteDelta": 0.0028,
+        "percentageDelta": 0.65,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.4288,
+        "valueB": 0.4316,
+        "absoluteDelta": 0.0028,
+        "percentageDelta": 0.65,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A6",
+      "question": "Compare May and June average interest rate.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.065587,
+        "valueB": 0.065597,
+        "absoluteDelta": 0.0,
+        "percentageDelta": 0.0,
+        "direction": "flat",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.065587,
+        "valueB": 0.065597,
+        "absoluteDelta": 0.0,
+        "percentageDelta": 0.0,
+        "direction": "flat",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A6",
+      "question": "Compare May and June average interest rate.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.065587,
+        "valueB": 0.065597,
+        "absoluteDelta": 0.0,
+        "percentageDelta": 0.0,
+        "direction": "flat",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 0.065587,
+        "valueB": 0.065597,
+        "absoluteDelta": 0.0,
+        "percentageDelta": 0.0,
+        "direction": "flat",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A7",
+      "question": "Compare May and June borrower age.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "avg_borrower_age",
+        "metricLabel": "Average borrower age",
+        "format": "decimal",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 71.3408,
+        "valueB": 71.3976,
+        "absoluteDelta": 0.0568,
+        "percentageDelta": 0.08,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "avg_borrower_age",
+        "metricLabel": "Average borrower age",
+        "format": "decimal",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 71.3408,
+        "valueB": 71.3976,
+        "absoluteDelta": 0.0568,
+        "percentageDelta": 0.08,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A7",
+      "question": "Compare May and June borrower age.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "avg_borrower_age",
+        "metricLabel": "Average borrower age",
+        "format": "decimal",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 71.3408,
+        "valueB": 71.3976,
+        "absoluteDelta": 0.0568,
+        "percentageDelta": 0.08,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "avg_borrower_age",
+        "metricLabel": "Average borrower age",
+        "format": "decimal",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 71.3408,
+        "valueB": 71.3976,
+        "absoluteDelta": 0.0568,
+        "percentageDelta": 0.08,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A8",
+      "question": "Compare May and June case count.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "A8",
+      "question": "Compare May and June case count.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      },
+      "composed": {
+        "available": true,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": "2026-05",
+        "periodB": "2026-06",
+        "valueA": 11013,
+        "valueB": 11035,
+        "absoluteDelta": 22.0,
+        "percentageDelta": 0.2,
+        "direction": "up",
+        "reason": null,
+        "status": "ok",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": [
+          "blob://processed/platform/alderbridge/2026-05-31/platform_canonical_typed.csv",
+          "blob://processed/platform/alderbridge/2026-06-30/platform_canonical_typed.csv"
+        ],
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": {
+          "periodA": {
+            "dataset": "funded",
+            "run_id": "2026-05-31",
+            "total_records": 11013,
+            "total_balance": 1946827440.6,
+            "records_included": 11013,
+            "balance_included": 1946827440.6,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          },
+          "periodB": {
+            "dataset": "funded",
+            "run_id": "2026-06-30",
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "coverage_by_balance_pct": 100.0,
+            "missing_dimension_fields": [],
+            "missing_measure_fields": [],
+            "filters": {}
+          }
+        },
+        "lineage": {
+          "source": "governed evolution time-series (cross-run comparison)",
+          "note": "Comparison reconciles to the same governed runs as the Evolution tab."
+        }
+      }
+    },
+    {
+      "case": "T1",
+      "question": "Compare October and November funded balance.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "T1",
+      "question": "Compare October and November funded balance.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "T2",
+      "question": "Compare September and October funded balance",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: September, October",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: September, October",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "T2",
+      "question": "Compare September and October funded balance",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: September, October",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: September, October",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "T3",
+      "question": "Compare the funded balance in October and November.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "T3",
+      "question": "Compare the funded balance in October and November.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "T4",
+      "question": "Compare October and November loan count.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "T4",
+      "question": "Compare October and November loan count.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "M1",
+      "question": "Compare October and November WA current LTV.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "M1",
+      "question": "Compare October and November WA current LTV.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "wa_ltv",
+        "metricLabel": "WA current LTV",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "M2",
+      "question": "Compare October and November average interest rate.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "M2",
+      "question": "Compare October and November average interest rate.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "wa_interest_rate",
+        "metricLabel": "WA interest rate",
+        "format": "percent",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P1",
+      "question": "Compare October and November pipeline amount.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P1",
+      "question": "Compare October and November pipeline amount.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P2",
+      "question": "How did the pipeline amount change from last week?",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: latest, last week",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: latest, last week",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P2",
+      "question": "How did the pipeline amount change from last week?",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: latest, last week",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_amount",
+        "metricLabel": "Pipeline amount",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: latest, last week",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P3",
+      "question": "Compare October and November case count.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P3",
+      "question": "Compare October and November case count.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "loan_count",
+        "metricLabel": "Loan count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P4",
+      "question": "Compare October and November KFI count.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P4",
+      "question": "Compare October and November KFI count.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P5",
+      "question": "Compare October and November application count.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "P5",
+      "question": "Compare October and November application count.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "pipeline_case_count",
+        "metricLabel": "Pipeline case count",
+        "format": "count",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [],
+        "sourcePeriods": null,
+        "dataset": "pipeline",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "D1",
+      "question": "Compare October and November balance, excluding pipeline cases.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "D1",
+      "question": "Compare October and November balance, excluding pipeline cases.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, November",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "R1",
+      "question": "Compare October and December funded balance.",
+      "tab": "funded",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, December",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, December",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    },
+    {
+      "case": "R1",
+      "question": "Compare October and December funded balance.",
+      "tab": "pipeline",
+      "differingFields": [],
+      "shipped": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, December",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      },
+      "composed": {
+        "available": false,
+        "metric": "funded_balance",
+        "metricLabel": "Funded balance",
+        "format": "gbp",
+        "periodA": null,
+        "periodB": null,
+        "valueA": null,
+        "valueB": null,
+        "absoluteDelta": null,
+        "percentageDelta": null,
+        "direction": null,
+        "reason": "requested period(s) unavailable: October, December",
+        "status": "insufficient_data",
+        "availablePeriods": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "sourcePeriods": null,
+        "dataset": "funded",
+        "portfolioId": "alderbridge",
+        "toRunId": null,
+        "reconciliation": null,
+        "lineage": null
+      }
+    }
+  ]
+}
