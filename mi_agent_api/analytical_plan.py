@@ -508,3 +508,165 @@ def geo_exposure(df: Any, *, interpretation) -> Dict[str, Any]:
     result["narrowed"] = narrowed
     result["declaredGroupedBy"] = list(plan.declares_grouped_by)
     return result
+
+
+# --------------------------------------------------------------------------- #
+# CONVERSION 4 — the `dimensions` axis, bridged.
+#
+# The first NEW contract axis connected to the plan layer since Conversion 2
+# bridged `time`. Conversions 1–3 all drew on the two axes already carried, so
+# this is the measurement of what adding one costs.
+#
+# Both accessors below are SHARED: they read the authoritative contract and are
+# reusable by any later route needing a grouping or a named start period. They
+# know nothing about `funded_bridge`.
+# --------------------------------------------------------------------------- #
+
+#: The contract's own role value for a dimension that is an AXIS rather than a
+#: selector. Compared as a literal, the way this module already compares
+#: `source_scope.state` — the plan layer reads the contract, it does not import
+#: its enums.
+ROLE_GROUPING = "grouping"
+
+
+def grouping_concepts(interpretation) -> Tuple[str, ...]:
+    """The governed dimension concepts the contract carries AS A GROUPING.
+
+    THE `dimensions` AXIS BRIDGE. Governed field identity only — the concept key
+    the parser resolved, never the user's wording — and the ROLE IS OBEYED
+    rather than assumed: a dimension the contract marked `filter` or left
+    `unresolved` is not returned here, so a caller cannot silently promote a
+    selector into an axis. That is the collapse the role split exists to
+    prevent, and reading `candidate_concept` while ignoring `role` would
+    reintroduce it one call site at a time.
+
+    Order is the contract's order, so a caller wanting "the" grouping takes the
+    first and a caller supporting several takes them all.
+    """
+    out: List[str] = []
+    for dim in (getattr(interpretation, "dimensions", None) or ()):
+        if getattr(dim, "role", None) != ROLE_GROUPING:
+            continue
+        concept = getattr(dim, "candidate_concept", None)
+        if concept and concept not in out:
+            out.append(str(concept))
+    return tuple(out)
+
+
+def comparison_period(interpretation) -> Optional[str]:
+    """The named start period the contract carries, or ``None``.
+
+    NOT A NEW AXIS. `time` was bridged by Conversion 2, but only through
+    `window_periods` — the magnitude of a trailing window. A question that names
+    a period to compare FROM ("since March 2026") states a different fact, and
+    it already has a governed home in `time.comparison_period`. This reads that
+    field; it does not create a semantic owner and it does not read the
+    question.
+
+    Only a FILLED slot answers. An empty one means the question named no start
+    period, which is not the same as naming one that could not be resolved.
+    """
+    time = getattr(interpretation, "time", None)
+    slot = getattr(time, "comparison_period", None)
+    if slot is None or getattr(slot, "state", "empty") != "filled":
+        return None
+    return getattr(slot, "raw_text", None)
+
+
+# --------------------------------------------------------------------------- #
+# `funded_bridge`, composed.
+# --------------------------------------------------------------------------- #
+
+#: How many contributors the waterfall keeps before aggregating the residual
+#: into "Other". The route's own long-standing constant.
+BRIDGE_TOP_N = 8
+
+
+def build_funded_bridge_plan(interpretation, *, dimension_key: Optional[str],
+                             dimension_label: str) -> Plan:
+    """The plan for a funded-balance attribution bridge.
+
+    The question is NOT a parameter. Both semantic facts this route ever read
+    from it now arrive on the contract: the source scope (Conversion 1) and the
+    attribution dimension (bridged above). The start period is read from the
+    contract too, and declared so the plan states the window it compares over.
+
+    `dimension_key` is the GOVERNED CONCEPT the registry resolved for the
+    contract's grouping; the executor turns it into the column(s) the tape
+    carries. A plan with no dimension is BLOCKED rather than defaulted here —
+    the route's fallback is its own convention and belongs at its own call site,
+    not inside a step that claims the contract asked for it.
+    """
+    steps: List[Step] = [
+        Step(STACK_PERIODS,
+             {"dataset": "funded", "take": "pair", "from": comparison_period(interpretation),
+              "disclose": "periodsAvailable"},
+             because=("a bridge opens at a named start period, else the earliest "
+                      "governed period, and closes at the latest")),
+        _population_step(getattr(interpretation, "source_scope", None)),
+        Step(RESOLVE_MEASURE, {"metric": "funded_balance", "aggregation": "sum"},
+             because="the bridge attributes movement in the funded balance"),
+    ]
+    if not dimension_key:
+        steps.append(Step(
+            GROUP, {"by": None},
+            because="a bridge attributes movement BY a dimension",
+            blocked=(BLOCKED_NO_CONTRACT_FIELD + ": no governed dimension carries "
+                     "a grouping role, and none is available to fall back to")))
+        return Plan(tuple(steps), ())
+    steps.append(Step(GROUP, {"by": [dimension_key], "measure": "funded_balance",
+                              "aggregation": "sum", "of": "the delta",
+                              "label": dimension_label, "top_n": BRIDGE_TOP_N,
+                              "residual": "Other"},
+                      because="the waterfall attributes the movement by this axis"))
+    steps.append(Step(COMPARE,
+                      {"of": ["funded_balance"], "between": "start period and latest",
+                       "as": "absolute delta", "reconciles_to": "netChange"},
+                      because="the per-category deltas sum exactly to the net change"))
+    return Plan(tuple(steps), (dimension_key,))
+
+
+def bridge_start_period(plan: Plan) -> Optional[str]:
+    """The start period this plan opens at, from the plan alone."""
+    step = next((s for s in plan.steps if s.primitive == STACK_PERIODS), None)
+    return (step.inputs.get("from") if step else None)
+
+
+def funded_bridge(output_root, client_id: str, *, interpretation,
+                  dimension_columns, dimension_key: Optional[str],
+                  dimension_label: str,
+                  to_run_id: Optional[str] = None) -> Dict[str, Any]:
+    """A governed funded-balance attribution bridge, COMPOSED.
+
+    A drop-in for `evolution.funded_bridge` as this route called it: the
+    population, the attribution axis and the start period all come from the
+    contract, and the same result dict comes back — so the waterfall, the table,
+    the prose, the envelope and the receipt are unchanged by construction.
+
+    `dimension_columns` is the registry's resolution of the governed concept
+    into the column(s) this tape may carry; the plan owns WHICH concept, the
+    registry owns how it is spelled.
+    """
+    from . import evolution as evolution_mod
+
+    plan = build_funded_bridge_plan(interpretation, dimension_key=dimension_key,
+                                    dimension_label=dimension_label)
+    label = lens_label(plan)
+    if plan.blocked:
+        return {"available": False, "lens": label,
+                "reason": plan.blocked[0].blocked,
+                "planBlocked": [s.to_dict() for s in plan.blocked]}
+
+    # EXISTING IMPLEMENTATION, reused. The period pair, the per-category deltas,
+    # the "Other" residual and the missing-dimension refusal all already exist
+    # there — re-deriving them would add a second owner of the same economics,
+    # and the missing-dimension guard is the one that keeps a bridge on an
+    # absent column from reporting GBP0 for a book that moved.
+    out = evolution_mod.funded_bridge(
+        output_root, client_id, dimension_columns,
+        start_period=bridge_start_period(plan), to_run_id=to_run_id,
+        lens_filters=lens_filters(plan), lens_label=label,
+        top_n=BRIDGE_TOP_N)
+    if out.get("available"):
+        out["declaredGroupedBy"] = list(plan.declares_grouped_by)
+    return out

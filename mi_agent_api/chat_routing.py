@@ -1652,13 +1652,21 @@ _REGION_FAMILY = ("collateral_geography", "geographic_region_collateral",
                   "geographic_region_obligor")
 
 
-def _bridge_dimension(spec, semantics: Dict[str, Any]) -> Tuple[Optional[str], Any, str]:
+def _bridge_dimension(concept: Optional[str],
+                      semantics: Dict[str, Any]) -> Tuple[Optional[str], Any, str]:
     """(semantic_key, candidate_column(s), business_label) for the bridge
-    attribution dimension — the one named in the question, else a sensible
-    default. Region resolves to the whole family so the bridge picks whichever
-    geography column the funded tape actually carries."""
+    attribution dimension — the governed CONCEPT the caller resolved, else a
+    sensible default. Region resolves to the whole family so the bridge picks
+    whichever geography column the funded tape actually carries.
+
+    CONVERSION 4 changed this from reading `spec.bridge_dimension` itself to
+    taking the concept as an argument, so the DECISION of which dimension is the
+    axis moved to the interpretation contract while this kept its real job:
+    turning a governed concept into the column(s) and label this tape spells it
+    with. One owner of registry resolution, and it no longer owns the semantics.
+    """
     fields = semantics.get("fields", {})
-    key = spec.bridge_dimension
+    key = concept
     if not key or key not in fields:
         key = next((k for k in _BRIDGE_DEFAULT_DIMS if k in fields), None)
     if not key:
@@ -1673,7 +1681,8 @@ def _bridge_dimension(spec, semantics: Dict[str, Any]) -> Tuple[Optional[str], A
 
 
 def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
-                  portfolio_id, as_of, semantics, source_lens=None) -> Dict[str, Any]:
+                  portfolio_id, as_of, semantics, source_lens=None,
+                  interpretation=None) -> Optional[Dict[str, Any]]:
     """Governed funded-balance ATTRIBUTION bridge → a waterfall artifact.
 
     Opening balance (a named start period, else the earliest) → per-category
@@ -1681,20 +1690,31 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
     lens named in the question (or the active dropdown) scopes it — so a
     consolidated (Total) and cohort (direct / acquired / cohort id) bridge are
     both available. Deltas reconcile exactly to the net change."""
-    _key, dim_col, dim_label = _bridge_dimension(spec, semantics)
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. The rule Conversions 1-3
+        # settled: one population owner, or none. Keeping the lens-resolved path
+        # as a fallback would leave `resolve_lens_with_default` reachable from
+        # here exactly when the contract failed.
+        return None
+    # CONVERSION 4 — the switch point, and the whole of it.
+    #
+    # Every semantic fact this route read from the question now arrives on the
+    # contract: the source scope (Conversion 1), the attribution dimension (the
+    # `dimensions` axis, bridged here) and the named start period
+    # (`time.comparison_period`). `_bridge_dimension` keeps only the registry
+    # resolution — concept to column and label.
+    dim_key, dim_col, dim_label = _bridge_dimension(
+        (_plan.grouping_concepts(interpretation) or (None,))[0], semantics)
     if not dim_col:
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
                          answer="I couldn't resolve a dimension to attribute the bridge by.",
                          route="funded_bridge", warnings=["no attribution dimension resolved."])
 
-    default_lens = (_portfolio_lens.lens_from_selection(source_lens)
-                    if source_lens is not None else None)
-    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
-    start_period = (spec.compare_periods or [None])[0]
-
-    br = evolution_mod.funded_bridge(
-        output_root, client_id, dim_col, start_period=start_period, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label)
+    br = _plan.funded_bridge(
+        output_root, client_id, interpretation=interpretation,
+        dimension_columns=dim_col, dimension_key=dim_key,
+        dimension_label=dim_label, to_run_id=run_id)
+    lens_label_text, lens_narrowed = br.get("lens") or "Total", None
 
     if not br.get("available"):
         return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
@@ -1711,7 +1731,7 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
         rows.append({"label": c["category"], "value": c["delta"], "type": "delta"})
     rows.append({"label": f"{end['period']} (latest)", "value": end["total"], "type": "total"})
 
-    lens_suffix = "" if lens.name == _portfolio_lens.LENS_TOTAL else f" — {lens.label}"
+    lens_suffix = "" if lens_label_text == "Total" else f" — {lens_label_text}"
     title = f"Funded balance bridge by {dim_label}{lens_suffix}"
     chart = _chart_artifact(
         title, chart_type="waterfall", x_key="label", rows=rows,
@@ -1727,7 +1747,7 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
         td = top["delta"]
         top_txt = (f" Largest mover: {top['category']} "
                    f"({'+' if td >= 0 else '−'}{_gbp(abs(td))}).")
-    answer = (f"{dim_label} bridge ({lens.label}): funded balance moved from "
+    answer = (f"{dim_label} bridge ({lens_label_text}): funded balance moved from "
               f"{_gbp(start['total'])} in {start['period']} to {_gbp(end['total'])} at "
               f"{end['period']} (latest) — a net change of "
               f"{'+' if net >= 0 else '−'}{_gbp(abs(net))} ({arrow}).{top_txt}")
@@ -2881,7 +2901,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of, semantics=r.semantics,
-                source_lens=r.source_lens)),
+                source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
 
         # 5. Static-pool cohort progression.
         Recogniser(
