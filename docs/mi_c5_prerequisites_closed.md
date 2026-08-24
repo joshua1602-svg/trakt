@@ -227,7 +227,42 @@ The thresholds are **not** being raised or lowered to account for this. Moving
 them would be the rationalisation the programme exists to avoid; disclosing the
 shift is the honest alternative.
 
-## 11. Scope held
+## 11. Final regression, by name
+
+Full estate at `4c62a0f`, same environment, against the 214-name baseline:
+
+```
+185 failed, 10279 passed, 35 skipped, 16 xfailed, 28 errors   =  213 names
+```
+
+| | |
+|---|---|
+| **introduced failing names** | **0** |
+| gone from baseline | 1 — the rename in §1 |
+
+Re-confirmed at the same commit:
+
+```
+C5 dependency verifier   0 dataset / 0 measure / 26 structural of an EXPECTED 26   (exit 0)
+882 dataset census       M1 2302, M2 5, M3 96, UNEXPLAINED 0
+P1C golden bank + dataset ownership + comparison periods   161 passed
+```
+
+Silent drops remain 0; no unexplained route movement; no unexplained
+answer/refusal movement. C1–C4 unchanged.
+
+## 12. Status
+
+**C5 PREREQUISITES CLOSED — READY TO RESTART**
+
+## 13. Recommended next task
+
+**Run Conversion 5 on `temporal_compare` against the thresholds already
+committed at `7d9f4c6`** — shared ≤ 75, route-specific 90–150, total ≤ 225 —
+and report its measured shared cost **alongside the 19 executable lines closed
+as prerequisites beforehand**, per §10.
+
+## 14. Scope held
 
 C5 not started. No route converted. No subject/operation accessors beyond the
 prerequisite. No threshold change. No `evolution` or `period_change` migration.
