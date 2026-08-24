@@ -452,3 +452,158 @@ Test and instrument code, reported apart and never counted as production cost:
 The allowlist mutation is the important one: it passes every behavioural
 assertion and is caught by exactly one test. Without that test the suite would
 have accepted a dataset-name rule.
+
+---
+
+# Part III — C6 prerequisites, resumed
+
+**C6 is not executed here.** This re-runs the dependency analysis on the
+post-fix estate and stops.
+
+## 16. Prerequisite 2 — funnel / stage selection, measured
+
+`migration_phase0/funnel_stage_representation.py`, read-only, from code:
+
+**What selects the sub-routes today**
+
+```
+funnel branch   : raw-question membership test against
+                  {'kfi':'KFI','application':'APPLICATION','offer':'OFFER',
+                   'completion':'COMPLETED','completed':'COMPLETED'}
+by-stage branch : raw-question substring test against
+                  ['by stage','stage migration','stage over time']
+```
+
+Both read the raw question **inside the handler**. Neither consults the
+interpretation contract, and no plan primitive expresses either.
+
+**A governed vocabulary already exists — and the route cannot reach all of it**
+
+```
+pipeline_prep._STAGE_CANON -> 24 spellings -> ['APPLICATION','COMPLETED','KFI','OFFER','WITHDRAWN']
+_FUNNEL_KEYWORDS reaches    ->                ['APPLICATION','COMPLETED','KFI','OFFER']
+governed stages the route's vocabulary CANNOT name -> ['WITHDRAWN']
+```
+
+A second, smaller defect, found by comparing the two vocabularies rather than by
+reading either alone: the canonical stage set has five members and the route's
+funnel vocabulary reaches four. **No question can ask for a withdrawn-case
+trend**, though the prep layer classifies withdrawals and the five-week fixture
+deliberately contains one (case 2004). Not fixed here — it is stage *vocabulary*,
+which is exactly the dependency C6 must represent properly rather than extend in
+place.
+
+**Contract representation: still none**
+
+```
+DatasetClaim  DimensionClaim  FilterClaim  OperationClaim  PopulationClaim
+SourceScopeClaim  SubjectClaim  TargetClaim  TimeClaim
+claims that can carry a stage TODAY: NONE
+```
+
+Nine claims, none with a stage-bearing field. The C6 matrix's "no contract
+representation at all" is confirmed independently of the C6 report.
+
+**Corpus demand**: 24 of 882 questions name a funnel stage word; 13 name a
+by-stage phrase.
+
+## 17. Existing conversion capability — three owners, none to be rebuilt
+
+| | what it is |
+|---|---|
+| `evolution._conversion_pct` | stage-to-stage percentage, used by the funnel |
+| `forecast_extrapolation.kfi_conversion_model` | empirical 5-week completion-vs-KFI rate, shared with the forecast bridge |
+| `chat_routing._route_conversion` | the shipped conversion route |
+
+C6 **consumes** these. Adding a fourth conversion rate would repeat the exact
+two-owners-that-agree-until-measured failure this programme has now closed three
+times.
+
+## 18. Four-part dependency matrix, re-run post-fix
+
+| dependency | represented? | owner agreement? | consumed by plan? | delivered coverage? | status |
+|---|---|---|---|---|---|
+| `dataset` | yes | 0 disagreements / 34 | `dataset_of` exists | funded ✓ · **pipeline 4 of 7** (was 2) | **READY** |
+| `subject` / measure | yes | 0 / 34 | `measure_request` exists | ✓ | READY |
+| `time` span | yes | n/a — takes the whole series | `span_periods` exists | ✓ | READY |
+| **`time.grain`** | yes | **now one owner** — route declares, receipt reads | not needed for dispatch | ✓ all four quadrants | **CLOSED THIS TASK** |
+| `population` / scope | yes | route does not narrow | `_whole_dataset_step` provable | n/a | READY |
+| `dimensions` | yes | n/a | `grouping_concepts` exists | n/a | not required |
+| `filters` | yes | not measured | **no** — per-period filtering is route machinery | 1 of 2 | **UNPROVEN** |
+| `operation` | yes | reads `spec.chart_type` | dispatch, as C1–C5 | ✓ | acknowledged exception |
+| **funnel-stage selection** | **NO** | vocabulary reaches 4 of 5 governed stages | no | ✓ 2 of 2 *(now refused honestly, 0 delivered)* | **PREREQUISITE** |
+| **by-stage selection** | **NO** | none | no | ✓ 3 of 3 | **PREREQUISITE** |
+
+Two dependencies moved: `time.grain` from a silent two-owner disagreement to a
+single declared owner, and `dataset` from blocking to ready on coverage.
+
+**Two prerequisites remain, both the same one**: no claim on the contract can
+carry a pipeline stage, so neither sub-route's selection can be expressed in a
+plan. That is a contract task, not a conversion task.
+
+## 19. Status
+
+# C6 STILL PREREQUISITE-BLOCKED — one prerequisite, not four
+
+Prerequisite 1 (pipeline data) is closed. The grain defect it exposed is closed
+at both owners. `time.grain` and `dataset` now pass all four parts.
+
+What remains is a single contract question: **how a pipeline stage is
+represented as a governed claim** — covering all five canonical stages, not the
+four the current vocabulary reaches. Until it is answered, funnel-stage and
+by-stage selection stay raw-question reads inside the handler, and C6 would have
+to migrate them by copying that read into the new path.
+
+**Do not solve C6 by teaching the compositional path the existing defect.**
+
+**Recommended next task:** design the governed stage claim as its own bounded
+contract task — vocabulary from `pipeline_prep._STAGE_CANON` (the existing
+single owner), all five stages, consuming the three existing conversion
+capabilities rather than adding a fourth. Then re-run this matrix and
+pre-register C6 with thresholds.
+
+---
+
+## 20. Regression by exact name
+
+Two runs are reported, because the first method was invalid and saying only the
+second would hide why.
+
+**Method 1 — worktree baseline: INVALID.** A `git worktree` at `44d3f59`
+skipped 739 tests where the working tree skips 35, so ~700 tests could not fail
+in the baseline and any failure in the after-run looked introduced. It flagged
+75. Re-running those 75 names in the working tree, same isolation, both sides:
+
+```
+PRE-FIX  failures: 3      POST-FIX failures: 3      INTRODUCED: (none)
+   test_evidence_manifest.py::test_every_evidence_input_matches_the_manifest
+   test_evidence_manifest.py::test_production_code_moving_on_is_reported_but_not_fatal
+   test_p1e_measure_safety.py::test_a_routed_capability_may_satisfy_a_share_by_stating_one
+```
+
+All 75 were artefacts of the baseline environment. Recorded rather than deleted:
+a baseline that skips what it should run manufactures regressions, and the
+comparison looked rigorous while measuring nothing.
+
+**Method 2 — same working tree, production files checked out at `44d3f59`, then
+restored.** Same data, same config, **35 skipped on both sides**.
+
+| | before | after |
+|---|---|---|
+| failed | 185 | **183** |
+| passed | 10,293 | 10,313 *(+20 new assertions)* |
+| errors | 28 | 28 |
+| skipped | 35 | 35 |
+
+```
+=== INTRODUCED (fail after, not before) ===
+   (none)
+=== FIXED (fail before, not after) ===
+   mi_agent_api/tests/test_chat_routing_e2e.py::test_pipeline_amount_evolution_by_week_e2e
+   mi_agent_api/tests/test_chat_routing_e2e.py::test_kfi_trend_by_week_e2e
+=== unchanged failures: 183 ===
+```
+
+**Zero introduced.** The two that now pass are the estate's own end-to-end tests
+for exactly this behaviour — both were red on the branch before this task, which
+is how long the defect had been shipping under a green-looking suite.
