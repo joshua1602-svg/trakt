@@ -180,45 +180,45 @@
       "case": "P-CASE",
       "question": "How many cases are there?",
       "tab": null,
-      "resolveActiveView": "pipeline",
+      "resolveActiveView": "funded",
       "datasetFor": "(retired)",
-      "servedDataset": "pipeline",
+      "servedDataset": "funded",
       "route": null,
       "ok": false,
-      "answer": "No governed pipeline data is available for the pipeline view."
+      "answer": "I understood this as a pipeline question, but I have not answered it: this asks about the pipeline (applications, offers or completions), which is a different g"
     },
     {
       "case": "P-CASE",
       "question": "How many cases are there?",
       "tab": "funded",
-      "resolveActiveView": "pipeline",
+      "resolveActiveView": "funded",
       "datasetFor": "(retired)",
-      "servedDataset": "pipeline",
+      "servedDataset": "funded",
       "route": null,
       "ok": false,
-      "answer": "No governed pipeline data is available for the pipeline view."
+      "answer": "I understood this as a pipeline question, but I have not answered it: this asks about the pipeline (applications, offers or completions), which is a different g"
     },
     {
       "case": "P-CASE",
       "question": "How many cases are there?",
       "tab": "pipeline",
-      "resolveActiveView": "pipeline",
+      "resolveActiveView": "funded",
       "datasetFor": "(retired)",
-      "servedDataset": "pipeline",
+      "servedDataset": "funded",
       "route": null,
       "ok": false,
-      "answer": "No governed pipeline data is available for the pipeline view."
+      "answer": "I understood this as a pipeline question, but I have not answered it: this asks about the pipeline (applications, offers or completions), which is a different g"
     },
     {
       "case": "P-CASE",
       "question": "How many cases are there?",
       "tab": "forecast",
-      "resolveActiveView": "pipeline",
+      "resolveActiveView": "funded",
       "datasetFor": "(retired)",
-      "servedDataset": "pipeline",
+      "servedDataset": "funded",
       "route": null,
       "ok": false,
-      "answer": "No governed pipeline data is available for the pipeline view."
+      "answer": "I understood this as a pipeline question, but I have not answered it: this asks about the pipeline (applications, offers or completions), which is a different g"
     },
     {
       "case": "P-APP",

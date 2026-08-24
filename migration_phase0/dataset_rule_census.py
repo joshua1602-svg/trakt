@@ -65,7 +65,6 @@ def _rules() -> Dict[str, Callable[[str], str]]:
     from mi_agent.portfolio_lens import undisclaimed_mention as um
     from mi_agent_api.workspace import (DEFAULT_VIEW, resolve_active_view,
                                         view_named_by_question)
-    from mi_agent_api import chat_routing as cr
 
     #: The tape artefacts `_dataset_for` reads and `view_named_by_question`
     #: does not. NOT a new vocabulary: this is `chat_routing._PIPELINE_WORDS`
@@ -73,12 +72,24 @@ def _rules() -> Dict[str, Callable[[str], str]]:
     ARTEFACTS = ("case", "kfi", "application", "offer")
 
     def today_pointintime(q: str) -> str:
-        """What an ordinary (unrouted) question resolves to at NO tab."""
+        """What an ordinary (unrouted) question resolves to at NO tab.
+
+        Since the remediation this IS the owner — `resolve_active_view` is a
+        shim over it — so this row is now the "after" column, not a baseline.
+        """
         return resolve_active_view(q, None)
 
-    def today_routed(q: str) -> str:
-        """What `_route_compare` / `_route_evolution` resolve at NO tab."""
-        return cr._dataset_for(q, resolve_active_view(q, None))
+    def retired_routed(q: str) -> str:
+        """`chat_routing._dataset_for` as it was, frozen here after retirement.
+
+        Reproduced rather than imported so the census stays runnable and the
+        comparison cannot drift when production moves again.
+        """
+        low = (q or "").lower()
+        if any(um(low, w) for w in ("pipeline", "case", "kfi", "application",
+                                    "offer")):
+            return "pipeline"
+        return "pipeline" if resolve_active_view(q, None) == "pipeline" else "funded"
 
     def narrow_union(q: str) -> str:
         """R1 — the view names, then the tape artefacts, then the default.
@@ -87,6 +98,12 @@ def _rules() -> Dict[str, Callable[[str], str]]:
         are `view_named_by_question` unchanged, so nothing it already decides
         can move. Step 4 fires only where it returned None, which is exactly
         the gap `_dataset_for` was covering alone.
+
+        KEPT AS PROPOSED, including `case`, which the shipped owner does NOT
+        carry. The difference is the whole point of leaving this row in: R1 is
+        the candidate this task selected on paper, and the shipped rule is R1
+        minus one word, dropped after the P1C golden bank showed what `case`
+        costs. Row `today_pointintime` above is what actually ships.
         """
         named = view_named_by_question(q)
         if named is not None:
@@ -108,7 +125,7 @@ def _rules() -> Dict[str, Callable[[str], str]]:
         return DEFAULT_VIEW
 
     return {"today_pointintime": today_pointintime,
-            "today_routed": today_routed,
+            "retired_routed": retired_routed,
             "R1_narrow_union": narrow_union,
             "R2_intent_requirements": intent_requirements}
 
@@ -135,10 +152,23 @@ def main() -> int:
         print(f"  {name:<24} failures {len(bad):>2} of {len(WORKED)}")
         for q, want, got in bad:
             print(f"        want {want:<9} got {got:<9} :: {q[:66]}")
+        if name == "today_pointintime" and bad:
+            print("        ^ THE LIVE OWNER. The remaining failure is the "
+                  "bare-`case` decision, taken\n"
+                  "          deliberately and documented in "
+                  "workspace.PIPELINE_ARTEFACTS: `case` means a\n"
+                  "          FUNDED LOAN in this estate at least as often "
+                  "(P1C golden bank,\n"
+                  "          `# -- loan count --`), and no corpus question "
+                  "reaches the pipeline\n"
+                  "          through it. The brief's worked example is NOT "
+                  "satisfied and this\n"
+                  "          instrument says so rather than being edited to "
+                  "agree with the code.")
 
     # --- corpus movement vs today ----------------------------------------- #
     base_pit = [rules["today_pointintime"](q) for q in qs]
-    base_rtd = [rules["today_routed"](q) for q in qs]
+    base_rtd = [rules["retired_routed"](q) for q in qs]
     print(f"\nCorpus movement, against today's point-in-time reading "
           f"(the one that loads the frame):")
     moves: Dict[str, List[Tuple[str, str, str]]] = {}

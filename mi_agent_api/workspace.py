@@ -24,10 +24,31 @@ DEFAULT_VIEW = "funded"
 #: they have, they ask how many APPLICATIONS.
 #:
 #: Not a new vocabulary. This is `chat_routing._PIPELINE_WORDS` moved to the
-#: owner, minus `pipeline` itself, which :data:`VIEWS` already covers. It lived
-#: in a route for as long as it did because that route was the only consumer
-#: that needed it — which is precisely what made it a second owner.
-PIPELINE_ARTEFACTS = ("case", "kfi", "application", "offer")
+#: owner, minus `pipeline` itself (which :data:`VIEWS` already covers) and minus
+#: `case`. It lived in a route for as long as it did because that route was the
+#: only consumer that needed it — which is precisely what made it a second
+#: owner.
+#:
+#: WHY `case` IS NOT HERE, measured rather than assumed. The retired second
+#: owner listed it, but it was reachable only from the compare and evolution
+#: routes, so its ambiguity never surfaced. Read by the ONE owner it decides
+#: every question, and in this estate a bare `case` means a FUNDED LOAN at
+#: least as often as a pipeline case:
+#:
+#:     "Which region gained the most cases since last month?"
+#:
+#: is filed in the P1C golden bank under `# -- loan count --`, beside "Which
+#: region added the most loans month-on-month?", and expects a ranked FUNDED
+#: movement. Classifying it as pipeline turns that answer into a refusal.
+#:
+#: The evidence for dropping it rather than keeping it: across the 882 distinct
+#: corpus questions, NOT ONE reaches the pipeline through `case`. Every
+#: artefact-driven movement comes from `application`, `kfi` or `offer`, all of
+#: which are unambiguous. `case` bought nothing and cost a golden-bank answer.
+#:
+#: A question that means the pipeline case still says so — "how many PIPELINE
+#: cases are there?" resolves through the view name, unaffected.
+PIPELINE_ARTEFACTS = ("kfi", "application", "offer")
 
 # Unqualified "amount"/"balance" resolves to this column per view. The pipeline
 # prepared dataset and the forecast frame both carry the view's primary metric

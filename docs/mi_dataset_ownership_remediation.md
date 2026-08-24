@@ -69,6 +69,53 @@ R1 is the narrowest union of the two existing owners: steps 1–3 are
 artefact step fires only where it returned `None`, which is exactly the gap the
 retired second owner was covering alone.
 
+## 3b. One requirement is NOT met: a bare `case`
+
+The brief lists **"How many cases are there?" → PIPELINE** among its worked
+examples. **It is not satisfied, deliberately**, and this section exists so the
+choice is visible rather than looking like an oversight.
+
+The retired second owner did list `case`, but it was reachable only from the
+compare and evolution routes, so its ambiguity never decided anything much.
+Read by the ONE owner it decides every question — and in this estate a bare
+`case` means a **funded loan** at least as often:
+
+```
+"Which region gained the most cases since last month?"
+```
+
+sits in the P1C golden bank under `# -- loan count --`, directly beside
+*"Which region added the most loans month-on-month?"*, and expects a ranked
+**FUNDED** movement. Classified as pipeline it becomes a refusal:
+
+> *I understood that you asked for comparison period (last month), but that
+> could not be applied to the calculation … the answer is a single point in
+> time; no period comparison was calculated.*
+
+That is an unrelated question moving, which is registered STOP condition **B7**.
+
+**The evidence for dropping the word rather than keeping it:** across the 882
+distinct corpus questions, **not one** reaches the pipeline through `case`.
+Every artefact-driven movement comes from `application`, `kfi` or `offer`, all
+unambiguous. `case` bought nothing and cost a golden-bank answer.
+
+A question that means the pipeline case still says so — *"how many **pipeline**
+cases are there?"* resolves through the view name, unaffected.
+
+The governed intent layer agrees with the brief and not with the golden bank:
+`intent.classify("Which region gained the most cases since last month?")`
+returns `families=('PIPELINE',)`, `requirements=('pipeline_dataset',)`,
+`matched=('cases',)`. So production is **internally inconsistent about this one
+word**, and consolidating owners is what made the inconsistency decide
+something. Which way it should be settled is a **product decision about house
+vocabulary**, not a dataset-ownership question, and it is left open:
+`test_a_bare_case_is_a_funded_loan_in_this_estate` and the golden-bank entry
+move together if it is taken the other way.
+
+`migration_phase0.dataset_rule_census` reports the live owner as failing
+**1 of 15** worked examples, with this reason printed. The instrument was not
+edited to agree with the code.
+
 ## 4. The disagreement, before
 
 `migration_phase0.dataset_ownership_disagreement`, 14 cases × 4 tabs = **56
@@ -124,13 +171,14 @@ by region."` was `pipeline` to it while the active view was `forecast`.
 
 ## 7. Answer-state movement, reported not hidden
 
-Across the 56 probe executions, **no answer became a refusal**. Two refusals
-became answers, both on the pipeline and forecast tabs:
+Across the 56 probe executions, 15 moved. **No answer became a refusal.**
+Three refusals became answers:
 
-| case | before | after |
-|---|---|---|
-| `"...excluding pipeline cases?"` | pipeline tape, `ok=False` | funded tape, `ok=True` |
-| `"What is the total balance?"` | pipeline tape, `ok=False` | funded tape, `ok=True` |
+| case | tab | before | after |
+|---|---|---|---|
+| `"...excluding pipeline cases?"` | pipeline | pipeline tape, `ok=False` | funded tape, `ok=True` |
+| `"...excluding pipeline cases?"` | forecast | forecast tape, `ok=False` | funded tape, `ok=True` |
+| `"What is the total balance?"` | pipeline | pipeline tape, `ok=False` | funded tape, `ok=True` |
 
 Both are the defect being fixed: the question asked for the funded book and the
 tab sent it elsewhere.

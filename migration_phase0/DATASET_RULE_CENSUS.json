@@ -1,39 +1,13 @@
 {
   "questions": 882,
   "workedExampleFailures": {
-    "today_pointintime": 4,
-    "today_routed": 4,
+    "today_pointintime": 1,
+    "retired_routed": 4,
     "R1_narrow_union": 0,
     "R2_intent_requirements": 0
   },
   "movementsAgainstPointInTime": {
-    "R1_narrow_union": [
-      {
-        "question": "applications over the last four weeks",
-        "before": "funded",
-        "after": "pipeline"
-      },
-      {
-        "question": "What completion rate is assumed from KFI to completion?",
-        "before": "funded",
-        "after": "pipeline"
-      },
-      {
-        "question": "How much do we currently have at offer and how much of it is likely to complete?",
-        "before": "funded",
-        "after": "pipeline"
-      },
-      {
-        "question": "What's the value of outstanding offers, and when do we expect them to fund?",
-        "before": "funded",
-        "after": "pipeline"
-      },
-      {
-        "question": "How much is sitting at offer today and what do we expect to complete from it and when?",
-        "before": "funded",
-        "after": "pipeline"
-      }
-    ],
+    "R1_narrow_union": [],
     "R2_intent_requirements": [
       {
         "question": "expected funded by stage",
@@ -49,11 +23,6 @@
         "question": "top brokers by expected funded amount",
         "before": "funded",
         "after": "forecast"
-      },
-      {
-        "question": "applications over the last four weeks",
-        "before": "funded",
-        "after": "pipeline"
       },
       {
         "question": "weighted expected funded by week",
@@ -191,11 +160,6 @@
         "after": "pipeline"
       },
       {
-        "question": "What completion rate is assumed from KFI to completion?",
-        "before": "funded",
-        "after": "pipeline"
-      },
-      {
         "question": "What is the expected time to securitisation scale?",
         "before": "funded",
         "after": "forecast"
@@ -267,12 +231,12 @@
       },
       {
         "question": "How much do we currently have at offer and how much of it is likely to complete?",
-        "before": "funded",
+        "before": "pipeline",
         "after": "forecast"
       },
       {
         "question": "What's the value of outstanding offers, and when do we expect them to fund?",
-        "before": "funded",
+        "before": "pipeline",
         "after": "forecast"
       },
       {
@@ -282,7 +246,7 @@
       },
       {
         "question": "How much is sitting at offer today and what do we expect to complete from it and when?",
-        "before": "funded",
+        "before": "pipeline",
         "after": "forecast"
       },
       {
@@ -332,5 +296,5 @@
       }
     ]
   },
-  "routedDisagreesWithPointInTime": 29
+  "routedDisagreesWithPointInTime": 24
 }

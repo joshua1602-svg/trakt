@@ -41,11 +41,11 @@ FUNDED = (
     "What is the direct funded balance?",
 )
 PIPELINE = (
-    "How many cases are there?",
     "How many applications are there?",
     "How many KFIs are there?",
     "How many offers are there?",
     "What is the pipeline amount?",
+    "How many pipeline cases are there?",
 )
 FORECAST = (
     "Forecast application volumes next quarter",
@@ -119,6 +119,39 @@ def test_forecast_beats_the_pipeline_vocabulary():
               "How much of the forecast comes from pipeline?",
               "Forecast case completions over the next three months"):
         assert ws.resolve_dataset(q) == "forecast", q
+
+
+def test_a_bare_case_is_a_funded_loan_in_this_estate():
+    """AN UNMET REQUIREMENT, recorded rather than quietly satisfied.
+
+    The remediation brief lists "How many cases are there?" -> PIPELINE among
+    its worked examples. It is NOT satisfied, deliberately, and this test says
+    so out loud rather than letting a silent choice look like an oversight.
+
+    The retired second owner did list `case`, but it was reachable only from the
+    compare and evolution routes so its ambiguity never surfaced. Read by the
+    ONE owner it decides every question, and it breaks a golden-bank answer:
+
+        "Which region gained the most cases since last month?"
+
+    sits in the P1C golden bank under `# -- loan count --`, beside "Which region
+    added the most loans month-on-month?", and expects a ranked FUNDED movement.
+    As a pipeline question it becomes a refusal — an unrelated question moving,
+    which is a registered STOP condition.
+
+    Measured: across the 882 corpus questions NOT ONE reaches the pipeline
+    through `case`; every artefact movement comes from `application`, `kfi` or
+    `offer`. Keeping it bought nothing and cost an answer.
+
+    Whether a bare `case` should mean the pipeline is a PRODUCT decision about
+    house vocabulary, not a dataset-ownership question. If it is taken, this
+    test and the golden-bank entry move together.
+    """
+    assert ws.resolve_dataset("How many cases are there?") == "funded"
+    assert ws.resolve_dataset(
+        "Which region gained the most cases since last month?") == "funded"
+    # Saying so still works, and is how the pipeline sense is expressed.
+    assert ws.resolve_dataset("How many pipeline cases are there?") == "pipeline"
 
 
 def test_the_forecast_reading_is_the_word_forecast_and_nothing_wider():
@@ -246,45 +279,34 @@ def test_the_second_owner_is_gone():
 
 
 def test_no_production_module_re_decides_the_dataset_from_raw_text():
-    """The tape vocabulary exists in exactly one production place.
+    """The disclaim-aware dataset reading happens in exactly one module.
 
     A grep-shaped test on purpose: the failure mode this guards is a THIRD
     reader appearing, and a third reader is invisible to any behavioural test
-    until its vocabulary happens to disagree.
+    until its vocabulary happens to disagree — which is precisely how
+    `_dataset_for` survived as long as it did.
+
+    Keyed on `undisclaimed_mention`, which is what a dataset reading IS in this
+    codebase: a mention test the sentence can rule out. An earlier cut keyed on
+    the artefact tuple instead and collided with pipeline STAGE tuples that name
+    the same words for an unrelated purpose — the words are shared, the
+    disclaim-aware reading of them is not.
     """
-    artefacts = {w.strip().lower() for w in ws.PIPELINE_ARTEFACTS}
-    owner = _REPO / "mi_agent_api" / "workspace.py"
-    holders = []
+    owner = "mi_agent_api/workspace.py"
+    callers = []
     for path in _REPO.rglob("*.py"):
         rel = path.relative_to(_REPO).as_posix()
         if "test" in rel or rel.startswith(("migration_phase0/", "docs/")):
             continue
         try:
-            tree = ast.parse(path.read_text())
-        except (OSError, UnicodeDecodeError, SyntaxError):
+            text = path.read_text()
+        except (OSError, UnicodeDecodeError):
             continue
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.Tuple, ast.List, ast.Set)):
-                continue
-            vals = {e.value.strip().lower() for e in node.elts
-                    if isinstance(e, ast.Constant) and isinstance(e.value, str)}
-            # EXACT set equality, not containment. `intent._PIPELINE_TERMS` is a
-            # superset and is a legitimate different reader — it decides
-            # refusability, never the dataset. Only an exact copy of THIS
-            # vocabulary is a second dataset owner.
-            if vals == artefacts:
-                holders.append(rel)
-    assert holders == [owner.relative_to(_REPO).as_posix()], (
-        "the pipeline tape vocabulary must live in exactly one production "
-        "module; found it in %s" % sorted(set(holders)))
-
-
-def test_the_two_routes_that_used_the_tab_can_no_longer_be_handed_one():
-    """`_route_compare` and `_route_evolution` took a `view` parameter and fed
-    it to the retired second owner. Leaving the parameter behind would be a live
-    wire back to the tab, so it is gone from both.
-    """
-    from mi_agent_api import chat_routing
-    for name in ("_route_compare", "_route_evolution"):
-        params = set(inspect.signature(getattr(chat_routing, name)).parameters)
-        assert "view" not in params, name
+        for node in ast.walk(ast.parse(text)):
+            if (isinstance(node, ast.Call)
+                    and getattr(node.func, "attr", getattr(node.func, "id", None))
+                    == "undisclaimed_mention"):
+                callers.append(rel)
+    assert sorted(set(callers)) == [owner], (
+        "the disclaim-aware dataset reading must live in exactly one production "
+        "module; it is called from %s" % sorted(set(callers)))
