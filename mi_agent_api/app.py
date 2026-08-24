@@ -283,9 +283,11 @@ class QueryRequest(BaseModel):
     portfolioId: Optional[str] = None
     asOfDate: Optional[str] = None
     filters: Optional[Dict[str, Any]] = None
-    # Active workspace view the question runs against (funded | pipeline |
-    # forecast). Explicit wording in the question overrides this. ``context`` may
-    # also carry ``{"activeView": ...}``.
+    # The workspace tab the caller is on (funded | pipeline | forecast).
+    # DISPLAY CONTEXT ONLY — it does not decide which dataset the question runs
+    # against. Natural-language MI is self-contained: the QUESTION determines
+    # the dataset, on every tab. See `mi_agent_api.workspace.resolve_dataset`.
+    # ``context`` may also carry ``{"activeView": ...}``, with the same status.
     datasetContext: Optional[str] = None
     context: Optional[Any] = None
     # Selected source-portfolio lens: "total" | "direct" | "acquired" | a cohort
