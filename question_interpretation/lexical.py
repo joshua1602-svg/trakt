@@ -740,3 +740,142 @@ def threshold_subject_kind(text: "Optional[str]",
             if best is None or match.start() > best[0]:
                 best = (match.start(), kind)
     return best[1] if best else None
+
+
+# --------------------------------------------------------------------------- #
+# THE PIPELINE STAGE AXIS — a governed concept with no reader until now
+# --------------------------------------------------------------------------- #
+#: The governed field key. `config/mi/pipeline_field_contract.yaml` already
+#: declares `pipeline_stage` with `role: dimension` and
+#: `semantic_registry_field: pipeline_stage`, and
+#: `config/mi/stratification_catalogue.yaml` already declares it categorical over
+#: `total_pipeline`. The dimension was governed on the DATA side the whole time;
+#: what did not exist was any way for a QUESTION to name it, which is why
+#: `_route_evolution` re-read the raw sentence to choose its sub-route.
+PIPELINE_STAGE_FIELD = "pipeline_stage"
+
+#: Matches the stage AXIS itself ("by stage", "stage migration", "stage
+#: balances"). Whole-word, so "stagecoach" and "staged" do not qualify.
+_STAGE_AXIS_RE = re.compile(r"\bstages?\b", re.IGNORECASE)
+
+_STAGE_VOCAB_CACHE: "Optional[Dict[str, str]]" = None
+
+
+def pipeline_stage_vocabulary() -> "Dict[str, str]":
+    """Question-side spellings of the governed stages -> canonical stage.
+
+    Derived from the ONE authoritative normalisation map,
+    `pipeline_prep._STAGE_CANON`, never redeclared here. Two adjustments, both
+    rules rather than hand-lists:
+
+    A data-value normalisation map is not a question vocabulary. `_STAGE_CANON`
+    maps ``"funded" -> COMPLETED``, which is right for a tape cell and wrong for
+    a sentence, where *funded* names the governed DATASET. Every spelling that
+    collides with a governed view name is therefore dropped, read from the view
+    registry so a newly registered view cannot silently reintroduce the clash.
+    Without this, *"Show funded balance evolution by month"* — the most ordinary
+    question in the corpus — would acquire a COMPLETED stage.
+
+    The import is deferred because `question_interpretation` is imported by the
+    parser that `mi_agent_api` itself imports; at module scope this is a cycle.
+    """
+    global _STAGE_VOCAB_CACHE
+    if _STAGE_VOCAB_CACHE is not None:
+        return _STAGE_VOCAB_CACHE
+    from mi_agent_api.pipeline_prep import _STAGE_CANON
+    from mi_agent_api.workspace import VIEWS
+    collides = {str(v).lower() for v in (VIEWS or ())}
+    kept = {k: v for k, v in _STAGE_CANON.items() if k.lower() not in collides}
+
+    # A truncation of a longer spelling for the SAME stage is a word fragment,
+    # not a stage noun, and fragments are where the false positives live:
+    # `complete` (a prefix of `completed`/`completion`) matched *"How complete is
+    # interest rate?"* — five corpus questions about DATA COMPLETENESS acquiring a
+    # COMPLETED stage — and `app` (a prefix of `application`) is the same shape.
+    # Dropped by that rule rather than by a hand-list, so the exclusion cannot
+    # drift from the map it is derived from. The canonical token itself is always
+    # kept: `offer` is a prefix of `offer issued` and IS the stage.
+    _STAGE_VOCAB_CACHE = {
+        k: v for k, v in kept.items()
+        if k.lower() == v.lower()
+        or not any(o != k and o.startswith(k) and kept[o] == v for o in kept)
+    }
+    return _STAGE_VOCAB_CACHE
+
+
+def canonical_pipeline_stages() -> "Tuple[str, ...]":
+    """The governed stage set, in funnel order, from the governed bucket map."""
+    from mi_agent_api.pipeline_prep import _STAGE_BUCKET
+    order = {"early": 0, "mid": 1, "late": 2, "completed": 3, "withdrawn": 4}
+    return tuple(sorted(_STAGE_BUCKET, key=lambda s: order.get(_STAGE_BUCKET[s], 9)))
+
+
+def pipeline_stage_request(question: "Optional[str]"
+                           ) -> "Tuple[Optional[str], bool]":
+    """What this question says about the pipeline stage axis.
+
+    Returns ``(canonical_stage, names_the_axis)``:
+
+      ``canonical_stage`` a specific governed stage the question names, or None
+      ``names_the_axis``  whether it names the stage DIMENSION ("by stage")
+
+    THE ONE PLACE A STAGE IS READ FROM A QUESTION. `_route_evolution` currently
+    holds two more — a membership test against `_FUNNEL_KEYWORDS` and a
+    substring test against three hard-coded phrases — and those are the duplicate
+    owners this exists to retire. It is deliberately a reader and not a policy:
+    it says what the sentence names, and leaves to the projection what role that
+    plays.
+
+    Both halves are needed and they are not the same question. *"Show pipeline
+    amount by stage over time"* names the axis and no stage; *"Show the KFI
+    trend"* names a stage and not the axis; *"How have offer-stage cases
+    changed?"* names both, and a specific stage beats the axis because the
+    question asks about one stage rather than for a split across all of them.
+
+    Longest spelling first, so ``offer issued`` is not read as ``offer``, and
+    ``undisclaimed_mention`` so a stage every occurrence of which the sentence
+    rules out does not select — the same bar the dataset owner already uses.
+    """
+    text = str(question or "")
+    if not text:
+        return None, False
+    from mi_agent.portfolio_lens import undisclaimed_mention
+
+    # Funnel order, so a sentence naming two stages resolves to the EARLIER one
+    # — *"How much is sitting at offer today and how much will complete?"* is a
+    # question about the offer stage with a completion verb in it, and the
+    # shipped handler already resolves it that way. The order is read from the
+    # governed bucket map, not asserted here.
+    order = {st: i for i, st in enumerate(canonical_pipeline_stages())}
+    stage: "Optional[str]" = None
+    vocab = pipeline_stage_vocabulary()
+    for spelling in sorted(vocab, key=lambda k: (order.get(vocab[k], 9), -len(k))):
+        # Plural allowed on the trailing word: "How many KFIs have we issued?"
+        # names a stage, and a reader that missed it would UNDER-reach where the
+        # handler it replaces reaches, which is the one direction a replacement
+        # may not fail in.
+        if not re.search(r"\b%s(?:e?s)?\b" % re.escape(spelling), text,
+                         re.IGNORECASE):
+            continue
+        if not undisclaimed_mention(text, spelling):
+            continue
+        stage = vocab[spelling]
+        break
+
+    # The bare word "stage" is ordinary English — *"What stage is the
+    # securitisation at?"* is not a pipeline question — so unlike a canonical
+    # stage NAME it is not self-evidencing. It names the axis only where the
+    # sentence puts it in an axis position ("by stage", "per stage"), or where
+    # the governed dataset owner has already decided this is a pipeline
+    # question. That is the asymmetry: a stage name is its own evidence, the
+    # word "stage" needs some.
+    axis = False
+    match = _STAGE_AXIS_RE.search(text)
+    if match:
+        before = text[max(0, match.start() - SELECTOR_WINDOW):match.start()]
+        if AXIS_MARKER_RE.search(before):
+            axis = True
+        else:
+            from mi_agent_api.workspace import resolve_dataset
+            axis = resolve_dataset(text) == "pipeline"
+    return stage, axis

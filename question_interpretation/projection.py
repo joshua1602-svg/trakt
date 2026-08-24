@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
+from . import lexical as _LEX
 from .schema import (
     AMOUNT, AVERAGE, BASE_ACQUIRED, BASE_DIRECT, BASE_FUNDED, BOUND, COUNT,
     EMPTY, FIELD, FILLED, FILTER, FORWARD,
@@ -267,6 +268,27 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
                 candidate_concept=key, source="parser.dimension(no facet term)"))
             qi.notes.append("dimension %s: parser only, no raw text available" % key)
 
+    # THE PIPELINE STAGE AXIS.
+    #
+    # `pipeline_stage` is a governed dimension in the pipeline field contract and
+    # a categorical stratification over `total_pipeline`, and the facet layer
+    # still never named it — so nothing above can raise it, and the one consumer
+    # that needs it re-read the raw sentence instead. This raises it from the
+    # single governed reader, into the SAME claim every other dimension uses.
+    #
+    # The role is the distinction the reader deliberately does not make: a
+    # question naming one stage is NARROWING to it, and one naming only the axis
+    # is SPLITTING by it. Naming both narrows — "offer-stage cases" asks about
+    # offers, not for a split across all five.
+    stage, names_axis = _LEX.pipeline_stage_request(qi.question)
+    if (stage or names_axis) and _LEX.PIPELINE_STAGE_FIELD not in seen:
+        seen.add(_LEX.PIPELINE_STAGE_FIELD)
+        qi.dimensions.append(DimensionClaim(
+            state=FILLED, raw_text=None,
+            role=FILTER if stage else GROUPING,
+            candidate_concept=_LEX.PIPELINE_STAGE_FIELD,
+            source="lexical.pipeline_stage_request"))
+
 
 def _filters(qi, spec, facets) -> None:
     """Filter clauses, from both readings, kept separate.
@@ -317,6 +339,16 @@ def _filters(qi, spec, facets) -> None:
             source="parser.filters[%s]" % key))
         qi.notes.append("filter on %s: parser supplies the field and bound, no "
                         "raw text" % key)
+
+    # The stage a question narrows to, as a governed categorical value. Canonical
+    # (`OFFER`, not "offer issued") because the reader normalises through the one
+    # authoritative stage map, so a consumer never has to spell-match.
+    stage, _axis = _LEX.pipeline_stage_request(qi.question)
+    if stage and _LEX.PIPELINE_STAGE_FIELD not in parser_filters:
+        qi.filters.append(FilterClaim(
+            state=FILLED, raw_text=None, categorical_value=stage,
+            provides=(FIELD, BOUND),
+            source="lexical.pipeline_stage_request"))
 
 
 def _time(qi, spec, PR) -> None:

@@ -297,6 +297,15 @@ def test_no_production_module_re_decides_the_dataset_from_raw_text():
     disclaim-aware reading of them is not.
     """
     owner = "mi_agent_api/workspace.py"
+    # The disclaim-aware MENTION TEST is a general helper, and a second governed
+    # concept now uses it: `lexical.pipeline_stage_request` reads a PIPELINE
+    # STAGE the same disclaim-aware way. The docstring above predicted exactly
+    # this collision — "the words are shared, the disclaim-aware reading of them
+    # is not" — and it is why the allowance below is a NAMED list rather than a
+    # loosened pattern: a third caller still fails, and adding one means saying
+    # here which governed concept it reads.
+    stage_owner = "question_interpretation/lexical.py"
+    allowed = [owner, stage_owner]
     callers = []
     for path in _REPO.rglob("*.py"):
         rel = path.relative_to(_REPO).as_posix()
@@ -311,9 +320,36 @@ def test_no_production_module_re_decides_the_dataset_from_raw_text():
                     and getattr(node.func, "attr", getattr(node.func, "id", None))
                     == "undisclaimed_mention"):
                 callers.append(rel)
-    assert sorted(set(callers)) == [owner], (
-        "the disclaim-aware dataset reading must live in exactly one production "
-        "module; it is called from %s" % sorted(set(callers)))
+    assert sorted(set(callers)) == sorted(allowed), (
+        "the disclaim-aware reading must live in the named owners only; "
+        "it is called from %s" % sorted(set(callers)))
+
+
+def test_the_stage_owner_cannot_become_a_second_dataset_owner():
+    """What makes the second `undisclaimed_mention` caller safe.
+
+    The guard above allows it by name; this is why the name is safe to allow. The
+    stage reader returns a canonical STAGE or None — never a dataset — and where
+    it needs to know the dataset it CONSUMES the one owner rather than deriving
+    one, so it cannot drift into a second dataset reading without this failing.
+    """
+    import inspect
+
+    from question_interpretation import lexical as L
+
+    src = inspect.getsource(L.pipeline_stage_request)
+    # It asks the owner; it does not re-derive.
+    assert "resolve_dataset" in src
+    # Every value it can return as a stage is a governed stage, never a view.
+    from mi_agent_api.workspace import VIEWS
+    for spelling, canon in L.pipeline_stage_vocabulary().items():
+        assert canon in L.canonical_pipeline_stages(), (spelling, canon)
+        assert canon.lower() not in {v.lower() for v in VIEWS}, canon
+    for question in ("Show funded balance evolution by month.",
+                     "How has the pipeline changed over time?",
+                     "Show the forecast.",):
+        stage, _axis = L.pipeline_stage_request(question)
+        assert stage is None or stage in L.canonical_pipeline_stages()
 
 
 # --------------------------------------------------------------------------- #
