@@ -339,9 +339,14 @@ def _time(qi, spec, PR) -> None:
         qi.time.window_periods = getattr(span, "periods", None)
         qi.time.window_governed = bool(getattr(span, "governed", False))
     if getattr(spec, "compare_periods", None):
+        periods = tuple(str(p) for p in spec.compare_periods)
         qi.time.comparison_period = Slot(
-            state=FILLED, raw_text=", ".join(str(p) for p in spec.compare_periods),
+            state=FILLED, raw_text=", ".join(periods),
             source="parser.compare_periods")
+        # THE VALUES, not only the wording. The slot above says a comparison was
+        # named; this says which periods, so a consumer never has to split the
+        # display join back into structure. Same owner, same call, one read.
+        qi.time.comparison_periods = periods
 
     grain_on_spec = getattr(spec, "trend_grain", None)
     if qi.time.grain and not grain_on_spec:

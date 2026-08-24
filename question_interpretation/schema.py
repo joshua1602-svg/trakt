@@ -378,6 +378,21 @@ class TimeClaim:
     #: disclosure in that case, and the two are not distinguishable from the
     #: period count alone.
     window_governed: bool = False
+    #: THE PERIODS THEMSELVES, in the order the question named them.
+    #:
+    #: The same closure `window_periods` made for `trend_window`, made again for
+    #: `comparison_period`: the slot carried the WORDING and not the VALUES. Its
+    #: `raw_text` is `", ".join(...)`, a DISPLAY JOIN, so a consumer that needed
+    #: the pair had to split a rendered string back into structure — which is
+    #: re-parsing a serialisation, not reading a field, and it silently breaks
+    #: on any period label that contains the separator.
+    #:
+    #: Measured before this field existed: 0 of 26 readings of the
+    #: `temporal_compare` surface carried the pair structurally.
+    #:
+    #: `comparison_period` is unchanged and still carries the wording, because
+    #: it is what a reader is shown. This says which periods they are.
+    comparison_periods: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.grain is not None and self.grain not in GRAINS:
@@ -385,6 +400,8 @@ class TimeClaim:
         if self.window_periods is not None and self.window_periods < 1:
             raise ValueError("a window must reach at least one period back, "
                              "not %r" % (self.window_periods,))
+        self.comparison_periods = tuple(
+            str(p) for p in (self.comparison_periods or ()))
 
     def as_dict(self) -> Dict[str, Any]:
         return {"comparison_period": self.comparison_period.as_dict(),
@@ -392,7 +409,8 @@ class TimeClaim:
                 "trend_window": self.trend_window.as_dict(),
                 "grain": self.grain,
                 "window_periods": self.window_periods,
-                "window_governed": self.window_governed}
+                "window_governed": self.window_governed,
+                "comparison_periods": list(self.comparison_periods)}
 
 
 #: TARGET-STATE CLOSURE — which governed DATASET the answer is built from.

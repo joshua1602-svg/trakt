@@ -25,7 +25,8 @@ the PRODUCTION reading and the CONTRACT reading of the same fact side by side:
     measure   production `(spec.metric, spec.aggregation)` -> resolve_metric_key
               contract   `subject.candidate_concept` -> the same resolver
     periods   production `spec.compare_periods`
-              contract   `time.comparison_period`
+              contract   `time.comparison_periods` -- the STRUCTURAL pair, and
+              `time.comparison_period` for the wording beside it
 
 A disagreement here is not a detail. It is the difference between a bounded
 accessor and a semantic-owner change, and the whole C5 budget rests on which
@@ -144,8 +145,13 @@ def main() -> int:
 
             cp = qi_wired.time.comparison_period
             prod_periods = list(getattr(spec, "compare_periods", None) or [])
-            structural = [a for a in ("periods", "values", "comparison_periods")
-                          if getattr(cp, a, None) is not None]
+            # The pair as the CONTRACT states it, compared to the parser's own
+            # list. A structural reading that does not match the production
+            # value would be worse than none: it would look closed.
+            contract_periods = list(
+                getattr(qi_wired.time, "comparison_periods", ()) or ())
+            structural = contract_periods if (
+                contract_periods and contract_periods == prod_periods) else []
 
             d_today = prod_ds != c_today
             d_wired = prod_ds != c_wired
@@ -162,7 +168,7 @@ def main() -> int:
             print(f"      measure prod={prod_measure[0]:<28} contract={str(ctr_measure[0]):<28}")
             print(f"      periods prod={prod_periods!s:<32} "
                   f"contract.raw_text={getattr(cp, 'raw_text', None)!r} "
-                  f"structural_fields={structural or 'NONE'}")
+                  f"structural={structural or 'NONE'}")
             rows.append({
                 "case": case, "question": question, "tab": tab,
                 "resolvedView": view,
@@ -176,7 +182,7 @@ def main() -> int:
                 "measureDisagrees": d_measure,
                 "periodsProduction": prod_periods,
                 "periodsContractRawText": getattr(cp, "raw_text", None),
-                "periodsContractStructuralFields": structural,
+                "periodsContractStructural": structural,
             })
 
     out = _REPO / "migration_phase0" / "DEPENDENCY_TEMPORAL_COMPARE.json"
@@ -188,11 +194,21 @@ def main() -> int:
     print(f"dataset disagreements, contract AS BUILT    : {ds_disagree_today}")
     print(f"dataset disagreements, WITH the view wired  : {ds_disagree_wired}")
     print(f"measure disagreements (at the same dataset) : {measure_disagree}")
+    # THE DENOMINATOR IS ASSERTED. Every owned case is a two-period comparison
+    # -- that is what makes it a `temporal_compare` question -- so every reading
+    # must carry the pair. A number lower than n is a gap; a number that merely
+    # rose is not evidence of anything.
+    expected_structural = n
     print(f"readings whose periods are STRUCTURAL       : {periods_structural} "
-          f"(of {n}) — the rest carry a joined display string only")
+          f"of an EXPECTED {expected_structural}")
+    if periods_structural != expected_structural:
+        print("!! the comparison-period pair is NOT carried structurally on "
+              "every owned reading — the C5 dependency model still has a gap")
     print(f"written                                    : {out.relative_to(_REPO)}")
     print("=" * 78)
-    return 0
+    gaps = (ds_disagree_wired or measure_disagree
+            or periods_structural != expected_structural)
+    return 1 if gaps else 0
 
 
 if __name__ == "__main__":

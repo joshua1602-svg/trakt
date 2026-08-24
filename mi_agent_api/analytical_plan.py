@@ -565,12 +565,37 @@ def comparison_period(interpretation) -> Optional[str]:
 
     Only a FILLED slot answers. An empty one means the question named no start
     period, which is not the same as naming one that could not be resolved.
+
+    DELIBERATELY UNCHANGED by the structural closure below. This returns the
+    slot's WORDING, and for a question naming two periods that wording is the
+    display join — "October, November". Making it return the first period
+    instead would change what this function MEANS, not how it is represented,
+    on all five corpus questions that carry a comparison period. The structural
+    read is a separate accessor, and the one caller that wants structure asks
+    for it by name.
     """
     time = getattr(interpretation, "time", None)
     slot = getattr(time, "comparison_period", None)
     if slot is None or getattr(slot, "state", "empty") != "filled":
         return None
     return getattr(slot, "raw_text", None)
+
+
+def comparison_periods(interpretation) -> Tuple[str, ...]:
+    """The periods the question named to compare, IN ORDER.
+
+    The structural read. `comparison_period` carries the wording a reader is
+    shown — `", ".join(...)` — and splitting that back apart is re-parsing a
+    serialisation, which breaks on any period label containing the separator.
+    This reads the values the contract states.
+
+    Empty when the question named no comparison, which a consumer must
+    distinguish from a comparison it could not resolve: the slot's state says
+    which, and this deliberately does not guess.
+    """
+    time = getattr(interpretation, "time", None)
+    periods = getattr(time, "comparison_periods", None) or ()
+    return tuple(str(p) for p in periods)
 
 
 # --------------------------------------------------------------------------- #
@@ -597,9 +622,20 @@ def build_funded_bridge_plan(interpretation, *, dimension_key: Optional[str],
     the route's fallback is its own convention and belongs at its own call site,
     not inside a step that claims the contract asked for it.
     """
+    # THE STRUCTURAL READ. `comparison_period` returns the slot's WORDING, which
+    # for a two-period question is the display join "October, November" — a
+    # start period no tape has. The pair is on the contract now, so the plan
+    # takes the first period from it rather than from a rendered string.
+    #
+    # Proved representation-only before it was switched: across all 12 cases
+    # executed routing shows this route owns, the structural first period and
+    # the join are IDENTICAL — every bridge question names at most one period.
+    # The fallback keeps a contract built by an older projection working.
+    _periods = comparison_periods(interpretation)
+    _from = _periods[0] if _periods else comparison_period(interpretation)
     steps: List[Step] = [
         Step(STACK_PERIODS,
-             {"dataset": "funded", "take": "pair", "from": comparison_period(interpretation),
+             {"dataset": "funded", "take": "pair", "from": _from,
               "disclose": "periodsAvailable"},
              because=("a bridge opens at a named start period, else the earliest "
                       "governed period, and closes at the latest")),

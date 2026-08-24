@@ -26,7 +26,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "T1",
@@ -54,7 +57,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "T2",
@@ -82,7 +88,10 @@
         "October"
       ],
       "periodsContractRawText": "September, October",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "September",
+        "October"
+      ]
     },
     {
       "case": "T2",
@@ -110,7 +119,10 @@
         "October"
       ],
       "periodsContractRawText": "September, October",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "September",
+        "October"
+      ]
     },
     {
       "case": "T3",
@@ -138,7 +150,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "T3",
@@ -166,7 +181,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "T4",
@@ -194,7 +212,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "T4",
@@ -222,7 +243,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "M1",
@@ -250,7 +274,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "M1",
@@ -278,7 +305,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "M2",
@@ -306,7 +336,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "M2",
@@ -334,7 +367,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P1",
@@ -362,7 +398,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P1",
@@ -390,7 +429,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P2",
@@ -418,7 +460,10 @@
         "last week"
       ],
       "periodsContractRawText": "latest, last week",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "latest",
+        "last week"
+      ]
     },
     {
       "case": "P2",
@@ -446,7 +491,10 @@
         "last week"
       ],
       "periodsContractRawText": "latest, last week",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "latest",
+        "last week"
+      ]
     },
     {
       "case": "P3",
@@ -474,7 +522,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P3",
@@ -502,7 +553,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P4",
@@ -530,7 +584,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P4",
@@ -558,7 +615,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P5",
@@ -586,7 +646,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "P5",
@@ -614,7 +677,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "D1",
@@ -642,7 +708,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "D1",
@@ -670,7 +739,10 @@
         "November"
       ],
       "periodsContractRawText": "October, November",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
     },
     {
       "case": "R1",
@@ -698,7 +770,10 @@
         "December"
       ],
       "periodsContractRawText": "October, December",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "December"
+      ]
     },
     {
       "case": "R1",
@@ -726,7 +801,10 @@
         "December"
       ],
       "periodsContractRawText": "October, December",
-      "periodsContractStructuralFields": []
+      "periodsContractStructural": [
+        "October",
+        "December"
+      ]
     }
   ]
 }
