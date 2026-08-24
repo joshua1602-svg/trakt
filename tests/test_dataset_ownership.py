@@ -247,3 +247,14 @@ def test_no_production_module_re_decides_the_dataset_from_raw_text():
     assert holders == [owner.relative_to(_REPO).as_posix()], (
         "the pipeline tape vocabulary must live in exactly one production "
         "module; found it in %s" % sorted(set(holders)))
+
+
+def test_the_two_routes_that_used_the_tab_can_no_longer_be_handed_one():
+    """`_route_compare` and `_route_evolution` took a `view` parameter and fed
+    it to the retired second owner. Leaving the parameter behind would be a live
+    wire back to the tab, so it is gone from both.
+    """
+    from mi_agent_api import chat_routing
+    for name in ("_route_compare", "_route_evolution"):
+        params = set(inspect.signature(getattr(chat_routing, name)).parameters)
+        assert "view" not in params, name

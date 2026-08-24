@@ -101,6 +101,9 @@ class RouteRequest:
     spec: Any
     spec_dict: Dict[str, Any]
     semantics: Mapping[str, Any]
+    #: The governed DATASET this question is about, as
+    #: `mi_agent_api.workspace.resolve_dataset` decided it. Named `view` for
+    #: history; it is no longer the workspace tab and no longer varies with it.
     view: str
     client_id: str
     run_id: Optional[str]

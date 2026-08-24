@@ -786,7 +786,7 @@ def _sentence_join(items: Sequence[str]) -> str:
 
 
 def _route_compare(question, spec, spec_dict, *, client_id, run_id, output_root,
-                   pipeline_root, view, portfolio_id, as_of) -> Dict[str, Any]:
+                   pipeline_root, portfolio_id, as_of) -> Dict[str, Any]:
     periods = list(spec.compare_periods or [])
     if len(periods) < 2:
         return _envelope(ok=False, question=question,
@@ -915,7 +915,7 @@ def _filter_summary(spec) -> str:
 
 
 def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_root,
-                     pipeline_root, view, portfolio_id, as_of, semantics=None
+                     pipeline_root, portfolio_id, as_of, semantics=None
                      ) -> Optional[Dict[str, Any]]:
     q = question.lower()
     dataset = _workspace.resolve_dataset(question)
@@ -3020,10 +3020,13 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             name="temporal_compare", priority=90,
             description="Governed comparison of two reporting periods.",
             recognise=lambda r: getattr(r.spec, "temporal_mode", None) == "compare",
+            # NO `view=`. The dataset is the question's, and the route asks
+            # `workspace.resolve_dataset` for it. Leaving the parameter here
+            # would be a live wire back to the tab.
             handle=lambda r: _route_compare(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
-                pipeline_root=r.pipeline_root, view=r.view,
+                pipeline_root=r.pipeline_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of)),
 
         # 10. Contractual risk limits.
@@ -3044,7 +3047,7 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             handle=lambda r: _route_evolution(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
-                pipeline_root=r.pipeline_root, view=r.view,
+                pipeline_root=r.pipeline_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 semantics=r.semantics)),
     ])
