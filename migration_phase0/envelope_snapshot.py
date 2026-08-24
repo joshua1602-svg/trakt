@@ -56,6 +56,21 @@ def _strip(node: Any) -> Any:
 
 
 def _cases(route: str):
+    if route == "funded_bridge":
+        # CONVERSION 4. The owned set comes from the ownership instrument's
+        # declared surface, filtered by the SHIPPED recogniser, so a case the
+        # route stops claiming drops out of the denominator loudly.
+        from migration_phase0.route_ownership_funded_bridge import CASES, SCOPES
+        from mi_agent.llm_query_parser import parse_with_repair
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.data_source import semantics_path
+        sem = load_mi_semantics(semantics_path())
+
+        def _claims(q):
+            spec, _m = parse_with_repair(q, sem, llm_enabled=False)
+            return bool(getattr(spec, "bridge_query", False))
+        return ([(c, q) for c, q, other in CASES
+                 if other is None and _claims(q)], SCOPES)
     if route == "geo_exposure":
         # CONVERSION 3. The owned set comes from the ownership instrument's
         # declared surface, filtered by the SHIPPED recogniser — so a case the
