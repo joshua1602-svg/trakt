@@ -286,6 +286,79 @@ def test_funded_bridge_needs_two_periods(monkeypatch):
     assert "two funded reporting periods" in br["reason"]
 
 
+def test_funded_bridge_missing_dimension_fails_closed(monkeypatch):
+    """A bridge requested on a dimension the tape does not carry is UNAVAILABLE,
+    never a valid-looking £0 → £0 result.
+
+    Non-vacuous by construction (see the assertions): the requested dimension is
+    genuinely absent, the book moves £600k → £800k between the two periods, and
+    the pre-fix code returned ``available=True`` with opening/closing/net all
+    zero — a wrong answer for a book that moved £200k. The fix makes the
+    calculation say it cannot execute the requested bridge instead.
+    """
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+
+    period_a = _bridge_frame(["South East", "South East", "London", "London", "Wales", "Wales"])
+    period_b = _bridge_frame(["South East"] * 5 + ["London"] * 2 + ["Wales"] * 1)
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2025-10-31", "reporting_date": "2025-10-31", "df": period_a, "source": "a"},
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31", "df": period_b, "source": "b"},
+    ])
+
+    # The requested dimension is genuinely absent from the tape.
+    assert "erm_product_type" not in period_a.columns
+    assert "erm_product_type" not in period_b.columns
+
+    # The book genuinely moved: a bridge on a PRESENT dimension over the SAME
+    # frames reports a non-zero net change, so a zero result is not legitimate.
+    present = evo.funded_bridge("blob://x", "client_001", ["geographic_region_obligor"])
+    assert present["available"] and present["netChange"] == 200_000
+
+    # The requested-but-absent dimension therefore FAILS CLOSED.
+    br = evo.funded_bridge("blob://x", "client_001", "erm_product_type")
+    assert br["available"] is False
+    assert "not available in the funded data" in br["reason"]
+    assert br["requestedDimension"] == ["erm_product_type"]
+    # It must NOT carry a misleading zero-valued economic result.
+    assert "start" not in br and "end" not in br and "netChange" not in br
+
+
+def test_funded_bridge_missing_dimension_from_a_candidate_list_fails_closed(monkeypatch):
+    """The same rule when NONE of a candidate list is present — the bridge does
+    not silently fall back to the first candidate and group nothing."""
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2025-10-31", "reporting_date": "2025-10-31", "df": _bridge_frame(["A", "B"]), "source": "a"},
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31", "df": _bridge_frame(["A", "A", "B"]), "source": "b"},
+    ])
+    br = evo.funded_bridge("blob://x", "client_001",
+                           ["erm_product_type", "broker_channel"])
+    assert br["available"] is False
+    assert br["requestedDimension"] == ["erm_product_type", "broker_channel"]
+    assert "start" not in br
+
+
+def test_funded_bridge_no_dimension_requested_keeps_its_own_message(monkeypatch):
+    """An EMPTY dimension request is a different case from an absent one, and
+    keeps the message it already had — absence of a grouping request is not the
+    same error as a grouping request that cannot be honoured."""
+    from mi_agent_api import platform_snapshots_blob as blob
+    import apps.blob_trigger_app.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "open_storage", lambda: object())
+    monkeypatch.setattr(blob, "build_funded_evolution_frames", lambda *a, **k: [
+        {"run_id": "2025-10-31", "reporting_date": "2025-10-31", "df": _bridge_frame(["A", "B"]), "source": "a"},
+        {"run_id": "2026-03-31", "reporting_date": "2026-03-31", "df": _bridge_frame(["A", "A", "B"]), "source": "b"},
+    ])
+    br = evo.funded_bridge("blob://x", "client_001", [])
+    assert br["available"] is False
+    assert "no attribution dimension is available" in br["reason"]
+    assert "requestedDimension" not in br
+
+
 # --------------------------------------------------------------------------- #
 # Cohort PROGRESSION (static pool across periods; source-portfolio + vintage)
 # --------------------------------------------------------------------------- #

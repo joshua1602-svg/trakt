@@ -319,11 +319,22 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
         return {"available": False, "lens": lens_label,
                 "reason": "at least two funded reporting periods are needed for a bridge"}
 
-    # Resolve the dimension column data-aware from the candidate(s).
+    # Resolve the dimension column data-aware from the candidate(s): the first
+    # candidate ACTUALLY PRESENT in the data. Never a candidate that is absent —
+    # a bridge grouped on a column the tape does not carry groups nothing,
+    # `_group_balance` returns {} on both sides, and the waterfall reports
+    # £0 → £0 (net £0) for a book that moved materially. That valid-looking zero
+    # is a wrong answer, so a requested-but-absent dimension FAILS CLOSED here,
+    # which is not the same as a book that did not move.
     candidates = [dimension_col] if isinstance(dimension_col, str) else list(dimension_col or [])
     present_cols = set().union(*[set(f["df"].columns) for f in scoped]) if scoped else set()
-    col = next((c for c in candidates if c in present_cols), candidates[0] if candidates else None)
+    col = next((c for c in candidates if c in present_cols), None)
     if not col:
+        if candidates:
+            return {"available": False, "lens": lens_label,
+                    "reason": ("the requested attribution dimension is not "
+                               "available in the funded data"),
+                    "requestedDimension": [str(c) for c in candidates]}
         return {"available": False, "lens": lens_label,
                 "reason": "no attribution dimension is available in the funded data"}
 
