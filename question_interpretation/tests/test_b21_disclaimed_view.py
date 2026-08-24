@@ -106,6 +106,12 @@ def test_the_second_owners_wider_vocabulary_survived_its_retirement():
     vocabulary moved to `workspace.PIPELINE_ARTEFACTS` and the ONE owner reads
     it. These assertions are the old ones, re-pointed at the owner, and they
     still carry the disclaiming test.
+
+    THREE of the four words survived. `case` did not — it is dataset-neutral,
+    because in this estate a bare case means a funded loan at least as often as
+    a pipeline case, and reading it as pipeline cost a P1C golden-bank answer.
+    See `workspace.PIPELINE_ARTEFACTS` and
+    `tests/test_dataset_ownership.py::test_a_bare_case_is_a_funded_loan_in_this_estate`.
     """
     assert not hasattr(routing, "_dataset_for"), "the second owner is retired"
     assert ws.resolve_dataset(
@@ -113,7 +119,10 @@ def test_the_second_owners_wider_vocabulary_survived_its_retirement():
     ) == "funded"
     # The can-fail for this half.
     assert ws.resolve_dataset("pipeline amount by stage") == "pipeline"
-    assert ws.resolve_dataset("How many cases completed?") == "pipeline"
+    assert ws.resolve_dataset("How many applications completed?") == "pipeline"
+    # `case` is the one that did NOT survive, and this says so rather than
+    # leaving its absence to be inferred.
+    assert ws.resolve_dataset("How many cases completed?") == "funded"
     # And the reading the tab used to supply is now the DEFAULT, not the tab.
     assert ws.resolve_dataset("balance by region") == "funded"
 
