@@ -92,6 +92,10 @@ class MiQueryRequest:
     portfolio_id: Optional[str] = None
     as_of_date: Optional[str] = None
     filters: Optional[Dict[str, Any]] = None
+    #: The workspace tab the caller is on. Carried for the UI and for callers
+    #: that echo it back; it is NOT an input to dataset semantics. A question
+    #: means the same thing on every tab — see
+    #: `mi_agent_api.workspace.resolve_dataset`.
     dataset_context: Optional[str] = None
     context: Optional[Any] = None
     #: The portfolio scope the caller has selected. A LIST selects several books
@@ -258,11 +262,15 @@ def execute_governed_mi_query(
     started_at = datetime.now(timezone.utc).isoformat()
     t0 = time.monotonic()
 
-    view = workspace_mod.resolve_active_view(
-        request.question,
-        request.dataset_context
-        or (request.context.get("activeView") or request.context.get("datasetContext")
-            if isinstance(request.context, dict) else None))
+    # THE DATASET IS THE QUESTION'S, NOT THE TAB'S.
+    #
+    # This used to fold `request.dataset_context` (the active React tab) in as
+    # the fallback, so the same sentence was served from a different dataset
+    # depending on which tab it was typed on — including
+    # "the balance by seasoning segment excluding pipeline cases", served from
+    # the pipeline on the pipeline tab. The tab still selects what the UI
+    # DISPLAYS; it no longer decides what a question MEANS.
+    view = workspace_mod.resolve_dataset(request.question)
     policy = PolicyState(runtime_mode=deps.runtime_mode)
     requested_portfolio = request.effective_portfolio_id()
 

@@ -91,7 +91,11 @@ def main() -> int:
         print(f"\n{case}  {question!r}\n      ({why})")
         for tab in TABS:
             view = ws.resolve_active_view(question, tab)
-            ds_for = cr._dataset_for(question, view)
+            # Runnable at BOTH commits. `_dataset_for` is the second owner this
+            # remediation retires, so after the change there is nothing to read
+            # and the column says so rather than the instrument dying.
+            legacy = getattr(cr, "_dataset_for", None)
+            ds_for = legacy(question, view) if legacy else "(retired)"
             env = execute_governed_mi_query(
                 MiQueryRequest(question=question, dataset_context=tab),
                 ctx).result or {}

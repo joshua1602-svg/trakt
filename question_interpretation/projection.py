@@ -43,7 +43,7 @@ from .schema import (
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
     OperationClaim, PopulationClaim, QuestionInterpretation, Slot,
     SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
-    DatasetClaim,
+    DatasetClaim, DATASET_FUNDED,
 )
 
 #: How the parser's aggregation reads as an operation type. `coverage` has no
@@ -526,48 +526,55 @@ def _source_scope(qi, registry=None, caller_scope=None) -> None:
 
 
 def _dataset(qi, caller_dataset=None) -> None:
-    """Carry `mi_agent_api.workspace`'s reading of which dataset to run against.
+    """Carry the ONE governed dataset decision onto the contract.
 
-    TARGET-STATE CLOSURE. The owner already existed and was already single; what
-    was missing is that nothing CARRIED its answer, so `chat_routing._dataset_for`
-    re-derived the same decision over a wider vocabulary — a duplicate its own
-    docstring names "THE SECOND OWNER", and the reason "the balance by seasoning
-    segment excluding pipeline cases" could reach a route with
-    `dataset='pipeline'`, narrowed to the very thing it excluded.
+    `mi_agent_api.workspace.resolve_dataset` is the single semantic owner and
+    this is the handoff: everything downstream reads `qi.dataset` rather than
+    re-deciding from the sentence.
 
-    Precedence is the owner's and is applied once: a view the QUESTION names
-    wins; otherwise the workspace tab; otherwise the default. The provenance
-    vocabulary is `source_scope`'s, reused rather than duplicated, because it is
-    the same distinction.
+    ``caller_dataset`` is ACCEPTED AND IGNORED, and its retirement is the point
+    of this function's current shape. It used to be the fallback when the
+    question named no view — which meant the active workspace tab decided what
+    a question MEANT, so "the balance by seasoning segment excluding pipeline
+    cases" was served from the pipeline on the pipeline tab: the sentence ruled
+    the pipeline out and the tab put it back. Natural-language MI is
+    self-contained. The question decides; the tab displays.
+
+    Provenance follows from that. There are now two cases and not three:
+    the QUESTION named the dataset, or the governed DEFAULT applied.
+    `PROV_CALLER_CONTEXT` is no longer reachable for this axis, which is a
+    property worth being able to assert rather than merely believe.
     """
     try:
-        from mi_agent_api.workspace import (DEFAULT_VIEW, VIEWS,
-                                            view_named_by_question)
+        from mi_agent_api.workspace import resolve_dataset, view_named_by_question
     except Exception as exc:  # noqa: BLE001 - the claim records the gap
         qi.dataset = DatasetClaim(
             state=UNRESOLVABLE, source="mi_agent_api.workspace",
-            reason="the dataset/view owner is unavailable: %s" % exc)
+            reason="the dataset owner is unavailable: %s" % exc)
         return
     try:
+        dataset = resolve_dataset(qi.question)
         named = view_named_by_question(qi.question)
     except Exception as exc:  # noqa: BLE001
         qi.dataset = DatasetClaim(
             state=UNRESOLVABLE, source="mi_agent_api.workspace",
-            reason="the dataset/view could not be resolved: %s" % exc)
+            reason="the dataset could not be resolved: %s" % exc)
         return
 
+    # A question that named a view outright, and one that named a pre-funding
+    # artefact, are both the USER stating the dataset. Only the fall-through to
+    # `funded` is the governed default. `raw_text` carries the view name when
+    # there was one, because that is the span the reader can point at.
     if named is not None:
-        dataset, provenance, raw = named, PROV_EXPLICIT_USER, named
+        provenance, raw = PROV_EXPLICIT_USER, named
+    elif dataset != DATASET_FUNDED:
+        provenance, raw = PROV_EXPLICIT_USER, None
     else:
-        tab = (caller_dataset or "").strip().lower()
-        if tab in VIEWS:
-            dataset, provenance, raw = tab, PROV_CALLER_CONTEXT, None
-        else:
-            dataset, provenance, raw = DEFAULT_VIEW, PROV_DEFAULT, None
+        provenance, raw = PROV_DEFAULT, None
     qi.dataset = DatasetClaim(
         state=FILLED, dataset=dataset, provenance=provenance, raw_text=raw,
         span=_span_of(qi.question, raw),
-        source="mi_agent_api.workspace.view_named_by_question")
+        source="mi_agent_api.workspace.resolve_dataset")
 
 
 def _population(qi, spec, facets) -> None:

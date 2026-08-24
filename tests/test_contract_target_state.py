@@ -130,11 +130,20 @@ class TestTheDatasetClaimSaysWhichTape:
         assert qi.dataset.provenance == "explicit_user"
         assert qi.dataset.stated_by_user is True
 
-    def test_the_workspace_tab_applies_when_the_question_is_silent(self, semantics):
-        qi = project("Show balance by region", semantics, caller_dataset="pipeline")
-        assert qi.dataset.dataset == "pipeline"
-        assert qi.dataset.provenance == "caller_context"
-        assert qi.dataset.stated_by_user is False
+    def test_the_workspace_tab_no_longer_applies_when_the_question_is_silent(
+            self, semantics):
+        """RETIRED BEHAVIOUR, replaced deliberately.
+
+        This asserted the tab filled the gap when the question named no dataset,
+        and `caller_context` provenance recorded that it had. Natural-language
+        MI is self-contained now: the governed default applies on every tab, and
+        `caller_context` is unreachable on this axis.
+        """
+        for tab in (None, "pipeline", "forecast", "funded"):
+            qi = project("Show balance by region", semantics, caller_dataset=tab)
+            assert qi.dataset.dataset == "funded", tab
+            assert qi.dataset.provenance == "default", tab
+            assert qi.dataset.stated_by_user is False
 
     def test_neither_gives_the_funded_default(self, semantics):
         qi = project("Show balance by region", semantics)
@@ -155,13 +164,16 @@ class TestTheDatasetClaimSaysWhichTape:
         assert qi.dataset.dataset == "funded"
 
     def test_the_contract_agrees_with_the_owner(self, semantics):
-        from mi_agent_api.workspace import resolve_active_view
+        from mi_agent_api.workspace import resolve_dataset
         for question, tab in (("How many pipeline cases are there?", None),
                               ("Show balance by region", "pipeline"),
                               ("Show balance by region", None),
+                              ("How many applications are there?", "funded"),
                               ("the balance by vintage, ignoring the forecast", None)):
             qi = project(question, semantics, caller_dataset=tab)
-            assert qi.dataset.dataset == resolve_active_view(question, tab), question
+            # The tab is passed and must make no difference: the contract
+            # carries the OWNER's answer, and the owner has no tab to read.
+            assert qi.dataset.dataset == resolve_dataset(question), (question, tab)
 
     def test_the_dataset_axis_is_not_the_portfolio_axis(self, semantics):
         """Conflating them is how "the balance by seasoning segment excluding
@@ -186,14 +198,22 @@ class TestTheOwnerStaysSingle:
     """The closure must not create the duplicate it removes."""
 
     def test_the_view_reading_lives_in_one_place(self):
-        """`view_named_by_question` was EXTRACTED from `resolve_active_view`,
-        not copied beside it: the resolver now calls it. A second vocabulary is
-        the defect B21 fixed."""
+        """One owner reads the vocabulary; everything else delegates to it.
+
+        `resolve_dataset` is that owner. `resolve_active_view` is now a shim
+        that forwards to it and reads nothing itself — so the assertion moved
+        from "the resolver calls the extracted helper" to "the shim decides
+        nothing at all", which is the stronger property.
+        """
         text = (_REPO / "mi_agent_api/workspace.py").read_text(encoding="utf-8")
-        body = text[text.index("def resolve_active_view("):]
-        body = body[:body.index("\ndef ", 1)]
-        assert "view_named_by_question(question)" in body
-        assert body.count("undisclaimed_mention") == 0
+        shim = text[text.index("def resolve_active_view("):]
+        shim = shim[:shim.index("\ndef ", 1)]
+        assert "resolve_dataset(question)" in shim
+        assert shim.count("undisclaimed_mention") == 0
+
+        owner = text[text.index("def resolve_dataset("):]
+        owner = owner[:owner.index("\ndef ", 1)]
+        assert "view_named_by_question(question)" in owner
 
     def test_the_projection_reads_no_question_vocabulary(self):
         """The contract carries the owners' answers. It matches no phrases."""

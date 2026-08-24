@@ -43,6 +43,7 @@ from . import period_change_route as _period_change
 from . import analytical_plan as _plan
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
+from . import workspace as _workspace
 from .recogniser_registry import (
     REGISTRY,
     Recogniser,
@@ -195,29 +196,19 @@ def _table_artifact(title: str, *, columns: List[Dict[str, Any]],
 # --------------------------------------------------------------------------- #
 # Dataset / metric resolution
 # --------------------------------------------------------------------------- #
-#: The words that make a routed question a PIPELINE question. Kept as data
-#: because B21's disclaiming test is applied per term: "excluding pipeline
-#: cases" rules out `pipeline` AND `case` with one clause.
-_PIPELINE_WORDS = ("pipeline", "case", "kfi", "application", "offer")
-
-
-def _dataset_for(question: str, view: str, default: str = "funded") -> str:
-    """Which dataset a routed answer is built from.
-
-    B21 — THE SECOND OWNER, found by enumerating where the view decision arrives
-    rather than by a failing test. `resolve_active_view` picks the frame and
-    this picks the dataset, and both were bare substring tests over overlapping
-    vocabulary; fixing only the first would have left "the balance by seasoning
-    segment excluding pipeline cases" reaching the evolution route with
-    `dataset="pipeline"` — narrowed to the very thing it excluded, by a wider
-    word list than the one that was fixed. It reads the same disclaiming test.
-    """
-    q = question.lower()
-    if any(_portfolio_lens.undisclaimed_mention(q, w) for w in _PIPELINE_WORDS):
-        return "pipeline"
-    if view == "pipeline":
-        return "pipeline"
-    return default
+# THE SECOND OWNER IS GONE.
+#
+# `_dataset_for` used to live here. It read its own tape vocabulary
+# (`pipeline | case | kfi | application | offer`) and fell back to the resolved
+# view, which made it a second answer to "which dataset is this question
+# about?" — one that disagreed with the contract's on 3 of 26 readings of the
+# `temporal_compare` surface, and with the point-in-time path on 29 of the 882
+# corpus questions.
+#
+# Its vocabulary is now `workspace.PIPELINE_ARTEFACTS`, read by
+# `workspace.resolve_dataset`, which is the single owner. Routes ask that owner;
+# they do not re-decide. Converted routes will read `interpretation.dataset`,
+# which the same owner populates.
 
 
 def _split_portfolio(portfolio_id: Optional[str]) -> Tuple[str, Optional[str]]:
@@ -801,7 +792,7 @@ def _route_compare(question, spec, spec_dict, *, client_id, run_id, output_root,
         return _envelope(ok=False, question=question,
                          answer="I need two periods to compare.", spec=spec_dict,
                          artifacts=[], route="temporal_compare", error="missing periods")
-    dataset = _dataset_for(question, view)
+    dataset = _workspace.resolve_dataset(question)
     out = compare_mod.run_temporal_compare(
         output_root, pipeline_root, client_id, run_id, dataset=dataset,
         metric=spec.metric, aggregation=spec.aggregation,
@@ -927,7 +918,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                      pipeline_root, view, portfolio_id, as_of, semantics=None
                      ) -> Optional[Dict[str, Any]]:
     q = question.lower()
-    dataset = _dataset_for(question, view)
+    dataset = _workspace.resolve_dataset(question)
     is_count = spec.aggregation == "count"
     filtered = bool(getattr(spec, "filters", None))
 

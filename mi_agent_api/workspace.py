@@ -19,6 +19,16 @@ from mi_agent import portfolio_lens as lens_mod
 VIEWS = ("funded", "pipeline", "forecast")
 DEFAULT_VIEW = "funded"
 
+#: The PRE-FUNDING ARTEFACTS. A question naming one of these is about the
+#: pipeline tape even though it names no view: nobody asks how many "pipeline"
+#: they have, they ask how many APPLICATIONS.
+#:
+#: Not a new vocabulary. This is `chat_routing._PIPELINE_WORDS` moved to the
+#: owner, minus `pipeline` itself, which :data:`VIEWS` already covers. It lived
+#: in a route for as long as it did because that route was the only consumer
+#: that needed it — which is precisely what made it a second owner.
+PIPELINE_ARTEFACTS = ("case", "kfi", "application", "offer")
+
 # Unqualified "amount"/"balance" resolves to this column per view. The pipeline
 # prepared dataset and the forecast frame both carry the view's primary metric
 # under ``current_outstanding_balance``, so the SAME query shape works per view.
@@ -41,14 +51,15 @@ _SHARED_DIMS = [
 def view_named_by_question(question: str) -> Optional[str]:
     """The view the QUESTION itself names, or ``None`` if it names none.
 
-    TARGET-STATE CLOSURE. `resolve_active_view` below answers "which view runs"
-    by folding the question and the tab together, and a caller cannot recover
-    from its answer WHICH OF THE TWO decided — including when they agree, which
-    is exactly when precedence matters least and is hardest to see.
+    The VIEW-NAME half of :func:`resolve_dataset`, which is the owner. Exposed
+    separately because a caller sometimes needs to know whether the question
+    named a view OUTRIGHT or fell through to a governed step — and because a
+    second copy of this vocabulary is the defect B21 fixed.
 
-    Exposed here rather than re-derived by the caller, because this half of the
-    reading is already made below and a second copy of the vocabulary is the
-    defect B21 fixed. `funded` is returned like any other view: it is the
+    Historically this was extracted from `resolve_active_view`, which folded the
+    question and the workspace tab together so that a caller could not recover
+    which of the two had decided. The tab is no longer an input to anything
+    here, so there is nothing left to disentangle. `funded` is returned like any other view: it is the
     default AND a thing a question can name outright, and collapsing those two
     is how an explicit "the funded book" becomes indistinguishable from silence.
     """
@@ -59,30 +70,82 @@ def view_named_by_question(question: str) -> Optional[str]:
     return None
 
 
-def resolve_active_view(question: str, dataset_context: Optional[str]) -> str:
-    """The dataset/view a query runs against. Explicit wording in the question
-    overrides the active tab; otherwise the tab (``dataset_context``) wins.
+def resolve_dataset(question: Optional[str]) -> str:
+    """**THE** dataset a natural-language MI question is about.
 
-    Priority of explicit wording: forecast > pipeline > funded (so "forecast
-    funded balance" routes to forecast, not funded).
+    ``FUNDED`` | ``PIPELINE`` | ``FORECAST``, decided by the QUESTION and by
+    nothing else. This is the single semantic owner. There is no second one, and
+    the caller's workspace tab is deliberately not a parameter — a parameter it
+    does not have cannot quietly become an input again.
 
-    B21 — A DISCLAIMED VIEW WORD DOES NOT CHOOSE THE FRAME. This was a bare
-    substring test, so the clause RULING OUT a view was what selected it:
-    "the balance by vintage, ignoring the forecast" loaded the forecast frame,
-    which carries 12 of the funded book's 71 columns, and the question died at
-    prepared-data validation on a column the funded book has. The
-    undisclaimed-mention test is `portfolio_lens`'s, not a second copy — the
-    lens resolver already had to decide whether a word was ruling a scope out,
-    and this is the same decision over a different vocabulary.
+    Why the tab is gone
+    -------------------
+    Natural-language MI is self-contained: the user should not have to know
+    which tab they are on to ask a correct question. Measured before this
+    change, six of fourteen probe questions were TAB-SENSITIVE — the same
+    sentence was served from a different dataset depending on the tab. Two of
+    them are worth naming:
 
-    Substring semantics are unchanged for every mention the sentence does not
-    rule out, which on this corpus is all 697 of them.
+        "How many cases are there?"
+            funded tab -> the funded book, pipeline tab -> the pipeline
+        "the balance by seasoning segment excluding pipeline cases"
+            pipeline tab -> the pipeline. The question rules the pipeline out
+            in words and the tab put it back.
+
+    The tab still selects what the UI DISPLAYS. It no longer decides what a
+    question MEANS. Those are different responsibilities.
+
+    Precedence
+    ----------
+    ``forecast`` > ``pipeline`` > ``funded`` > pre-funding artefact > default.
+
+    The first three are :func:`view_named_by_question` unchanged, so nothing it
+    already decided can move. The artefact step fires ONLY where it returned
+    ``None``, which is exactly the gap `chat_routing._dataset_for` was covering
+    alone — and covering with the opposite precedence, testing its tape
+    vocabulary BEFORE any forecast reading, so "Forecast application volumes
+    next quarter" was `pipeline` to it. Forecast wins here.
+
+    Population is a different axis
+    ------------------------------
+    Direct / Acquired / a named SPV never appear above. They select a POPULATION
+    WITHIN a dataset and are `portfolio_lens`'s to resolve. "The acquired funded
+    balance" is the funded dataset, acquired population, and conflating the two
+    axes is how a scope word could have chosen a tape.
+
+    Vocabulary choice, measured
+    ---------------------------
+    `mi_workflows.analytical.intent` expresses these concepts structurally, as
+    ``REQ_PIPELINE_DATASET`` / ``REQ_FORECAST``, and was the obvious candidate
+    to own this. It was censused rather than assumed and it is the wrong tool:
+    those requirements decide whether a question is REFUSABLE and are checked
+    AGAINST a dataset, not used to select one, so their vocabularies are much
+    wider. Over the 882 distinct corpus questions they move **59 (6.7%)**,
+    including "top brokers by expected funded amount" to forecast. The rule
+    below moves **5 (0.6%)**, and all five name a pre-funding artefact.
     """
     named = view_named_by_question(question)
     if named is not None:
         return named
-    ctx = (dataset_context or "").strip().lower()
-    return ctx if ctx in VIEWS else DEFAULT_VIEW
+    low = (question or "").lower()
+    if any(lens_mod.undisclaimed_mention(low, w) for w in PIPELINE_ARTEFACTS):
+        return "pipeline"
+    return DEFAULT_VIEW
+
+
+def resolve_active_view(question: str, dataset_context: Optional[str] = None) -> str:
+    """Retained caller-facing name for :func:`resolve_dataset`.
+
+    ``dataset_context`` is ACCEPTED AND IGNORED. It used to be the fallback when
+    the question named no view, and that fallback is the tab dependence this
+    change removes. The parameter survives only so existing callers keep
+    working; it has no semantic effect and
+    `test_dataset_ownership.py::test_the_tab_argument_is_inert` pins that.
+
+    Prefer :func:`resolve_dataset` in new code, which does not offer the
+    parameter at all.
+    """
+    return resolve_dataset(question)
 
 
 def build_forecast_view_frame(funded_df: Optional[pd.DataFrame],

@@ -90,23 +90,32 @@ def test_the_view_resolver_still_selects_a_genuine_view():
     assert ws.resolve_active_view("Show forecast balance by region.", None) == "forecast"
     assert ws.resolve_active_view("How much pipeline is overdue?", None) == "pipeline"
     assert ws.resolve_active_view("forecast funded balance", "funded") == "forecast"
-    assert ws.resolve_active_view("amount by region", "pipeline") == "pipeline"
+    # `("amount by region", "pipeline") == "pipeline"` used to sit here and was
+    # RETIRED, not weakened: the tab is no longer an input to what a question
+    # means, so a sentence naming no dataset takes the governed default on every
+    # tab. `tests/test_dataset_ownership.py` pins that directly.
+    assert ws.resolve_active_view("amount by region", "pipeline") == "funded"
 
 
-def test_the_dataset_resolver_reads_the_same_test():
-    """THE SECOND OWNER, found by enumerating where the view decision arrives —
-    not by a failing test. `_dataset_for` is on the same governed path, reached
-    through the compare and evolution routes, and its word list is WIDER:
-    `case`, `kfi`, `application`, `offer`. Fixing only `resolve_active_view`
-    would have left the excluding question narrowed to the very dataset it
-    excluded."""
-    assert routing._dataset_for(
-        "What is the balance by seasoning segment excluding pipeline cases?",
-        "funded") == "funded"
+def test_the_second_owners_wider_vocabulary_survived_its_retirement():
+    """`_dataset_for` IS GONE. Its vocabulary is not.
+
+    It was the second owner — reached through the compare and evolution routes,
+    with a word list wider than the view names: `case`, `kfi`, `application`,
+    `offer`. Retiring it would have silently dropped that reading, so the
+    vocabulary moved to `workspace.PIPELINE_ARTEFACTS` and the ONE owner reads
+    it. These assertions are the old ones, re-pointed at the owner, and they
+    still carry the disclaiming test.
+    """
+    assert not hasattr(routing, "_dataset_for"), "the second owner is retired"
+    assert ws.resolve_dataset(
+        "What is the balance by seasoning segment excluding pipeline cases?"
+    ) == "funded"
     # The can-fail for this half.
-    assert routing._dataset_for("pipeline amount by stage", "funded") == "pipeline"
-    assert routing._dataset_for("How many cases completed?", "funded") == "pipeline"
-    assert routing._dataset_for("balance by region", "pipeline") == "pipeline"
+    assert ws.resolve_dataset("pipeline amount by stage") == "pipeline"
+    assert ws.resolve_dataset("How many cases completed?") == "pipeline"
+    # And the reading the tab used to supply is now the DEFAULT, not the tab.
+    assert ws.resolve_dataset("balance by region") == "funded"
 
 
 def test_the_disclaiming_test_has_one_implementation():

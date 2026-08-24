@@ -31,10 +31,16 @@ _FIXTURES = _REPO_ROOT / "tests" / "fixtures" / "client_001_mi_pack"
 # Unit: active-view resolution + forecast frame
 # --------------------------------------------------------------------------- #
 class TestActiveViewResolution(unittest.TestCase):
-    def test_tab_context_used_when_no_explicit_wording(self):
-        self.assertEqual(ws.resolve_active_view("amount by region", "pipeline"), "pipeline")
-        self.assertEqual(ws.resolve_active_view("amount by region", "forecast"), "forecast")
-        self.assertEqual(ws.resolve_active_view("amount by region", None), "funded")
+    def test_the_tab_no_longer_decides_when_the_question_is_silent(self):
+        """RETIRED BEHAVIOUR, replaced deliberately.
+
+        This asserted that the tab supplied the dataset when the question named
+        none. Natural-language MI is self-contained now: a question means the
+        same thing on every tab, and one naming no dataset takes the governed
+        default. See `tests/test_dataset_ownership.py`.
+        """
+        for tab in ("pipeline", "forecast", "funded", None):
+            self.assertEqual(ws.resolve_active_view("amount by region", tab), "funded")
 
     def test_explicit_wording_overrides_tab(self):
         self.assertEqual(ws.resolve_active_view("funded balance by region", "pipeline"), "funded")
@@ -140,12 +146,19 @@ class TestWorkspaceApi(unittest.TestCase):
         self.assertIn("forecastBreakdowns", fc)
         self.assertIn("lineage", fc)
 
-    # ---- tab-aware query --------------------------------------------------- #
-    def test_unqualified_amount_routes_to_active_dataset(self):
+    # ---- question-driven query --------------------------------------------- #
+    def test_an_unqualified_question_means_the_same_thing_on_every_tab(self):
+        """RETIRED BEHAVIOUR, replaced deliberately.
+
+        This asserted that "amount by region" followed the tab. It is the
+        clearest statement of the rule that has been withdrawn: the user should
+        not need to know which tab they are on to ask a correct MI question.
+        A question naming no dataset takes the governed default, everywhere.
+        """
         for ctx in ("funded", "pipeline", "forecast"):
             body = self._query("amount by region", ctx)
             self.assertTrue(body["ok"], (ctx, body.get("validation")))
-            self.assertEqual(body["metadata"]["datasetContext"], ctx)
+            self.assertEqual(body["metadata"]["datasetContext"], "funded")
 
     def test_explicit_wording_overrides_tab(self):
         # Forecast wording while on the funded tab routes to forecast.
@@ -155,18 +168,49 @@ class TestWorkspaceApi(unittest.TestCase):
         body = self._query("pipeline amount by region", "funded")
         self.assertEqual(body["metadata"]["datasetContext"], "pipeline")
 
-    def test_funded_balance_differs_from_pipeline_amount(self):
-        funded = self._query("amount by region", "funded")
-        pipeline = self._query("amount by region", "pipeline")
-        # Both succeed but answer different datasets (funded ~£8.9MM+, pipeline ~£1.8MM).
-        self.assertTrue(funded["ok"] and pipeline["ok"])
+    def test_naming_the_dataset_still_reaches_a_different_tape(self):
+        """The two tapes remain distinguishable — by WORDING, not by tab.
+
+        Renamed from `test_funded_balance_differs_from_pipeline_amount`, which
+        selected the tapes with the tab. The tabs below are DELIBERATELY
+        CROSSED: each question overrides the tab it was typed on, which is the
+        rule this change installs.
+        """
+        funded = self._query("funded balance by region", "pipeline")
+        pipeline = self._query("pipeline amount by region", "funded")
         self.assertEqual(funded["metadata"]["datasetContext"], "funded")
         self.assertEqual(pipeline["metadata"]["datasetContext"], "pipeline")
+        self.assertTrue(funded["ok"], funded.get("validation"))
+
+    def test_an_unqualified_measure_on_the_pipeline_is_now_unreachable(self):
+        """A NARROWING, recorded rather than hidden.
+
+        "amount by region" on the pipeline tab used to be answered from the
+        pipeline. It is now answered from the funded book, because the question
+        names no dataset — that is the intended rule. The shorthand has no
+        replacement, though, because naming the tape in the sentence feeds
+        `pipeline` to the MEASURE parser, which rejects it:
+
+            "'pipeline' is not a governed measure in this dataset"
+
+        That parser behaviour is PRE-EXISTING — `pipeline amount by region` was
+        already `ok=False` before this change, on every tab — but it was masked
+        by the tab shortcut and is now load-bearing. Fixing it means teaching
+        measure resolution to ignore a word the dataset owner has already
+        consumed, which is a separate task with its own blast radius.
+
+        Asserted so that the day it is fixed, this test fails and says so.
+        """
+        body = self._query("pipeline amount by region", "pipeline")
+        self.assertEqual(body["metadata"]["datasetContext"], "pipeline")
+        self.assertFalse(body["ok"])
+        self.assertIn("pipeline", " ".join(body["validation"]["errors"]).lower())
 
     def test_unsupported_query_fails_gracefully(self):
         # A dimension absent from the pipeline dataset returns a controlled
         # (non-500) validation response, not an exception.
-        body = self._query("current outstanding balance by maturity year", "pipeline")
+        body = self._query(
+            "pipeline current outstanding balance by maturity year", "funded")
         self.assertIn("ok", body)
         self.assertFalse(body["ok"])
         self.assertEqual(body["metadata"]["datasetContext"], "pipeline")

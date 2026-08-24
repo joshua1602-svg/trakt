@@ -8,15 +8,20 @@ re-baseline enumerated, and no more.
 For every question the route actually owns, at every workspace tab, this puts
 the PRODUCTION reading and the CONTRACT reading of the same fact side by side:
 
-    dataset   production `chat_routing._dataset_for(question, view)`, where
-              `view` is what `mi_service` already resolved —
-              `workspace.resolve_active_view(question, tab)`, NOT the raw tab.
-              Feeding the raw tab here instead manufactures four disagreements
-              that production does not have; the first cut of this instrument
-              did exactly that.
-              contract   `interpretation.dataset.dataset`, built two ways —
-                         AS THE ROUTED PATH BUILDS IT TODAY (nothing wired) and
-                         AS IT WOULD BE with the resolved view wired in
+    dataset   production what `_route_compare` actually computes.
+              contract   `interpretation.dataset.dataset`.
+
+              READ THIS BEFORE BELIEVING A ZERO. Since the dataset ownership
+              remediation these two share ONE owner,
+              `workspace.resolve_dataset`, so this is a WIRING check — does the
+              contract carry the owner's answer to the route? — and no longer
+              an AGREEMENT check between two rules. A zero here means the
+              handoff is intact, not that two independent readings happen to
+              coincide; the second reading no longer exists.
+
+              Before the remediation it compared `chat_routing._dataset_for`
+              against the contract and found 3 disagreements in 26 readings,
+              plus 7 more that were cured by wiring the resolved view in.
     measure   production `(spec.metric, spec.aggregation)` -> resolve_metric_key
               contract   `subject.candidate_concept` -> the same resolver
     periods   production `spec.compare_periods`
@@ -94,7 +99,6 @@ def _contract_measure(qi, dataset: str, resolve) -> Tuple[Any, ...]:
 def main() -> int:
     client_id, semantics = _env()
     from mi_agent.parsed_question import ParsedQuestion
-    from mi_agent_api import chat_routing as cr
     from mi_agent_api import workspace as ws
     from mi_agent_api.temporal_compare import resolve_metric_key
     from question_interpretation import projection as proj
@@ -117,9 +121,10 @@ def main() -> int:
         facets = list(R.detect_requested_facets(question, semantics, frame=None,
                                                 requested_dimensions=dim_terms))
         for tab in DATASETS:
-            # EXACTLY what mi_service hands the router.
-            view = ws.resolve_active_view(question, tab)
-            prod_ds = cr._dataset_for(question, view)
+            # EXACTLY what mi_service hands the router, and exactly what
+            # `_route_compare` computes -- the one owner, tab-independent.
+            view = ws.resolve_dataset(question)
+            prod_ds = ws.resolve_dataset(question)
             qi_today = proj.from_parts(question, spec=spec, facets=facets,
                                        dim_terms=dim_terms, semantics=semantics,
                                        registry=None, caller_scope=None,
