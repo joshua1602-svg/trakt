@@ -256,10 +256,34 @@ measurement.**
 
 ## 10. Regression, by name
 
+Full run over `mi_agent/tests/`, `mi_agent_api/`, `question_interpretation/tests/`,
+the C1/C2/C3 guards, the Defect A tests and the new C4 tests:
+
+```
+18 failed, 3134 passed, 2 skipped, 7 xfailed in 391.04s
+```
+
+Attributed against the correct base — `39544bb`, the commit C4 branched from,
+run in the same environment:
+
+```
+base (39544bb) failures : 18
+C4 retry failures       : 18
+INTRODUCED BY C4        : 0     (set difference empty)
+FIXED BY C4             : 0     (set difference empty — nothing silently fixed)
+```
+
+**Identical by name in both directions.** The 18 are the pre-existing baseline
+set (live-fixture cases, the time-axis wording case, the `mi_agent_api` pipeline
+and receipt cases carried since C3).
+
+One test differs from the *older* C3 baseline —
+`test_funded_balance_bridge_returns_reconciling_waterfall`, which now passes.
+That was **fixed by Defect A** (`39544bb`), not by this conversion: it is absent
+from the `39544bb` failure list, so it was already passing before C4 began. It
+is recorded here so the improvement is not mis-credited to C4.
+
 * `tests/test_conversion4_funded_bridge.py` — **21 passed** (new).
-* `mi_agent/tests/`, `mi_agent_api/`, `question_interpretation/tests/`, the
-  C1/C2/C3 guards, the Defect A tests — no introduced failing names; the
-  residual failures are the pre-existing baseline set carried since C3.
 * Five A5 surfaces **byte-identical**; **silent drops 0**.
 
 **Introduced failing names: 0. Silent drops: 0. Route movement: 0. Answer /
