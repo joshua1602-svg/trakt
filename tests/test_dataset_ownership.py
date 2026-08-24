@@ -142,24 +142,54 @@ def test_the_forecast_reading_is_the_word_forecast_and_nothing_wider():
 # --------------------------------------------------------------------------- #
 # Population is a different axis
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("question,scope_word", [
+@pytest.mark.parametrize("question", [
+    "What is the acquired book balance?",
+    "What is the direct book balance?",
+    "What is the acquired funded balance?",
+    "What is the direct funded balance?",
+    "How many pipeline cases are in the acquired book?",
+])
+def test_a_provenance_word_never_chooses_the_tape(question):
+    """The dataset axis is decided without reference to the population axis.
+
+    Asserted on the contract as well as the resolver, so a leak through the
+    projection would be caught too. Note the last case: it is a PIPELINE
+    question about the ACQUIRED book, and both readings must survive together.
+    """
+    expected = "pipeline" if "pipeline" in question.lower() else "funded"
+    assert ws.resolve_dataset(question) == expected, question
+    assert project(question, semantics={}).dataset.dataset == expected
+
+
+@pytest.mark.parametrize("question,scope", [
     ("What is the acquired book balance?", "acquired"),
     ("What is the direct book balance?", "direct"),
-    ("What is the acquired funded balance?", "acquired"),
-    ("What is the direct funded balance?", "direct"),
+    ("How many pipeline cases are in the acquired book?", "acquired"),
 ])
-def test_population_scope_never_chooses_the_dataset(question, scope_word):
-    """A provenance word selects a POPULATION within the funded book.
+def test_the_population_claim_survives_alongside_the_dataset_claim(question, scope):
+    """Both axes are read, and neither costs the other anything."""
+    qi = project(question, semantics={})
+    assert qi.source_scope.scope == scope, qi.source_scope.as_dict()
 
-    It must never select a tape. Asserted on the contract, not only on the
-    resolver, so a leak through the projection would be caught too.
+
+@pytest.mark.parametrize("question", [
+    "What is the acquired funded balance?",
+    "What is the direct funded balance?",
+])
+def test_a_provenance_word_without_a_book_noun_still_resolves_no_scope(question):
+    """A PRE-EXISTING limit, pinned so it cannot be mistaken for this change.
+
+    B22's doctrine is that a provenance word must QUALIFY a book noun, because
+    `acquired` is ordinary English about lending. "the acquired BOOK balance"
+    qualifies one; "the acquired funded balance" does not, so no scope is
+    claimed and the answer covers the whole portfolio.
+
+    Untouched here and asserted only so that the day it changes, a test says so.
+    The DATASET is `funded` either way, which is what this file is about.
     """
-    assert ws.resolve_dataset(question) == "funded", question
     qi = project(question, semantics={})
     assert qi.dataset.dataset == "funded"
-    assert scope_word in (qi.source_scope.raw_text or "").lower() \
-        or qi.source_scope.scope is not None, \
-        f"the scope claim lost {scope_word!r}: {qi.source_scope.as_dict()}"
+    assert qi.source_scope.scope == "total"
 
 
 def test_the_dataset_axis_ignores_the_scope_vocabulary():
