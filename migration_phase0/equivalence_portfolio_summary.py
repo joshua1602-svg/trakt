@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from migration_phase0.assurance_semantics import measurement_failed
+
 _REPO = Path(__file__).resolve().parent.parent
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
@@ -115,13 +117,21 @@ def main() -> int:
         # decides precedence — the same inputs the routed path now supplies.
         # Without them this measured the pre-1E reading and the raw type filter,
         # and its "0 differences" said nothing about the governed path.
-        registry = None
+        # The fallback here used to be `registry = None`, described as "fall back
+        # to the pre-1G reading" — the very reading the comment above condemns as
+        # saying nothing about the governed path. Injecting a `build_registry`
+        # fault proved it: the run still printed "economic differences: 0" over
+        # nine cases and never mentioned that the registry was missing.
+        #
+        # `build_registry` returning None for a book that carries no portfolio
+        # column is a legitimate measurement outcome and still flows through. An
+        # EXCEPTION is not, and now stops the run.
+        from mi_agent_api import portfolio_context as _ctx
         try:
-            from mi_agent_api import portfolio_context as _ctx
-
             registry = _ctx.build_registry(df)
-        except Exception:  # noqa: BLE001 - fall back to the pre-1G reading
-            registry = None
+        except Exception as exc:  # noqa: BLE001 - re-raised, never absorbed
+            raise measurement_failed(
+                "equivalence_portfolio_summary", case_id, exc) from exc
         interpretation = projection.project(question, semantics=semantics,
                                             frame=df, registry=registry)
         plan = shadow.build_plan(interpretation, region_column=region_col,

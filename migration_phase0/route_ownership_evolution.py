@@ -114,16 +114,25 @@ def run() -> List[Dict[str, Any]]:
     from mi_agent_api.workspace import resolve_dataset
     from mi_agent_api.chat_routing import _FUNNEL_KEYWORDS
 
+    from migration_phase0.assurance_semantics import (AssuranceMeasurementError,
+                                                      measurement_failed)
+
     client = TestClient(app)
+    questions = _questions()
     rows: List[Dict[str, Any]] = []
-    for q in _questions():
+    for q in questions:
+        # An error row carried `route=None`, which makes `owned` False, which
+        # drops the question out of the owned-surface denominator without trace.
+        # With every query faulting, this printed "OWNED BY THE EVOLUTION FAMILY:
+        # 0" and a table of zeros — indistinguishable from a route that owns
+        # nothing. A REFUSED answer is a legitimate measurement and still counts;
+        # an exception is not an answer.
         try:
             r = client.post("/mi/query", json={
                 "question": q, "portfolioId": "client_001/mi_2026_05",
                 "asOfDate": "2026-05-31"}).json()
-        except Exception as exc:  # noqa: BLE001
-            rows.append({"question": q, "route": None, "error": str(exc)})
-            continue
+        except Exception as exc:  # noqa: BLE001 - re-raised, never absorbed
+            raise measurement_failed("route_ownership_evolution", q, exc) from exc
         route = (r.get("metadata") or {}).get("route")
         low = q.lower()
         rows.append({
@@ -138,6 +147,12 @@ def run() -> List[Dict[str, Any]]:
             "rows": max([len(a.get("rows") or []) for a in (r.get("artifacts") or [])]
                         or [0]),
         })
+    # The denominator, asserted: every corpus question must have produced a
+    # reading. Zero owned cases is a legitimate finding; zero READINGS is not.
+    if len(rows) != len(questions) or not rows:
+        raise AssuranceMeasurementError(
+            "ASSURANCE INVALID - measurement failed in route_ownership_evolution: "
+            "%d reading(s) for %d corpus question(s)" % (len(rows), len(questions)))
     return rows
 
 

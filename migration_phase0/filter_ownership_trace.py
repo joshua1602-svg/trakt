@@ -79,6 +79,9 @@ def main() -> int:
     from mi_agent.parsed_question import ParsedQuestion
     from question_interpretation import projection as proj
 
+    from migration_phase0.assurance_semantics import (AssuranceMeasurementError,
+                                                      measurement_failed)
+
     print("=" * 92)
     print("EVOLUTION FILTER OWNERSHIP — three things called 'filters'")
     print("=" * 92)
@@ -140,17 +143,31 @@ def main() -> int:
     from mi_agent_api.workspace import resolve_dataset
     fields: Dict[str, int] = {}
     filtered_q = 0
-    for q in _corpus():
+    corpus = _corpus()
+    for q in corpus:
+        # A skipped question used to vanish from this census silently. With every
+        # corpus parse faulting, the run still reported "corpus questions carrying
+        # spec.filters: 0" and "expressible by lens_filters: 0" — the second
+        # figure identical to the real finding, so total measurement failure was
+        # indistinguishable from the result it was meant to establish.
         try:
             spec = ParsedQuestion.parse(q, semantics).spec
-        except Exception:  # noqa: BLE001
-            continue
+        except Exception as exc:  # noqa: BLE001 - re-raised, never absorbed
+            raise measurement_failed("filter_ownership_trace", q, exc) from exc
         sf = dict(getattr(spec, "filters", None) or {})
         if not sf:
             continue
         filtered_q += 1
         for k in sf:
             fields[k] = fields.get(k, 0) + 1
+    # The denominator, asserted. A corpus that silently shrinks is the shape this
+    # census cannot be allowed to report through: zero filtered questions out of
+    # zero looks exactly like zero out of 882.
+    if not corpus:
+        raise AssuranceMeasurementError(
+            "ASSURANCE INVALID - measurement failed in filter_ownership_trace: "
+            "the governed corpus is empty")
+    print(f"   corpus questions examined             : {len(corpus)}")
     print(f"   corpus questions carrying spec.filters: {filtered_q}")
     for k, n in sorted(fields.items(), key=lambda kv: -kv[1]):
         print(f"      {k:<34} {n}")

@@ -90,15 +90,27 @@ def _snapshot(out_path: str) -> int:
     from mi_agent_api.data_source import semantics_path
     from question_interpretation import projection
 
+    from migration_phase0.assurance_semantics import measurement_failed
+
     sem = load_mi_semantics(semantics_path())
     rows: List[Dict[str, Any]] = []
     for q in _questions():
+        # A parse fault used to be recorded as a row and stepped over, on the
+        # reasoning that "a parse fault is data, not a stop". Measured, this
+        # corpus produces ZERO faults in normal operation, so a fault is not
+        # data — it is the measurement failing. And the error row carried no
+        # `dimensions` key, which `_diff` reads through `.get("dimensions", [])`
+        # as *zero dimensions*: injecting a parse fault made all 645 questions
+        # error, and the census still printed "questions compared: 645 /
+        # ILLEGAL deltas (blast): 0".
+        #
+        # A question that legitimately has no dimensions is a different thing
+        # and still records `[]` — 275 of the 645 do.
         try:
             spec, _m = parse_with_repair(q, sem, llm_enabled=False)
             qi = projection.project(q, semantics=sem)
-        except Exception as exc:  # noqa: BLE001 — a parse fault is data, not a stop
-            rows.append({"question": q, "error": f"{type(exc).__name__}: {exc}"})
-            continue
+        except Exception as exc:  # noqa: BLE001 - re-raised, never absorbed
+            raise measurement_failed("contract_role_census", q, exc) from exc
         rows.append({
             "question": q,
             "bridgeDimension": getattr(spec, "bridge_dimension", None),
@@ -118,6 +130,17 @@ def _diff(before: str, after: str) -> int:
         raise SystemExit(f"CENSUS UNSOUND: corpora differ — "
                          f"only before {sorted(set(b) - set(a))[:3]}, "
                          f"only after {sorted(set(a) - set(b))[:3]}")
+    # A census file written by an older build could still carry error rows, and
+    # those read as "zero dimensions" here. Refuse to compare them rather than
+    # silently counting an un-measured question as an unchanged one.
+    unmeasured = sorted([q for q, r in list(b.items()) + list(a.items())
+                         if "error" in r])
+    if unmeasured:
+        raise SystemExit(
+            "CENSUS UNSOUND: %d question(s) carry a measurement error and cannot "
+            "be compared as evidence, e.g. %s" % (len(unmeasured), unmeasured[:3]))
+    if not b:
+        raise SystemExit("CENSUS UNSOUND: the census is empty")
 
     changed: List[Dict[str, Any]] = []
     illegal: List[str] = []

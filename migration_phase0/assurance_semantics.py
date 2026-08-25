@@ -26,6 +26,17 @@ degrades.
 Deliberately NOT provided: any default, any fallback, any `or {}`. A caller that
 cannot get semantics must stop, because the alternative is what this exists to
 prevent.
+
+This module is also the home of the assurance failure vocabulary generally. The
+loader defect above has a sibling: a broad `except` that turns a crashed
+MEASUREMENT into an empty result, so the instrument continues and reports
+zero. `AssuranceMeasurementError` and `measurement_failed` are for that, and the
+distinction they enforce is the point —
+
+    measurement ran, found nothing   -> an empty result, which is evidence
+    measurement could not run        -> an exception, which is not
+
+Those two must never share a representation.
 """
 from __future__ import annotations
 
@@ -38,8 +49,35 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 
-class AssuranceSemanticsError(RuntimeError):
+class AssuranceError(RuntimeError):
+    """Base: this assurance run cannot be trusted and must not report a result."""
+
+
+class AssuranceSemanticsError(AssuranceError):
     """Raised when governed semantics are absent, empty or materially incomplete."""
+
+
+class AssuranceMeasurementError(AssuranceError):
+    """Raised when a measurement could not be completed.
+
+    NOT for a measurement that legitimately found nothing — that is an empty
+    result and it is evidence. This is for the case where the instrument was
+    unable to measure at all, which no count can represent.
+    """
+
+
+def measurement_failed(instrument: str, case: Optional[str],
+                       exc: BaseException) -> "AssuranceMeasurementError":
+    """The one fail-loud constructor, carrying enough to identify the failure.
+
+    Chained with `raise ... from exc` at the call site so the original traceback
+    and root cause survive; an assurance failure that hides its cause just moves
+    the opacity somewhere else.
+    """
+    where = " on %r" % (case,) if case else ""
+    return AssuranceMeasurementError(
+        "ASSURANCE INVALID - measurement failed in %s%s: %s: %s"
+        % (instrument, where, type(exc).__name__, exc))
 
 
 #: Governed fields every semantics-dependent instrument in this directory relies
