@@ -79,6 +79,16 @@ jobs:
         # timer registers, fires every five minutes, logs a failure and delivers
         # nothing — which reads as "no notifications yet" rather than as a broken
         # deployment. verify_package.py now probes this chain too.
+        #
+        # question_interpretation/ is mi_agent's, and the omission that taught us
+        # a package list has to follow the imports rather than the directory
+        # names people remember:
+        #   trakt_notifications/risk_review.py -> mi_agent.concentration_tests
+        #   mi_agent/__init__.py               -> .llm_query_parser
+        #   mi_agent/llm_query_parser.py:29    -> question_interpretation.lexical
+        # That last hop is a TOP-LEVEL package, not a submodule of mi_agent, so
+        # shipping mi_agent/ does not bring it. It is imported at module scope,
+        # so the whole archive fails to import rather than failing on first use.
         run: |
           zip -r deploy.zip \
             function_app.py \
@@ -88,6 +98,7 @@ jobs:
             engine/ \
             operations_control/ \
             mi_agent/ \
+            question_interpretation/ \
             mi_agent_api/ \
             mi_agent_pptx/ \
             analytics_lib/ \
