@@ -210,40 +210,47 @@ def _probe_frame():
     })
 
 
-#: (label, class, filters). The class names the divergence each case exercises,
-#: so a regression reports WHICH semantic owner drifted, not merely that
-#: something did.
-PROBES: Tuple[Tuple[str, str, Dict[str, Any]], ...] = (
+#: (label, class, filters, expected). The class names the divergence each case
+#: exercises, so a regression reports WHICH semantic owner drifted. `expected`
+#: is the ABSOLUTE outcome, and it is the load-bearing half.
+#:
+#: Why an absolute is needed at all: once both paths go through one owner, a
+#: mutation INSIDE that owner moves them together and they still agree. A pure
+#: agreement check therefore proves parity and says nothing about correctness —
+#: measured, not assumed: removing the percent normalisation left this census at
+#: 119/119 until these expectations were added. Parity is what the invariant
+#: asks for; correctness is what the reader gets.
+PROBES: Tuple[Tuple[str, str, Dict[str, Any], Any], ...] = (
     ("percent threshold in points", "percent",
-     {"current_loan_to_value": {"op": "gt", "value": 50}}),
+     {"current_loan_to_value": {"op": "gt", "value": 50}}, 3),
     ("percent range in points", "percent",
-     {"current_loan_to_value": {"op": "between", "value": [40, 60]}}),
+     {"current_loan_to_value": {"op": "between", "value": [40, 60]}}, 1),
     ("percent field, fraction-scale operand", "percent",
-     {"current_loan_to_value": {"op": "gt", "value": 0.5}}),
+     {"current_loan_to_value": {"op": "gt", "value": 0.5}}, 3),
     ("non-percent numeric must NOT rescale", "no-rescale",
-     {"youngest_borrower_age": {"op": "gt", "value": 70}}),
+     {"youngest_borrower_age": {"op": "gt", "value": 70}}, 2),
     ("percent_points field must NOT rescale", "no-rescale",
-     {"current_interest_rate": {"op": "gt", "value": 4}}),
-    ("operator alias '>'", "operator", {"youngest_borrower_age": {"op": ">", "value": 70}}),
+     {"current_interest_rate": {"op": "gt", "value": 4}}, 3),
+    ("operator alias '>'", "operator", {"youngest_borrower_age": {"op": ">", "value": 70}}, 2),
     ("operator alias 'above'", "operator",
-     {"youngest_borrower_age": {"op": "above", "value": 70}}),
+     {"youngest_borrower_age": {"op": "above", "value": 70}}, 2),
     ("operator alias 'gte'", "operator",
-     {"youngest_borrower_age": {"op": "gte", "value": 70}}),
+     {"youngest_borrower_age": {"op": "gte", "value": 70}}, 2),
     ("operator alias 'greater_than_or_equal'", "operator",
-     {"youngest_borrower_age": {"op": "greater_than_or_equal", "value": 70}}),
-    ("categorical bare string", "categorical", {"borrower_type": "Joint"}),
+     {"youngest_borrower_age": {"op": "greater_than_or_equal", "value": 70}}, 2),
+    ("categorical bare string", "categorical", {"borrower_type": "Joint"}, 2),
     ("categorical dict shape", "categorical",
-     {"borrower_type": {"op": "eq", "value": "Joint"}}),
+     {"borrower_type": {"op": "eq", "value": "Joint"}}, 2),
     ("categorical case-insensitive", "categorical",
-     {"collateral_geography": "south east"}),
-    ("membership in []", "categorical", {"borrower_type": ["Joint"]}),
+     {"collateral_geography": "south east"}, 2),
+    ("membership in []", "categorical", {"borrower_type": ["Joint"]}, 2),
     ("null-heavy column, wide bound", "nulls",
-     {"youngest_borrower_age": {"op": "le", "value": 200}}),
+     {"youngest_borrower_age": {"op": "le", "value": 200}}, 4),
 )
 
 #: Negative controls. Each must REFUSE on both paths — never widen, never
 #: silently empty.
-NEGATIVE: Tuple[Tuple[str, Dict[str, Any]], ...] = (
+NEGATIVE: Tuple[Tuple[str, Dict[str, Any]], ...] = (  # expected: refusal
     ("missing field (column absent)", {"borrower_type_missing": "Joint"}),
     ("unknown semantic field", {"not_a_governed_field": {"op": "gt", "value": 1}}),
     ("invalid numeric value", {"youngest_borrower_age": {"op": "gt", "value": "abc"}}),
@@ -255,7 +262,10 @@ def _probe_section(semantics, cases, *, drop: Optional[str] = None):
     frame = _probe_frame()
     out = []
     for entry in cases:
-        label, klass, filters = entry if len(entry) == 3 else (entry[0], "negative", entry[1])
+        if len(entry) == 4:
+            label, klass, filters, expected = entry
+        else:
+            label, klass, filters, expected = entry[0], "negative", entry[1], "refused"
         work = frame
         key = next(iter(filters))
         if drop == "auto" and key.endswith("_missing"):
@@ -263,12 +273,19 @@ def _probe_section(semantics, cases, *, drop: Optional[str] = None):
             work = frame.drop(columns=[key.replace("_missing", "")])
         shipped = _shipped(work, filters, semantics)
         reusable = _reusable(work, _predicates(filters, semantics), semantics)
+        if expected == "refused":
+            correct = shipped[0] == "refused" and reusable[0] == "refused"
+        else:
+            correct = (shipped[0] == "rows" and reusable[0] == "rows"
+                       and len(shipped[1]) == expected == len(reusable[1]))
         out.append({"label": label, "class": klass, "filters": filters,
+                    "expected": expected,
                     "shipped": [shipped[0], shipped[1] if isinstance(shipped[1], str)
                                 else len(shipped[1])],
                     "reusable": [reusable[0], reusable[1] if isinstance(reusable[1], str)
                                  else len(reusable[1])],
-                    "agree": _agree(shipped, reusable)})
+                    "agree": _agree(shipped, reusable),
+                    "correct": correct})
     return out
 
 
@@ -276,11 +293,13 @@ def _print_probes(title, rows) -> int:
     print(f"\n{title}")
     bad = 0
     for row in rows:
-        ok = row["agree"]
+        ok = row["agree"] and row["correct"]
         bad += 0 if ok else 1
+        flag = "OK " if ok else ("WRONG" if row["agree"] else "DIV")
         s, r = row["shipped"], row["reusable"]
-        print(f"  {'OK ' if ok else 'DIV'} [{row['class']:<11}] {row['label']:<40}"
-              f" shipped={s[0]}:{str(s[1])[:26]:<28} reusable={r[0]}:{str(r[1])[:26]}")
+        print(f"  {flag:<5}[{row['class']:<11}] {row['label']:<40}"
+              f" want={str(row['expected']):<8} shipped={s[0]}:{str(s[1])[:20]:<22}"
+              f" reusable={r[0]}:{str(r[1])[:20]}")
     return bad
 
 

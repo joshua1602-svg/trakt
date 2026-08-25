@@ -192,3 +192,182 @@ The normalisation therefore lives in exactly one place —
 `population.predicate_of`, the one function that turns a spec filter entry into
 a governed `Predicate` — and both executors read the result.
 
+
+---
+
+## 7. The change
+
+One owner, `mi_agent.mi_query_executor.governed_predicate_mask`, holding the
+whole shipped rule: field resolution → operator alias → membership /
+categorical-with-domain / numeric-with-percent-rescale → an NA-free mask. It
+raises `MIQueryExecutionError` — the shipped controlled failure — for any
+predicate it cannot execute.
+
+It lives in the executor because that is where the rule already was and where
+every dependency already lives (`resolve_semantic_field`, `_require_column`,
+`_OP_ALIASES`, `percent_storage_scale`, `_resolve_domain_value`,
+`_apply_numeric_op`). Moving those to `population.py` would have been a larger
+change for the same result.
+
+```
+spec.filters entry ─┐
+                    ├─> population.predicate_of ─> Predicate(field, op, value)
+Predicate ──────────┘                                        │
+                                                             v
+                              mi_query_executor.governed_predicate_mask
+                                          │              │
+                              _apply_filters          apply_population
+```
+
+`population.predicate_of` is the one normaliser for the three spec shapes; both
+executors read its result, so "what shape did the spec use" is no longer a
+semantic input. `population._mask` — the reimplemented comparator — is deleted.
+
+**Fail closed.** `apply_population` returns `(None, evidence)` for a predicate
+it cannot execute, with `blocked_reason` set and `is_usable` False. It does not
+hand back the frame it failed to narrow, so a caller that forgets to read the
+evidence crashes loudly instead of answering a whole-book figure as a narrowed
+one. Three of the four consumers already refused before touching the frame and
+needed no change; `period_movement` now stops at the first unusable snapshot
+rather than building a snapshot out of the un-narrowed book first.
+
+---
+
+## 8. Result — 119/119
+
+```
+CONTRACT agreement (parser -> RowPredicateClaim)
+   field 121/121 · operator 121/121 · value 121/121
+
+EXECUTION agreement (same rows, or the same governed failure)
+   119/119            (was 48/119)
+
+family            agree  disagree
+LTV                  56         0      (was 0 / 56)
+borrower age         20         0      (was 18 / 2)
+balance              15         0
+borrower type        15         0      (was 0 / 15)
+geography             9         0
+months on book        4         0
+interest rate         2         0
+
+silent widening (reusable returned a frame it could not narrow): 0   (was 8)
+VERDICT: PARITY HOLDS
+```
+
+All four negative controls — missing column, unknown semantic field,
+uncomparable value, invalid range bounds — now refuse on **both** paths.
+
+---
+
+## 9. Blast — 882 questions, zero movement on every axis
+
+```
+interpretation  changed: 0
+dataset         changed: 0
+route           changed: 0
+predicates      changed: 0
+answer          changed: 0
+population      changed: 0
+```
+
+This is the expected shape and it was pre-registered: the 71 disagreements were
+**latent**. Only four corpus questions reach `apply_population` today, all
+`months_on_book`, all already in the agreement set. Fixing a latent divergence
+correctly produces no live movement — 71 disagreements are not 71 answer
+changes, and a census that showed 71 movements would have meant the fix had
+changed shipped behaviour.
+
+Delivered economic anchors, captured before and after and compared field by
+field:
+
+```
+balance trend where LTV above 50%   IDENTICAL   £432,425,355.79
+                                                £450,969,362.11
+                                                £472,527,483.38
+balance trend                       IDENTICAL   £1.93bn -> £1.95bn -> £1.96bn
+how many loans have LTV above 50%   IDENTICAL   1,889 loans
+balance by region where LTV above 50%  IDENTICAL  11 groups, 1,889 loans
+```
+
+---
+
+## 10. Mutation testing, and what it exposed about the census
+
+Four mutations, each applied alone and restored:
+
+| | mutation | tests | census |
+|---|---|---|---|
+| A | percent normalisation removed | 3 of 30 fail | PARITY DOES NOT HOLD |
+| B | unappliable predicate returns the frame again | 4 of 30 fail | PARITY DOES NOT HOLD, 104/119 |
+| C | every numeric threshold rescaled as percent | 4 of 30 fail | PARITY DOES NOT HOLD |
+| D | categorical normalisation removed | 2 of 30 fail | PARITY DOES NOT HOLD |
+
+**The first run of these did not look like that, and the reason matters.**
+Mutations A, C and D initially left the census at **119/119, PARITY HOLDS**.
+They are mutations *inside the shared owner*, so both paths moved together and
+kept agreeing. A pure agreement check proves parity and says nothing whatever
+about correctness — and unification is exactly what creates that blind spot.
+Only mutation B, which lives in `apply_population` alone, was caught.
+
+The census now scores each probe against an **absolute expected outcome** as
+well as against the other path, and reports `DIV` (the paths disagree) and
+`WRONG` (they agree on the wrong answer) as distinct failures. With that, all
+four mutations fail it.
+
+Worth stating plainly for whoever maintains this: **after unification, a parity
+census is necessary and not sufficient.** The absolute expectations carry the
+correctness load.
+
+---
+
+## 11. One-owner proof
+
+Every decision the invariant covers is computed in exactly one place, and every
+one of those places is inside `governed_predicate_mask`:
+
+```
+operator aliases      _OP_ALIASES        mi_query_executor.py:552   (1 use)
+value-domain          _resolve_domain_value            :576         (1 use)
+percent normalisation percent_storage_scale            :597         (1 use for predicates)
+comparator            _apply_numeric_op                :613         (1 use)
+missing column        _require_column                  :545         (1 use for predicates)
+```
+
+`population.py` builds no mask at all any more — it calls
+`governed_predicate_mask` at line 191 and indexes with the result. The other
+`percent_storage_scale` callers (`period_change`, `evolution`, `cohorts`,
+`analytical.executors`) scale MEASURES for display, which is a different
+concern that already had its own single owner; none of them executes a
+predicate. The remaining `_require_column` calls resolve metric, date and sort
+columns, not predicates.
+
+No compatibility wrapper remains, so there is nothing to prove delegates.
+
+---
+
+## 12. Cost — canonical raw-line accounting
+
+Raw added + raw deleted production diff lines. Never net-executable.
+
+| bucket | file | raw lines |
+|---|---|---|
+| predicate execution shared infrastructure | `mi_query_executor.py` | 283 |
+| predicate execution shared infrastructure | `population.py` (less `_mask`) | 84 |
+| cleanup — the duplicate comparator deleted | `population.py` `_mask` | 20 |
+| product hardening — fail-closed consumer | `analytical/executors.py` | 14 |
+| **production total** | | **401** |
+| tests | `test_predicate_execution_parity.py` | 299 (new) |
+| assurance instruments | `predicate_execution_parity.py` | 378 (new) |
+| assurance instruments | `predicate_parity_blast.py` | 202 (new) |
+| docs | this file | — |
+
+**How this should be treated in normalised C6 burden.** It should **not** be
+charged to C6. This closed a latent inconsistency in a SHARED semantic owner
+that predates the compositional-plan work and that four existing production
+consumers already depended on; C6 discovered it, C6 did not cause it. The
+honest classification is **product hardening of shared infrastructure**,
+recorded separately, in the same bucket as the grain defect and the
+`KIND_THRESHOLD` receipt defect. Charging discovery costs to the migration
+would make the migration look expensive for finding bugs, which is the opposite
+of the incentive worth having.

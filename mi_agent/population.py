@@ -86,10 +86,23 @@ class PopulationEvidence:
     unavailable: List[str] = field(default_factory=list)
     rows_before: Optional[int] = None
     rows_after: Optional[int] = None
+    #: The governed failure that stopped execution, when one did. Set together
+    #: with a ``None`` frame, so "could not execute" is a state a caller cannot
+    #: mistake for "executed and changed nothing".
+    blocked_reason: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"applied": list(self.applied), "unavailable": list(self.unavailable),
-                "rowsBefore": self.rows_before, "rowsAfter": self.rows_after}
+        out: Dict[str, Any] = {
+            "applied": list(self.applied), "unavailable": list(self.unavailable),
+            "rowsBefore": self.rows_before, "rowsAfter": self.rows_after}
+        if self.blocked_reason:
+            out["blockedReason"] = self.blocked_reason
+        return out
+
+    @property
+    def is_usable(self) -> bool:
+        """Did every requested predicate actually execute?"""
+        return not self.unavailable and self.blocked_reason is None
 
     @property
     def is_complete(self) -> bool:
@@ -100,6 +113,29 @@ def _canonical(field_key: str, semantics: Optional[Mapping[str, Any]]) -> str:
     fields = (semantics or {}).get("fields") or {}
     entry = fields.get(field_key) or {}
     return str(entry.get("canonical_field") or field_key)
+
+
+def predicate_of(key: Any, raw: Any) -> Predicate:
+    """One spec filter entry, as a governed Predicate.
+
+    THE normaliser for the three shapes ``spec.filters`` uses. Both executors
+    go through it, so "what shape did the spec use" stops being a semantic
+    input: before this, `_apply_filters` dispatched on the shape and
+    `material_predicates` erased it, which is how one predicate came to have
+    two meanings.
+    """
+    name = str(key)
+    if isinstance(raw, Mapping) and any(k in raw for k in ("op", "value", "min", "max")):
+        # `min`/`max` without an `op` is a shape the executor already accepted;
+        # reproducing its unwrapping here is what stops the two from disagreeing
+        # about a bound the reader did supply. `material_predicates` used to
+        # keep the whole dict as the value, so the receipt claimed a predicate
+        # that could only ever match nothing.
+        return Predicate(name, str(raw.get("op") or "eq"),
+                         raw.get("value", raw.get("min", raw.get("max"))))
+    if isinstance(raw, (list, tuple, set)):
+        return Predicate(name, "in", list(raw))
+    return Predicate(name, "eq", raw)
 
 
 def material_predicates(filters: Optional[Mapping[str, Any]],
@@ -117,12 +153,7 @@ def material_predicates(filters: Optional[Mapping[str, Any]],
         name = str(key)
         if name in SCOPE_KEYS or name in NON_POPULATION_KEYS:
             continue
-        if isinstance(raw, Mapping) and "op" in raw:
-            out.append(Predicate(name, str(raw.get("op") or "eq"), raw.get("value")))
-        elif isinstance(raw, (list, tuple, set)):
-            out.append(Predicate(name, "in", list(raw)))
-        else:
-            out.append(Predicate(name, "eq", raw))
+        out.append(predicate_of(name, raw))
     return out
 
 
@@ -131,54 +162,45 @@ def apply_population(frame, predicates: Iterable[Predicate],
                      ) -> Tuple[Any, PopulationEvidence]:
     """Narrow ``frame`` by every predicate, returning ``(frame, evidence)``.
 
-    Reuses the executor's own comparison semantics rather than reimplementing
-    them, so a route and the point-in-time path cannot disagree about what
-    "age > 85" means. A predicate whose column is absent is recorded as
-    UNAVAILABLE and the frame is left alone — the caller then refuses, because a
-    population that could not be applied must never be answered as the whole book.
+    Executes through :func:`mi_agent.mi_query_executor.governed_predicate_mask`
+    — THE one governed meaning of a predicate — so this and the point-in-time
+    executor cannot disagree about what "LTV over 50" selects. It used to reuse
+    only the COMPARATOR, which left it with no percent rescaling, no operator
+    aliases, no value-domain resolution and no field resolution: five distinct
+    ways for a route and the point-in-time path to answer the same question
+    differently.
+
+    FAIL CLOSED. A predicate that cannot be executed returns ``(None, evidence)``
+    with the reason on the evidence. It does NOT return the frame it failed to
+    narrow: a caller that forgets to read the evidence then crashes loudly
+    instead of answering a whole-book figure as though it were the narrowed one.
+    That was the P1L failure mode, and "the caller is supposed to check" is what
+    made it possible.
     """
     evidence = PopulationEvidence()
     predicates = list(predicates or [])
     if frame is None or not predicates:
         return frame, evidence
 
-    # NB: `getattr(frame, "columns", []) or []` raises — a pandas Index has no
-    # truth value. Build the set directly.
-    columns = set(getattr(frame, "columns", []))
+    from .mi_query_executor import MIQueryExecutionError, governed_predicate_mask
+
     evidence.rows_before = int(len(frame))
     work = frame
     for predicate in predicates:
-        column = predicate.field if predicate.field in columns else _canonical(
-            predicate.field, semantics)
-        if column not in columns:
-            evidence.unavailable.append(predicate.describe())
-            continue
         try:
-            work = work[_mask(work[column], predicate)]
-        except Exception:  # noqa: BLE001 - an unappliable predicate is UNAVAILABLE
+            execution = governed_predicate_mask(work, predicate.field, predicate.op,
+                                                predicate.value, semantics or {})
+        except MIQueryExecutionError as exc:
+            # The same governed failure the point-in-time executor raises, in
+            # the shape this path's callers already read.
             evidence.unavailable.append(predicate.describe())
-            continue
+            evidence.blocked_reason = str(exc)
+            return None, evidence
+        work = work[execution.mask]
         evidence.applied.append(predicate.describe())
     evidence.rows_after = int(len(work))
     return work, evidence
 
-
-def _mask(column: pd.Series, predicate: Predicate) -> pd.Series:
-    """Boolean mask for one predicate, delegating numeric/date ops to the
-    executor so the two paths cannot drift."""
-    op, value = predicate.op, predicate.value
-    if op in ("in", "not_in"):
-        wanted = {str(v).strip().lower()
-                  for v in (value if isinstance(value, (list, tuple, set)) else [value])}
-        hit = column.astype("string").str.strip().str.lower().isin(wanted)
-        return ~hit if op == "not_in" else hit
-    if op in ("eq", "ne"):
-        same = (column.astype("string").str.strip().str.lower()
-                == str(value).strip().lower())
-        return ~same if op == "ne" else same
-    from .mi_query_executor import _apply_numeric_op
-
-    return _apply_numeric_op(column, op, value)
 
 # --------------------------------------------------------------------------- #
 # Fabricated populations — the mirror of the P1L loss check
