@@ -458,6 +458,11 @@ export interface MailIngestOutcome {
   registered: string[];
   skipped: { name: string; reason: string }[];
   recorded_text: boolean;
+  /** Whether Trakt went on to READ the files it registered. A file held but
+   *  not read leaves open the questions reading it would have answered — the
+   *  file format among them — so this is never assumed. */
+  recognised: boolean;
+  recognition_note: string;
   already: boolean;
   statement: string;
 }

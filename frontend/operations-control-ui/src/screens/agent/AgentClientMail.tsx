@@ -85,8 +85,15 @@ export function ClientMailPanel({
     if (taking) return;
     setTaking(message.graph_id);
     try {
-      await client.ingestAgentMail(caseId, [message.graph_id]);
-      toast.show(copy.agent.mailIngested, "success");
+      const done = await client.ingestAgentMail(caseId, [message.graph_id]);
+      // A file Trakt holds but has not read is not a clean success: the
+      // questions reading it would have answered are still open, and a green
+      // toast is how that stays invisible until the case will not submit.
+      const unread = (done.ingested ?? []).find(
+        (o) => o.registered.length > 0 && !o.recognised,
+      );
+      toast.show(unread ? unread.statement : copy.agent.mailIngested,
+                 unread ? "error" : "success");
       onIngested();
       await check();
     } catch (err) {

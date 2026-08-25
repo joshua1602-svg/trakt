@@ -176,3 +176,129 @@ def test_the_residue_is_named_as_the_operators_own(service, issued):
 def test_the_answer_says_the_operator_need_not_wait_for_the_email(service,
                                                                   issued):
     assert "do not have to wait" in service.pending_sentences(issued)
+
+
+# --------------------------------------------------------------------------- #
+# Once the client has been ASKED
+# --------------------------------------------------------------------------- #
+#
+# ``client_checklist`` excludes anything sitting in an open information
+# request, so pressing "ask the client" empties it. Everything below is about
+# what must NOT follow from that.
+
+@pytest.fixture()
+def asked(service, issued):
+    """A case whose outstanding items have been put to the client."""
+    return service.request_client_information(issued, actor=ACTOR)
+
+
+def test_asking_the_client_empties_the_checklist(service, asked):
+    """The premise. If this ever stops being true the tests below are vacuous."""
+    assert service.onboarding.client_checklist(asked.case) == []
+
+
+def test_an_item_the_client_was_asked_for_is_still_the_clients(service, asked):
+    """The defect: the whole list flipped to "needs you" at the exact moment it
+    became most true that we were waiting on them."""
+    p = service.pending(asked)
+    labels = [row["label"] for row in p["client"]]
+    assert any("Legal Entity Identifier" in l for l in labels)
+    assert not any("Legal Entity Identifier" in m for m in p["yours"])
+
+
+def test_the_case_is_still_reported_as_waiting_on_the_client(service, asked):
+    p = service.pending(asked)
+    assert p["waiting_on"] == "client"
+    assert "waiting on Northstar Lending" in service.pending_sentences(asked)
+
+
+def test_nothing_the_client_was_asked_for_is_listed_as_the_operators(service,
+                                                                     asked):
+    """The residue under "needs you" must be exactly what nobody has asked the
+    client for — that is what makes it the answer to "why is this stuck"."""
+    p = service.pending(asked)
+    requested = [row["label"].split(" — ")[0]
+                 for req in asked.case.requests() for row in req.items]
+    assert requested, "the fixture asked the client for nothing"
+    for label in requested:
+        assert not any(label in message for message in p["yours"]), label
+
+
+def test_an_answered_item_drops_off_the_client_list(service, asked):
+    """Asked is not the same as outstanding. An item answered after it was
+    asked must not keep appearing because the request still names it."""
+    before = service.pending(asked)["client"]
+    one = [r for req in asked.case.requests() for r in req.items][0]
+    updated = service.submit_client_response(
+        asked, actor=ACTOR, response={_key(one): _answer_for(one)},
+        strict=False)
+    after = service.pending(updated)["client"]
+    assert len(after) == len(before) - 1
+    assert one["label"] not in [row["label"] for row in after]
+
+
+# --------------------------------------------------------------------------- #
+# The request has to be able to close
+# --------------------------------------------------------------------------- #
+
+def test_answering_every_item_closes_the_request(service, asked):
+    """The terminal defect.
+
+    ``readiness()`` counts an open request as outstanding and refuses to
+    submit while any remains, so a request that never closes is a case that can
+    never be approved — however completely it has been answered.
+    """
+    assert service.onboarding_readiness(asked)["outstanding_requests"]
+
+    updated = service.submit_client_response(
+        asked, actor=ACTOR, response=_all_answers(asked.case), strict=False)
+    assert service.onboarding_readiness(updated)["outstanding_requests"] == []
+
+
+def test_a_partial_answer_closes_nothing(service, asked):
+    """Closing is derived from what is answered, never asserted. A request
+    half-answered must not make a case look complete that is not."""
+    one = [r for req in asked.case.requests() for r in req.items][0]
+    updated = service.submit_client_response(
+        asked, actor=ACTOR, response={_key(one): _answer_for(one)},
+        strict=False)
+    assert service.onboarding_readiness(updated)["outstanding_requests"]
+
+
+def test_closing_a_request_is_audited(service, asked):
+    updated = service.submit_client_response(
+        asked, actor=ACTOR, response=_all_answers(asked.case), strict=False)
+    events = service.store.list_audit(TENANT_A, updated.case_ref)
+    closed = [e for e in events if e["action"] == "client_request_answered"]
+    assert len(closed) == 1
+    assert closed[0]["actor_identity"] == ACTOR
+
+
+def _key(row) -> str:
+    return (f"{row['section']}.{row['field']}" if row["index"] is None
+            else f"{row['section']}[{row['index']}].{row['field']}")
+
+
+def _answer_for(row) -> object:
+    """A value the catalogue will accept for one checklist row.
+
+    Options come from the catalogue rather than from a guess, so this stays
+    correct when a field's vocabulary changes.
+    """
+    from operations_control.onboarding.catalogue import catalogue
+    field = catalogue().field(row["section"], row["field"])
+    if field is not None and getattr(field, "options", None):
+        return str(field.options[0].get("value"))
+    name = row["field"]
+    if "email" in name:
+        return "ops@northstar.example"
+    if name == "lei":
+        return "213800LBQA1Y9SHqwq49"
+    if "jurisdiction" in name or "country" in name:
+        return "GB"
+    return "Provided"
+
+
+def _all_answers(case) -> dict:
+    return {_key(row): _answer_for(row)
+            for req in case.requests() for row in req.items}

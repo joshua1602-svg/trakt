@@ -351,3 +351,94 @@ def test_registering_still_obeys_the_runs_own_state(service, issued, graph,
         _ingest.ingest(service, issued, chosen, actor=ACTOR, config=config,
                        transport=graph)
     assert "register" in str(excinfo.value).lower()
+
+
+# --------------------------------------------------------------------------- #
+# A file taken in by mail is READ, not just held
+# --------------------------------------------------------------------------- #
+
+def test_an_emailed_file_answers_what_looking_at_it_answers(service, issued,
+                                                            graph, config):
+    """The defect: registering is not reading.
+
+    ``file_format`` is declared ``inferred`` in the catalogue — a client is
+    never asked it, because the answer is in the file. Recognition is what
+    supplies it. The upload route has always run recognition; taking a file in
+    by mail did not, so a client who ATTACHED their loan tape left the
+    file-format question open and the case unapprovable, while the same file
+    dragged onto the screen would have closed it.
+    """
+    before = [p["message"] for p in service.onboarding_readiness(issued)["blocking"]]
+    assert any("File format" in m for m in before), before
+
+    graph.inbox = [reply(issued.case_ref, attachments=True)]
+    graph.attachments = {"AAMkAGI2-reply-1": [TAPE]}
+    _found, chosen = waiting_for(service, graph, config, issued.case_ref)
+    updated, outcome = _ingest.ingest(service, issued, chosen, actor=ACTOR,
+                                      config=config, transport=graph)
+
+    assert outcome.recognised is True
+    assert updated.case.answers.get("sample"), "no sample was registered"
+    after = [p["message"] for p in
+             service.onboarding_readiness(updated)["blocking"]]
+    assert not any("File format" in m for m in after), after
+
+
+def test_the_mail_route_and_the_upload_route_leave_the_same_case(service,
+                                                                 issued, graph,
+                                                                 config):
+    """Two routes, one outcome. The whole bug was that they differed."""
+    graph.inbox = [reply(issued.case_ref, attachments=True)]
+    graph.attachments = {"AAMkAGI2-reply-1": [TAPE]}
+    _found, chosen = waiting_for(service, graph, config, issued.case_ref)
+    by_mail, _ = _ingest.ingest(service, issued, chosen, actor=ACTOR,
+                                config=config, transport=graph)
+
+    other = service.create_case(tenant=TENANT, initiating_user=ACTOR,
+                                instruction=OPENING)
+    other = service.register_synthetic_artefact(
+        other, filename=TAPE["name"],
+        data=base64.b64decode(TAPE["contentBytes"]), actor=ACTOR)
+    by_upload = service.classify_artefacts(other, actor=ACTOR)
+
+    def formats(case):
+        return sorted(str(s.get("file_format") or "")
+                      for s in case.case.items("sources"))
+
+    assert formats(by_mail) == formats(by_upload)
+    assert "csv" in formats(by_mail)
+
+
+def test_a_reply_with_no_files_does_not_pretend_to_have_read_any(service,
+                                                                 issued, graph,
+                                                                 config):
+    graph.inbox = [reply(issued.case_ref)]
+    _found, chosen = waiting_for(service, graph, config, issued.case_ref)
+    _updated, outcome = _ingest.ingest(service, issued, chosen, actor=ACTOR,
+                                       config=config, transport=graph)
+    assert outcome.registered == []
+    assert outcome.recognised is False
+
+
+def test_recognition_failing_does_not_cost_the_reply(service, issued, graph,
+                                                     config, monkeypatch):
+    """The files and the client's words are already recorded when recognition
+    runs, and a retry would register them twice — so a failure is reported,
+    never raised, and never silent."""
+    graph.inbox = [reply(issued.case_ref, attachments=True)]
+    graph.attachments = {"AAMkAGI2-reply-1": [TAPE]}
+    _found, chosen = waiting_for(service, graph, config, issued.case_ref)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("recognition is unavailable")
+
+    monkeypatch.setattr(service, "classify_artefacts", boom)
+    updated, outcome = _ingest.ingest(service, issued, chosen, actor=ACTOR,
+                                      config=config, transport=graph)
+
+    assert outcome.registered == [TAPE["name"]]          # the file is on the case
+    assert outcome.recorded_text is True                 # so are the words
+    assert outcome.recognised is False
+    assert "has NOT read them yet" in outcome.statement  # and it SAYS so
+    assert any(e.get("kind") == _ingest.INGESTED_KEY     # idempotency intact
+               for e in updated.run.control_results)
