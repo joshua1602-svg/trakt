@@ -203,6 +203,24 @@ plan.
 
 ---
 
+## 9a. Confirming regression (§9) — PASSED
+
+Full suite, same tree, before and after the wiring:
+
+```
+before (parity)   : 203 failed, 10350 passed, 36 skipped, 16 xfailed, 28 errors
+after  (C6 wiring): 203 failed, 10369 passed, 36 skipped, 16 xfailed, 28 errors
+
+failing-name sets : 231 vs 231
+INTRODUCED        : 0
+FIXED             : 0
+silent drops      : 0   (skips, xfails and errors all identical)
+```
+
+The +19 passes are exactly the 19 tests this task added.
+
+---
+
 ## 10. Verdict
 
 # C6 FILTER PLAN PREREQUISITE CLOSED
