@@ -259,14 +259,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -290,14 +290,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -321,14 +321,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -352,14 +352,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -383,14 +383,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -414,14 +414,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -494,6 +494,192 @@
       "periodsContractStructural": [
         "May",
         "June"
+      ]
+    },
+    {
+      "case": "V2",
+      "question": "Compare this month and last month funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "last month"
+      ],
+      "periodsContractRawText": "latest, last month",
+      "periodsContractStructural": [
+        "latest",
+        "last month"
+      ]
+    },
+    {
+      "case": "V2",
+      "question": "Compare this month and last month funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "last month"
+      ],
+      "periodsContractRawText": "latest, last month",
+      "periodsContractStructural": [
+        "latest",
+        "last month"
+      ]
+    },
+    {
+      "case": "O1",
+      "question": "Compare October and November WA LTV.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "O1",
+      "question": "Compare October and November WA LTV.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "O2",
+      "question": "Compare latest pipeline with prior pipeline.",
+      "tab": "funded",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "prior pipeline"
+      ],
+      "periodsContractRawText": "latest, prior pipeline",
+      "periodsContractStructural": [
+        "latest",
+        "prior pipeline"
+      ]
+    },
+    {
+      "case": "O2",
+      "question": "Compare latest pipeline with prior pipeline.",
+      "tab": "pipeline",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "prior pipeline"
+      ],
+      "periodsContractRawText": "latest, prior pipeline",
+      "periodsContractStructural": [
+        "latest",
+        "prior pipeline"
       ]
     },
     {
@@ -755,14 +941,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -786,14 +972,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -817,14 +1003,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [
@@ -848,14 +1034,14 @@
       "datasetDisagreesToday": false,
       "datasetDisagreesWired": false,
       "measureProduction": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureContract": [
-        "funded_balance",
-        "Funded balance",
-        "gbp"
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
       ],
       "measureDisagrees": false,
       "periodsProduction": [

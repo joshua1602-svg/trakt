@@ -63,22 +63,13 @@ def _env() -> Tuple[str, Dict[str, Any]]:
     os.environ["MI_AGENT_LLM_PARSER"] = "off"
     os.environ["MI_AGENT_LLM_ENABLED"] = "0"
     logging.disable(logging.WARNING)
-    from mi_agent_api import mi_service
-    sem: Dict[str, Any] = {}
-    for name in ("load_semantics", "_load_semantics", "semantics_for"):
-        fn = getattr(mi_service, name, None)
-        if callable(fn):
-            try:
-                sem = fn(cfg.CLIENT_ID) or {}
-                break
-            except TypeError:
-                try:
-                    sem = fn() or {}
-                    break
-                except Exception:  # noqa: BLE001
-                    pass
-            except Exception:  # noqa: BLE001
-                pass
+    # THE governed semantics, via the one assurance loader, which delegates to
+    # production. This used to probe three plausible loader names on
+    # `mi_service`, none of which exist, and fall through to {} - so every
+    # measurement below ran against an EMPTY registry and still printed clean
+    # numbers. `load_assurance_semantics` raises instead of degrading.
+    from migration_phase0.assurance_semantics import load_assurance_semantics
+    sem = load_assurance_semantics()
     return cfg.CLIENT_ID, sem
 
 
