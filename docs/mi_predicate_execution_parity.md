@@ -292,6 +292,27 @@ balance by region where LTV above 50%  IDENTICAL  11 groups, 1,889 loans
 
 ---
 
+## 9a. Existing-consumer census
+
+Which consumers actually execute predicates, measured by spying on
+`apply_population` across all 882 corpus questions rather than reasoned from the
+call graph:
+
+| consumer | predicate executions | blocked |
+|---|---|---|
+| `analytical/executors.py::period_movement` | 84 | 0 |
+| `analytical/populations.py::apply` | 12 | 0 |
+| `mi_service._population_frame` | 0 | 0 |
+| the three capabilities via `populations.apply` | (counted in the 12) | 0 |
+
+Both live consumers are genuinely exercised — this is not a vacuous pass — and
+**nothing is blocked**, which is why the fail-closed change moves no answer.
+`mi_service._population_frame` narrows only when a route supplies a frame
+resolver AND the spec carries predicates, which no corpus question does today;
+it is covered by the negative controls rather than by live traffic.
+
+---
+
 ## 10. Mutation testing, and what it exposed about the census
 
 Four mutations, each applied alone and restored:
