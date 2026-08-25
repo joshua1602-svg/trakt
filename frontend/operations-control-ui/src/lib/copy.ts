@@ -489,7 +489,11 @@ export const copy = {
     gateActive: "Now",
     gateBlocked: "Blocked",
     gatePending: "Not started",
-    missingHeading: "Missing inputs",
+    missingHeading: "What Trakt still needs from you",
+    missingHelp:
+      "What the client owes is listed under the client questions. These are " +
+      "the ones nobody has asked them for, because they are not the client's " +
+      "to answer.",
     criteriaOnboarding: "The onboarding",
     criteriaExecution: "The practice run",
     criteriaBoundary: "The practice boundary",
@@ -682,6 +686,8 @@ export const copy = {
     readyStatus: "READY_FOR_EXECUTION",
     notReady: "Not ready yet",
     criteriaHeading: "Readiness criteria",
+    criteriaSummary: (passed: number, total: number) =>
+      `${passed} of ${total} criteria passed`,
     manifestHeading: "Machine-readable summary",
     downloadPackage: "Show the readiness package",
     hidePackage: "Hide the readiness package",

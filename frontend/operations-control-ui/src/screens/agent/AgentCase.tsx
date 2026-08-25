@@ -17,7 +17,7 @@ import type {
   ReadinessCriterion,
   StreamSummary,
 } from "@/api/agentTypes";
-import type { ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
+import type { CaseProblem, ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
 import { ClientMailPanel } from "./AgentClientMail";
 import { ClientQuestionsPanel } from "./AgentClientQuestions";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
@@ -74,6 +74,31 @@ function onboardingActions(status: AgentStatus): string[] {
     out.push("approve_onboarding");
   }
   return out;
+}
+
+/**
+ * The blocking problems that are the OPERATOR'S to solve.
+ *
+ * `onboarding.blocking` and the client's outstanding list overlap almost
+ * entirely — every unanswered client field is both — so rendering both in full
+ * printed the same eleven items twice on one screen, once as a checklist and
+ * once as sentences, and buried anything that was genuinely different. The
+ * residue is the real answer to "why is this stuck": what nobody has asked the
+ * client for, because it is not theirs to answer.
+ *
+ * The split is the SERVER'S, not this screen's: validation stamps every
+ * problem with `owner`, from whether the catalogue asks that field of a client
+ * at all. Deriving it here instead — "blocking items not in the checklist" —
+ * would have been wrong in a way that matters, because `client_checklist`
+ * excludes anything sitting in an open request, so pressing "ask the client"
+ * would have emptied the checklist and tipped the client's own items into this
+ * panel at the exact moment it became most true that we were waiting on them.
+ * That is the bug already fixed once in the agent's `pending()`; reading
+ * `owner` cannot reproduce it, because ownership does not depend on what has
+ * been asked.
+ */
+export function operatorBlocking(blocking: CaseProblem[]): CaseProblem[] {
+  return blocking.filter((problem) => problem.owner !== "client");
 }
 
 /** Which pack stage currently owns the pack panel, so it renders exactly once. */
@@ -165,6 +190,7 @@ export function AgentCaseScreen() {
   const stages = deriveStages(status);
   const current = stages.find((stage) => stage.status === "current");
   const packStage = packOwner(status);
+  const yours = operatorBlocking(onboarding.blocking);
   const openDecisions = status.open_decisions.filter((d) => d.status === "open");
 
   /** One stage's workflow content. Rendered under exactly one stage. */
@@ -573,9 +599,14 @@ export function AgentCaseScreen() {
             onSaved={() => void view.reload({ quiet: true })}
           />
 
-          <Panel title={copy.agent.criteriaHeading}>
-            <CriteriaList criteria={status.readiness.criteria} />
-          </Panel>
+          <CriteriaPanel
+            criteria={status.readiness.criteria}
+            /* Expanded once the case is at readiness, where the table is the
+               work. Before then most rows read "Blocked" only because the case
+               has not got there yet, which is not information — it is the wall
+               that made "what is pending" unanswerable. */
+            open={stages.find((stage) => stage.key === "readiness")?.status !== "future"}
+          />
 
           {/* The blocked banner at the top already lists these when the run is
               BLOCKED; this panel covers blockers recorded in any other state. */}
@@ -589,10 +620,11 @@ export function AgentCaseScreen() {
             </Panel>
           )}
 
-          {onboarding.blocking.length > 0 && (
+          {yours.length > 0 && (
             <Panel title={copy.agent.missingHeading}>
+              <p className="mb-2 text-xs text-stone-500">{copy.agent.missingHelp}</p>
               <ul className="list-disc space-y-1 pl-4 text-sm text-stone-600">
-                {onboarding.blocking.map((problem) => (
+                {yours.map((problem) => (
                   <li key={`${problem.section}-${problem.field}-${problem.index}`}>
                     {problem.message}
                   </li>
@@ -1512,6 +1544,38 @@ function ActivationPanel({
         </>
       )}
     </Panel>
+  );
+}
+
+/**
+ * The readiness table, folded away until it is the work.
+ *
+ * Nine rows, always expanded, six of them "Blocked" purely because the case
+ * has not reached them — the same wall that made the agent's own answer to
+ * "what is pending" useless. The count is the part worth seeing at every
+ * stage; the table is one click from it, and open by default once the case is
+ * actually at readiness.
+ */
+function CriteriaPanel({
+  criteria,
+  open,
+}: {
+  criteria: ReadinessCriterion[];
+  open: boolean;
+}) {
+  const passed = criteria.filter((criterion) => criterion.passed).length;
+  return (
+    <details open={open} className="rounded-2xl border border-stone-200 bg-white p-5">
+      <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-stone-900">
+        {copy.agent.criteriaHeading}
+        <span className="ml-auto shrink-0 text-xs font-medium text-stone-500">
+          {copy.agent.criteriaSummary(passed, criteria.length)}
+        </span>
+      </summary>
+      <div className="mt-3">
+        <CriteriaList criteria={criteria} />
+      </div>
+    </details>
   );
 }
 

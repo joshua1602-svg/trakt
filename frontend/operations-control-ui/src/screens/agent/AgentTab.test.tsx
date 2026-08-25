@@ -652,6 +652,37 @@ describe("OCC Agent tab — the client questions", () => {
       .not.toBeInTheDocument();
   });
 
+  /**
+   * The same eleven items used to render twice on one screen — as a checklist
+   * under the client questions, and as sentences under "Missing inputs".
+   */
+  it("does not repeat the client's outstanding items as the operator's", async () => {
+    await createCase();
+    const heading = await screen.findByText(copy.agent.questionsHeading);
+    const questions = heading.closest("section") as HTMLElement;
+    // Scoped to the panel: the agent's own opening turn also names what is
+    // outstanding, and that is the agent speaking rather than a second list.
+    expect(within(questions).getByText(/Legal Entity Identifier/))
+      .toBeInTheDocument();
+    // Everything outstanding on this case is the client's, so the panel that
+    // asks the OPERATOR for things has nothing to say and does not render.
+    expect(screen.queryByText(copy.agent.missingHeading)).not.toBeInTheDocument();
+  });
+
+  /**
+   * Nine criteria, always expanded, most of them "Blocked" only because the
+   * case has not reached them — the wall that made the agent's own answer to
+   * "what is pending" useless. The count stays; the table folds away.
+   */
+  it("folds the readiness table away until the case is at readiness", async () => {
+    await createCase();
+    const summary = await screen.findByText(copy.agent.criteriaHeading);
+    const panel = summary.closest("details") as HTMLDetailsElement;
+    expect(panel).not.toBeNull();
+    expect(panel.open).toBe(false);
+    expect(within(panel).getByText(/of \d+ criteria passed/)).toBeInTheDocument();
+  });
+
   /** The timeline keeps the two things that ARE steps: receive, and chase. */
   it("keeps receiving and chasing on the timeline", async () => {
     const user = await createCase();
