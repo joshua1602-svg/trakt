@@ -140,17 +140,41 @@ def test_stage_temporal_execution_is_fixture_proven_only():
     weeks = sorted(p.name for p in fixture.iterdir() if p.is_dir())
     assert len(weeks) == 5, weeks
 
-    from mi_agent_api import datasets as datasets_mod, pipeline_contract as pc
-    from demo_platform import config as cfg
-
     import os
-    os.environ.setdefault("TRAKT_RUNTIME_MODE", "development")
-    os.environ.update(cfg.mi_env(period_role="current"))
-    production = pc.weekly_extract_inventory(
-        datasets_mod._pipeline_discovery_root(), cfg.CLIENT_ID)
+
+    from demo_platform import config as cfg
+    from mi_agent_api import datasets as datasets_mod, pipeline_contract as pc
+
+    # THE CONFIGURED root, measured from a clean environment.
+    #
+    # Not `os.environ` as it stands: `migration_phase0.route_ownership_evolution`
+    # repoints MI_AGENT_PIPELINE_ROOT at this very fixture, and it used to leave
+    # it repointed. Run after it in one process, the first cut of this test read
+    # the fixture AS production, found five weekly extracts, and reported that
+    # production had acquired data. The instrument now restores what it changes;
+    # this isolates itself as well, because a caveat that depends on test
+    # ordering is not a caveat.
+    saved = {k: os.environ.get(k) for k in
+             ("MI_AGENT_PIPELINE_ROOT", "MI_AGENT_ONBOARDING_OUTPUT_ROOT")}
+    try:
+        for key in saved:
+            os.environ.pop(key, None)
+        os.environ.setdefault("TRAKT_RUNTIME_MODE", "development")
+        os.environ.update(cfg.mi_env(period_role="current"))
+        os.environ.pop("MI_AGENT_PIPELINE_ROOT", None)
+        production = pc.weekly_extract_inventory(
+            datasets_mod._pipeline_discovery_root(), cfg.CLIENT_ID)
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
     assert production.get("uniqueWeeklyExtractsUsed") == 0, (
-        "production now carries weekly extracts — the fixture-only caveat in the "
-        "C6 record is out of date and must be re-measured against real data")
+        "the configured discovery root now carries weekly extracts — the "
+        "fixture-only caveat in the C6 record is out of date and Pipeline Stage "
+        "temporal execution must be re-measured against real data")
 
 
 def test_governed_aliases_normalise_to_the_canonical_token():

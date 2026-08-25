@@ -64,6 +64,18 @@ PROBES: Tuple[Tuple[str, str, Optional[str], str], ...] = (
 )
 
 
+
+#: The retired `chat_routing._FUNNEL_KEYWORDS`, frozen here.
+#:
+#: C6 deleted the map from production. This instrument's job is to DESCRIBE the
+#: pre-C6 architecture, so it needs the historical value — but importing a
+#: symbol the product has removed makes an instrument that cannot even load, and
+#: this one silently became that. Frozen constants are the right shape for
+#: history: the record cannot rot, and it cannot be mistaken for the live rule.
+_RETIRED_FUNNEL_KEYWORDS = {"kfi": "KFI", "application": "APPLICATION",
+                            "offer": "OFFER", "completion": "COMPLETED",
+                            "completed": "COMPLETED"}
+
 def _corpus() -> List[str]:
     out: List[str] = []
     seen = set()
@@ -100,10 +112,9 @@ def _env() -> Tuple[str, Dict[str, Any]]:
 def _shipped_decision(question: str) -> Dict[str, Any]:
     """What the SHIPPED handler decides from the raw question, reproduced from
     its own conditions rather than from a copy of them."""
-    from mi_agent_api.chat_routing import _FUNNEL_KEYWORDS
     from mi_agent_api.workspace import resolve_dataset
     low = question.lower()
-    funnel = next((st for kw, st in _FUNNEL_KEYWORDS.items() if kw in low), None)
+    funnel = next((st for kw, st in _RETIRED_FUNNEL_KEYWORDS.items() if kw in low), None)
     by_stage = any(w in low for w in ("by stage", "stage over time", "stage migration"))
     dataset = resolve_dataset(question)
     if funnel:

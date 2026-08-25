@@ -37,6 +37,14 @@ RETIRED: Tuple[Tuple[str, str], ...] = (
     ("_mask", "mi_agent/population.py"),
 )
 
+#: Modules that must not IMPORT a retired symbol from anywhere. Production is
+#: not enough: C6 retired `_FUNNEL_KEYWORDS` and the estate stayed green
+#: because its last consumer was an ASSURANCE INSTRUMENT, whose ImportError
+#: only surfaced two tests deep. An instrument that cannot import is an
+#: instrument that cannot measure.
+CONSUMER_ROOTS: Tuple[str, ...] = ("migration_phase0", "mi_agent", "mi_agent_api",
+                                   "mi_workflows", "question_interpretation")
+
 
 def _bound_and_read(path: Path) -> Tuple[Set[str], Set[str]]:
     """Every name the module BINDS, and every name it READS. Docstrings and
@@ -105,3 +113,48 @@ def test_no_estate_guard_checks_a_symbol_by_substring():
     assert not offenders, (
         f"substring symbol checks found: {offenders}. Use the AST: a symbol is "
         "retired when nothing binds or reads it, and prose about it is fine.")
+
+
+@pytest.mark.parametrize("symbol,module", RETIRED)
+def test_nothing_anywhere_still_imports_a_retired_symbol(symbol, module):
+    """The consumer sweep, across instruments as well as production.
+
+    `_FUNNEL_KEYWORDS` was deleted and every production module was clean, yet
+    `migration_phase0/route_ownership_evolution.py` still did
+    `from mi_agent_api.chat_routing import _FUNNEL_KEYWORDS`. The full suite
+    caught it only through two unrelated-looking failures in
+    test_assurance_measurement_failure.py.
+    """
+    offenders = []
+    for root in CONSUMER_ROOTS:
+        for path in (_REPO_ROOT / root).rglob("*.py"):
+            if "__pycache__" in str(path):
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom)) and any(
+                        a.name == symbol for a in node.names):
+                    offenders.append(str(path.relative_to(_REPO_ROOT)))
+    assert not offenders, f"{symbol} is still imported by: {sorted(set(offenders))}"
+
+
+def test_an_assurance_instrument_restores_the_environment_it_repoints():
+    """State leaked between measurements is a measurement fault.
+
+    `route_ownership_evolution` repoints MI_AGENT_PIPELINE_ROOT at the five-week
+    fixture. It used to leave it repointed, so a later test read the fixture AS
+    production and reported that production had acquired weekly extracts.
+    """
+    path = _REPO_ROOT / "migration_phase0" / "route_ownership_evolution.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    sets = {n.slice.value for n in ast.walk(tree)
+            if isinstance(n, ast.Subscript) and isinstance(n.ctx, ast.Store)
+            and isinstance(n.value, ast.Attribute) and n.value.attr == "environ"
+            and isinstance(n.slice, ast.Constant)}
+    assert sets, "the instrument no longer repoints anything — update this control"
+    source = path.read_text(encoding="utf-8")
+    assert "_saved_env" in source and "os.environ.pop" in source, (
+        f"{sorted(sets)} are set but never restored")

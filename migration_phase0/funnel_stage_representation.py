@@ -32,6 +32,18 @@ CORPORA = ("question_interpretation/stage1_corpus.json",
            "question_interpretation/stage2_corpus.json")
 
 
+
+#: The retired `chat_routing._FUNNEL_KEYWORDS`, frozen here.
+#:
+#: C6 deleted the map from production. This instrument's job is to DESCRIBE the
+#: pre-C6 architecture, so it needs the historical value — but importing a
+#: symbol the product has removed makes an instrument that cannot even load, and
+#: this one silently became that. Frozen constants are the right shape for
+#: history: the record cannot rot, and it cannot be mistaken for the live rule.
+_RETIRED_FUNNEL_KEYWORDS = {"kfi": "KFI", "application": "APPLICATION",
+                            "offer": "OFFER", "completion": "COMPLETED",
+                            "completed": "COMPLETED"}
+
 def _questions() -> List[str]:
     out, seen = [], set()
     for f in CORPORA:
@@ -60,7 +72,8 @@ def main(argv=None) -> int:
     print("\n1. WHAT SELECTS THE SUB-ROUTES TODAY")
     src = inspect.getsource(CR._route_evolution)
     print("   funnel branch   : raw-question membership test against")
-    print(f"                     _FUNNEL_KEYWORDS = {CR._FUNNEL_KEYWORDS}")
+    print(f"                     _FUNNEL_KEYWORDS (RETIRED BY C6) = "
+          f"{_RETIRED_FUNNEL_KEYWORDS}")
     by_stage = re.findall(r'"((?:by stage|stage over time|stage migration))"', src)
     print(f"   by-stage branch : raw-question substring test against {sorted(set(by_stage))}")
     print("   Both read the RAW QUESTION inside the handler. Neither consults the")
@@ -71,8 +84,8 @@ def main(argv=None) -> int:
     canon = getattr(pipeline_prep, "_STAGE_CANON", {})
     stages = sorted(set(canon.values())) if canon else []
     print(f"   pipeline_prep._STAGE_CANON -> {len(canon)} spellings -> {stages}")
-    routed = sorted(set(CR._FUNNEL_KEYWORDS.values()))
-    print(f"   _FUNNEL_KEYWORDS reaches    -> {routed}")
+    routed = sorted(set(_RETIRED_FUNNEL_KEYWORDS.values()))
+    print(f"   the retired map reached     -> {routed}")
     missing = [s for s in stages if s not in routed]
     print(f"   governed stages the route's vocabulary CANNOT name -> {missing or 'none'}")
 
@@ -109,7 +122,7 @@ def main(argv=None) -> int:
     # ------------------------------------------------------------------ 5
     print("\n5. CORPUS DEMAND FOR THE TWO UNREPRESENTED DEPENDENCIES")
     qs = _questions()
-    fun = [q for q in qs if any(k in q.lower() for k in CR._FUNNEL_KEYWORDS)]
+    fun = [q for q in qs if any(k in q.lower() for k in _RETIRED_FUNNEL_KEYWORDS)]
     bys = [q for q in qs if any(w in q.lower() for w in set(by_stage))]
     print(f"   questions naming a funnel stage word : {len(fun)} of {len(qs)}")
     print(f"   questions naming a by-stage phrase   : {len(bys)} of {len(qs)}")

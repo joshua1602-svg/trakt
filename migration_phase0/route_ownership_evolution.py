@@ -105,6 +105,16 @@ def run() -> List[Dict[str, Any]]:
     out_root = tmp / "onboarding_output"
     for run_id, rdate, n, scale in FUNDED_RUNS:
         _write_run(out_root, run_id, rdate, n, scale)
+    # MUTATED AND RESTORED. This instrument repoints the governed roots at its
+    # own fixture, and it used to leave them repointed: any test that ran after
+    # it in the same process saw the five-week fixture as production, which is
+    # how `test_stage_temporal_execution_is_fixture_proven_only` came to measure
+    # 5 weekly extracts and report that production had acquired data. An
+    # assurance instrument that corrupts the environment it measures is not a
+    # measurement.
+    _saved_env = {k: os.environ.get(k) for k in
+                  ("MI_AGENT_ONBOARDING_OUTPUT_ROOT", "MI_AGENT_PIPELINE_ROOT",
+                   "MI_AGENT_AUTH_ENABLED")}
     os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"] = str(out_root)
     os.environ["MI_AGENT_PIPELINE_ROOT"] = str(FIXTURE)
     os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
@@ -112,7 +122,7 @@ def run() -> List[Dict[str, Any]]:
     from fastapi.testclient import TestClient
     from mi_agent_api.app import app
     from mi_agent_api.workspace import resolve_dataset
-    from mi_agent_api.chat_routing import _FUNNEL_KEYWORDS
+    from question_interpretation.lexical import pipeline_stage_request
 
     from migration_phase0.assurance_semantics import (AssuranceMeasurementError,
                                                       measurement_failed)
@@ -141,14 +151,23 @@ def run() -> List[Dict[str, Any]]:
             "owned": route in EVOLUTION_ROUTES,
             "grade": _grade(r),
             "dataset": resolve_dataset(q),
-            "funnel_word": next((s for k, s in _FUNNEL_KEYWORDS.items() if k in low), None),
-            "by_stage_word": next((w for w in ("by stage", "stage over time",
-                                               "stage migration") if w in low), None),
+            # THE GOVERNED READER, not the retired five-substring map. C6
+            # deleted `chat_routing._FUNNEL_KEYWORDS`; this instrument was its
+            # last consumer, and kept importing it. `pipeline_stage_request` is
+            # the one place a stage is read from a question, and it also answers
+            # the axis question, so the two hard-coded phrase lists go with it.
+            "funnel_word": pipeline_stage_request(q)[0],
+            "by_stage_word": ("by stage" if pipeline_stage_request(q)[1] else None),
             "rows": max([len(a.get("rows") or []) for a in (r.get("artifacts") or [])]
                         or [0]),
         })
     # The denominator, asserted: every corpus question must have produced a
     # reading. Zero owned cases is a legitimate finding; zero READINGS is not.
+    for key, value in _saved_env.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
     if len(rows) != len(questions) or not rows:
         raise AssuranceMeasurementError(
             "ASSURANCE INVALID - measurement failed in route_ownership_evolution: "
