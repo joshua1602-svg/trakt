@@ -291,6 +291,84 @@ def row_predicate_step(interpretation) -> Optional[Step]:
                 because=f"the contract carries resolved row predicates ({described})")
 
 
+def governed_stage(interpretation):
+    """``(stage, names_axis)`` — read from the CONTRACT, never from the question.
+
+    Both halves already sit on the contract, produced by
+    `lexical.pipeline_stage_request`, THE one place a stage is read from a
+    sentence:
+
+      stage       a `FilterClaim` carrying the canonical value (OFFER, not
+                  "offer issued"), sourced to that reader
+      names_axis  a `DimensionClaim` on `pipeline_stage` whose role is GROUPING
+                  — the question named the stage DIMENSION and no single stage
+
+    `_route_evolution` used to hold two more readers of the same fact: a
+    membership test against a five-substring `_FUNNEL_KEYWORDS` map, and a
+    substring test against three hard-coded phrases. Those are the duplicate
+    owners this retires.
+    """
+    from question_interpretation.lexical import PIPELINE_STAGE_FIELD
+    from question_interpretation.schema import FILLED, GROUPING
+
+    stage = next((c.categorical_value for c in
+                  (getattr(interpretation, "filters", None) or [])
+                  if getattr(c, "source", "") == "lexical.pipeline_stage_request"
+                  and getattr(c, "categorical_value", None)), None)
+    # `candidate_concept`, not `concept`. The first cut of this reader used the
+    # wrong attribute name, `getattr` returned None for every claim, and the
+    # axis silently read False — which moved both stage-axis questions off
+    # `evolution_pipeline_stage` onto the plain evolution path. The 882-question
+    # blast caught it; nothing else would have, because both questions refuse in
+    # this environment either way and only the ROUTE and the refusal wording
+    # differed.
+    axis = any(getattr(d, "candidate_concept", None) == PIPELINE_STAGE_FIELD
+               and getattr(d, "role", None) == GROUPING
+               and d.state == FILLED
+               for d in (getattr(interpretation, "dimensions", None) or []))
+    return stage, axis
+
+
+def governed_stage_step(interpretation) -> Optional[Step]:
+    """The stage as a row-predicate population step.
+
+    A DIFFERENT step from `row_predicate_step`, deliberately, and the reason is
+    measured rather than stylistic. `pipeline_stage` never appears in
+    `spec.filters` — 0 of 882 corpus questions — so promoting the governed stage
+    claim into the global `row_predicates` channel would attach
+    `pipeline_stage eq COMPLETED` to questions the claim fires on but that are
+    NOT stage narrowings: 35 of the 39 stage-naming questions route elsewhere,
+    10 of them to `forecast_extrapolation`, where "completion" is a forecast
+    TIME concept ("forecast by completion month", "show projected completions").
+
+    So the stage is consumed where it plays a narrowing role — in the evolution
+    plan — rather than asserted globally. That is a decision about WHERE a
+    governed claim is read, not about what it means; the vocabulary stays whole
+    and stays owned by `pipeline_stage_request`.
+    """
+    stage, _axis = governed_stage(interpretation)
+    if not stage:
+        return None
+    from question_interpretation.lexical import PIPELINE_STAGE_FIELD
+    return Step(SELECT_POPULATION,
+                {"kind": KIND_ROW_PREDICATES,
+                 "predicates": [{"field": PIPELINE_STAGE_FIELD, "op": "eq",
+                                 "value": stage}]},
+                because=f"the contract carries the governed pipeline stage {stage}")
+
+
+def evolution_dataset(interpretation) -> Optional[str]:
+    """Which governed dataset the series is built from, from the ONE owner.
+
+    `workspace.resolve_dataset` decided it once and the projection carried it.
+    `_route_evolution` used to call that resolver a second time on the raw
+    question — agreement by maintenance, on all 32 owned questions, right up
+    until someone changed one of them.
+    """
+    claim = getattr(interpretation, "dataset", None)
+    return getattr(claim, "dataset", None) if claim is not None else None
+
+
 def row_predicates(plan_or_step) -> List[Any]:
     """The governed `Predicate` objects a plan selects rows by.
 

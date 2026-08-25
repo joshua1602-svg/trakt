@@ -873,10 +873,6 @@ def _route_compare(question, spec_dict, *, client_id, run_id, output_root,
 # --------------------------------------------------------------------------- #
 # B. Evolution / trend
 # --------------------------------------------------------------------------- #
-_FUNNEL_KEYWORDS = {"kfi": "KFI", "application": "APPLICATION", "offer": "OFFER",
-                    "completion": "COMPLETED", "completed": "COMPLETED"}
-
-
 def _declare_grain(envelope: Dict[str, Any], grain: str) -> Dict[str, Any]:
     """Record the reporting grain this answer was actually published at.
 
@@ -979,8 +975,20 @@ def _filter_summary(predicates) -> str:
 def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_root,
                      pipeline_root, portfolio_id, as_of, semantics=None,
                      interpretation=None) -> Optional[Dict[str, Any]]:
-    q = question.lower()
-    dataset = _workspace.resolve_dataset(question)
+    # THE DATASET, THE STAGE AND THE STAGE AXIS, ALL FROM THE CONTRACT.
+    #
+    # This route used to re-read the raw question three times for facts the
+    # interpretation layer had already settled: `resolve_dataset(question)` for
+    # the dataset, a five-substring `_FUNNEL_KEYWORDS` map for the stage, and
+    # `"by stage" in q` for the stage axis. Each was a second owner of a
+    # governed decision, and the substring readers were narrower than the
+    # governed vocabulary they shadowed — 21 spellings against 5.
+    dataset = _plan.evolution_dataset(interpretation)
+    if dataset is None:
+        # No contract, no plan. Deferring is the fail-safe: the point-in-time
+        # path validates and refuses, rather than this route guessing a dataset.
+        return None
+    funnel_stage, stage_axis = _plan.governed_stage(interpretation)
     is_count = spec.aggregation == "count"
 
     # THE POPULATION, PLANNED FROM THE CONTRACT. `spec.filters` still answers
@@ -1007,8 +1015,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     if filtered and dataset != "funded":
         return None
 
-    # Funnel stage trend (KFI / Application / Offer / Completion by week).
-    funnel_stage = next((stage for kw, stage in _FUNNEL_KEYWORDS.items() if kw in q), None)
+    # Funnel stage trend, for whatever stage the governed vocabulary resolved.
     if funnel_stage:
         funnel = evolution_mod.pipeline_funnel_evolution(pipeline_root, client_id, run_id)
         pts = funnel.get("series", {}).get(funnel_stage, [])
@@ -1053,7 +1060,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
         return _declare_grain(out, "week")
 
     # Pipeline amount by stage over time (multi-series).
-    if dataset == "pipeline" and ("by stage" in q or "stage over time" in q or "stage migration" in q):
+    if dataset == "pipeline" and stage_axis:
         pipe = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
         by_stage = pipe.get("byStage", [])
         if not by_stage:
