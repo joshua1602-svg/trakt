@@ -211,6 +211,11 @@ class Ingested:
     skipped: List[Dict[str, str]] = field(default_factory=list)
     recorded_text: bool = False
     already: bool = False
+    #: Whether Trakt went on to READ what it registered. False with a reason
+    #: when recognition could not run, because a file Trakt holds but has not
+    #: looked at leaves questions open that looking at it would have answered.
+    recognised: bool = False
+    recognition_note: str = ""
     statement: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -218,6 +223,8 @@ class Ingested:
                 "registered": list(self.registered),
                 "skipped": list(self.skipped),
                 "recorded_text": self.recorded_text,
+                "recognised": self.recognised,
+                "recognition_note": self.recognition_note,
                 "already": self.already, "statement": self.statement}
 
 
@@ -288,6 +295,29 @@ def ingest(service: Any, agent_case: Any, waiting_message: WaitingMessage, *,
     service.audit_mail_ingest(run, actor=actor, message=message,
                               correlation=correlation, result=result)
 
+    # Registering a file is not the same as READING it, and the case needs the
+    # second. Recognition is what tells Client Onboarding the file format, the
+    # expected names and often the asset class — questions the catalogue marks
+    # `inferred` precisely because a client should never be asked them. The
+    # upload route has always called this; taking a file in by mail did not, so
+    # a client who ATTACHED their loan tape left the file-format question open
+    # while the same file dragged onto the screen would have closed it.
+    #
+    # Deliberately after the ingest is durable. Recognition failing must not
+    # cost the reply — the files and the client's words are already recorded,
+    # and a retry would register them twice. So it is reported rather than
+    # raised: "Trakt holds this and has not looked at it" is a state an
+    # operator must be able to see, and silence is how it stayed invisible.
+    if result.registered:
+        try:
+            agent_case = service.classify_artefacts(agent_case, actor=actor)
+            result.recognised = True
+        except Exception as exc:  # noqa: BLE001 — recognition is not the ingest
+            result.recognition_note = str(exc)
+            logger.warning("mail: registered %d file(s) but could not read "
+                           "them (%s)", len(result.registered), exc)
+        result.statement = _statement(message, result)
+
     if mark_read and message.graph_id:
         try:
             cfg = config or load_inbound()
@@ -337,6 +367,11 @@ def _statement(message: InboundMessage, result: Ingested) -> str:
             f"{s['name']} ({s['reason']})" for s in result.skipped) + "."
     if not result.registered and not result.skipped:
         line += " No attachments."
+    if result.registered and not result.recognised:
+        line += (" Trakt has NOT read them yet"
+                 + (f" ({result.recognition_note})" if result.recognition_note
+                    else "")
+                 + ", so anything they would have answered is still open.")
     if result.recorded_text:
         line += (" The client's message was recorded on the case. It has NOT "
                  "been applied to any answer — read it and instruct the agent "

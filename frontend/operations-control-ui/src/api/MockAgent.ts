@@ -1900,6 +1900,8 @@ export class MockAgent {
           registered: [],
           skipped: [],
           recorded_text: false,
+          recognised: false,
+          recognition_note: "",
           already: true,
           statement: "This reply has already been taken in.",
         });
@@ -1929,6 +1931,11 @@ export class MockAgent {
         registered: files.map((f) => f.name),
         skipped: [],
         recorded_text: Boolean(message.body_text),
+        // uploadArtefacts above already registers the sample with Client
+        // Onboarding, which is what "read" means here — the mock reproduces
+        // the server's behaviour rather than a happier version of it.
+        recognised: files.length > 0,
+        recognition_note: "",
         already: false,
         statement:
           `Reply from ${message.sender} received ${message.received_at}. ` +
