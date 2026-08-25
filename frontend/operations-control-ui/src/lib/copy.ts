@@ -534,7 +534,9 @@ export const copy = {
       "hold them.",
     questionsSave: "Save answers",
     questionsDiscard: "Discard changes",
-    questionsSaved: "Saved. The answers are on the case.",
+    questionsSaved:
+      "Saved. The answers are on the case, and any request that asked for them " +
+      "closes once every item in it is answered.",
     questionsHint:
       "Answers are recorded exactly as typed, against the same keys a client's own " +
       "submission would use.",

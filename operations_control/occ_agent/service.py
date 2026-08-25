@@ -916,6 +916,8 @@ class OccAgentService:
             case, sorted(plan.accepted), actor)
         if request_id:
             agent_case = self._close_request(agent_case, request_id, actor)
+        else:
+            agent_case = self._close_answered_requests(agent_case, actor)
         self._audit(agent_case.run, "client_response_submitted",
                     actor_type=ACTOR_HUMAN, actor=actor,
                     classification=EXEC_DETERMINISTIC,
@@ -970,6 +972,50 @@ class OccAgentService:
                                    f"{status}",
                     detail={"status": status, "reason": reason,
                             "response_chars": len(response_text)})
+        return agent_case
+
+    def _close_answered_requests(self, agent_case: AgentCase,
+                                 actor: str) -> AgentCase:
+        """Close every open request whose items are now all answered.
+
+        An information request is what an operator sends when they ask a client
+        for something; ``readiness()`` treats an open one as outstanding, and
+        refuses to submit the onboarding while any remains. So a request that is
+        never closed is a case that can never be approved — which is what
+        happened: the questions panel wrote the answers and left the request
+        that asked for them open, so a case moved from "waiting on the client"
+        to "waiting on nobody" and stopped.
+
+        Closing is derived, not asserted. A request is closed only when EVERY
+        item it covers has left the catalogue's own outstanding list, so a
+        partial response closes nothing and cannot make a case look complete
+        that is not. The close itself goes through the same governed path an
+        operator's own "record the response" takes — sent, responded, reviewed
+        — so the case history reads identically whichever route answered it.
+
+        Deliberately not conditional on WHO answered. A client's emailed reply
+        typed in by an operator, an operator answering from a phone call, and a
+        client's own submission are the same act as far as the request is
+        concerned: the thing that was asked for is now known.
+        """
+        case = agent_case.case
+        outstanding = {(row["section"], row["field"], row["index"])
+                       for row in self.onboarding.catalogue
+                       .outstanding_for_client(case.answers)}
+        for request in list(case.outstanding_requests):
+            items = [(i.get("section"), i.get("field"), i.get("index"))
+                     for i in request.items]
+            if not items or any(key in outstanding for key in items):
+                continue
+            agent_case = self._close_request(
+                agent_case, request.request_id, actor)
+            self._audit(agent_case.run, "client_request_answered",
+                        actor_type=ACTOR_HUMAN, actor=actor,
+                        classification=EXEC_DETERMINISTIC,
+                        input_reference=request.request_id,
+                        decision_basis="every item this request asked for is "
+                                       "now answered on the case",
+                        detail={"items": len(items)})
         return agent_case
 
     def _close_request(self, agent_case: AgentCase, request_id: str,
@@ -2203,20 +2249,44 @@ class OccAgentService:
         onboarding = self.onboarding_readiness(agent_case)
         checklist = [dict(row) for row in
                      (onboarding.get("client_checklist") or [])]
-        # The client checklist and the case's blocking problems overlap almost
+        # An item the client has already been ASKED for is still the client's,
+        # and the checklist alone does not know that: ``client_checklist``
+        # excludes anything sitting in an open information request, so pressing
+        # "ask the client" empties it. Reasoning from the checklist alone
+        # therefore flipped the whole list from "waiting on them" to "needs
+        # you" at the exact moment it became most true that we were waiting on
+        # them — and told an operator that seven things were theirs to supply
+        # while the request asking the client for those same seven was open.
+        #
+        # So what is outstanding ON THE CLIENT is the checklist plus the items
+        # of every open request that have not since been answered.
+        requested = [dict(item) for r in
+                     (onboarding.get("outstanding_requests") or [])
+                     for item in (r.get("items") or [])]
+        still_open = {(row["section"], row["field"], row["index"])
+                      for row in self.onboarding.catalogue
+                      .outstanding_for_client(case.answers)}
+        seen: set = {(row.get("section"), row.get("field"), row.get("index"))
+                     for row in checklist}
+        for item in requested:
+            key = (item.get("section"), item.get("field"), item.get("index"))
+            if key in seen or key not in still_open:
+                continue        # already listed, or answered since it was asked
+            seen.add(key)
+            checklist.append({**item, "asked": True})
+
+        # The client list and the case's blocking problems overlap almost
         # entirely — every unanswered client field is both. Listing both in
         # full is how an answer to "what is pending" became nine lines that say
         # the same seven things twice, burying the two that were different. So
-        # the problems are reported only where they are NOT already on the
-        # checklist, which is precisely the set the operator has to supply
-        # themselves; that residue is the real answer to "why is this stuck".
-        asked = {(row.get("section"), row.get("field"), row.get("index"))
-                 for row in checklist}
+        # the problems are reported only where they are NOT already above,
+        # which is precisely the set the operator has to supply themselves;
+        # that residue is the real answer to "why is this stuck".
         yours = [str(p.get("message") or "")
                  for p in (onboarding.get("blocking") or [])
                  if p.get("message")
                  and (p.get("section"), p.get("field"),
-                      p.get("index")) not in asked]
+                      p.get("index")) not in seen]
         problems = [str(p.get("message") or "")
                     for p in (onboarding.get("blocking") or [])
                     if p.get("message")]
@@ -2230,7 +2300,7 @@ class OccAgentService:
         # them. Before that the questions are outstanding on Trakt, not on
         # them, and telling an operator they are waiting for a client who has
         # never been written to is the kind of false comfort that loses a week.
-        waiting_on = "client" if issued and (checklist or requests) else "you"
+        waiting_on = "client" if issued and checklist else "you"
         actions = [a for a in self.available_actions(agent_case)
                    if a not in _NOT_A_WAY_FORWARD]
         nxt = [n for n in _states.spec(run.state).next_states
@@ -2290,8 +2360,9 @@ class OccAgentService:
             lines.append(
                 f"{len(p['requests'])} information request"
                 f"{'s' if len(p['requests']) != 1 else ''} covering {total} "
-                "item(s) are still open. The onboarding cannot be submitted "
-                "for approval until each one is recorded as answered.")
+                "item(s) are still open, and the onboarding cannot be "
+                "submitted for approval while one is. Each closes itself once "
+                "every item it asked for has been answered.")
 
         lines.append("")
         if p["actions"]:
