@@ -306,9 +306,29 @@ def test_as_dict_round_trips_every_slot():
     #                 `chat_routing._dataset_for` was re-deriving the same
     #                 decision over a wider vocabulary — a duplicate its own
     #                 docstring names "THE SECOND OWNER".
+    #   row_predicates
+    #                 C6 FILTER BINDING, step 1. The RESOLVED row predicates —
+    #                 governed field + operator + value — as
+    #                 `llm_query_parser._filter_field_of` bound them and
+    #                 `population.material_predicates` normalised them.
+    #
+    #                 A THIRD channel, and it had to be. `filters` carries what
+    #                 the question SAID and deliberately carries no field:
+    #                 "identifying that a clause exists is a different job from
+    #                 resolving what it binds". `population` names a population
+    #                 by INTENT ("the back book") and is deliberately kept apart
+    #                 from its resolution. Putting a resolved field on either
+    #                 would collapse a distinction each of them exists to hold,
+    #                 so the decision was NOT to extend FilterClaim.
+    #
+    #                 Added because a compositional plan needs `field + operator
+    #                 + value` and the projection was writing the field into a
+    #                 provenance STRING — source="parser.filters[…]" — where
+    #                 nothing downstream could read it without parsing prose or
+    #                 re-reading the English.
     assert keys == {"question", "operation", "subject", "dimensions", "filters",
-                    "time", "target", "population", "source_scope", "dataset",
-                    "residue", "notes"}
+                    "time", "target", "population", "row_predicates",
+                    "source_scope", "dataset", "residue", "notes"}
 
 
 # --------------------------------------------------------------------------- #

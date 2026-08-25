@@ -218,6 +218,22 @@ change wants its own pre-registration and blast-radius proof.
 
 ---
 
+## 6a. The pre-registration guard fired, and that is the point
+
+`test_schema.test_as_dict_round_trips_every_slot` asserts the contract's key set
+**exactly**, with a comment on each key explaining the decision that admitted it:
+
+> Every addition here is PRE-REGISTERED MOVEMENT, not drift, and this test is
+> the guard that makes the distinction enforceable — a claim added without a
+> decision fails here.
+
+Adding `row_predicates` failed it, as designed. The key is now registered with
+the decision behind it: why the channel is a **third** one, and why extending
+`FilterClaim` was rejected rather than overlooked. That is the only edit made to
+an existing test in this task.
+
+---
+
 ## 7. Tests
 
 `question_interpretation/tests/test_row_predicate_claim.py`, 9 tests, through
