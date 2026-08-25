@@ -179,17 +179,34 @@ export function AgentCaseScreen() {
       case "pack_issue":
         if (key !== packStage) return null;
         return (
+          <PackPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onDraft={() => void act(() => client.draftAgentPack(caseId))}
+            onApprove={() => void act(() => client.approveAgentPack(caseId))}
+            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+          />
+        );
+      case "responses":
+        return (
           <>
-            <PackPanel
-              status={status}
-              busy={busy}
+            {/* The stage reads in the order the work happens: what came back,
+                then what it answers, then what is still outstanding.
+
+                RECEIVE. A reply the client has already sent is the cheapest
+                way to answer the questions below it. */}
+            <ClientMailPanel
               caseId={caseId}
-              onDraft={() => void act(() => client.draftAgentPack(caseId))}
-              onApprove={() => void act(() => client.approveAgentPack(caseId))}
-              onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+              busy={busy}
+              canRegister={available.has("register_synthetic_artefact")}
+              onIngested={() => void view.reload({ quiet: true })}
             />
-            {/* Beside the pack, not inside it: the pack is what goes OUT, and
-                this is the operator's own view of what it asks. */}
+            {/* RECORD. This is where a client's answers are entered, and it
+                sits AFTER the reply rather than beside the pack. Beside the
+                pack it read as part of drafting what goes out, so the pack was
+                issued, the reply was read, and the step that puts the answers
+                on the case was behind a stage the operator had already left. */}
             <div className="mt-4">
               <ClientQuestionsPanel
                 caseId={caseId}
@@ -199,19 +216,7 @@ export function AgentCaseScreen() {
                 onSaved={() => void view.reload({ quiet: true })}
               />
             </div>
-          </>
-        );
-      case "responses":
-        return (
-          <>
-            {/* First, because a reply the client has already sent is the
-                cheapest way to answer the checklist below it. */}
-            <ClientMailPanel
-              caseId={caseId}
-              busy={busy}
-              canRegister={available.has("register_synthetic_artefact")}
-              onIngested={() => void view.reload({ quiet: true })}
-            />
+            {/* WHAT REMAINS, and the way to ask again for it. */}
             <div className="mt-4">
               <ResponsesBlock
                 requests={onboarding.information_requests}

@@ -545,7 +545,7 @@ describe("OCC Agent tab — the client questions", () => {
    * already decided. Every capability existed and was tested; no screen
    * rendered any of them.
    */
-  async function openCase() {
+  async function createCase() {
     const user = userEvent.setup();
     renderApp("/agent");
     const box = await screen.findByLabelText(copy.agent.newCaseHeading);
@@ -556,6 +556,29 @@ describe("OCC Agent tab — the client questions", () => {
     await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
     await screen.findByText(copy.agent.conversationHeading);
     return user;
+  }
+
+  async function openCase() {
+    const user = await createCase();
+    await issuePack(user);
+    return user;
+  }
+
+  /**
+   * Walk the case to the stage where client answers are recorded.
+   *
+   * This is not scaffolding around the panel — it is the workflow the panel
+   * now belongs to. Recording a client's answers comes AFTER the request has
+   * gone out, so a test that reaches the form without issuing the pack would
+   * be asserting an order the screen no longer offers.
+   */
+  async function issuePack(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: copy.agent.packDraft }));
+    await user.click(await screen.findByRole("button", { name: copy.agent.packApprove }));
+    const to = await screen.findByLabelText(copy.agent.packRecipients);
+    await user.type(to, "ops@northstar.example");
+    await user.click(screen.getByRole("button", { name: copy.agent.packSend }));
+    await screen.findByRole("button", { name: copy.agent.questionsShow });
   }
 
   it("lets an operator read every question the client is asked", async () => {
@@ -600,14 +623,31 @@ describe("OCC Agent tab — the client questions", () => {
     expect(submitted).not.toHaveBeenCalled();
   });
 
-  it("says nothing about already-known values when there are none", async () => {
-    const user = await openCase();
-    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
-    await screen.findByLabelText(/Reporting email/);
+  /**
+   * The order of the work, pinned.
+   *
+   * Recording the client's answers used to sit beside the pack, which read as
+   * part of drafting what goes out. So the pack was issued, the reply was
+   * read, and the step that actually puts the answers on the case was behind a
+   * stage the operator had already walked past — the case then would not
+   * submit, with nothing on screen saying why. It belongs where the answers
+   * arrive: issue the request, receive the reply, record what it said.
+   */
+  it("puts recording the answers after issuing the request, not beside the pack", async () => {
+    const user = await createCase();
 
-    // A heading over an empty list is noise. Nothing is known until the pack
-    // has been built from the case.
-    expect(screen.queryByText(copy.agent.questionsKnownHeading)).not.toBeInTheDocument();
+    // Nothing to record against until the client has been asked.
+    expect(screen.queryByRole("button", { name: copy.agent.questionsShow }))
+      .not.toBeInTheDocument();
+
+    await issuePack(user);
+
+    const stage = document.querySelector('[data-stage="responses"]') as HTMLElement;
+    expect(stage).not.toBeNull();
+    expect(within(stage).getByRole("button", { name: copy.agent.questionsShow }))
+      .toBeInTheDocument();
+    // Beside it, in the same stage: what the client actually sent back.
+    expect(within(stage).getByText(copy.agent.mailHeading)).toBeInTheDocument();
   });
 
   it("surfaces a refused answer instead of swallowing it", async () => {
