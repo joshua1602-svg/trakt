@@ -30,6 +30,9 @@ import type {
   PackSection,
   ScenarioSummary,
   SyntheticRunDoc,
+  AgentMail,
+  AgentMailMessage,
+  MailIngestOutcome,
 } from "./agentTypes";
 import type { ChecklistRow, OnboardingCase } from "./onboardingTypes";
 
@@ -1750,6 +1753,191 @@ export class MockAgent {
     stored.doc.blockers = blockers.filter(Boolean);
     this.move(stored, S.BLOCKED);
     this.record(stored, "run_blocked", "a deterministic control blocked the run");
+  }
+
+  // -- the client's reply ---------------------------------------------------- //
+
+  /**
+   * What is "in the mailbox" for this case.
+   *
+   * The mock's own send is record-only, so there is no real conversation to
+   * correlate against. What is reproduced here is the SHAPE the server
+   * returns, including the part a happy-path fixture would leave untested: an
+   * unmatched message. The screen has to render one, and an operator has to
+   * see that Trakt will not guess.
+   */
+  mail(caseRef: string): AgentMail {
+    const stored = this.get(caseRef);
+    if (stored.doc.pack_status !== "SENT") {
+      return {
+        case_ref: caseRef,
+        mail: {
+          messages: [],
+          matched: 0,
+          unmatched: 0,
+          for_this_case: [],
+          note: "Nothing has been issued to this client yet.",
+        },
+      };
+    }
+    const messages = this.mailbox(stored);
+    const mine = messages.filter((m) => m.correlation.matched);
+    return {
+      case_ref: caseRef,
+      mail: {
+        mailbox: "onboarding@traktinfra.io",
+        folder: "inbox",
+        messages,
+        matched: mine.length,
+        unmatched: messages.length - mine.length,
+        for_this_case: mine,
+      },
+    };
+  }
+
+  private mailbox(stored: StoredRun): AgentMailMessage[] {
+    const caseRef = stored.doc.case_ref;
+    const receipt = stored.doc.pack_receipt as { to?: string[] };
+    const to = (receipt.to ?? [])[0] ?? "client@example.com";
+    const taken = new Set(
+      (stored.doc.ingested_mail ?? []).map((m) => String(m)),
+    );
+    return [
+      {
+        graph_id: `mail-${caseRef}-1`,
+        internet_message_id: `<reply-1@${to.split("@")[1] ?? "example.com"}>`,
+        conversation_id: `conv-${caseRef}`,
+        subject: `RE: Onboarding information request (${caseRef})`,
+        sender: to,
+        sender_name: "Client contact",
+        received_at: nowIso(),
+        body_text:
+          "Answers below, and the funded book is attached.\n" +
+          "LEI: 5493001KJTIIGC8Y1R12\n" +
+          "Country of establishment: United Kingdom",
+        has_attachments: true,
+        attachments: [
+          {
+            name: "funded_book.csv",
+            content_type: "text/csv",
+            size: 20480,
+            inline: false,
+            oversize: false,
+            readable: true,
+          },
+        ],
+        correlation: {
+          case_ref: caseRef,
+          tenant: stored.doc.tenant,
+          bases: ["conversation", "in_reply_to", "case_ref", "sender"],
+          candidates: [],
+          matched: true,
+          note: "Matched on conversation, in_reply_to, case_ref, sender.",
+        },
+        already_ingested: taken.has(`mail-${caseRef}-1`),
+      },
+      {
+        graph_id: `mail-${caseRef}-2`,
+        internet_message_id: "<newsletter@example.net>",
+        conversation_id: "conv-unrelated",
+        subject: "Some files for you",
+        sender: to,
+        sender_name: "Client contact",
+        received_at: nowIso(),
+        body_text: "Sending these over as discussed.",
+        has_attachments: false,
+        attachments: [],
+        correlation: {
+          case_ref: "",
+          tenant: "",
+          bases: [],
+          candidates: [caseRef],
+          matched: false,
+          note:
+            "The sender is a contact on this case, but nothing else in the message " +
+            "ties it there. An address alone is not enough to record a client's " +
+            "answer against a case.",
+        },
+        already_ingested: false,
+      },
+    ];
+  }
+
+  /**
+   * Take named replies in. Files are registered through the same path an
+   * upload uses; the client's words become a `client` turn and change no
+   * answer — the property the server holds, reproduced here so a test driving
+   * the mock cannot pass while the real one would refuse.
+   */
+  ingestMail(
+    caseRef: string,
+    messageIds: string[],
+  ): AgentStatus & { ingested: MailIngestOutcome[] } {
+    const stored = this.get(caseRef);
+    const known = new Map(this.mailbox(stored).map((m) => [m.graph_id, m]));
+    const ingested: MailIngestOutcome[] = [];
+
+    for (const id of messageIds) {
+      const message = known.get(id);
+      if (!message) {
+        throw new OpsError(
+          `Message ${id} is no longer in the mailbox folder this deployment reads.`,
+          "OCC_AGENT_MAIL_NOT_FOUND",
+        );
+      }
+      if (!message.correlation.matched) {
+        throw new OpsError(
+          "This message could not be tied to this case by anything the mail system " +
+            "carries, so it was not ingested. " + message.correlation.note,
+          "OCC_AGENT_MAIL_UNMATCHED",
+        );
+      }
+      const already = (stored.doc.ingested_mail ?? []).includes(id);
+      if (already) {
+        ingested.push({
+          case_ref: caseRef,
+          graph_id: id,
+          registered: [],
+          skipped: [],
+          recorded_text: false,
+          already: true,
+          statement: "This reply has already been taken in.",
+        });
+        continue;
+      }
+      const files = message.attachments.filter((a) => !a.inline && a.readable);
+      if (files.length > 0) this.uploadArtefacts(caseRef, files.map((f) => f.name));
+      if (message.body_text) {
+        stored.doc.messages.push({
+          role: "client",
+          text: message.body_text,
+          at: message.received_at,
+          refs: [],
+          author: message.sender_name || message.sender,
+        });
+      }
+      stored.doc.ingested_mail = [...(stored.doc.ingested_mail ?? []), id];
+      this.record(
+        stored,
+        "client_reply_ingested",
+        "a reply in the OCC mailbox, matched to this case on " +
+          message.correlation.bases.join(", "),
+      );
+      ingested.push({
+        case_ref: caseRef,
+        graph_id: id,
+        registered: files.map((f) => f.name),
+        skipped: [],
+        recorded_text: Boolean(message.body_text),
+        already: false,
+        statement:
+          `Reply from ${message.sender} received ${message.received_at}. ` +
+          (files.length > 0 ? `Registered: ${files.map((f) => f.name).join(", ")}. ` : "") +
+          "The client's message was recorded on the case. It has NOT been applied to " +
+          "any answer — read it and instruct the agent if it should change the case.",
+      });
+    }
+    return { ...this.status(caseRef), ingested };
   }
 
   private record(stored: StoredRun, action: string, basis: string): void {

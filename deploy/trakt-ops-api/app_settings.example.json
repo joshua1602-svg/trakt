@@ -39,8 +39,20 @@
   { "_comment": "Store as a Key Vault REFERENCE, never a literal, and never in source control: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/trakt-mail-client-secret/). Rotate on the app registration and update the secret; no redeploy is needed.",
     "name": "TRAKT_MAIL_CLIENT_SECRET", "value": "<key-vault-reference>" },
 
-  { "_comment": "The mailbox every OCC communication is sent FROM. Must be the mailbox the Application Access Policy scopes the app to.",
-    "name": "TRAKT_MAIL_MAILBOX", "value": "admin@traktinfra.io" },
+  { "_comment": "The mailbox every OCC communication is sent FROM and read BACK IN. Must be the mailbox the Application Access Policy scopes the app to. Use a DEDICATED mailbox: the policy scopes the application to a whole mailbox and cannot scope it to a folder, so pointing this at a mailbox that also receives unrelated business email gives the application read access to all of it.",
+    "name": "TRAKT_MAIL_MAILBOX", "value": "onboarding@traktinfra.io" },
+
+  { "_comment": "Inbound client replies (trakt_mail.inbound / trakt_mail.ingest). A SEPARATE switch from the outbound one, because sending a pack and reading a mailbox are different capabilities: a deployment may hold either without the other. OFF unless this is an explicit opt-in token. With it on, an operator can see what has arrived and take a reply into a case; nothing polls and nothing is ingested unattended. A client's FILES are registered through the same governed method an operator's upload uses; a client's WORDS are recorded for the operator to read and are never applied to a case on their own.",
+    "name": "TRAKT_MAIL_INBOUND_ENABLED", "value": "true" },
+
+  { "_comment": "OPTIONAL. The folder replies are read from; defaults to the inbox. Naming a dedicated folder (fed by an Outlook rule) is how a deployment that MUST share a mailbox narrows what the reader looks at. Understand what that is and is not: the Application Access Policy still grants the application the whole mailbox, so this is a process control, not a technical one.",
+    "name": "TRAKT_MAIL_INBOUND_FOLDER", "value": "inbox" },
+
+  { "_comment": "OPTIONAL, and advised for the first controlled onboarding. Comma-separated addresses or @domain suffixes whose mail may be ingested; EMPTY MEANS NO RESTRICTION. A message is dropped before its attachments are downloaded, so this genuinely limits what the deployment reads rather than what it acts on.",
+    "name": "TRAKT_MAIL_SENDER_ALLOWLIST", "value": "" },
+
+  { "_comment": "OPTIONAL inbound mechanics; the defaults are the supported configuration. INBOUND_MAX bounds how many messages one read examines, because the read happens inside an API request. MAX_ATTACHMENT_BYTES bounds a single download; an attachment over it is REPORTED to the operator with its size, never silently skipped.",
+    "_defaults": { "TRAKT_MAIL_INBOUND_MAX": "25", "TRAKT_MAIL_INBOUND_MAX_ATTACHMENT_BYTES": "26214400" } },
 
   { "_comment": "OPTIONAL, and strongly advised for the first controlled onboarding. Comma-separated addresses or @domain suffixes this deployment may send to; EMPTY MEANS NO RESTRICTION. Set it to your own address while the capability is being proven, so a stale or mistyped contact on a case cannot reach a real client. Remove it once the first real client is onboarded.",
     "name": "TRAKT_MAIL_RECIPIENT_ALLOWLIST", "value": "" },

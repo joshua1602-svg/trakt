@@ -7,12 +7,18 @@ calls, and this way ``transport`` stays injectable so every path — success,
 throttling, a revoked secret, a mailbox the application may not touch — is
 testable without a network.
 
-The two calls:
+The two calls that send:
 
   1. a client-credentials token from
      ``https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token``, scoped
      to ``https://graph.microsoft.com/.default``;
   2. ``POST /users/{mailbox}/sendMail``.
+
+Reading uses the same token, the same transport and the same host pin — the
+authentication path is not duplicated or varied for it. What reading adds is
+three more ``GET``\ s and one ``PATCH``: list a folder's messages, read one
+message's attachments, and mark a message read so the same reply is not
+ingested twice. Nothing here deletes or moves mail.
 
 Why a third call exists
 -----------------------
@@ -62,6 +68,20 @@ RECEIPT_HEADER = "x-trakt-receipt-id"
 #: message just sent is the newest, so a small window is sufficient and keeps
 #: the response small.
 CONFIRM_WINDOW = 15
+
+#: The fields one listed message carries. ``uniqueBody`` is the reason this is
+#: an explicit list rather than a default projection: it is Graph's rendering
+#: of the message WITHOUT the quoted history, which is exactly the difference
+#: between reading a client's answer and re-reading Trakt's own question back.
+MESSAGE_FIELDS = (
+    "id,internetMessageId,conversationId,conversationIndex,subject,"
+    "receivedDateTime,from,sender,toRecipients,hasAttachments,isRead,"
+    "bodyPreview,body,uniqueBody,internetMessageHeaders"
+)
+
+#: Largest attachment this client will pull down in one read. The caller passes
+#: its own configured bound; this is the backstop for a caller that does not.
+MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
 Transport = Callable[[urllib.request.Request, float], "tuple[int, bytes]"]
 
@@ -354,6 +374,84 @@ class GraphMailClient:
                 if detail and _carries_receipt(detail, receipt_id):
                     return {**item, **detail}
         return None
+
+    # -- read -------------------------------------------------------------- #
+    def list_messages(self, *, folder: str = "inbox", top: int = 25,
+                      unread_only: bool = True) -> List[Dict[str, Any]]:
+        """Messages in one folder of the configured mailbox, newest first.
+
+        ``unread_only`` is the default because read state is how this
+        integration remembers what it has already looked at. It is a weak
+        memory — a human opening the mailbox in Outlook marks things read too —
+        so it is a filter, never the thing that decides whether a message is
+        ingested; :mod:`trakt_mail.ingest` re-checks against the case record.
+        """
+        query: Dict[str, str] = {
+            "$top": str(max(1, min(int(top or 1), 100))),
+            "$orderby": "receivedDateTime desc",
+            "$select": MESSAGE_FIELDS,
+        }
+        if unread_only:
+            query["$filter"] = "isRead eq false"
+        url = (f"{self._mailbox_path('mailFolders', folder, 'messages')}"
+               f"?{urllib.parse.urlencode(query)}")
+        _status, payload = self._call("GET", url)
+        return [item for item in (payload.get("value") or [])
+                if isinstance(item, dict)]
+
+    def message_attachments(self, message_id: str, *,
+                            max_bytes: int = MAX_ATTACHMENT_BYTES
+                            ) -> List[Dict[str, Any]]:
+        """One message's file attachments, with their bytes.
+
+        Only ``fileAttachment`` is returned. An ``itemAttachment`` (a forwarded
+        message) and a ``referenceAttachment`` (a OneDrive link) carry no bytes
+        on this endpoint, and treating either as a client's data file would put
+        something in the sandbox that is not what it claims to be.
+
+        An attachment over ``max_bytes`` is reported with ``oversize`` set and
+        NO content, rather than skipped silently: an operator needs to know a
+        client sent something too big, which is a different problem from a
+        client sending nothing.
+        """
+        if not message_id:
+            return []
+        url = self._mailbox_path("messages", message_id, "attachments")
+        _status, payload = self._call("GET", url)
+        out: List[Dict[str, Any]] = []
+        for item in payload.get("value") or []:
+            if not isinstance(item, dict):
+                continue
+            kind = str(item.get("@odata.type") or "")
+            if not kind.endswith("fileAttachment"):
+                logger.info("mail: ignoring %s on message", kind or "attachment")
+                continue
+            size = int(item.get("size") or 0)
+            record = {"name": str(item.get("name") or ""),
+                      "content_type": str(item.get("contentType") or ""),
+                      "size": size,
+                      "inline": bool(item.get("isInline")),
+                      "oversize": size > max_bytes,
+                      "content": "" if size > max_bytes
+                                 else str(item.get("contentBytes") or "")}
+            out.append(record)
+        return out
+
+    def mark_read(self, message_id: str) -> bool:
+        """Mark one message read. Best effort; never fatal.
+
+        The alternative — moving or deleting the message — would take mail out
+        of a mailbox a person also uses, so this integration does neither.
+        """
+        if not message_id:
+            return False
+        try:
+            self._call("PATCH", self._mailbox_path("messages", message_id),
+                       body={"isRead": True})
+        except GraphMailError as exc:
+            logger.info("mail: could not mark a message read (%s)", exc)
+            return False
+        return True
 
     def _read_message(self, message_id: str) -> Optional[Dict[str, Any]]:
         if not message_id:

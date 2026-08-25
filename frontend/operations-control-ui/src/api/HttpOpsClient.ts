@@ -8,6 +8,7 @@ import type {
   AgentClientForm,
   AgentChecklist,
   AgentMeta,
+  AgentMail,
   AgentPack,
   AgentPreview,
   AgentReadinessPackage,
@@ -15,6 +16,7 @@ import type {
   AgentStatus,
   AgentTurn,
   CaseSummary,
+  MailIngestOutcome,
 } from "./agentTypes";
 
 import type {
@@ -742,6 +744,27 @@ export class HttpOpsClient implements OpsClient {
     return this.post<AgentStatus>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/form`,
       { answers, request_id: options.request_id ?? "", strict: options.strict ?? true },
+    );
+  }
+
+  async getAgentMail(caseRef: string): Promise<AgentMail> {
+    return this.request<{ ok: true } & AgentMail>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mail`,
+    );
+  }
+
+  /**
+   * The message ids are sent explicitly. There is deliberately no "take in
+   * everything waiting": an operator chooses which replies belong to the case
+   * they are looking at, and the server refuses any it cannot tie there.
+   */
+  async ingestAgentMail(
+    caseRef: string,
+    messageIds: string[],
+  ): Promise<AgentStatus & { ingested: MailIngestOutcome[] }> {
+    return this.post<AgentStatus & { ingested: MailIngestOutcome[] }>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mail/ingest`,
+      { message_ids: messageIds },
     );
   }
 

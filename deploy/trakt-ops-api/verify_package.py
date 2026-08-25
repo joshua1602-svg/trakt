@@ -57,7 +57,8 @@ REQUIRED_SCRIPTS = (
 #: Agent mounts, and its absence is deliberately non-fatal there (a pack is
 #: recorded rather than sent) — which is exactly why it has to be asserted here
 #: instead. A silently mail-less deployment is the failure this catches.
-REQUIRED_LAZY_MODULES = ("trakt_mail.adapter", "trakt_mail.presentation")
+REQUIRED_LAZY_MODULES = ("trakt_mail.adapter", "trakt_mail.presentation",
+                         "trakt_mail.inbound", "trakt_mail.ingest")
 
 EXPECTED_TITLE = "Trakt Operations Control API"
 

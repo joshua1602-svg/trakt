@@ -415,3 +415,19 @@ def test_a_single_registration_needs_no_qualifier(service, opened):
         if line.startswith("- **Client name**") or \
                 line.startswith("- **Jurisdiction**"):
             assert " — " not in line, line
+
+
+def test_a_client_reads_product_names_not_product_codes(service):
+    """The confirmation list asks the client to check what Trakt holds.
+
+    ``reporting_products`` declares no ``options`` — its vocabulary is the
+    catalogue's regime products — so the list showed "Reporting products — mi"
+    and asked a client to confirm a code they have never seen.
+    """
+    case = service.create_case(
+        tenant=TENANT_A, initiating_user=ACTOR,
+        instruction="Onboard Northstar Lending. UK equity release. Monthly "
+                    "portfolio MI. Portfolio id direct_101.")
+    document = service.build_pack(case).document()
+    assert "Management Information" in document
+    assert "— mi" not in document
