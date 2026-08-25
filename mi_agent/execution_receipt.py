@@ -3132,6 +3132,58 @@ def answer_axis_keys(envelope: Optional[Dict[str, Any]]) -> Set[str]:
     return out
 
 
+def threshold_execution_proven(envelope: Optional[Dict[str, Any]],
+                               semantics: Optional[dict],
+                               threshold_count: int) -> bool:
+    """Does execution evidence prove the requested threshold(s) actually ran?
+
+    The threshold facet is detected from the QUESTION and carries no field,
+    operator or value structurally — `field_key` is None for every comparator
+    form. `metadata.populationApplied` carries the field and neither the
+    operator nor the value. So the two cannot be matched against each other, and
+    a rule that tried would be parsing `label` — the receipt reading the
+    question back to itself, which is what `_ROUTE_GRANULARITY` and the P1K
+    silent errors exist to warn against.
+
+    The proof comes from an invariant of the executor instead.
+    `mi_query_executor._apply_filters` applies EVERY entry in `spec.filters` or
+    raises `_require_column`, and appends each field it actually narrowed on to
+    the ledger after the column is confirmed. So when every governed material
+    predicate the spec carries appears in `applied`, and none is `unavailable`,
+    every narrowing the question expressed did run — including the one this
+    threshold facet is the lexical twin of.
+
+    Deliberately fail-closed at every gap: no ledger, no predicates, a predicate
+    the ledger does not name, anything unavailable, or fewer predicates than
+    thresholds (one bound resolved and another did not) all return False and
+    leave the facet LOST. Spec presence alone is never evidence — the spec says
+    what was asked, the ledger says what ran, and only the second certifies.
+    """
+    if not isinstance(envelope, dict) or threshold_count <= 0:
+        return False
+    ledger = (envelope.get("metadata") or {}).get("populationApplied")
+    if not isinstance(ledger, Mapping):
+        return False
+    if ledger.get("unavailable"):
+        return False
+    applied = {str(a).split(" ")[0] for a in (ledger.get("applied") or [])}
+    if not applied:
+        return False
+
+    from .population import material_predicates
+
+    filters = ((envelope.get("spec") or {}).get("filters")) or {}
+    predicates = list(material_predicates(filters, semantics))
+    if not predicates:
+        return False
+    # Every predicate proven, and at least as many predicates as thresholds: a
+    # question naming two bounds where only one resolved must not have the
+    # unresolved one certified by the resolved one's evidence.
+    if len(predicates) < threshold_count:
+        return False
+    return all(p.field in applied for p in predicates)
+
+
 def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional[str],
                             semantics: dict,
                             available_columns: Optional[Iterable[str]] = None,
@@ -3145,6 +3197,9 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
     to. A claim that does not match the question is not accepted.
     """
     columns = set(available_columns or ())
+    # Counted before the loop: a threshold is proven only when the spec carries
+    # at least as many governed predicates as the question named bounds.
+    _threshold_count = sum(1 for f in facets if f.kind == KIND_THRESHOLD)
     ranked = ranking_evidence(envelope)
     compared = comparison_evidence(envelope)
     analytical = analytical_evidence(envelope)
@@ -3247,9 +3302,17 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.reason = "the geographic scope was not applied to the calculation"
 
         elif facet.kind == KIND_THRESHOLD:
-            facet.status = LOST
-            facet.reason = ("this governed capability does not apply a value "
-                            "threshold, so the figure is not restricted to it")
+            # Was unconditionally LOST, consulting nothing — on the same path
+            # where a sibling KIND_POPULATION facet for the SAME predicate is
+            # stamped APPLIED from `populationApplied`. Funded evolution narrows
+            # correctly per period, publishes the narrowing, and the answer
+            # refused anyway.
+            if threshold_execution_proven(envelope, semantics, _threshold_count):
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = LOST
+                facet.reason = ("this governed capability does not apply a value "
+                                "threshold, so the figure is not restricted to it")
 
         elif facet.kind == KIND_STRESS:
             if route in SCENARIO_ROUTES:
