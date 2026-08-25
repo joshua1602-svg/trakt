@@ -66,11 +66,13 @@ Classes 2, 4 and 5 were **not** visible in the 119-question census. Class 2 and
 class 4 are the same silent-widening / silent-emptying shape as the two the
 census did find, and they would have shipped inside C6 unnoticed.
 
-Class 5 is the awkward one: shipped's meaning depends on the **spec value
+Class 5 was the awkward one: shipped's meaning depends on the **spec value
 shape**, which `material_predicates` erases. So shipped `_apply_filters` is not
 a well-defined function of the Predicate at all — one Predicate, two shipped
-answers. §6 records how that is resolved and proves the corpus never exercises
-it.
+answers, and the invariant in §1 was literally unstatable.
+
+**Product semantics have since been ruled** (§6a), which settles it: the shape
+carries no intended business meaning and is normalised away.
 
 ---
 
@@ -124,11 +126,11 @@ Only **four** call sites execute predicates. Every one of them already stops on
    frame.
 3. `eq`/`ne` dispatch becomes a function of the **value type** (string →
    categorical + domain; numeric/date → `_apply_numeric_op`) rather than of the
-   spec value shape. This is the only way one Predicate can have one meaning.
+   spec value shape — see §6a, where the product semantics are ruled.
    Pre-registered movement: a dict-shaped `eq` with a string value stops raising
    and starts matching. **Corpus exercise of that shape: 0 of 121 predicates**
    (76 `dict gt`, 7 `dict between`, 6 `dict ge`, 4 `dict lt`, 4 `dict le`, 24
-   bare `str`), so this is unexercised by any shipped question.
+   bare `str`), so no shipped question exercises it today.
 
 **Not authorised**
 
@@ -152,3 +154,41 @@ changed dataset or population interpretation · C6 conversion or plan wiring.
   parity cannot be had without redesigning a shared consumer.
 - **STOP — PREDICATE PARITY BLAST** — unrelated shipped behaviour moves.
 - **STOP — PREDICATE SEMANTIC OWNER AMBIGUOUS** — no safe single owner exists.
+
+---
+
+## 6a. The Class 5 ruling, and its three boundaries
+
+> Bare categorical borrower-type values and explicit equality predicates are
+> semantically identical. `Joint` and `Single` in governed borrower context
+> canonicalise to `borrower_type eq <value>`. The current input-shape
+> distinction is not to be preserved in `Predicate`; it has no intended business
+> meaning.
+
+This is a **product decision**, not a compatibility workaround, and it is what
+makes the §1 invariant statable at all: a Predicate can now have one meaning
+because the two shapes were never two meanings.
+
+The ruling came with three boundaries, and the implementation observes all
+three:
+
+1. **No shape or provenance state on `Predicate`.** It stays `field`, `op`,
+   `value`. The two shapes produce an *equal* object, not merely an equivalent
+   one — asserted by
+   `test_the_predicate_carries_no_shape_or_provenance_state`.
+
+2. **No joint/single recognition in the predicate executor.** The dispatch tests
+   the OPERAND'S TYPE — `isinstance(value, str)` — and knows nothing about
+   borrower types, or about any other product vocabulary.
+   `test_the_executor_recognises_no_borrower_type_vocabulary` proves it by
+   running the same predicate against a field named `anything_at_all` and
+   getting the identical categorical execution.
+
+3. **Field binding stays upstream.** Which field a phrase binds to is settled
+   once by `llm_query_parser._filter_field_of`, before any executor sees it.
+   `governed_predicate_mask` takes a `field_key` it never derives.
+
+The normalisation therefore lives in exactly one place —
+`population.predicate_of`, the one function that turns a spec filter entry into
+a governed `Predicate` — and both executors read the result.
+
