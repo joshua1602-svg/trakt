@@ -1102,13 +1102,24 @@ export class MockOnboarding {
   private validate(stored: StoredCase): CaseProblem[] {
     const out: CaseProblem[] = [];
     const chosen = new Set(this.products(stored));
+    // Whose problem this is. The real validator stamps every problem with
+    // `owner = "client" if f.asked_of_client else "operator"`, and
+    // `asked_of_client` is exactly `source === "client_supplied"`. This mock
+    // used to hardcode "operator" on all of them, which is not a harmless
+    // simplification: the case screen uses `owner` to separate what the client
+    // owes from what the operator owes, so a mock that calls everything the
+    // operator's would validate that screen against a contract the server does
+    // not honour.
     const push = (
       section: string,
       field: string,
       message: string,
       severity: "blocking" | "advisory" = "blocking",
       index: number | null = null,
-    ) => out.push({ section, field, message, severity, index, owner: "operator" });
+      owner: "client" | "operator" = "operator",
+    ) => out.push({ section, field, message, severity, index, owner });
+    const whose = (field: { source: string }): "client" | "operator" =>
+      field.source === "client_supplied" ? "client" : "operator";
 
     for (const section of CATALOGUE.sections) {
       if (section.repeatable) {
@@ -1125,11 +1136,12 @@ export class MockOnboarding {
             const where = name ? ` for ${name}` : "";
             if (!present(value)) {
               if (isRequired(field, stored.answers, item))
-                push(section.key, field.key, `${field.label}${where} is needed.`, "blocking", index);
+                push(section.key, field.key, `${field.label}${where} is needed.`,
+                     "blocking", index, whose(field));
               continue;
             }
             const problem = validateValue(field, value);
-            if (problem) push(section.key, field.key, problem, "blocking", index);
+            if (problem) push(section.key, field.key, problem, "blocking", index, whose(field));
           }
         });
         continue;
@@ -1145,11 +1157,11 @@ export class MockOnboarding {
         const key = section.from_regime ? `${field.product}.${field.key}` : field.key;
         if (!present(value)) {
           if (isRequired(field, stored.answers, block))
-            push(section.key, key, `${field.label} is needed.`);
+            push(section.key, key, `${field.label} is needed.`, "blocking", null, whose(field));
           continue;
         }
         const problem = validateValue(field, value);
-        if (problem) push(section.key, key, problem);
+        if (problem) push(section.key, key, problem, "blocking", null, whose(field));
       }
     }
 
