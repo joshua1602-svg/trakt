@@ -111,7 +111,11 @@ An equivalence measured over refusals alone is rejected.
 
 ## 6. Allowed movements
 
-### AUTHORISED H4 — GOVERNED STAGE VOCABULARY ACTIVATION
+### AUTHORISED H4 — LEGACY WRONG-DELIVERY CORRECTION
+
+*(Originally pre-registered as "governed stage vocabulary activation". Renamed
+after measurement: the movements are not refusals becoming answers. See the
+correction at the end of this section.)*
 
 Ruled: `pipeline_stage_request` is the intended product vocabulary;
 `_FUNNEL_KEYWORDS` is a legacy implementation limitation, not a compatibility
@@ -178,3 +182,51 @@ and classified as AUTHORISED H4, never described as equivalence-preserved.
 - **STOP — C6 SHAPE CASCADE** conversion requires route-shape branching (H9).
 - **STOP — C6 CAPABILITY EXPANSION** any refusal→delivery outside the governed
   stage activation (H4).
+
+
+---
+
+## 9. Correction, recorded after measurement
+
+The activation set was pre-registered as **empty**, on the strength of an
+882-question corpus measurement in which the governed vocabulary and
+`_FUNNEL_KEYWORDS` agreed on all 24 questions naming a stage. That measurement
+was correct and the **denominator was wrong**: no corpus question uses any of
+the 16 spellings the governed map adds.
+
+The fixture exercises them, and what it showed is worse than a narrower
+vocabulary. A stage spelling the retired map failed to recognise did **not**
+refuse — it fell through to the funded series:
+
+```
+Show the illustration trend   ->  £1.96bn of WHOLE-BOOK FUNDED BALANCE
+Show the quote trend          ->  £1.96bn
+Show the drawdown trend       ->  £1.96bn
+Show the withdrawn trend      ->  £1.96bn
+Show the cancelled trend      ->  £1.96bn
+```
+
+Five questions named a governed stage and received a different question's
+answer, disclosed nowhere. After conversion: `illustration`, `quote` and
+`drawdown` return the correct governed stage series; `withdrawn` and `cancelled`
+return an honest *"No weekly Withdrawn extracts are available yet."*
+
+These are therefore classified **AUTHORISED H4 — LEGACY WRONG-DELIVERY
+CORRECTION**, not REFUSED → DELIVERED, and **equivalence is not claimed for
+them**. They are a pre-existing defect the conversion removes.
+
+The mistake also broke the classifier that was supposed to catch them: it
+defined an activation as "refused before, delivered after", which would have
+labelled all five regressions, because the before-state was a wrong delivery.
+
+### The retired defect assertion
+
+`tests/test_pipeline_stage_contract.py` carried
+`test_the_stage_the_shipped_route_cannot_name`, asserting that WITHDRAWN was
+unreachable from any question. That was a pinned record of this defect. Ruled:
+an estate must not assert behaviour the product has fixed. It is replaced by
+`test_the_governed_vocabulary_reaches_every_canonical_stage`, whose non-vacuity
+is derived from the governed map rather than hand-listed, plus
+`test_stage_temporal_execution_is_fixture_proven_only`, which fails if the
+fixture disappears **or** if production acquires weekly extracts and this
+caveat is left standing. The historical fact lives here and in git history.

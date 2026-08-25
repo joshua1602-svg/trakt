@@ -80,18 +80,77 @@ def test_every_canonical_stage_is_representable(stage, question):
     assert L.pipeline_stage_request(question)[0] == stage
 
 
-def test_the_stage_the_shipped_route_cannot_name():
-    """`_FUNNEL_KEYWORDS` reaches four of the five governed stages. WITHDRAWN was
-    unreachable from any question, which is why the gap could not be closed by
-    adding another keyword — the vocabulary had to come from the governed map."""
-    from mi_agent_api.chat_routing import _FUNNEL_KEYWORDS
-    reachable = set(_FUNNEL_KEYWORDS.values())
-    assert "WITHDRAWN" not in reachable
-    assert set(CANONICAL) - reachable == {"WITHDRAWN"}
-    for q in ("Show withdrawn cases over time.",
-              "How many pipeline cases were withdrawn?",
-              "Show declined cases by week."):
-        assert L.pipeline_stage_request(q)[0] == "WITHDRAWN", q
+def test_the_governed_vocabulary_reaches_every_canonical_stage():
+    """THE CURRENT PRODUCT INVARIANT: a question can name any of the five.
+
+    This test used to assert the opposite — that the shipped route could reach
+    only four, WITHDRAWN being unnameable from any question. That was a pinned
+    record of a legacy defect in `chat_routing._FUNNEL_KEYWORDS`, a five-substring
+    map that C6 retired. An estate must not go on asserting behaviour the product
+    has fixed, so the requirement is inverted here and the historical fact is kept
+    where history belongs: `docs/mi_conversion6_stop_conditions.md`, the C6 report,
+    and the commit that removed the map.
+
+    The defect was worse than a missing spelling. A stage the map did not
+    recognise did not refuse — it fell through to the funded series, so
+    *"Show the illustration trend"* answered with GBP1.96bn of whole-book funded
+    balance. Correcting that is why the five affected questions are classified
+    AUTHORISED H4 — LEGACY WRONG-DELIVERY CORRECTION rather than as equivalence.
+
+    NON-VACUITY is derived, not hand-asserted: the spellings the retired map
+    could not match are computed from the governed vocabulary and must be
+    non-empty and must include WITHDRAWN, the stage it could not reach at all.
+    """
+    for stage in CANONICAL:
+        spellings = [k for k, v in L.pipeline_stage_vocabulary().items() if v == stage]
+        assert spellings, stage
+        for spelling in spellings:
+            assert L.pipeline_stage_request(f"Show {spelling} cases.")[0] == stage, spelling
+
+    # What the five-substring map could NOT have matched. Computed from the
+    # governed map so this stays true as the product adds spellings.
+    retired = ("kfi", "application", "offer", "completion", "completed")
+    missed = {k: v for k, v in L.pipeline_stage_vocabulary().items()
+              if not any(sub in k.lower() for sub in retired)}
+    assert missed, "the governed vocabulary adds nothing the retired map lacked"
+    assert "WITHDRAWN" in set(missed.values()), (
+        "WITHDRAWN was the stage the retired map could not reach at all; if no "
+        "WITHDRAWN spelling is beyond it, this test has stopped proving anything")
+    for spelling, stage in missed.items():
+        assert L.pipeline_stage_request(f"Show {spelling} cases.")[0] == stage, spelling
+
+
+def test_stage_temporal_execution_is_fixture_proven_only():
+    """AND THE LIMIT OF THAT EVIDENCE, stated where it cannot be overlooked.
+
+    The stage vocabulary resolving is one thing; a stage SERIES executing across
+    real weekly history is another. The latter is proved only against
+    `tests/fixtures/pipeline_history_5w`, because the configured production
+    discovery root currently contains ZERO weekly extracts — every pipeline,
+    stage and funnel question there answers "No weekly pipeline extracts are
+    available", with ok=True.
+
+    So Pipeline Stage temporal execution is FIXTURE-PROVEN,
+    PRODUCTION-DATA-UNEXERCISED. This test fails if that stops being true in
+    either direction: if the fixture disappears, or if production acquires
+    extracts and this caveat is silently left standing.
+    """
+    fixture = _ROOT / "tests" / "fixtures" / "pipeline_history_5w"
+    assert fixture.is_dir(), "the five-week fixture is the only stage-history evidence"
+    weeks = sorted(p.name for p in fixture.iterdir() if p.is_dir())
+    assert len(weeks) == 5, weeks
+
+    from mi_agent_api import datasets as datasets_mod, pipeline_contract as pc
+    from demo_platform import config as cfg
+
+    import os
+    os.environ.setdefault("TRAKT_RUNTIME_MODE", "development")
+    os.environ.update(cfg.mi_env(period_role="current"))
+    production = pc.weekly_extract_inventory(
+        datasets_mod._pipeline_discovery_root(), cfg.CLIENT_ID)
+    assert production.get("uniqueWeeklyExtractsUsed") == 0, (
+        "production now carries weekly extracts — the fixture-only caveat in the "
+        "C6 record is out of date and must be re-measured against real data")
 
 
 def test_governed_aliases_normalise_to_the_canonical_token():

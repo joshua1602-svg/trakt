@@ -167,10 +167,11 @@ def diff(before, after) -> int:
                 json.dumps(row, sort_keys=True, default=str):
             same += 1
             continue
-        # AUTHORISED H4 — GOVERNED STAGE VOCABULARY ACTIVATION.
+        # AUTHORISED H4 — LEGACY WRONG-DELIVERY CORRECTION.
         #
-        # The test is NOT "refused before, delivered after". Measured, that
-        # would have missed every activation here and called them regressions:
+        # NOT "refused before, delivered after", and not equivalence either.
+        # Measured, the refused/delivered test would have called every one of
+        # these a regression:
         # the retired five-substring map did not refuse a stage spelling it
         # failed to recognise, it fell through and answered the WHOLE FUNDED
         # BOOK. "Show the illustration trend" returned £1.96bn of funded
@@ -195,10 +196,10 @@ def diff(before, after) -> int:
     print(f"delivered before/after: {sum(1 for r in before if r['delivered'])}"
           f" / {sum(1 for r in after if r['delivered'])}")
     print(f"IDENTICAL            : {same}")
-    print(f"AUTHORISED H4 activations (refused -> delivered): {len(activated)}")
+    print(f"AUTHORISED H4 - LEGACY WRONG-DELIVERY CORRECTION: {len(activated)}")
     print(f"UNEXPLAINED movements: {len(moved)}")
     for was, now in activated:
-        print(f"\n   ACTIVATION  {was['question']}")
+        print(f"\n   WRONG-DELIVERY CORRECTED  {was['question']}")
         print(f"      before: {was['route']} delivered={was['delivered']} "
               f"rows={was['row_count']}  {str(was['answer'])[:66]}")
         print(f"      after : {now['route']} delivered={now['delivered']} "
@@ -210,7 +211,10 @@ def diff(before, after) -> int:
         print(f"      after : route={now['route']} delivered={now['delivered']} "
               f"rows={now['row_count']} answer={str(now['answer'])[:80]}")
     print("\n" + "=" * 92)
-    print("VERDICT: " + ("EQUIVALENT" if not moved else "NOT EQUIVALENT"))
+    print("VERDICT: " + ("NO UNEXPLAINED MOVEMENT" if not moved
+                         else "UNEXPLAINED MOVEMENT PRESENT"))
+    if activated:
+        print("         (equivalence is NOT claimed for the corrections above)")
     print("=" * 92)
     return 0 if not moved else 1
 
