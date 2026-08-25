@@ -145,8 +145,9 @@ describe("OCC Agent tab — case navigation", () => {
 
     // A Client Onboarding reference, not an identifier this feature invented.
     expect((await screen.findAllByText(/ONB-\d{4}-\d{4}/)).length).toBeGreaterThan(0);
-    // And Client Onboarding's own outstanding-for-client list.
-    const panel = (await screen.findByText(copy.agent.checklistHeading)).closest("section");
+    // And Client Onboarding's own outstanding-for-client list, in the one
+    // panel that both lists what the client owes and lets it be answered.
+    const panel = (await screen.findByText(copy.agent.questionsHeading)).closest("section");
     expect(
       within(panel as HTMLElement).getByText(/Legal Entity Identifier/),
     ).toBeInTheDocument();
@@ -545,7 +546,7 @@ describe("OCC Agent tab — the client questions", () => {
    * already decided. Every capability existed and was tested; no screen
    * rendered any of them.
    */
-  async function openCase() {
+  async function createCase() {
     const user = userEvent.setup();
     renderApp("/agent");
     const box = await screen.findByLabelText(copy.agent.newCaseHeading);
@@ -556,6 +557,33 @@ describe("OCC Agent tab — the client questions", () => {
     await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
     await screen.findByText(copy.agent.conversationHeading);
     return user;
+  }
+
+  async function openCase() {
+    const user = await createCase();
+    await issuePack(user);
+    return user;
+  }
+
+  /**
+   * Walk the case to the stage where client answers are recorded.
+   *
+   * This is not scaffolding around the panel — it is the workflow the panel
+   * now belongs to. Recording a client's answers comes AFTER the request has
+   * gone out, so a test that reaches the form without issuing the pack would
+   * be asserting an order the screen no longer offers.
+   */
+  async function issuePack(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: copy.agent.packDraft }));
+    await user.click(await screen.findByRole("button", { name: copy.agent.packApprove }));
+    const to = await screen.findByLabelText(copy.agent.packRecipients);
+    await user.type(to, "ops@northstar.example");
+    await user.click(screen.getByRole("button", { name: copy.agent.packSend }));
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-stage="responses"][data-stage-status="current"]'),
+      ).not.toBeNull(),
+    );
   }
 
   it("lets an operator read every question the client is asked", async () => {
@@ -600,14 +628,38 @@ describe("OCC Agent tab — the client questions", () => {
     expect(submitted).not.toHaveBeenCalled();
   });
 
-  it("says nothing about already-known values when there are none", async () => {
-    const user = await openCase();
-    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
-    await screen.findByLabelText(/Reporting email/);
+  /**
+   * Where recording an answer lives, pinned.
+   *
+   * It sat inside a timeline stage, and the predictable thing happened: the
+   * stage completed, collapsed, and the only place to record an answer went
+   * with it. Onboarding is not a linear pass — answers arrive by email, by
+   * phone, as a correction three stages later — so this is a reference view of
+   * the case, reachable at every stage, not a step an operator walks past.
+   */
+  it("can record an answer at any stage, before the pack and after it", async () => {
+    const user = await createCase();
+    expect(await screen.findByRole("button", { name: copy.agent.questionsShow }))
+      .toBeInTheDocument();
 
-    // A heading over an empty list is noise. Nothing is known until the pack
-    // has been built from the case.
-    expect(screen.queryByText(copy.agent.questionsKnownHeading)).not.toBeInTheDocument();
+    await issuePack(user);
+    expect(screen.getByRole("button", { name: copy.agent.questionsShow }))
+      .toBeInTheDocument();
+    // And it is NOT inside the stage that completes and collapses.
+    const stage = document.querySelector('[data-stage="responses"]') as HTMLElement;
+    expect(stage).not.toBeNull();
+    expect(within(stage).queryByRole("button", { name: copy.agent.questionsShow }))
+      .not.toBeInTheDocument();
+  });
+
+  /** The timeline keeps the two things that ARE steps: receive, and chase. */
+  it("keeps receiving and chasing on the timeline", async () => {
+    const user = await createCase();
+    await issuePack(user);
+    const stage = document.querySelector('[data-stage="responses"]') as HTMLElement;
+    expect(within(stage).getByText(copy.agent.mailHeading)).toBeInTheDocument();
+    expect(within(stage).getByRole("button", { name: copy.agent.checklistAsk }))
+      .toBeInTheDocument();
   });
 
   it("surfaces a refused answer instead of swallowing it", async () => {

@@ -471,7 +471,6 @@ export const copy = {
     onboardingStageHeading: "Onboarding",
     onboardingHeading: "The onboarding",
     onboardingOpen: "Open it in the onboarding screens",
-    checklistHeading: "What the client still has to tell us",
     checklistEmpty: "Nothing outstanding from the client.",
     checklistAsk: "Ask the client for these",
     checklistRecord: "Record what came back",
@@ -540,6 +539,10 @@ export const copy = {
     questionsHint:
       "Answers are recorded exactly as typed, against the same keys a client's own " +
       "submission would use.",
+    questionsOutstanding: (n: number) =>
+      n === 1
+        ? "1 answer still outstanding from the client."
+        : `${n} answers still outstanding from the client.`,
     questionsPending: (n: number) =>
       n === 1 ? "1 answer not yet saved" : `${n} answers not yet saved`,
     questionsRequired: "Required",
@@ -690,8 +693,8 @@ export const copy = {
       scope: "Confirm scope",
       pack_prepare: "Prepare onboarding pack",
       pack_review: "Review and approve the pack",
-      pack_issue: "Record or issue the request",
-      responses: "Receive client responses",
+      pack_issue: "Issue the request",
+      responses: "Receive and record client responses",
       artefacts: "Receive required artefacts",
       configure: "Generate configuration",
       config_review: "Review configuration",
