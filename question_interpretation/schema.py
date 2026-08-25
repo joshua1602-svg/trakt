@@ -630,6 +630,48 @@ class PopulationClaim(Slot):
 
 
 @dataclass
+class RowPredicateClaim(Slot):
+    """A row predicate the governed parser RESOLVED: field, operator, value.
+
+    THE RESOLVED CHANNEL, and deliberately a third thing.
+
+    `FilterClaim` is what the question SAID — a clause, its operator and its
+    value, sometimes only half of one, with the field explicitly absent because
+    "identifying that a clause exists is a different job from resolving what it
+    binds". `PopulationClaim` is a population named by INTENT — "the back book" —
+    kept separate from its resolution on purpose. Putting a resolved field on
+    either would collapse a distinction each of them exists to hold.
+
+    This carries the third fact: what the parser bound the clause to. It is not a
+    new resolution — `llm_query_parser._filter_field_of` already did it, once,
+    upstream of every route, and `population.material_predicates` already
+    normalises the result across numeric and categorical shapes into
+    `Predicate(field, op, value)`. This claim is how that crosses into the
+    contract, so a compositional plan can read `current_loan_to_value gt 50.0`
+    without a route re-deriving it.
+
+    `source_portfolio_id` never appears here. `mi_agent.population` excludes it
+    by name — the P1I-A ruling governs that phrase family as SCOPE, and it
+    travels on `source_scope`. The two channels stay apart.
+    """
+
+    #: The governed semantic field key, as the parser resolved it.
+    field_key: Optional[str] = None
+    #: The comparison, normalised by `material_predicates`: gt/lt/eq/in/between.
+    operator: Optional[str] = None
+    #: The bound. Numeric for a threshold, a string for a categorical value, a
+    #: list for membership.
+    value: Any = None
+
+    def as_dict(self) -> Dict[str, Any]:
+        d = super().as_dict()
+        d["field_key"] = self.field_key
+        d["operator"] = self.operator
+        d["value"] = self.value
+        return d
+
+
+@dataclass
 class QuestionInterpretation:
     """One question, interpreted lexically. Carried, not acted on."""
 
@@ -641,6 +683,10 @@ class QuestionInterpretation:
     time: TimeClaim = field(default_factory=TimeClaim)
     target: TargetClaim = field(default_factory=TargetClaim)
     population: List[PopulationClaim] = field(default_factory=list)
+    #: The RESOLVED row predicates — field + operator + value — as the governed
+    #: parser bound them. Additive: `filters` still carries what the question
+    #: said, and this carries what it resolved to.
+    row_predicates: List[RowPredicateClaim] = field(default_factory=list)
     #: PHASE 1A. Which source portfolio(s) the question scopes to, carried from
     #: `mi_agent.portfolio_lens`. Single-valued: a question has at most one.
     source_scope: SourceScopeClaim = field(default_factory=SourceScopeClaim)
@@ -665,6 +711,7 @@ class QuestionInterpretation:
             "time": self.time.as_dict(),
             "target": self.target.as_dict(),
             "population": [p.as_dict() for p in self.population],
+            "row_predicates": [p.as_dict() for p in self.row_predicates],
             "source_scope": self.source_scope.as_dict(),
             "dataset": self.dataset.as_dict(),
             "residue": list(self.residue),

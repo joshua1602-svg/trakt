@@ -42,7 +42,7 @@ from .schema import (
     SCOPE_ACQUIRED, SCOPE_COHORT, SCOPE_DIRECT, SCOPE_TOTAL, SOURCE_SCOPES,
     STATED,
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
-    OperationClaim, PopulationClaim, QuestionInterpretation, Slot,
+    OperationClaim, PopulationClaim, QuestionInterpretation, RowPredicateClaim, Slot,
     SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
     DatasetClaim, DATASET_FUNDED,
 )
@@ -109,6 +109,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     _time(qi, spec, PR)
     _target(qi, spec, facets)
     _population(qi, spec, facets)
+    _row_predicates(qi, spec, semantics)
     _source_scope(qi, registry, caller_scope)
     _dataset(qi, caller_dataset)
     _note_join_state(qi)
@@ -612,6 +613,40 @@ def _dataset(qi, caller_dataset=None) -> None:
         state=FILLED, dataset=dataset, provenance=provenance, raw_text=raw,
         span=_span_of(qi.question, raw),
         source="mi_agent_api.workspace.resolve_dataset")
+
+
+def _row_predicates(qi, spec, semantics) -> None:
+    """Carry the predicates the parser already RESOLVED into the contract.
+
+    `llm_query_parser._filter_field_of` binds a clause to its governed field
+    once, upstream of every route — measured, `chat_routing` calls neither it nor
+    `_resolve_subject` nor the subject vocabulary. `spec.filters` therefore
+    arrives ALREADY keyed by governed field, and the only reason a compositional
+    plan cannot read it is that the projection wrote that key into a provenance
+    STRING — `source="parser.filters[current_loan_to_value]"` — rather than a
+    structure.
+
+    This reads it structurally, through the SAME call the population ledger
+    already makes. `material_predicates` is the one normaliser: it turns a
+    numeric `{"op": "gt", "value": 50.0}`, a bare categorical value and a list
+    into one `Predicate(field, op, value)` shape, and it excludes
+    `source_portfolio_id` by name because that phrase family is SCOPE and travels
+    on `source_scope`.
+
+    Nothing is re-derived and no wording is read. A question with no governed
+    predicate contributes nothing, which is a legitimate empty and not a failure.
+    """
+    from mi_agent.population import material_predicates
+
+    filters = dict(getattr(spec, "filters", None) or {})
+    if not filters:
+        return
+    for predicate in material_predicates(filters, semantics):
+        qi.row_predicates.append(RowPredicateClaim(
+            state=FILLED, raw_text=None,
+            field_key=predicate.field, operator=predicate.op,
+            value=predicate.value,
+            source="parser.filters via population.material_predicates"))
 
 
 def _population(qi, spec, facets) -> None:
