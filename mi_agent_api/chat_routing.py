@@ -26,7 +26,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from mi_agent.mi_query_executor import _apply_filters
+from mi_agent import population as _population
+from mi_agent.mi_query_executor import MIQueryExecutionError
 from mi_agent.parsed_question import ParsedQuestion
 
 from mi_agent import period_request as _period_request
@@ -918,12 +919,25 @@ def _funded_metric_value(df, metric_key: str) -> Optional[float]:
     return None
 
 
-def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
+def _filtered_funded_evo(output_root, client_id, run_id, predicates, semantics,
                          metric_key: str) -> Dict[str, Any]:
-    """A funded single-metric series across reporting periods with the spec's
-    filter applied WITHIN each period (via the canonical executor filter, so the
-    scope matches a point-in-time filtered answer). Raises on an invalid filter so
-    the caller can defer to the controlled point-in-time validation path."""
+    """A funded single-metric series with the POPULATION applied within each period.
+
+    ``predicates`` are the governed `Predicate` objects the compositional plan
+    selected — `SELECT_POPULATION(kind=row_predicates)`, built from
+    `RowPredicateClaim` and nothing else. This function does not receive the
+    spec, so it cannot read a filter's meaning even by accident.
+
+    Execution goes through `population.apply_population`, which since the
+    predicate-parity work runs every predicate through
+    `mi_query_executor.governed_predicate_mask` — the same single owner
+    `_apply_filters` uses. That equivalence is what makes this substitution
+    row-for-row identical rather than merely similar, and it is measured at
+    119/119 by `migration_phase0.predicate_execution_parity`.
+
+    Raises on a predicate that cannot be applied, so the caller defers to the
+    controlled point-in-time validation path exactly as before.
+    """
     frames = evolution_mod.funded_frames(output_root, client_id, run_id)
     periods: List[Dict[str, Any]] = []
     sources: List[str] = []
@@ -931,7 +945,14 @@ def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
         df = fr.get("df")
         if df is None:
             continue
-        fdf = _apply_filters(df, spec, semantics, [])  # may raise -> caller defers
+        fdf, evidence = _population.apply_population(df, predicates, semantics)
+        if fdf is None or not evidence.is_usable:
+            # FAIL CLOSED, and in the shape this caller already handles: a
+            # population that could not be applied is not a series with a
+            # missing filter, it is no series at all.
+            raise MIQueryExecutionError(
+                "the requested population could not be applied to this book: "
+                + "; ".join(evidence.unavailable or [evidence.blocked_reason or ""]))
         rd = fr.get("reporting_date") or fr.get("run_id")
         periods.append({
             "period": (str(rd)[:7] if rd else fr.get("run_id")),
@@ -944,25 +965,41 @@ def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
     return {"periods": periods, "sourceFiles": sources}
 
 
-def _filter_summary(spec) -> str:
-    """A short human description of the active spec filters for the answer/notes."""
-    parts: List[str] = []
-    for k, v in (getattr(spec, "filters", None) or {}).items():
-        if isinstance(v, dict):
-            op = v.get("op", "eq")
-            parts.append(f"{k} {op} {v.get('value', v.get('min', v.get('max')))}")
-        else:
-            parts.append(f"{k} = {v}")
-    return "; ".join(parts)
+def _filter_summary(predicates) -> str:
+    """A short human description of the applied population, for answer and notes.
+
+    Described from the governed `Predicate` rather than from the spec, through
+    `Predicate.describe()` — the same wording the population ledger and the
+    facet labels already use, so the prose, the evidence and the receipt cannot
+    say three different things about one narrowing.
+    """
+    return "; ".join(p.describe() for p in (predicates or ()))
 
 
 def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_root,
-                     pipeline_root, portfolio_id, as_of, semantics=None
-                     ) -> Optional[Dict[str, Any]]:
+                     pipeline_root, portfolio_id, as_of, semantics=None,
+                     interpretation=None) -> Optional[Dict[str, Any]]:
     q = question.lower()
     dataset = _workspace.resolve_dataset(question)
     is_count = spec.aggregation == "count"
-    filtered = bool(getattr(spec, "filters", None))
+
+    # THE POPULATION, PLANNED FROM THE CONTRACT. `spec.filters` still answers
+    # "did the reader ask to narrow at all" — a gate, not a meaning — and every
+    # question of WHICH rows is answered by the plan step.
+    population_step = _plan.row_predicate_step(interpretation)
+    predicates = _plan.row_predicates(population_step)
+    requested = dict(getattr(spec, "filters", None) or {})
+    filtered = bool(predicates)
+
+    # A narrowing the plan does not carry must never be silently dropped. The
+    # keys the contract excludes by design are SCOPE and reporting-basis keys,
+    # which are not row predicates at all; if any remain, this route cannot
+    # honour the whole request and defers to the point-in-time path, which is
+    # the same fail-safe an invalid filter already takes. Measured on the
+    # corpus: 121 spec.filters entries, 121 material predicates, 0 excluded —
+    # so this defers on nothing that ships today.
+    if requested and len(predicates) != len(requested):
+        return None
 
     # Filtered trends are supported for the FUNDED single-metric series only
     # (applied per period below). A filtered pipeline / funnel / stage trend defers
@@ -1053,7 +1090,8 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
         # Filtered funded series: apply the filter within each period. On an invalid
         # filter, defer to the controlled point-in-time validation path.
         try:
-            evo = _filtered_funded_evo(output_root, client_id, run_id, spec, semantics or {}, metric_key)
+            evo = _filtered_funded_evo(output_root, client_id, run_id, predicates,
+                                       semantics or {}, metric_key)
         except Exception:  # noqa: BLE001 - invalid filter -> point-in-time path
             return None
     else:
@@ -1075,7 +1113,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     period_field = "week" if any("week" in p for p in periods) else "period"
     rows = [{"period": p.get(period_field), "value": (p.get("metrics") or {}).get(metric_key)}
             for p in periods]
-    filter_txt = _filter_summary(spec) if filtered else ""
+    filter_txt = _filter_summary(predicates) if filtered else ""
     scope_suffix = f" — {filter_txt}" if filter_txt else ""
     disp = _METRIC_DISPLAY.get(metric_key, ("decimal", "decimal", None))
     chart = _chart_artifact(
@@ -1129,8 +1167,8 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
         before = next((p.get("rows") or p.get("totalRows") for p in reversed(periods)
                        if (p.get("rows") or p.get("totalRows")) is not None), None)
         out.setdefault("metadata", {})["populationApplied"] = {
-            "applied": [f"{key} (applied within each period)"
-                        for key in (getattr(spec, "filters", None) or {})],
+            "applied": [f"{p.field} (applied within each period)"
+                        for p in predicates],
             "unavailable": [], "rowsBefore": before, "rowsAfter": last,
         }
     return out
@@ -3103,7 +3141,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 run_id=r.run_id, output_root=r.output_root,
                 pipeline_root=r.pipeline_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
-                semantics=r.semantics)),
+                semantics=r.semantics,
+                interpretation=r.resolve_interpretation())),
     ])
     return registry
 

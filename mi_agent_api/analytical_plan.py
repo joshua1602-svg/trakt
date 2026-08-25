@@ -69,6 +69,21 @@ COMPARE = "compare"
 #: any blocked step is a REFUSAL, never an answer with the step omitted.
 BLOCKED_NO_CONTRACT_FIELD = "no contract field"
 
+#: The GOVERNED MODES of `select_population`. They were string literals in three
+#: places before a second mode existed; naming them is what stops a reader from
+#: assuming there is only one.
+#:
+#: The two narrowing modes are deliberately SEPARATE STRUCTURES, not one filter
+#: bag. `source_portfolio_lens` narrows by governed portfolio IDENTITY, which the
+#: registry decides — Phase 1C measured the two readings diverging at GBP300
+#: against GBP1,200 on a book with two portfolios of one type. `row_predicates`
+#: narrows by VALUE, on a governed field. Collapsing them into `lens_filters`
+#: would put identity back into the value channel, which is the P1I-A ruling in
+#: reverse.
+KIND_SOURCE_PORTFOLIO_LENS = "source_portfolio_lens"
+KIND_ROW_PREDICATES = "row_predicates"
+KIND_WHOLE_DATASET = "whole_dataset"
+
 #: The five governed headline measures, and how each is resolved.
 HEADLINE_MEASURES: Tuple[Tuple[str, str], ...] = (
     ("funded_balance", "sum"),
@@ -186,7 +201,7 @@ def _population_step(scope) -> Step:
     elif state == "filled":
         return Step(
             SELECT_POPULATION,
-            {"kind": "source_portfolio_lens",
+            {"kind": KIND_SOURCE_PORTFOLIO_LENS,
              "base_population": scope.base_population,
              "portfolio_ids": list(scope.portfolio_ids),
              "provenance": scope.provenance,
@@ -226,7 +241,7 @@ def _whole_dataset_step(route: str, dataset: Optional[str] = None) -> Step:
     to prove the claim is not the same as the claim being false, and a plan is
     not the place to decide which.
     """
-    inputs = {"kind": "whole_dataset", "dataset": dataset}
+    inputs = {"kind": KIND_WHOLE_DATASET, "dataset": dataset}
     because = ("this route does not narrow by source portfolio; a named scope "
                "is refused by the facet layer as a lost narrowing")
     try:
@@ -248,6 +263,53 @@ def _whole_dataset_step(route: str, dataset: Optional[str] = None) -> Step:
                              "declared lens_aware — it NARROWS — so it may not "
                              "plan the whole dataset. Use `_population_step`."))
     return Step(SELECT_POPULATION, inputs, because=because)
+
+
+def row_predicate_step(interpretation) -> Optional[Step]:
+    """The `select_population` step for VALUE predicates — the second mode.
+
+    Built EXCLUSIVELY from `RowPredicateClaim`, which the governed parser
+    already resolved: `_filter_field_of` bound the field once, upstream of every
+    route, and `population.material_predicates` normalised the result. Nothing
+    here reads `spec.filters`, the question text, or a provenance string, so a
+    route planning from this cannot re-derive a filter's meaning even by
+    accident — there is no English within reach.
+
+    Returns ``None`` when the question carries no row predicate. That is the
+    ordinary case and it is NOT a blocked step: a question that narrows nothing
+    plans no narrowing.
+    """
+    claims = [c for c in (getattr(interpretation, "row_predicates", None) or [])
+              if getattr(c, "field_key", None)]
+    if not claims:
+        return None
+    predicates = [{"field": c.field_key, "op": c.operator, "value": c.value}
+                  for c in claims]
+    described = "; ".join(f"{d['field']} {d['op']} {d['value']}" for d in predicates)
+    return Step(SELECT_POPULATION,
+                {"kind": KIND_ROW_PREDICATES, "predicates": predicates},
+                because=f"the contract carries resolved row predicates ({described})")
+
+
+def row_predicates(plan_or_step) -> List[Any]:
+    """The governed `Predicate` objects a plan selects rows by.
+
+    Returns the executor's own `Predicate`, not a dict, because the one thing
+    every caller must NOT do is re-interpret these. They go straight to
+    `governed_predicate_mask` — the single owner of what a predicate means.
+    """
+    from mi_agent.population import Predicate
+
+    steps = (plan_or_step.steps if hasattr(plan_or_step, "steps")
+             else ([plan_or_step] if plan_or_step is not None else []))
+    out: List[Any] = []
+    for step in steps:
+        if (step is None or step.primitive != SELECT_POPULATION
+                or step.inputs.get("kind") != KIND_ROW_PREDICATES or step.blocked):
+            continue
+        for entry in step.inputs.get("predicates") or []:
+            out.append(Predicate(entry["field"], entry["op"], entry["value"]))
+    return out
 
 
 def _label_for(scope) -> str:  # noqa: D401
@@ -272,7 +334,7 @@ def lens_filters(plan: Plan) -> Optional[Dict[str, Any]]:
     """
     step = next((s for s in plan.steps
                  if s.primitive == SELECT_POPULATION
-                 and s.inputs.get("kind") == "source_portfolio_lens"
+                 and s.inputs.get("kind") == KIND_SOURCE_PORTFOLIO_LENS
                  and not s.blocked), None)
     if step is None:
         return None
@@ -281,8 +343,11 @@ def lens_filters(plan: Plan) -> Optional[Dict[str, Any]]:
 
 
 def lens_label(plan: Plan) -> str:
+    """The SCOPE's label. Kind-aware, and it has to be: once a plan can carry
+    two `select_population` steps, "the first one" is no longer the lens."""
     step = next((s for s in plan.steps
-                 if s.primitive == SELECT_POPULATION and not s.blocked), None)
+                 if s.primitive == SELECT_POPULATION and not s.blocked
+                 and s.inputs.get("kind") != KIND_ROW_PREDICATES), None)
     return (step.inputs.get("label") if step else None) or "Total"
 
 
