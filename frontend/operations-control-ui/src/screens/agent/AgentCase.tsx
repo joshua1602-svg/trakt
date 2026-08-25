@@ -202,21 +202,11 @@ export function AgentCaseScreen() {
               canRegister={available.has("register_synthetic_artefact")}
               onIngested={() => void view.reload({ quiet: true })}
             />
-            {/* RECORD. This is where a client's answers are entered, and it
-                sits AFTER the reply rather than beside the pack. Beside the
-                pack it read as part of drafting what goes out, so the pack was
-                issued, the reply was read, and the step that puts the answers
-                on the case was behind a stage the operator had already left. */}
-            <div className="mt-4">
-              <ClientQuestionsPanel
-                caseId={caseId}
-                version={status.run.version}
-                confirmations={status.pack.confirmations ?? []}
-                busy={busy}
-                onSaved={() => void view.reload({ quiet: true })}
-              />
-            </div>
-            {/* WHAT REMAINS, and the way to ask again for it. */}
+            {/* CHASE. What is still outstanding and the way to ask again for
+                it. Recording the answers is NOT here: it is in the rail, where
+                it is reachable at every stage. This stage completes and
+                collapses, and a client's corrections do not stop arriving when
+                it does. */}
             <div className="mt-4">
               <ResponsesBlock
                 requests={onboarding.information_requests}
@@ -573,11 +563,14 @@ export function AgentCaseScreen() {
             )}
           </Panel>
 
-          <ClientPanel
+          <ClientQuestionsPanel
+            caseId={caseId}
+            version={status.run.version}
+            confirmations={status.pack.confirmations ?? []}
             checklist={onboarding.client_checklist}
             requests={onboarding.information_requests}
             busy={busy}
-            onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
+            onSaved={() => void view.reload({ quiet: true })}
           />
 
           <Panel title={copy.agent.criteriaHeading}>
@@ -1516,70 +1509,6 @@ function ActivationPanel({
               {copy.agent.activationConfirm}
             </button>
           </div>
-        </>
-      )}
-    </Panel>
-  );
-}
-
-/**
- * What the client still has to answer, and what has already been asked.
- *
- * The list is Client Onboarding's own — only fields a client can actually
- * answer — so this panel shows it rather than working anything out.
- */
-function ClientPanel({
-  checklist,
-  requests,
-  busy,
-  onAsk,
-}: {
-  checklist: ChecklistRow[];
-  requests: InformationRequest[];
-  busy: boolean;
-  onAsk: () => void;
-}) {
-  return (
-    <Panel title={copy.agent.checklistHeading}>
-      {checklist.length === 0 ? (
-        <p className="text-sm text-stone-500">{copy.agent.checklistEmpty}</p>
-      ) : (
-        <>
-          <ul className="list-disc space-y-1 pl-4 text-sm text-stone-700">
-            {checklist.map((row) => (
-              <li key={`${row.section}-${row.field}-${row.index}`}>{row.label}</li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onAsk}
-            className="mt-3 rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-          >
-            {copy.agent.checklistAsk}
-          </button>
-        </>
-      )}
-
-      {requests.length > 0 && (
-        <>
-          <p className="mt-4 text-xs uppercase tracking-wide text-stone-400">
-            {copy.agent.requestsHeading}
-          </p>
-          <ul className="mt-1 space-y-1 text-sm text-stone-600">
-            {requests.map((request) => (
-              <li key={request.request_id} className="flex justify-between gap-2">
-                <span>
-                  {request.items.length} item{request.items.length === 1 ? "" : "s"}
-                </span>
-                <span className="text-xs text-stone-500">
-                  {["open", "sent"].includes(request.status)
-                    ? copy.agent.requestOutstanding
-                    : copy.agent.requestAnswered}
-                </span>
-              </li>
-            ))}
-          </ul>
         </>
       )}
     </Panel>

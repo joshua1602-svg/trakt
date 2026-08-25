@@ -145,8 +145,9 @@ describe("OCC Agent tab — case navigation", () => {
 
     // A Client Onboarding reference, not an identifier this feature invented.
     expect((await screen.findAllByText(/ONB-\d{4}-\d{4}/)).length).toBeGreaterThan(0);
-    // And Client Onboarding's own outstanding-for-client list.
-    const panel = (await screen.findByText(copy.agent.checklistHeading)).closest("section");
+    // And Client Onboarding's own outstanding-for-client list, in the one
+    // panel that both lists what the client owes and lets it be answered.
+    const panel = (await screen.findByText(copy.agent.questionsHeading)).closest("section");
     expect(
       within(panel as HTMLElement).getByText(/Legal Entity Identifier/),
     ).toBeInTheDocument();
@@ -578,7 +579,11 @@ describe("OCC Agent tab — the client questions", () => {
     const to = await screen.findByLabelText(copy.agent.packRecipients);
     await user.type(to, "ops@northstar.example");
     await user.click(screen.getByRole("button", { name: copy.agent.packSend }));
-    await screen.findByRole("button", { name: copy.agent.questionsShow });
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-stage="responses"][data-stage-status="current"]'),
+      ).not.toBeNull(),
+    );
   }
 
   it("lets an operator read every question the client is asked", async () => {
@@ -624,30 +629,37 @@ describe("OCC Agent tab — the client questions", () => {
   });
 
   /**
-   * The order of the work, pinned.
+   * Where recording an answer lives, pinned.
    *
-   * Recording the client's answers used to sit beside the pack, which read as
-   * part of drafting what goes out. So the pack was issued, the reply was
-   * read, and the step that actually puts the answers on the case was behind a
-   * stage the operator had already walked past — the case then would not
-   * submit, with nothing on screen saying why. It belongs where the answers
-   * arrive: issue the request, receive the reply, record what it said.
+   * It sat inside a timeline stage, and the predictable thing happened: the
+   * stage completed, collapsed, and the only place to record an answer went
+   * with it. Onboarding is not a linear pass — answers arrive by email, by
+   * phone, as a correction three stages later — so this is a reference view of
+   * the case, reachable at every stage, not a step an operator walks past.
    */
-  it("puts recording the answers after issuing the request, not beside the pack", async () => {
+  it("can record an answer at any stage, before the pack and after it", async () => {
     const user = await createCase();
-
-    // Nothing to record against until the client has been asked.
-    expect(screen.queryByRole("button", { name: copy.agent.questionsShow }))
-      .not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: copy.agent.questionsShow }))
+      .toBeInTheDocument();
 
     await issuePack(user);
-
+    expect(screen.getByRole("button", { name: copy.agent.questionsShow }))
+      .toBeInTheDocument();
+    // And it is NOT inside the stage that completes and collapses.
     const stage = document.querySelector('[data-stage="responses"]') as HTMLElement;
     expect(stage).not.toBeNull();
-    expect(within(stage).getByRole("button", { name: copy.agent.questionsShow }))
-      .toBeInTheDocument();
-    // Beside it, in the same stage: what the client actually sent back.
+    expect(within(stage).queryByRole("button", { name: copy.agent.questionsShow }))
+      .not.toBeInTheDocument();
+  });
+
+  /** The timeline keeps the two things that ARE steps: receive, and chase. */
+  it("keeps receiving and chasing on the timeline", async () => {
+    const user = await createCase();
+    await issuePack(user);
+    const stage = document.querySelector('[data-stage="responses"]') as HTMLElement;
     expect(within(stage).getByText(copy.agent.mailHeading)).toBeInTheDocument();
+    expect(within(stage).getByRole("button", { name: copy.agent.checklistAsk }))
+      .toBeInTheDocument();
   });
 
   it("surfaces a refused answer instead of swallowing it", async () => {
