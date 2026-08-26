@@ -428,8 +428,14 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     if ranking.refusal is not None:
         return _rank_refusal_envelope(question, spec_dict, ranking)
 
+    # THE ONE EVIDENCE RECORD, built here because this is the only place where
+    # both the intent (which fields the term could have bound to) and the
+    # outcome (which one it did) are in scope. Everything downstream — prose,
+    # table, metadata — reads it. Nothing downstream re-derives it.
+    receipt = (movement_receipt_for(result, rank_intent, ranking)
+               if ranking.applied else None)
     return _render(result, question, spec_dict, portfolio_id, as_of,
-                   ranking=ranking)
+                   receipt=receipt)
 
 
 # --------------------------------------------------------------------------- #
@@ -608,6 +614,66 @@ def apply_ranking(intent: RankingOutcome, result: PeriodChangeResult
                           distribution=distribution)
 
 
+def movement_receipt_for(result: PeriodChangeResult, intent: RankingOutcome,
+                         ranking: RankingOutcome) -> Any:
+    """The governed `MovementReceipt` for a delivered ranked movement.
+
+    EVERY FIGURE IS CARRIED, NONE IS RECOMPUTED. The ranking engine has already
+    stated each row's opening, closing, absolute and percentage movement and the
+    value it sorted on; this hands those to the receipt verbatim. Recomputing a
+    percentage here would create a second calculation of a published fact, and
+    the point of the receipt is that there is exactly one.
+
+    Nothing in this function reads the question, a chart column, an artifact
+    title or the route's own identity.
+    """
+    from .movement_receipt import (PopulationEvidence, RankedElement,
+                                   build_movement_receipt)
+
+    payload = result.to_dict()
+    period = payload["summary"]["period"]
+    distribution, movement = ranking.distribution, ranking.movement
+    provenance = list(payload.get("dataset_provenance") or [])
+    scope = payload.get("portfolio_scope") or {}
+    # Per-period row counts, from the governed provenance. THE PREDICATE LIST IS
+    # EMPTY AND SAYS SO. This route selects a population by scope, not by row
+    # predicate; publishing an empty predicate tuple with equal filtered and
+    # unfiltered counts states that no narrowing happened, which is a fact. An
+    # absent population block would merely leave it unknown.
+    counts = tuple(int(ref.get("row_count") or 0) for ref in provenance)
+    population = PopulationEvidence(
+        dataset=(payload.get("request_interpretation") or {}).get("mode"),
+        portfolio_ids=tuple(str(p) for p in (scope.get("portfolio_ids") or ())),
+        predicates=(), row_counts=counts, unfiltered_row_counts=counts)
+    elements = tuple(
+        RankedElement(rank=position, group_value=str(row.category),
+                      start_value=row.start_value, end_value=row.end_value,
+                      absolute_movement=row.absolute_movement,
+                      percentage_movement=row.percent_movement,
+                      rank_value=row.rank_value, presence=row.presence,
+                      note=row.note)
+        for position, row in enumerate(movement.rows, start=1))
+    candidates = tuple(f for f in ((intent.field,) + tuple(intent.alt_fields)) if f)
+    # The aggregation as the GOVERNED RESULT publishes it for this dimension —
+    # not a word chosen here. A dimension the payload does not carry leaves it
+    # unstated rather than guessed.
+    published = next((d for d in (payload.get("distribution_changes") or [])
+                      if d.get("canonical_field") == distribution.field), {})
+    return build_movement_receipt(
+        measure=distribution.balance_field,
+        aggregation=published.get("aggregation"),
+        grouping_dimension=distribution.field,
+        grouping_display_name=distribution.display_name,
+        grouping_candidates=candidates,
+        periods=(period["start"], period["end"]),
+        levels=(), ranked=(), elements=elements,
+        analysed_groups=tuple(str(c.category) for c in distribution.categories),
+        basis=movement.basis, basis_label=movement.basis_label,
+        direction=movement.direction, limit=movement.top_n,
+        direction_excluded=movement.direction_excluded,
+        exclusions=tuple(movement.excluded), population=population)
+
+
 def _unrankable_message(result: PeriodChangeResult, term: str, movement: Any
                         ) -> str:
     """Why no ranking was produced, as a finding rather than an apology.
@@ -685,88 +751,100 @@ def _share_pp(value: Optional[float]) -> str:
     return "—" if value is None else f"{float(value) * 100:.2f}%"
 
 
-def _rank_rows(ranking: RankingOutcome) -> List[Dict[str, Any]]:
-    basis = ranking.movement.basis
+def _rank_rows(receipt: Any) -> List[Dict[str, Any]]:
+    """The ranked table, read from the receipt.
+
+    THE POSITION IS READ, NOT RE-COUNTED. This used to number the rows with its
+    own `enumerate`, so the rank a reader saw in the table was a second
+    derivation of the rank the evidence recorded. They agreed only because the
+    same list was iterated twice.
+    """
+    basis = receipt.ranking_basis
     unit = _BASIS_UNITS.get(basis, UNIT_CURRENCY)
     share = basis in ("balance_share", "count_share")
     rows: List[Dict[str, Any]] = []
-    for index, row in enumerate(ranking.movement.rows, start=1):
+    for row in receipt.elements:
         rows.append({
-            "rank": index,
-            "category": row.category,
+            "rank": row.rank,
+            "category": row.group_value,
             "start_value": (_share_pp(row.start_value) if share
                             else _format_value(row.start_value, unit)),
             "end_value": (_share_pp(row.end_value) if share
                           else _format_value(row.end_value, unit)),
             "movement": (f"{row.absolute_movement * 100:+.2f} pp" if share
                          else _format_movement(row.absolute_movement, unit)),
-            "percent_movement": ("—" if row.percent_movement is None
-                                 else f"{row.percent_movement:+.1f}%"),
+            "percent_movement": ("—" if row.percentage_movement is None
+                                 else f"{row.percentage_movement:+.1f}%"),
             "presence": row.presence,
         })
     return rows
 
 
-def build_rank_answer(result: PeriodChangeResult,
-                      ranking: RankingOutcome) -> str:
-    """The ranked answer, stated from the ranked rows and nothing else."""
+def build_rank_answer(receipt: Any) -> str:
+    """The ranked answer, stated FROM THE RECEIPT and nothing else.
+
+    Every semantic fact this sentence asserts — which two dates, which
+    dimension, which basis, which direction, which group came first, and what
+    its opening and closing figures were — is read from the governed evidence
+    record. The result object, the ranking outcome and the question are not
+    parameters, so there is nothing here to re-derive them from.
+    """
     from . import chat_routing
 
-    movement, request = ranking.movement, ranking.request
-    period = (result.summary.get("period") or {})
-    start = chat_routing._date_label(period.get("start"))
-    end = chat_routing._date_label(period.get("end"))
-    dimension = ranking.distribution.display_name
-    basis = movement.basis_label
-    share = movement.basis in ("balance_share", "count_share")
-    unit = _BASIS_UNITS.get(movement.basis, UNIT_CURRENCY)
+    start = chat_routing._date_label(receipt.start_period)
+    end = chat_routing._date_label(receipt.end_period)
+    dimension = receipt.grouping_display_name
+    basis = receipt.basis_label
+    share = receipt.ranking_basis in ("balance_share", "count_share")
+    unit = _BASIS_UNITS.get(receipt.ranking_basis, UNIT_CURRENCY)
+    top_n = receipt.ordering_limit
 
     def _describe(row) -> str:
         if share:
             figure = (f"{_share_pp(row.start_value)} → {_share_pp(row.end_value)} "
                       f"({row.absolute_movement * 100:+.2f} pp)")
         else:
-            relative = ("" if row.percent_movement is None
-                        else f", {row.percent_movement:+.1f}%")
+            relative = ("" if row.percentage_movement is None
+                        else f", {row.percentage_movement:+.1f}%")
             figure = (f"{_format_value(row.start_value, unit)} → "
                       f"{_format_value(row.end_value, unit)} "
                       f"({_format_movement(row.absolute_movement, unit)}"
                       f"{relative})")
-        return f"{row.category} {figure}"
+        return f"{row.group_value} {figure}"
 
     direction_word = {"increase": "increased", "decrease": "decreased"}.get(
-        movement.direction, "moved")
-    lead = movement.rows[0]
+        receipt.ranking_direction, "moved")
+    lead = receipt.elements[0]
     parts = [f"Between {start} and {end}, ranked by {basis} across "
-             f"{dimension}, {lead.category} {direction_word} the most: "
+             f"{dimension}, {lead.group_value} {direction_word} the most: "
              f"{_describe(lead)}."]
 
     # Prose names the leader and a few runners-up; the full ranking is the table.
     # A twelve-category ranking read out as a sentence is not an answer anybody
     # can use, and truncating it silently would hide rows — so when the prose
     # stops short it says how many rows the table carries.
-    named = movement.rows[1:] if request is not None and request.top_n else \
-        movement.rows[1:_PROSE_RUNNERS_UP + 1]
+    rows = list(receipt.elements)
+    named = rows[1:] if top_n else rows[1:_PROSE_RUNNERS_UP + 1]
     if named:
         parts.append("Then " + "; ".join(_describe(r) for r in named) + ".")
-    if request is not None and request.top_n:
-        parts.append(f"Showing the top {request.top_n} of "
-                     f"{len(ranking.distribution.categories)} categories.")
-    elif len(movement.rows) > len(named) + 1:
-        parts.append(f"The full ranking of all {len(movement.rows)} ranked "
-                     f"{'category' if len(movement.rows) == 1 else 'categories'} "
+    if top_n:
+        parts.append(f"Showing the top {top_n} of "
+                     f"{receipt.groups_analysed} categories.")
+    elif len(rows) > len(named) + 1:
+        parts.append(f"The full ranking of all {len(rows)} ranked "
+                     f"{'category' if len(rows) == 1 else 'categories'} "
                      f"is in the table below.")
-    if movement.direction_excluded:
-        count = movement.direction_excluded
+    if receipt.direction_excluded:
+        count = receipt.direction_excluded
         moved = {"increase": "increase", "decrease": "decrease"}.get(
-            movement.direction, "move")
+            receipt.ranking_direction, "move")
         parts.append(f"{count} further "
                      f"{'category' if count == 1 else 'categories'} did not "
                      f"{moved} on this basis and "
                      f"{'is' if count == 1 else 'are'} not listed.")
-    if movement.excluded:
+    if receipt.exclusions:
         parts.append("Not ranked: " + "; ".join(
-            f"{category} ({reason})" for category, reason in movement.excluded)
+            f"{category} ({reason})" for category, reason in receipt.exclusions)
             + ".")
     return " ".join(parts)
 
@@ -1020,12 +1098,21 @@ def build_answer(result: PeriodChangeResult) -> str:
 
 def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any],
             portfolio_id: Optional[str], as_of: Optional[str],
-            ranking: Optional[RankingOutcome] = None) -> Dict[str, Any]:
+            receipt: Any = None) -> Dict[str, Any]:
+    """Render the governed answer.
+
+    THE RANKING OUTCOME IS NOT A PARAMETER. It used to be, and every ranked
+    fact in this function was read from it or from `result.summary` — so the
+    prose, the table and the metadata were three independent derivations that
+    happened to agree. `receipt` is the only ranked input now, which is what
+    makes "narration does not infer this independently" a structural property
+    rather than a promise.
+    """
     from . import chat_routing
 
     payload = result.to_dict()
     artifacts: List[Dict[str, Any]] = []
-    ranked = ranking is not None and ranking.applied
+    ranked = receipt is not None and bool(receipt.elements)
 
     summary = payload["summary"]
     kpis = [
@@ -1048,14 +1135,18 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
         # The ranking the question asked for leads, before the governed
         # narrative's own tables: the reader asked which category moved most,
         # and that answer must not be the fourth table down.
+        # Title, columns and description all state what the RECEIPT records.
+        # The table used to name its own dimension and dates from the result
+        # while the prose named them from the ranking outcome — two readings of
+        # one fact, in one answer.
         artifacts.append(chat_routing._table_artifact(
-            f"Ranked movement by {ranking.distribution.display_name}",
-            columns=_RANK_COLUMNS, rows=_rank_rows(ranking), spec=spec_dict,
+            f"Ranked movement by {receipt.grouping_display_name}",
+            columns=_RANK_COLUMNS, rows=_rank_rows(receipt), spec=spec_dict,
             portfolio_id=portfolio_id, as_of=as_of,
-            description=(f"Ranked on {ranking.movement.basis_label} between "
-                         f"{chat_routing._date_label(summary['period']['start'])} "
+            description=(f"Ranked on {receipt.basis_label} between "
+                         f"{chat_routing._date_label(receipt.start_period)} "
                          f"and "
-                         f"{chat_routing._date_label(summary['period']['end'])}"
+                         f"{chat_routing._date_label(receipt.end_period)}"
                          f", from the governed period-change result.")))
 
     metric_rows = _metric_rows(result)
@@ -1085,7 +1176,7 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
 
     envelope = chat_routing._envelope(
         ok=True, question=question,
-        answer=(build_rank_answer(result, ranking) if ranked
+        answer=(build_rank_answer(receipt) if ranked
                 else build_answer(result)),
         spec=spec_dict,
         artifacts=artifacts, route=ROUTE_NAME, lens_applied=True,
@@ -1113,20 +1204,33 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
         # on which basis, in which direction and over which two dates — so the
         # guard can prove the ranking the question asked for is the ranking that
         # ran, rather than taking the route's word for it.
+        #
+        # EVERY VALUE IS NOW A PROJECTION OF THE RECEIPT. The keys and the
+        # figures are unchanged, because the receipt carries the engine's own
+        # rows verbatim; what changed is that this dict no longer reads the
+        # ranking outcome and the result summary a second time. The receipt
+        # itself travels alongside it, additively, so a consumer can audit the
+        # answer without reconstructing it from these keys.
         meta["rankedMovement"] = {
             "applied": True,
-            "canonicalField": ranking.distribution.field,
-            "displayName": ranking.distribution.display_name,
-            "basis": ranking.movement.basis,
-            "basisLabel": ranking.movement.basis_label,
-            "direction": ranking.movement.direction,
-            "topN": ranking.movement.top_n,
-            "rankedCategories": len(ranking.movement.rows),
-            "categoriesAnalysed": len(ranking.distribution.categories),
+            "canonicalField": receipt.grouping_dimension,
+            "displayName": receipt.grouping_display_name,
+            "basis": receipt.ranking_basis,
+            "basisLabel": receipt.basis_label,
+            "direction": receipt.ranking_direction,
+            "topN": receipt.ordering_limit,
+            "rankedCategories": len(receipt.elements),
+            "categoriesAnalysed": receipt.groups_analysed,
             "excluded": [{"category": c, "reason": r}
-                         for c, r in ranking.movement.excluded],
-            "openingPeriod": summary["period"]["start"],
-            "closingPeriod": summary["period"]["end"],
-            "rows": [r.to_dict() for r in ranking.movement.rows],
+                         for c, r in receipt.exclusions],
+            "openingPeriod": receipt.start_period,
+            "closingPeriod": receipt.end_period,
+            "rows": [{"category": e.group_value, "start_value": e.start_value,
+                      "end_value": e.end_value,
+                      "absolute_movement": e.absolute_movement,
+                      "percent_movement": e.percentage_movement,
+                      "rank_value": e.rank_value, "presence": e.presence,
+                      "note": e.note} for e in receipt.elements],
         }
+        meta["movementReceipt"] = receipt.to_dict()
     return envelope
