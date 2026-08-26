@@ -2344,6 +2344,45 @@ _GROUPING_MARKERS = frozenset({"by", "per", "across", "between", "split",
                                "versus", "vs", "against"})
 
 
+def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
+                         available_values) -> bool:
+    """Does ANY existing owner claim this word? Ask them; never guess.
+
+    The one test both unknown-category paths use, so the attributive and the
+    prepositional readings of one question cannot disagree about whether a word
+    is a category nobody carries. Consulted: the book's value catalogue, the
+    dimension owner, the measure owner, the scope owner, and the estate's
+    request-framing, aggregation, chart and analytical-framing vocabularies.
+    """
+    token = (token or "").strip().lower()
+    if not token or token.isdigit():
+        return True
+    if token in _GROUPING_MARKERS:
+        return True
+    if token in _METRIC_SIDE_STOPWORDS or token in _ANALYTICAL_FRAMING_WORDS:
+        return True
+    if _categorical_value_field(token, available_values):
+        return True
+    if _explicit_dimensions(token, semantics, available_columns=available_columns)[0]:
+        return True
+    if _detect_metric(token, semantics)[2]:
+        return True
+    try:
+        from .portfolio_lens import mentions_portfolio
+        if mentions_portfolio(token):
+            return True
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        pass
+    # THE PERIOD OWNER. "compare october and november loan count" names two
+    # PERIODS, and a month is not a category the book fails to carry. Without
+    # this the comparison recogniser published `unknown category: 'november'`
+    # — inert until a routed guard began acting on these notes, at which point
+    # it would have refused a working question.
+    if _detect_periods(token):
+        return True
+    return False
+
+
 def _unclaimed_attributive_slot(masked: str, semantics: dict, available_columns,
                                 available_values) -> Optional[str]:
     """The attributive qualifier that NO governed owner claims, if there is one.
@@ -2390,25 +2429,9 @@ def _unclaimed_attributive_slot(masked: str, semantics: dict, available_columns,
         if not cursor:
             continue
         token = cursor[-1].strip().lower()
-        if not token:
+        if not token or _claimed_by_an_owner(token, semantics, available_columns,
+                                             available_values):
             continue
-        if token in _GROUPING_MARKERS:
-            continue
-        if token in _METRIC_SIDE_STOPWORDS or token in _ANALYTICAL_FRAMING_WORDS:
-            continue
-        if _categorical_value_field(token, available_values):
-            continue
-        if _explicit_dimensions(token, semantics,
-                                available_columns=available_columns)[0]:
-            continue
-        if _detect_metric(token, semantics)[2]:
-            continue
-        try:
-            from .portfolio_lens import mentions_portfolio
-            if mentions_portfolio(token):
-                continue
-        except Exception:  # noqa: BLE001 - no owner, no claim
-            pass
         return token
     return None
 
@@ -2618,7 +2641,17 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         # 'highgate mortgages'" over the top of it is the same fact explained
         # worse — and it is the very collision this whole rule is about, in the
         # other direction.
-        if unresolved is not None and not _names_a_book(clause):
+        # THE SAME OWNER TEST THE ATTRIBUTIVE PATH USES. Without it this branch
+        # recorded an ANALYTIC NOUN as a category the book does not carry:
+        # "where is the largest geographic concentration?" produced
+        # `unknown category: 'concentration'`. The note was inert while nothing
+        # routed acted on it; once a routed guard began refusing on these notes
+        # it would have refused a question that answers correctly. The two
+        # paths now agree about what counts as an unrecognised category.
+        if (unresolved is not None and not _names_a_book(clause)
+                and not all(_claimed_by_an_owner(w, semantics, available_columns,
+                                                 available_values)
+                            for w in str(value).split())):
             unresolved.append(f"{UNKNOWN_CATEGORY_PREFIX}'{value}'")
         return None
     field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"

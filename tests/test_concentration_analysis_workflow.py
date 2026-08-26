@@ -311,7 +311,17 @@ class TestDimensionGovernance:
         assert _dimension(result, "erm_product_type") is None
         assert _dimension(result, "product_type") is not None
         excluded = {e["field"]: e for e in result["audit"]["dimensions_excluded"]}
-        assert "vocabulary" in excluded["erm_product_type"]["reason"]
+        # THE REASON MUST NAME THE ORIGINATOR-SPECIFIC CHARACTER of the
+        # categories. This matched the literal word "vocabulary", which was a
+        # proxy for that fact; the sentence now says "the registry declares
+        # this dimension's categories originator-specific" and adds what the
+        # limit actually is — the METHODOLOGY's, not arithmetic's, because the
+        # same dimension is legitimately aggregated by the share and ranking
+        # paths. Every structural guarantee this test makes is unchanged and
+        # still asserted above and below: erm_product_type excluded,
+        # product_type answering instead, the exclusion recorded in the audit,
+        # and a limitation emitted.
+        assert "originator" in excluded["erm_product_type"]["reason"]
         assert any("erm_product_type" in note for note in result["limitations"])
 
     def test_scale_aligned_vocabulary_is_allowed_within_one_portfolio(self, bsr):
