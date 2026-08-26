@@ -115,8 +115,12 @@ def detect_intent(question: str) -> str:
     if re.search(r"\bsource\b.*\bapproval\b|\bapproval history\b|\bwho approved\b"
                  r"|\bprovenance\b", q):
         return "explain_concentration_test"
-    if re.search(r"\bmoved from\b|\bwhat( has|'s| has been)? changed\b|\bworsen"
-                 r"|\bdeteriorat|\bmovement\b|\bthis month\b|\bsince last\b", q):
+    # DELEGATED to the single LEVEL/MOVEMENT owner. "has this concentration
+    # moved" is the same distinction the rest of the estate asks, and this
+    # module used to answer it with a sixth private vocabulary.
+    from question_interpretation.lexical import is_movement_question
+
+    if is_movement_question(q):
         return "compare_concentration_periods"
     if re.search(r"\bcannot\b.*\bcalculat|\bunavailable\b|\bmissing data\b", q):
         return "list_concentration_unavailable"

@@ -1,0 +1,78 @@
+[
+  {
+    "question": "Show funded balance evolution from October to November.",
+    "before": {
+      "answer": "The requested end date 2026-11-30 is 153 days from the nearest usable governed snapshot (2026-06-30), beyond the 45-day limit for this portfolio. The comparison is not performed rather than answered about a different period.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show funded balance evolution from October to November.",
+      "route": "period_change_analysis",
+      "rows": 0
+    },
+    "after": {
+      "answer": "I can't compare October and November for funded balance: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Show funded balance evolution from October to November.",
+      "route": "temporal_compare",
+      "rows": 0
+    }
+  },
+  {
+    "question": "Show pipeline growth from October to November.",
+    "before": {
+      "answer": "No governed pipeline data is available for the pipeline view.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show pipeline growth from October to November.",
+      "route": null,
+      "rows": 0
+    },
+    "after": {
+      "answer": "I can't compare October and November for pipeline amount: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Show pipeline growth from October to November.",
+      "route": "temporal_compare",
+      "rows": 0
+    }
+  },
+  {
+    "question": "Are we originating different types of loans now compared with a few months ago?",
+    "before": {
+      "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a sc",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Are we originating different types of loans now compared with a few months ago?",
+      "route": null,
+      "rows": 0
+    },
+    "after": {
+      "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Are we originating different types of loans now compared with a few months ago?",
+      "route": "period_change",
+      "rows": 0
+    }
+  },
+  {
+    "question": "How does recent lending compare with what we were originating earlier in the year?",
+    "before": {
+      "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a sc",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How does recent lending compare with what we were originating earlier in the year?",
+      "route": null,
+      "rows": 0
+    },
+    "after": {
+      "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How does recent lending compare with what we were originating earlier in the year?",
+      "route": "period_change",
+      "rows": 0
+    }
+  }
+]

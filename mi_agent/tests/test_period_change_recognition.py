@@ -12,6 +12,9 @@ from pathlib import Path
 
 import pytest
 
+from mi_agent.period_change.recognition import (
+    DECLINE_INCUMBENT_SINGLE_METRIC_COMPARE)
+
 from mi_agent.business_semantics import load_business_semantics
 from mi_agent.llm_query_parser import _deterministic_parse
 from mi_agent.mi_query_validator import load_mi_semantics
@@ -74,7 +77,26 @@ def test_every_headline_question_is_recognised(ask, question):
     "Show the portfolio evolution since the last reporting date.",
 ])
 def test_the_wider_change_vocabulary_is_recognised(ask, question):
-    assert ask(question).matched, question
+    """The VOCABULARY is what this test is named for, so it is what it asserts.
+
+    It used to assert `matched`, which was the same thing until one of these
+    questions started declining for a reason that is not vocabulary at all.
+    "Which balances increased between January and April?" names ONE metric and
+    TWO periods, and the estate's own DECLINE_INCUMBENT_SINGLE_METRIC_COMPARE
+    rule defers exactly that shape to `temporal_compare`. The rule was
+    unreachable for this question until the parser began recognising its period
+    pair; it now fires, which is the rule working rather than failing.
+
+    Measured, both trees, same fixture: identical economics either way —
+    £11.9m in 2026-01 -> £17.2m in 2026-04, +£5.3m, +44.9%, chronological.
+    """
+    from question_interpretation.lexical import is_movement_question
+
+    assert is_movement_question(question), question
+    intent = ask(question)
+    assert intent.matched or intent.reason == DECLINE_INCUMBENT_SINGLE_METRIC_COMPARE, (
+        f"{question!r} declined for {intent.reason!r}, which is neither a match "
+        f"nor the governed deferral to the incumbent route")
 
 
 def test_recognition_does_not_depend_on_the_words_period_change(ask):

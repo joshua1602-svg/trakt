@@ -449,3 +449,31 @@ authorised_movements:
       Only the branch that INVENTS an order. Where the reader names both
       periods the stated order is honoured unchanged — 8 explicit-pair
       questions are byte-identical before and after, and they are the control.
+  - id: M2
+    date: "2026-08-26"
+    defect: D3
+    kind: authorised capability movement
+    breaches_before: 7
+    breaches_after: 7
+    cleared: []
+    new_breaches: 0
+    grade_movements: 0
+    statement: >
+      One generic owner for LEVEL versus MOVEMENT
+      (question_interpretation.lexical.temporal_aspect) replaced five
+      independent inferrers that disagreed on 30 of 882 corpus questions with
+      no reader a superset of any other. NO GRADE MOVED and no breach changed,
+      but THREE canary questions changed route — F8.a, F10.a and F10.b moved
+      from temporal_compare to period_change_analysis, because the retired
+      reader missed the bare verb in "how did X change" and the owner does not.
+      Economics are identical on the shared metric (+£3.9m, £12.2m -> £16.1m;
+      LTV 37.4% -> 36.5% falling) and both routes report the pair
+      chronologically, so this is a movement in which answer is given, not in
+      what is true.
+    scope: >
+      Recorded here because a route change that leaves every grade identical is
+      exactly the movement a grade-level detector cannot see. D3 — "the verb,
+      not the meaning, selects the route" — is the defect this narrows: the
+      verb no longer selects the route through five different vocabularies,
+      though route PRECEDENCE still decides which of two eligible routes
+      answers, and that is not closed.

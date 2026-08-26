@@ -27,6 +27,7 @@ did not have.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 #: Clause openers that introduce a CONDITION.
@@ -879,3 +880,185 @@ def pipeline_stage_request(question: "Optional[str]"
             from mi_agent_api.workspace import resolve_dataset
             axis = resolve_dataset(text) == "pipeline"
     return stage, axis
+
+
+# --------------------------------------------------------------------------- #
+# LEVEL versus MOVEMENT — the single owner
+# --------------------------------------------------------------------------- #
+# THE QUESTION THIS ANSWERS, and nothing else:
+#
+#     Is the quantity asked for a LEVEL at one point in time, or a CHANGE
+#     between two points in time?
+#
+# It lives here because it is a reading of the QUESTION's vocabulary, which is
+# what this module owns, and because it must not live in any route: the estate
+# had FIVE components inferring it independently and they disagreed on 30 of 882
+# corpus questions, with no reader a superset of any other —
+#
+#     A  period_change.recognition.has_change_language      17
+#     B  llm_query_parser._COMPARE_TRIGGER_RE               21
+#     C  spec.temporal_mode == "compare"                     5
+#     D  interpreter.deterministic's compare branch         20
+#     E  concentration_query's compare_concentration gate    0
+#     union                                                 30
+#
+# — and each missed part of the union (A 13, B 9, C 25, D 10, E 30). Reader A
+# missed "How did the balance change since last month?", the most canonical
+# movement question in the estate, because CHANGE_MARKERS carried "changed",
+# "change in" and "has changed" but not the bare verb.
+#
+# TWO THINGS THAT ARE NOT A MOVEMENT, and the reason each is excluded:
+#
+#   comparing two POPULATIONS  "how does the front book compare with our older
+#                              lending" contrasts two slices of one snapshot.
+#                              Reader B called it a movement because its trigger
+#                              is a bare "compare" with no period requirement.
+#   comparing against a PLAN   "compare current funded balance to expected",
+#                              "the largest concentration versus limit" — the
+#                              second operand is a forecast or a threshold, not
+#                              an earlier date.
+#
+# So every construction below requires a PERIOD on both sides, or an explicit
+# change verb. A bare "compare" is not evidence of anything temporal.
+#
+# A SERIES IS NOT A TWO-POINT MOVEMENT either. "balance by month" is a sequence
+# of levels; the estate already treats it as a separate decline reason
+# (DECLINE_TREND_SERIES) and folding it in here would claim a movement wherever
+# a time axis appears.
+
+LEVEL = "level"
+MOVEMENT = "movement"
+TEMPORAL_ASPECTS = (LEVEL, MOVEMENT)
+
+#: Verbs and nouns that name a change. Superset of the estate's readers: the
+#: bare conjugations `change`, `changing`, `declined`, `dropped` and `growing`
+#: were missing from the widest of them.
+CHANGE_WORDS: Tuple[str, ...] = (
+    "change", "changed", "changes", "changing",
+    "movement", "movements", "moved", "moves", "move",
+    "increase", "increased", "increasing", "decrease", "decreased", "decreasing",
+    "grew", "grow", "grown", "growing", "growth",
+    "declined", "decline", "declining", "dropped", "drop", "dropping",
+    "shrank", "shrunk", "shrinking", "rose", "risen", "rising",
+    "fell", "fallen", "falling",
+    "improved", "improvement", "deteriorated", "deterioration",
+    "worsened", "shifted", "shift",
+)
+_CHANGE_WORD_RE = re.compile(
+    r"\b(?:" + "|".join(sorted(CHANGE_WORDS, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE)
+
+#: Phrases that name a period-over-period comparison outright.
+COMPARISON_PERIOD_WORDS: Tuple[str, ...] = (
+    "month on month", "month-on-month", " mom ", "quarter on quarter",
+    "quarter-on-quarter", " qoq ", "year on year", "year-on-year", " yoy ",
+    "year to date", "year-to-date", " ytd ",
+    "current versus previous", "current vs previous",
+    "versus the previous", "versus the prior", "vs the previous", "vs the prior",
+    "with the previous", "with the prior",
+    "since the previous", "since the prior", "since the last",
+)
+
+#: What counts as naming a period. A construction only reads as temporal when a
+#: period stands on BOTH sides of it — that is the whole difference between
+#: comparing two dates and comparing two books.
+_PERIOD = (r"(?:\d{4}-\d{2}(?:-\d{2})?|\d{4}|q[1-4]|h[12]|"
+           r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+           r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|"
+           r"dec(?:ember)?|"
+           r"(?:last|previous|prior|next|this|current|latest)\s+"
+           r"(?:day|week|month|quarter|year|run|pipeline|period)|"
+           # Relative recency. A reader says "now compared with a few months
+           # ago" and means two dates as plainly as "October versus November";
+           # without these the owner read that as a level.
+           r"(?:a\s+few\s+|\d+\s+|a\s+|several\s+)?"
+           r"(?:days?|weeks?|months?|quarters?|years?)\s+ago|"
+           r"earlier\s+(?:in\s+the\s+)?(?:year|quarter|month|period)|"
+           r"latest|today|yesterday|now|recent(?:ly)?)")
+
+#: Seasoning SEGMENTS are not periods. "the front book", "our seasoned loans"
+#: and "the back book" name cohorts of the CURRENT book, so a question
+#: contrasting two of them is cross-sectional however comparative its wording.
+#: The estate has a `seasoning` owner for exactly that axis, and the difference
+#: between it and this one is the difference between "what we hold" and "what
+#: moved".
+
+_BETWEEN_PERIODS_RE = re.compile(
+    rf"\bbetween\s+{_PERIOD}\s+and\s+{_PERIOD}", re.IGNORECASE)
+_FROM_TO_PERIODS_RE = re.compile(
+    rf"\bfrom\s+{_PERIOD}\s+(?:to|until|through)\s+{_PERIOD}", re.IGNORECASE)
+_PERIOD_VERSUS_RE = re.compile(
+    rf"{_PERIOD}\s+(?:versus|vs\.?|against|compared\s+(?:to|with))\s+"
+    rf"{_PERIOD}", re.IGNORECASE)
+#: "compare October AND November". A bare `and` between two periods is NOT
+#: enough on its own — "show pipeline by stage for October and November" asks
+#: for two LEVELS side by side, not their difference — so the connective only
+#: counts when an explicit comparison verb governs it.
+_COMPARE_PERIODS_RE = re.compile(
+    rf"\bcompar\w*\b[^.?!]{{0,40}}?{_PERIOD}\s+(?:and|with|to|versus|vs\.?)\s+"
+    rf"{_PERIOD}", re.IGNORECASE)
+#: Two DISTINCT periods anywhere, joined by a comparison word. The shape
+#: "how does recent lending compare with what we were originating earlier in the
+#: year" puts the periods too far from the connective for the patterns above.
+_COMPARE_WORD_RE = re.compile(
+    r"\b(?:compare[ds]?|comparing|versus|vs\.?|against|different|difference)\b",
+    re.IGNORECASE)
+_PERIOD_TOKEN_RE = re.compile(_PERIOD, re.IGNORECASE)
+_SINCE_PERIOD_RE = re.compile(rf"\bsince\s+{_PERIOD}", re.IGNORECASE)
+#: "how did/has X change" — the shape reader A missed entirely.
+_HOW_CHANGED_RE = re.compile(
+    r"\bhow\s+(?:did|has|have|is|are)\b.{0,60}?\b(?:chang|mov|grow|grew|"
+    r"declin|f[ae]ll|drop|increas|decreas|shift)", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class TemporalAspect:
+    """Whether the question asks for a level or a change, and what said so."""
+
+    verdict: str
+    evidence: Tuple[str, ...] = ()
+
+    @property
+    def is_movement(self) -> bool:
+        return self.verdict == MOVEMENT
+
+
+def temporal_aspect(question: str) -> TemporalAspect:
+    """LEVEL or MOVEMENT, with the signals that decided it.
+
+    MOVEMENT requires POSITIVE evidence. Absence of evidence is LEVEL, because
+    a question that names no change is asking what the position is — which is
+    what every route in the estate already assumes, and saying so explicitly is
+    what lets a consumer stop guessing.
+
+    The evidence is returned so a receipt can show WHY a question was read as a
+    change. A verdict with no evidence is a level, and that is checkable.
+    """
+    text = f" {str(question or '').strip().lower()} "
+    evidence: list = []
+    if _CHANGE_WORD_RE.search(text):
+        evidence.append("change_word")
+    if any(w in text for w in COMPARISON_PERIOD_WORDS):
+        evidence.append("comparison_period_phrase")
+    if _BETWEEN_PERIODS_RE.search(text):
+        evidence.append("between_periods")
+    if _FROM_TO_PERIODS_RE.search(text):
+        evidence.append("from_period_to_period")
+    if _PERIOD_VERSUS_RE.search(text):
+        evidence.append("period_versus_period")
+    if _COMPARE_PERIODS_RE.search(text):
+        evidence.append("compare_period_and_period")
+    if (_COMPARE_WORD_RE.search(text)
+            and len({m.group(0).strip().lower()
+                     for m in _PERIOD_TOKEN_RE.finditer(text)}) >= 2):
+        evidence.append("two_periods_and_a_comparison")
+    if _SINCE_PERIOD_RE.search(text):
+        evidence.append("since_period")
+    if _HOW_CHANGED_RE.search(text):
+        evidence.append("how_did_it_change")
+    return TemporalAspect(MOVEMENT if evidence else LEVEL, tuple(evidence))
+
+
+def is_movement_question(question: str) -> bool:
+    """The boolean form, for a caller that does not need the evidence."""
+    return temporal_aspect(question).is_movement

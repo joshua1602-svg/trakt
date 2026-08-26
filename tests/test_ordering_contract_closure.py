@@ -144,24 +144,28 @@ def test_a_ranking_of_a_level_does_not_claim_to_be_a_movement():
     assert op.orders_a_movement is False
 
 
-def test_the_known_gap_is_recorded_rather_than_papered_over():
-    """A ranked question whose temporality only the WORDS carry.
+def test_the_gap_that_was_pinned_here_is_now_CLOSED():
+    """This test used to assert `ordering_of is None`, and said so on purpose.
 
     "Which region grew the most balance since last month?" is a ranked movement
-    to any reader. The contract cannot say so, because no owner tells it the
-    question is temporal: `_compare_recognizer`'s trigger vocabulary does not
-    fire on "grew ... since", so `temporal_mode` is unset and `ordering_of`
-    stays None.
+    to any reader, and the contract could not say so because no owner told it
+    the question was temporal — `_compare_recognizer`'s trigger vocabulary did
+    not fire on "grew ... since". The assertion pinned the GAP and carried the
+    instruction to flip it, with the movement attributed, on the day an owner
+    appeared.
 
-    This test PINS THE GAP rather than hiding it. `ordering_of` is deliberately
-    NOT derived by reading the question here — that would put a fourth
-    change-language reader in the estate, which is the defect class this
-    programme exists to remove. The gap closes when the parser's temporal
-    vocabulary closes, and this test flips to `ORDER_OF_MOVEMENT` on that day
-    and must be updated then, with the movement attributed.
+    `question_interpretation.lexical.temporal_aspect` is that owner. The
+    movement is attributed in the canary bank's authorised_movements ledger as
+    M2 and measured in docs/mi_temporal_aspect_owner.md: 113 contracts changed,
+    2 plans changed on one route, 4 answers moved and none into a wrong answer.
+
+    The old assertion is NOT deleted quietly — it is inverted, and this
+    docstring is the record of what it used to say.
     """
     op = _project("Which region grew the most balance since last month?").operation
     assert op.type == RANKING
-    assert op.ordering_of is None, (
-        "the parser now marks this question temporal — good. Update this test "
-        "and attribute the capability movement; do not delete it.")
+    assert op.ordering_of == ORDER_OF_MOVEMENT
+    assert op.orders_a_movement
+    # And the level sibling must NOT have moved with it.
+    level = _project("Which region has the largest balance?").operation
+    assert level.orders_a_movement is False

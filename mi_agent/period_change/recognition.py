@@ -51,37 +51,12 @@ from .periods import PeriodRequest
 # --------------------------------------------------------------------------- #
 #: Explicit change language. A question carrying any of these is asking what
 #: moved, whatever nouns surround it.
-CHANGE_MARKERS: Tuple[str, ...] = (
-    "changed", "change in", "changes in", "what changed", "has changed",
-    "have changed", "movement", "movements", "moved", "what moved",
-    "increase", "increased", "decrease", "decreased",
-    "improved", "deteriorated", "improvement", "deterioration",
-    "grown", "shrunk", "rose", "fell", "risen", "fallen",
-    "drivers of", "driver of", "what drove", "main drivers",
-    "portfolio evolution", "evolution of the portfolio",
-    "composition change", "composition changed", "shifted", "shift in",
-    # The same verb family, in the tenses a ranked question actually uses.
-    # "grown", "rose" and "fell" were already here; "grew", "growth",
-    # "declined" and "dropped" are the missing conjugations of the identical
-    # intent, and without them "which region grew the most last month?" was not
-    # recognised as change language at all.
-    "grew", "grow", "growth", "shrank",
-    "decline", "declined", "declining", "dropped", "drop in",
-    "rising", "falling", "gained", "lost balance",
-)
-
-#: Period tokens that are themselves change language: nobody writes
-#: "quarter-on-quarter" about a single date. "prior period" alone is NOT here —
-#: "show me the prior month balance" is an as-at question, not a change question.
-COMPARISON_PERIOD_MARKERS: Tuple[str, ...] = (
-    "month on month", "month-on-month", " mom ", "quarter on quarter",
-    "quarter-on-quarter", " qoq ", "year on year", "year-on-year", " yoy ",
-    "year to date", "year-to-date", " ytd ",
-    "current versus previous", "current vs previous",
-    "versus the previous", "versus the prior", "vs the previous", "vs the prior",
-    "with the previous", "with the prior",
-    "since the previous", "since the prior", "since the last",
-)
+# CHANGE_MARKERS and COMPARISON_PERIOD_MARKERS lived here and are DELETED.
+# `question_interpretation.lexical` owns the LEVEL/MOVEMENT vocabulary for the
+# whole estate; keeping a second copy here — even an unused one — is how the
+# estate came to have five readers of one distinction in the first place.
+# TREND_MARKERS stays: a SERIES is not a two-point movement, and it is a
+# separate decline reason.
 
 #: Relative period modes, longest/most specific first so "year-on-year" is not
 #: shadowed by a looser marker.
@@ -283,19 +258,23 @@ def _any(text: str, markers: Sequence[str]) -> bool:
 def has_change_language(question: str) -> bool:
     """True when the question is asking what moved, not what the position is.
 
-    Three ways a question qualifies: explicit change words, a period token that
-    only ever appears in a change question (``quarter-on-quarter``), or an
-    explicit two-period construction ("between March and June", "compare
-    2025-12-31 with 2026-03-31"). The last one matters because naming two dates
-    IS the question — no verb is needed — but it is deliberately the weakest
-    signal, and a two-period question with a single metric focus is deferred to
-    the incumbent ``temporal_compare`` route below.
+    DELEGATED. `question_interpretation.lexical.temporal_aspect` is the single
+    owner of LEVEL versus MOVEMENT for the whole estate, and this function no
+    longer decides anything — it reads that owner's verdict.
+
+    It used to own its own vocabulary, and the estate had FIVE such readers that
+    disagreed on 30 of 882 corpus questions with no reader a superset of any
+    other. This one missed "How did the balance change since last month?", the
+    most canonical movement question there is, because CHANGE_MARKERS carried
+    "changed", "change in" and "has changed" but not the bare verb "change".
+
+    Measured before the delegation: the owner is a strict SUPERSET of this
+    reader — 0 questions this said were changes the owner calls levels, and 7
+    the owner recognises that this missed.
     """
-    text = _padded(question)
-    if _any(text, CHANGE_MARKERS) or _any(text, COMPARISON_PERIOD_MARKERS):
-        return True
-    return any(pattern.search(question or "")
-               for pattern in (_BETWEEN_RE, _FROM_TO_RE, _VERSUS_RE))
+    from question_interpretation.lexical import is_movement_question
+
+    return is_movement_question(question)
 
 
 def _explicit_periods(question: str, spec: Any) -> Tuple[Optional[str], Optional[str]]:

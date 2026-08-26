@@ -24,7 +24,7 @@
       "ranked_direction": null,
       "ranked_top_n": null,
       "period_order_breach": null,
-      "answer": "Between 30 April 2026 and 31 May 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, signifi"
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
     },
     {
       "id": "F1.b",
@@ -76,7 +76,7 @@
       "ranked_direction": null,
       "ranked_top_n": null,
       "period_order_breach": null,
-      "answer": "Between 30 April 2026 and 31 May 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, signifi"
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
     },
     {
       "id": "F1.d",
@@ -707,7 +707,7 @@
         "SPAN": "UNEVIDENCED",
         "MOVEMENT": "HONOURED"
       },
-      "route": "temporal_compare",
+      "route": "period_change_analysis",
       "ok": true,
       "delivers_rows": true,
       "ranked_applied": false,
@@ -716,7 +716,7 @@
       "ranked_direction": null,
       "ranked_top_n": null,
       "period_order_breach": null,
-      "answer": "WA current LTV moved from 37.4% in 2026-04 to 36.5% in 2026-05 \u2014 a change of 0.9% (-2.27%, down).\n\nCalculated: Governed period comparison."
+      "answer": "Between 30 April 2026 and 31 May 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%). Against the registry's directionality, 1 metric(s) moved in the improving direction and 0 in the deteriorating direction. No governed materiality threshold is configured for this portfolio"
     },
     {
       "id": "F8.b",
@@ -895,7 +895,7 @@
         "SPAN": "UNEVIDENCED",
         "MOVEMENT": "HONOURED"
       },
-      "route": "temporal_compare",
+      "route": "period_change_analysis",
       "ok": true,
       "delivers_rows": true,
       "ranked_applied": false,
@@ -904,7 +904,7 @@
       "ranked_direction": null,
       "ranked_top_n": null,
       "period_order_breach": null,
-      "answer": "Funded balance moved from \u00a312.2m in 2026-04 to \u00a316.1m in 2026-05 \u2014 a change of \u00a33.9m (+32.24%, up).\n\nCalculated: Governed period comparison."
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
     },
     {
       "id": "F10.b",
@@ -921,7 +921,7 @@
         "SPAN": "UNEVIDENCED",
         "MOVEMENT": "HONOURED"
       },
-      "route": "temporal_compare",
+      "route": "period_change_analysis",
       "ok": true,
       "delivers_rows": true,
       "ranked_applied": false,
@@ -930,7 +930,7 @@
       "ranked_direction": null,
       "ranked_top_n": null,
       "period_order_breach": null,
-      "answer": "WA current LTV moved from 37.4% in 2026-04 to 36.5% in 2026-05 \u2014 a change of 0.9% (-2.27%, down).\n\nCalculated: Governed period comparison."
+      "answer": "Between 30 April 2026 and 31 May 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%). Against the registry's directionality, 1 metric(s) moved in the improving direction and 0 in the deteriorating direction. No governed materiality threshold is configured for this portfolio"
     },
     {
       "id": "F10.c",
@@ -1551,7 +1551,25 @@
           "statement": "\"How did LTV change since last month?\" is answered \"WA current LTV moved from 36.5% in 2026-05 to 37.4% in 2026-04 \u2014 a change of 0.9% (+2.33%, up)\". The pair is reversed: May opens and April closes. LTV fell from 37.4% in April to 36.5% in May, and the answer reports it as a rise. The route is temporal_compare (C5), not period_change \u2014 this is a finding about the converted estate, not about the C7 candidate.\n"
         }
       ]
-    }
+    },
+    "authorised_movements": [
+      {
+        "id": "M1",
+        "date": "2026-08-26",
+        "defect": "D4",
+        "kind": "authorised defect correction",
+        "breaches_before": 9,
+        "breaches_after": 7,
+        "cleared": [
+          "I7_period_order_is_chronological \u00b7 F10.a \u00b7 SPAN",
+          "I7_period_order_is_chronological \u00b7 F10.b \u00b7 SPAN"
+        ],
+        "new_breaches": 0,
+        "grade_movements": 0,
+        "statement": "`llm_query_parser._compare_recognizer` built the comparison pair as [\"latest\", <relative>] when a question named a relative period but no explicit month. `latest` IS the closing period, so the comparison opened at the close: the sign of every movement inverted, and `pct = abs/va` then divided by the closing value, so the magnitude was wrong too. A book that grew \u00a318.87m -> \u00a321.10m was reported as a 10.57% fall; it is now reported as a 11.81% rise. Pre-registered in docs/mi_d4_comparison_direction_preregistration.md before the change, and the movement matched that registration exactly: two I7 breaches cleared, ZERO grade movements, zero new breaches.\n",
+        "scope": "Only the branch that INVENTS an order. Where the reader names both periods the stated order is honoured unchanged \u2014 8 explicit-pair questions are byte-identical before and after, and they are the control.\n"
+      }
+    ]
   },
   "breaches": [
     {
@@ -1648,7 +1666,7 @@
     },
     {
       "case": "F8.a",
-      "route": "temporal_compare",
+      "route": "period_change_analysis",
       "elements": [
         "MEASURE",
         "SPAN"
@@ -1656,14 +1674,14 @@
     },
     {
       "case": "F10.a",
-      "route": "temporal_compare",
+      "route": "period_change_analysis",
       "elements": [
         "SPAN"
       ]
     },
     {
       "case": "F10.b",
-      "route": "temporal_compare",
+      "route": "period_change_analysis",
       "elements": [
         "MEASURE",
         "SPAN"

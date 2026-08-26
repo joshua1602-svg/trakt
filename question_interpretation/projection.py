@@ -44,7 +44,7 @@ from .schema import (
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
     ORDER_BASIS_ABSOLUTE, ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT,
     ORDER_BASIS_SHARE, ORDER_DECREASE, ORDER_DIRECTIONS, ORDER_EITHER,
-    ORDER_INCREASE, ORDER_OF_MOVEMENT,
+    ORDER_INCREASE, ORDER_OF_LEVEL, ORDER_OF_MOVEMENT,
     OperationClaim, PopulationClaim, QuestionInterpretation, RowPredicateClaim, Slot,
     SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
     DatasetClaim, DATASET_FUNDED,
@@ -197,6 +197,7 @@ def _ordering_values(question, spec, dim_terms) -> dict:
     distinguish "ranks a level" from "does not say".
     """
     from mi_agent.period_change import rank_request as _rank
+    from question_interpretation import lexical as _lex
 
     out = {}
     # THE TERM THE RESOLVER ALREADY FOUND. `detect_rank_request` returns None
@@ -219,13 +220,26 @@ def _ordering_values(question, spec, dim_terms) -> dict:
         limit = getattr(request, "top_n", None)
         if isinstance(limit, int) and limit > 0:
             out["ordering_limit"] = limit
-    # LEVEL or MOVEMENT. Read from the same two signals the parser already
-    # settled — a comparison pair, or a compare/bridge temporal mode — so this
-    # agrees with `type == MOVEMENT` by construction rather than by coincidence.
-    if (getattr(spec, "compare_periods", None)
+    # LEVEL or MOVEMENT, from the SINGLE OWNER.
+    #
+    # This used to read the parser's `compare_periods` / `temporal_mode` /
+    # `bridge_query`, which meant the contract could only call a ranking a
+    # movement when the compare recogniser happened to fire. "Which region grew
+    # the most balance since last month?" is a ranked movement to any reader and
+    # the contract said nothing, because the recogniser's trigger vocabulary did
+    # not cover "grew ... since". `lexical.temporal_aspect` now owns the
+    # distinction for the whole estate and this reads its verdict.
+    #
+    # The parser's own facts are kept as a SECOND path to MOVEMENT rather than
+    # dropped: a question the parser has already resolved into a period pair is
+    # a movement whatever its wording, and losing that would narrow the claim.
+    out["ordering_of"] = (
+        ORDER_OF_MOVEMENT
+        if (_lex.is_movement_question(question)
+            or getattr(spec, "compare_periods", None)
             or getattr(spec, "temporal_mode", None) == "compare"
-            or getattr(spec, "bridge_query", False)):
-        out["ordering_of"] = ORDER_OF_MOVEMENT
+            or getattr(spec, "bridge_query", False))
+        else ORDER_OF_LEVEL)
     return out
 
 

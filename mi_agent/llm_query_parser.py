@@ -1202,9 +1202,9 @@ def _detect_periods(q: str) -> List[str]:
     return out
 
 
-_COMPARE_TRIGGER_RE = re.compile(
-    r"\bcompare[ds]?\b|change (?:from|between)|how did .+ change|"
-    r"compared (?:to|with)|versus")
+# _COMPARE_TRIGGER_RE lived here and is DELETED. `_compare_recognizer` now asks
+# `lexical.is_movement_question`, and a private trigger left beside it would be
+# a second answer to the same question waiting to drift from the first.
 
 
 def _compare_recognizer(q: str, title: str, semantics: dict
@@ -1215,7 +1215,17 @@ def _compare_recognizer(q: str, title: str, semantics: dict
     runtime / API layer fills value A, value B, absolute + % delta, source
     periods and a controlled insufficient-data response from evolution data.
     """
-    if not _COMPARE_TRIGGER_RE.search(q):
+    # DELEGATED. `lexical.temporal_aspect` owns LEVEL versus MOVEMENT; this
+    # recogniser owns which PERIODS a comparison runs over, and nothing else.
+    #
+    # The trigger it replaces was a bare "compare|versus|compared to" with no
+    # period requirement, so it read six corpus questions as changes that are
+    # not: two compare an actual against a FORECAST, one compares a level
+    # against a LIMIT, and three contrast the front book with the back book —
+    # cohorts of one snapshot, which the `seasoning` owner exists for.
+    from question_interpretation.lexical import is_movement_question
+
+    if not is_movement_question(q):
         return None
     periods = _detect_periods(q)
     if len(periods) < 2:
