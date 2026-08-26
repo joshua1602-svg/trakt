@@ -125,12 +125,58 @@ def _spec(question, semantics):
 
 
 def test_a_newly_carried_axis_does_not_answer_a_question_naming_no_measure(semantics):
-    """"how is the loan book tracking month to month" names NO measure. The
-    widened axis must not pull it into the line path, which would default the
-    metric to Total Balance — a guess for a question that named none."""
-    spec = _spec("how is the loan book tracking month to month", semantics)
-    assert spec.chart_type != "line", \
-        "a metric-less question must not become a line on the strength of the axis alone"
+    """"how is the loan book tracking month to month" names NO measure, and must
+    not be answered with a Total Balance series — a guess for a question that
+    named none.
+
+    THE GUARANTEE IS UNCHANGED; WHERE IT IS ENFORCED HAS MOVED, and this now
+    asserts the guarantee rather than the proxy that used to stand for it.
+
+    The proxy was `spec.chart_type != "line"`, which asked the PARSER to decide
+    whether a measure had been named — with its own default already applied. It
+    could therefore only be conservative, and it was: it also refused "how has
+    the pipeline evolved?", whose measure is not defaulted at all but DETERMINED
+    by the governed dataset the question names, exactly as the working wording
+    "show pipeline evolution" is.
+
+    The spec now RECORDS the substitution (`metric_defaulted`) instead of hiding
+    it, the contract carries it as `SubjectClaim.provenance`, and the evolution
+    route refuses the bare case — no dataset, no analytic, no dimension, no
+    measure. So the question below still cannot be answered; it is now stopped
+    by the layer that can tell the two cases apart.
+
+    Measured when the guard moved, over nine metric-less axis wordings ("how has
+    it evolved?", "show me month by month", "what does it look like over time?",
+    …): 0 answered, 8 refused with "you have not said which metric" and one with
+    an unresolved scope. The assertion below is the shape this test has always
+    protected, stated as an outcome.
+    """
+    import os
+    import warnings as _w
+
+    _w.simplefilter("ignore")
+    os.environ.setdefault("TRAKT_RUNTIME_MODE", "development")
+    from demo_platform import config as cfg
+    os.environ.update(cfg.mi_env(period_role="current"))
+    os.environ["MI_AGENT_LLM_PARSER"] = "off"
+    os.environ["MI_AGENT_LLM_ENABLED"] = "0"
+    os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
+    from fastapi.testclient import TestClient
+    from mi_agent_api.app import app
+
+    question = "how is the loan book tracking month to month"
+    # The parse still records that no measure was named, which is what the old
+    # assertion was reaching for through chart_type.
+    spec = _spec(question, semantics)
+    assert getattr(spec, "metric_defaulted", False) is True, \
+        "the parse must record that the measure was substituted, not named"
+
+    body = TestClient(app).post(
+        "/mi/query", json={"question": question, "portfolioId": cfg.CLIENT_ID}).json()
+    assert body.get("ok") is False, \
+        "a metric-less question must not be answered on the strength of the axis alone"
+    assert "not said which metric" in (body.get("answer") or "").lower(), \
+        "the refusal must name what is missing"
 
 
 def test_the_same_question_with_a_measure_named_does_become_a_series(semantics):

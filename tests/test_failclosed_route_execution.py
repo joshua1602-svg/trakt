@@ -133,7 +133,7 @@ def test_f1_ranked_movement_receipt_failure_fails_closed(client, monkeypatch):
 
     fired = {"n": 0}
 
-    def faulting(result, intent, ranking):
+    def faulting(result, intent, ranking, **kwargs):
         fired["n"] += 1
         raise InjectedExecutionFault("after the governed analysis ran")
 

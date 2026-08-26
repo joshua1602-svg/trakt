@@ -106,10 +106,21 @@ def kpi_value(body: Dict[str, Any], label_contains: str) -> float:
     a test must name the one it means — reading "the first number" silently
     compared row counts in an earlier draft of this suite.
     """
+    # MATCHED ON THE LABEL **OR** THE GOVERNED FIELD KEY.
+    #
+    # This matched the label alone, so it broke when the KPI headline started
+    # using the registry's business name and the aggregation that produced the
+    # figure ("Weighted-average Current LTV") instead of the column key
+    # title-cased ("Current Loan To Value Weighted"). What this test asserts is
+    # a VALUE — that Total LTV is not the mean of the per-portfolio LTVs — and a
+    # value assertion must not be defeated by a rename. The field key
+    # (`current_loan_to_value_weighted_avg`) is the stable identity of the tile.
     wanted = label_contains.lower()
+    key = wanted.replace(" ", "_")
     for artifact in body.get("artifacts") or []:
         for kpi in artifact.get("kpis") or []:
-            if wanted not in str(kpi.get("label", "")).lower():
+            if wanted not in str(kpi.get("label", "")).lower() \
+                    and key not in str(kpi.get("field", "")).lower():
                 continue
             raw = (str(kpi.get("value", ""))
                    .replace("£", "").replace(",", "").replace("%", "").strip())

@@ -200,21 +200,21 @@
         "MOVEMENT"
       ],
       "grades": {
-        "RANK": "UNEVIDENCED",
-        "DIMENSION": "UNEVIDENCED",
-        "DIRECTION": "UNEVIDENCED",
-        "MOVEMENT": "HONOURED"
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
       },
-      "route": "period_change_analysis",
-      "ok": true,
-      "delivers_rows": true,
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
       "ranked_applied": false,
       "ranked_field": null,
       "ranked_basis": null,
       "ranked_direction": null,
       "ranked_top_n": null,
       "period_order_breach": null,
-      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
+      "answer": "I can report what changed, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
     },
     {
       "id": "F3.a",
@@ -1812,11 +1812,33 @@
         "grade_movements": 0,
         "statement": "One generic owner for LEVEL versus MOVEMENT (question_interpretation.lexical.temporal_aspect) replaced five independent inferrers that disagreed on 30 of 882 corpus questions with no reader a superset of any other. NO GRADE MOVED and no breach changed, but THREE canary questions changed route \u2014 F8.a, F10.a and F10.b moved from temporal_compare to period_change_analysis, because the retired reader missed the bare verb in \"how did X change\" and the owner does not. Economics are identical on the shared metric (+\u00a33.9m, \u00a312.2m -> \u00a316.1m; LTV 37.4% -> 36.5% falling) and both routes report the pair chronologically, so this is a movement in which answer is given, not in what is true.\n",
         "scope": "Recorded here because a route change that leaves every grade identical is exactly the movement a grade-level detector cannot see. D3 \u2014 \"the verb, not the meaning, selects the route\" \u2014 is the defect this narrows: the verb no longer selects the route through five different vocabularies, though route PRECEDENCE still decides which of two eligible routes answers, and that is not closed.\n"
+      },
+      {
+        "id": "M3",
+        "date": "2026-08-26",
+        "defect": "D1",
+        "kind": "authorised defect correction and governed-refusal activation",
+        "breaches_before": 7,
+        "breaches_after": 0,
+        "cleared": [
+          "I1_honour_or_disclose \u00b7 F3.b \u00b7 MOVEMENT",
+          "I1_honour_or_disclose \u00b7 F5.d \u00b7 MOVEMENT",
+          "I3_composition_preserves_parts \u00b7 F3.a -> F5.d \u00b7 MOVEMENT",
+          "I4_phrasing_is_not_meaning \u00b7 F1.a / F1.b",
+          "I4_phrasing_is_not_meaning \u00b7 F1.c / F1.d",
+          "I4_phrasing_is_not_meaning \u00b7 F2.a / F2.b / F2.c",
+          "I4_phrasing_is_not_meaning \u00b7 F3.a / F3.b / F3.c"
+        ],
+        "new_breaches": 0,
+        "grade_movements": 70,
+        "statement": "C7 reduction. The route's ranking vocabulary \u2014 _rank_subject and three word lists \u2014 was deleted and the route now reads the contract's ordering_direction, ordering_basis, ordering_limit and the dimension claim's candidate_concepts. D1 is closed at the route: \"which region grew the most\" binds geographic_region_obligor instead of falsely reporting that the book carries no such dimension. A governed no-implicit-period guard was added: a ranked movement naming no window is now CLARIFIED, not answered over an invented latest-versus-previous pair.\n",
+        "scope": "THE ZERO IS NOT A CLEAN BILL. Clearing all seven breaches came with 70 grade movements, and most of this bank's ranked cases name no period, so under the new ruling they refuse: F3, F5, F6 and F7 joined F4 as UNEXERCISED. Zero breaches measured over refusals is the vacuity I6 exists to catch, and it is reported as such rather than as success. Family F11 was ADDED \u2014 never edited \u2014 with five period-carrying ranked movement cases, all of which honour every element they declare, so ranking is exercised again on evidence that did not exist before.\n"
       }
     ]
   },
   "breaches": [],
   "unexercised_families": [
+    "F2",
     "F3",
     "F4",
     "F5",
@@ -1861,15 +1883,6 @@
       ]
     },
     {
-      "case": "F2.d",
-      "route": "period_change_analysis",
-      "elements": [
-        "DIMENSION",
-        "DIRECTION",
-        "RANK"
-      ]
-    },
-    {
       "case": "F8.a",
       "route": "period_change_analysis",
       "elements": [
@@ -1898,6 +1911,56 @@
       "elements": [
         "SPAN"
       ]
+    }
+  ],
+  "refreeze_history": [
+    {
+      "commit_topic": "Final Zero-Blast Commercial Closure",
+      "baseline": "7cadf04",
+      "rows_moved": 1,
+      "attribution": [
+        {
+          "case": "F2.d",
+          "question": "Which underwriter grew the most?",
+          "from": {
+            "RANK": "UNEVIDENCED",
+            "DIMENSION": "UNEVIDENCED",
+            "DIRECTION": "UNEVIDENCED",
+            "MOVEMENT": "HONOURED"
+          },
+          "to": {
+            "RANK": "DISCLOSED",
+            "DIMENSION": "DISCLOSED",
+            "DIRECTION": "DISCLOSED",
+            "MOVEMENT": "DISCLOSED"
+          },
+          "cause": "The no-implicit-comparison-period rule was gated on rank_intent.requested, so the NARRATIVE half of period_change kept inventing the latest-versus-previous window the ranked half was forbidden to invent. 'underwriter' is not a governed dimension term, so this question was never treated as a ranking and fell to that narrative half \u2014 where, naming no period, it was answered with a whole-book movement summary. It now refuses and says which element is missing.",
+          "direction": "SAFER. This bank's own note for F2.d reads 'a dimension no registry carries \u2014 must refuse, and refuse truthfully'. Verified at 7cadf04 in a worktree: the question ANSWERED there. It refuses now.",
+          "not_a_bank_edit": "No expectation was changed to agree with the code. The bank's cases, families, declared elements and invariants are untouched; only the recorded READING moved, and every moved line is attributed above."
+        }
+      ],
+      "coverage_cost": {
+        "unexercised_families": {
+          "from": [
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7"
+          ],
+          "to": [
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7"
+          ]
+        },
+        "why": "F2 is 'Which X grew the most?' with no period in any of its four cases. F2.a/b/c already refused, disclosing the missing period; F2.d was the only case in the family that delivered, and it delivered a whole-book narrative for a question about underwriters. Making it refuse is right and costs the family its one delivering case. THIS IS A REAL LOSS OF EVIDENCE, recorded rather than absorbed: F2's elements are now unverifiable either way, and a period-bearing variant should be added to the bank to restore coverage.",
+        "not_fixed_here": "Adding cases to a frozen adversarial bank mid-sprint would change the denominator this sprint is measured against. It is carried to the real-data handoff instead."
+      },
+      "invariant_breaches": 0
     }
   ]
 }

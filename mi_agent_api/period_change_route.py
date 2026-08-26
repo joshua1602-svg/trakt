@@ -132,6 +132,7 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
 
     frames = evolution_mod.funded_frames(output_root, client_id, to_run_id)
     snapshots: List[SnapshotFrame] = []
+    empty_snapshots: List[str] = []
     for frame in frames:
         source_df = frame.get("df")
         if source_df is None:
@@ -146,6 +147,14 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
                 raise PopulationNotApplied(
                     "; ".join(evidence.unavailable
                               or [evidence.blocked_reason or "unknown reason"]))
+            if int(len(df)) == 0:
+                # A POPULATION THAT SELECTS NOTHING IS NOT A COMPARISON.
+                # Left to run, the workflow reports "no governed field tagged
+                # for period-change analysis is available in both snapshots" —
+                # a true sentence about empty frames and a misleading one about
+                # the book, which carries those fields perfectly well. The
+                # obstacle is the population, so the refusal names it.
+                empty_snapshots.append(str(frame.get("run_id")))
             if evidence_out is not None:
                 # KEYED BY SNAPSHOT, because the receipt publishes counts for
                 # the TWO snapshots the comparison resolved to, not for every
@@ -166,6 +175,10 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
             # the lens selected but that this reporting date never contained
             # must be reported as absent, not as a snapshot full of nulls.
             portfolio_ids=_portfolio_ids(source_df, scope_mod)))
+    if population and snapshots and len(empty_snapshots) == len(snapshots):
+        raise PopulationNotApplied(
+            "no rows in this book match the requested population at any of the "
+            "snapshots compared (" + ", ".join(empty_snapshots) + ")")
     return tuple(snapshots)
 
 
@@ -464,7 +477,25 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # Every answer this route gives is a comparison between two dates, so the
     # question of which two dates is never optional here. Nothing about the
     # rule changes — only the false premise that it applied to ranking alone.
-    if interpretation is not None:
+    # ...and it applies to the narrative half only where the question names no
+    # MEASURE either. "What are the main drivers of the balance movement?"
+    # names its measure and its analysis and is missing only the window, which
+    # the bridge answers over its governed default; refusing it was this
+    # guard's first draft reaching past what it is for. "What changed?" and
+    # "Which underwriter grew the most?" name neither, and are exactly the
+    # questions the rule exists to stop being answered over a window nobody
+    # asked for.
+    # A NAMED CONCEPT IS A NAMED SUBJECT. "What changed in credit quality?"
+    # carries no `spec.metric` — the concept selects a SET of governed measures
+    # rather than one — but it plainly says what to analyse, and is missing only
+    # the window. Reading `intent.requested_concepts` is this route's own
+    # pre-claim reading, already computed above; it is not a second look at the
+    # sentence.
+    _named_subject = bool(getattr(spec, "metric", None)
+                          or intent.requested_concepts
+                          or intent.requested_fields)
+    if interpretation is not None and (rank_intent.requested
+                                       or not _named_subject):
         _time = getattr(interpretation, "time", None)
         _named = bool(getattr(_time, "comparison_periods", None)
                       or getattr(_time, "window_periods", None))

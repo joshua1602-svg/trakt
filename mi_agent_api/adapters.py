@@ -148,12 +148,37 @@ def _infer_col_format(col: str, resolved: Dict[str, Any]) -> str:
 
 
 def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
-    base = key
-    for suffix in ("_sum", "_avg", "_weighted_avg", "_median", "_count", "_count_distinct"):
+    """The headline label for one executed measure — INCLUDING what was computed.
+
+    The aggregation suffix was stripped and thrown away, so the KPI for
+    `youngest_borrower_age_avg` read "Youngest Borrower Age: 74" beside a
+    provenance line that correctly said "Average Borrower Age" and a rawValue
+    of 74.33 — the portfolio AVERAGE, headlined as though it were the youngest
+    borrower in the book. The number and the calculation are untouched; what
+    changes is that the label now describes the calculation that produced it.
+
+    The aggregation words come from `execution_receipt._MEASURE_AGG_WORDS`, the
+    vocabulary the receipt already renders that provenance line from, so the
+    headline and the receipt cannot say two different things about one figure.
+    """
+    # LONGEST SUFFIX FIRST. `_avg` matched before `_weighted_avg`, so
+    # `current_loan_to_value_weighted_avg` lost only "_avg" and read
+    # "Average Current Loan To Value Weighted".
+    base, agg = key, ""
+    for suffix in sorted(("_sum", "_avg", "_weighted_avg", "_median",
+                          "_count", "_count_distinct"), key=len, reverse=True):
         if base.endswith(suffix):
-            base = base[: -len(suffix)]
+            base, agg = base[: -len(suffix)], suffix[1:]
             break
-    return base.replace("_", " ").title()
+    try:
+        from mi_agent.execution_receipt import _MEASURE_AGG_WORDS
+        prefix = _MEASURE_AGG_WORDS.get(agg, "")
+    except Exception:  # noqa: BLE001 - no owner, the label is as it was
+        prefix = ""
+    # The FIELD's governed business name where the resolver knows one, so the
+    # headline reads as the registry spells it rather than as the column is
+    # keyed. Same helper the chart series labels already use.
+    return f"{prefix}{_label_for(base, resolved)}".strip()
 
 
 def _format_kpi_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
@@ -534,6 +559,24 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
     ranked = _ranked_lead(rows, (qr or {}).get("resolved_fields") or {}, hints, spec)
     if ranked:
         return ranked
+    # A SINGLE ROW IS A SINGLE FIGURE, whatever chart was chosen for it.
+    #
+    # "What is the balance of offer stage cases?" narrows to one governed stage
+    # and is rendered as a bar, so the scalar branch above — gated on
+    # chart_type — was skipped and the reader got "Here is the bar for your
+    # query, covering 1 group." The money was in the KPI artifact and nowhere
+    # in the prose, which is the same defect that branch was added to fix, one
+    # chart type further along.
+    #
+    # Purely additive and rendering-only: it is reached only where the next
+    # line would have said "covering 1 group", it comes AFTER the ranked lead
+    # so no ranked answer changes, and it uses the same row, labels and
+    # formatters as the KPI artifact — a rendering, not a second calculation.
+    if len(rows) == 1:
+        line = _scalar_line(rows[0], (qr or {}).get("resolved_fields") or {},
+                            hints, spec)
+        if line:
+            return line
     noun = "result" if chart_type in (None, "none") else chart_type
     if n is not None:
         groups = "1 group" if n == 1 else f"{n:,} groups"
@@ -606,7 +649,9 @@ def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
     # answering with the other's figure. Everything else follows in row order,
     # so nothing is dropped and the reader still gets the coverage.
     wanted = ""
+    _grouped = False
     if isinstance(spec, Mapping):
+        _grouped = bool(spec.get("dimension") or spec.get("dimensions"))
         if str(spec.get("aggregation") or "").lower() == "count":
             wanted = "_count"
         elif spec.get("metric"):
@@ -621,7 +666,14 @@ def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
         # stay in the KPI artifact and on the receipt; the sentence leads with
         # the figure and keeps the coverage.
         if key.endswith("_share_pct") or key.endswith("_pct"):
-            return 0
+            # ...but a share OF ONE GROUP is not the share anyone asked for.
+            # A grouped result carries a per-group concentration column, so
+            # once this branch also served grouped answers "what is the
+            # balance of offer stage cases?" led with "Concentration Pct:
+            # 100.0%" — the share of the only group, which is 100% by
+            # construction and reads like a finding. The share leads where the
+            # share IS the answer: an ungrouped question about the book.
+            return 0 if not _grouped else 3
         if key.endswith(("_numerator", "_denominator")) or key == "population_total":
             return 4
         if wanted == "_count":

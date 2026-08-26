@@ -1063,6 +1063,12 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     if (getattr(_subject, "provenance", None) == _PROV_DEFAULT
             and not is_count
             and not stage_axis
+            # A NAMED STAGE DETERMINES THE MEASURE just as the dataset does:
+            # "completions by month" is a pipeline question whose measure is
+            # the governed pipeline amount, not a question with no measure.
+            # Checking only the stage AXIS ("by stage") and not a named stage
+            # made this guard refuse it.
+            and not funnel_stage
             and getattr(getattr(interpretation, "operation", None),
                         "analytic", None) is None
             and not _plan.grouping_concepts(interpretation)

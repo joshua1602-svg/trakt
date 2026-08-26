@@ -177,7 +177,46 @@ def test_config_fallback_when_no_doc(monkeypatch, tmp_path):
                     "confidence": "high", "needs_review": False}],
         "limit_count": 1, "needs_review_count": 0,
         "categories": ["geographic_concentration"]}), encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
+    # THE FALLBACK IS LOCATED FROM THE PACKAGE, NOT THE WORKING DIRECTORY.
+    # This test used to place the config under a tmp_path and chdir into it,
+    # which passed only because `risk_limits` resolved `Path("config")`
+    # relative to the process CWD. That relative path was the defect: run from
+    # anywhere but the repository root, a client with committed limits was told
+    # they had none. The GUARANTEE this test protects — a committed config YAML
+    # with no Schedule 8 document resolves to "config fallback" — is unchanged;
+    # only where the file has to be for the resolver to find it has moved.
+    monkeypatch.setattr(rl, "_CONFIG_ROOT", tmp_path / "config")
     out = rl.load_extracted_limits("client_cfg")
     assert out["limits_source"] == "config fallback"
     assert out["available"] is True
+
+
+def test_the_committed_fallback_does_not_depend_on_the_working_directory(
+        monkeypatch, tmp_path):
+    """Same client, same config, three working directories, one answer.
+
+    The relative `Path("config")` this replaces made a client's limits appear
+    and disappear with the directory the process was started in — silently, and
+    in the safe-looking direction ("extraction required" for a book whose limits
+    are committed). Nothing in an answer may depend on `os.getcwd()`.
+    """
+    import os
+    cfg = tmp_path / "config" / "clients" / "client_cwd" / "risk_limits_extracted.yaml"
+    cfg.parent.mkdir(parents=True)
+    import yaml as _yaml
+    cfg.write_text(_yaml.safe_dump({
+        "limits": [{"limit_id": "geo_x", "category": "geographic_concentration",
+                    "limit_value": 30.0, "unit": "percent", "direction": "max",
+                    "confidence": "high", "needs_review": False}],
+        "limit_count": 1, "needs_review_count": 0,
+        "categories": ["geographic_concentration"]}), encoding="utf-8")
+    monkeypatch.setattr(rl, "_CONFIG_ROOT", tmp_path / "config")
+
+    seen = []
+    for where in (tmp_path, tmp_path.parent, os.sep):
+        monkeypatch.chdir(where)
+        out = rl.load_extracted_limits("client_cwd")
+        seen.append((out["limits_source"], out.get("limit_count"),
+                     out.get("available")))
+    assert len(set(seen)) == 1, f"the answer changed with the working directory: {seen}"
+    assert seen[0][0] == "config fallback"

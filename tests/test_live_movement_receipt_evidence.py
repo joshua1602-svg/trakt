@@ -72,8 +72,12 @@ def _with_mutated_receipt(monkeypatch, mutate):
     import mi_agent_api.period_change_route as pcr
     original = pcr.movement_receipt_for
 
-    def patched(result, intent, ranking):
-        return mutate(original(result, intent, ranking))
+    # **kwargs, because the route now hands the receipt builder the governed
+    # population it applied and the per-snapshot evidence for it. Pinning the
+    # old positional signature made this stub raise INSIDE a claimed route,
+    # which is a fail-closed error and not the mutation this test injects.
+    def patched(result, intent, ranking, **kwargs):
+        return mutate(original(result, intent, ranking, **kwargs))
 
     monkeypatch.setattr(pcr, "movement_receipt_for", patched)
 

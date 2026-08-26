@@ -81,7 +81,29 @@ def ask(question: str, **kw):
     from mi_agent.period_change.recognition import recognise
 
     semantics = load_mi_semantics(SEMANTICS_PATH)
-    spec, _meta = _deterministic_parse(question, semantics)
+    # PARSE THE WAY PRODUCTION PARSES — with the book's own value catalogue.
+    #
+    # Without it, `_parse_categorical_filter` falls back to binding an
+    # unrecognised phrase to the geography field, so "What changed in credit
+    # quality?" came out of this harness carrying
+    # `collateral_geography = "Credit Quality"`. Nothing applied that filter,
+    # so the harness answered anyway; once the route began applying the
+    # governed population to every snapshot it compares, the invented predicate
+    # selected nothing and the question failed. Production never parses without
+    # the catalogue — it is exactly what stops a geography being invented — so
+    # this stand-in for the router now supplies it too.
+    _values = None
+    try:
+        from mi_agent import execution_receipt as _r
+        from mi_agent_api import evolution as _evo
+        _frames = _evo.funded_frames("blob://x", "client", None) or []
+        _df = next((f.get("df") for f in _frames if f.get("df") is not None), None)
+        if _df is not None:
+            _values = _r.book_values(_df, semantics)
+    except Exception:  # noqa: BLE001 - no frames yet, parse as before
+        _values = None
+    spec, _meta = _deterministic_parse(question, semantics,
+                                       available_values=_values)
     params = dict(client_id="client", run_id=None, output_root="blob://x",
                   portfolio_id="client/2026-06-30", as_of=None)
     params.update(kw)
