@@ -67,6 +67,47 @@ NEUTRAL = "neutral"
 #: exists to prevent. Re-add it when a question demands it, with the question.
 OPERATION_TYPES = (COUNT, AMOUNT, AVERAGE, MOVEMENT, RANKING, FORWARD, NEUTRAL)
 
+# --------------------------------------------------------------------------- #
+# THE ORDERING FACTS — the third application of the closure pattern.
+#
+# `OperationClaim.type == RANKING` says a ranking was NAMED. It does not say
+# what to rank, which way, on what basis, or how many — and measured over the 97
+# corpus questions that carry ranking language, `modifiers` is EMPTY on every
+# one of them. Every one of those four facts is resolved downstream from raw
+# English by `mi_agent.period_change.rank_request`, which is a second reading of
+# a sentence the contract has already claimed.
+#
+# That is the same shape the contract has closed twice before, and these fields
+# are the same remedy:
+#
+#     trend_window     (wording)  ->  window_periods       (the magnitude)
+#     comparison_period(wording)  ->  comparison_periods   (the values)
+#     type == RANKING  (wording)  ->  ordering_*           (the values)
+#
+# `ordering_of` is the one that is not merely carriage. It separates "which
+# region has the largest balance" from "which region grew the most" — a ranking
+# of a LEVEL from a ranking of a MOVEMENT. Nothing in the contract could express
+# that difference before, and a question that asks which region GREW has been
+# answered with which region IS, disclosed nowhere.
+ORDER_INCREASE = "increase"
+ORDER_DECREASE = "decrease"
+ORDER_EITHER = "either"
+ORDER_DIRECTIONS = (ORDER_INCREASE, ORDER_DECREASE, ORDER_EITHER)
+
+#: What the ordering is measured ON. Mirrors the governed bases the ranking
+#: engine already implements; naming them here does not add a basis.
+ORDER_BASIS_ABSOLUTE = "absolute"
+ORDER_BASIS_PERCENT = "percent"
+ORDER_BASIS_SHARE = "share"
+ORDER_BASIS_COUNT = "count"
+ORDER_BASES = (ORDER_BASIS_ABSOLUTE, ORDER_BASIS_PERCENT, ORDER_BASIS_SHARE,
+               ORDER_BASIS_COUNT)
+
+#: Whether the quantity ordered is a LEVEL at one date or a MOVEMENT between two.
+ORDER_OF_LEVEL = "level"
+ORDER_OF_MOVEMENT = "movement"
+ORDER_SUBJECTS = (ORDER_OF_LEVEL, ORDER_OF_MOVEMENT)
+
 #: The SYNTACTIC role a named dimension plays in this sentence. Not a semantic
 #: judgement about the registry: both `region` and `borrower type` are
 #: dimensions; in "balance by region for joint borrowers" their roles differ.
@@ -240,15 +281,52 @@ class Slot:
 class OperationClaim(Slot):
     type: Optional[str] = None
     modifiers: Tuple[str, ...] = ()
+    #: THE ORDERING VALUES. See the vocabulary block above for why these are
+    #: typed fields rather than strings in `modifiers`: encoding them as
+    #: "basis:absolute" would make every consumer split a serialisation back
+    #: into structure, which is the defect `comparison_periods` was added to
+    #: close and is not going to be reintroduced here.
+    #:
+    #: All four are None when the question named no ordering. `ordering_of` is
+    #: None when a ranking was named but the question does not say whether it
+    #: ranks a level or a movement — which a consumer must distinguish from
+    #: "it ranks a level", and so the field never defaults.
+    ordering_direction: Optional[str] = None
+    ordering_basis: Optional[str] = None
+    ordering_limit: Optional[int] = None
+    ordering_of: Optional[str] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.type is not None and self.type not in OPERATION_TYPES:
             raise ValueError("unknown operation type %r" % (self.type,))
+        for value, allowed, label in (
+                (self.ordering_direction, ORDER_DIRECTIONS, "ordering direction"),
+                (self.ordering_basis, ORDER_BASES, "ordering basis"),
+                (self.ordering_of, ORDER_SUBJECTS, "ordering subject")):
+            if value is not None and value not in allowed:
+                raise ValueError("unknown %s %r" % (label, value))
+        if self.ordering_limit is not None and self.ordering_limit < 1:
+            raise ValueError("an ordering limit must be at least 1, not %r"
+                             % (self.ordering_limit,))
+
+    @property
+    def orders_a_movement(self) -> bool:
+        """True only when the contract SAYS the ordering is over a movement.
+
+        Deliberately not "not a level": an unstated subject is unknown, and a
+        consumer that treats unknown as level is the substitution this field
+        exists to prevent.
+        """
+        return self.ordering_of == ORDER_OF_MOVEMENT
 
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
-        d.update({"type": self.type, "modifiers": list(self.modifiers)})
+        d.update({"type": self.type, "modifiers": list(self.modifiers),
+                  "ordering_direction": self.ordering_direction,
+                  "ordering_basis": self.ordering_basis,
+                  "ordering_limit": self.ordering_limit,
+                  "ordering_of": self.ordering_of})
         return d
 
 
@@ -270,15 +348,42 @@ class SubjectClaim(Slot):
 class DimensionClaim(Slot):
     role: str = UNRESOLVED_ROLE
     candidate_concept: Optional[str] = None
+    #: THE OTHER GOVERNED FIELDS THE SAME TERM RESOLVES TO once the book's
+    #: columns are known.
+    #:
+    #: `execution_receipt.requested_dimension_terms` already computes these, and
+    #: its own docstring says why: a generic term resolves to different concrete
+    #: fields depending on what the dataset carries, and carrying the
+    #: alternatives is how an availability difference is never mistaken for a
+    #: substitution. Nothing carried them, so they were dropped at the contract
+    #: boundary and every consumer saw one candidate.
+    #:
+    #: Measured: "Which region grew the most?" resolves to `collateral_geography`
+    #: with `geographic_region_obligor` as an alternate. On a book carrying the
+    #: second and not the first, the reader was told region "is not a governed
+    #: period-change dimension for this book" — a false statement about a
+    #: dimension the book carries. That is canary defect D1, and the contract
+    #: could not express the fact that would have prevented it.
+    alternate_concepts: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.role not in DIMENSION_ROLES:
             raise ValueError("unknown dimension role %r" % (self.role,))
+        self.alternate_concepts = tuple(
+            str(c) for c in (self.alternate_concepts or ()))
+
+    @property
+    def candidate_concepts(self) -> Tuple[str, ...]:
+        """Every governed field this claim could bind to, best first."""
+        first = (self.candidate_concept,) if self.candidate_concept else ()
+        return first + tuple(c for c in self.alternate_concepts
+                             if c != self.candidate_concept)
 
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
-        d.update({"role": self.role, "candidate_concept": self.candidate_concept})
+        d.update({"role": self.role, "candidate_concept": self.candidate_concept,
+                  "alternate_concepts": list(self.alternate_concepts)})
         return d
 
 

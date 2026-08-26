@@ -42,6 +42,9 @@ from .schema import (
     SCOPE_ACQUIRED, SCOPE_COHORT, SCOPE_DIRECT, SCOPE_TOTAL, SOURCE_SCOPES,
     STATED,
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
+    ORDER_BASIS_ABSOLUTE, ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT,
+    ORDER_BASIS_SHARE, ORDER_DECREASE, ORDER_DIRECTIONS, ORDER_EITHER,
+    ORDER_INCREASE, ORDER_OF_MOVEMENT,
     OperationClaim, PopulationClaim, QuestionInterpretation, RowPredicateClaim, Slot,
     SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
     DatasetClaim, DATASET_FUNDED,
@@ -102,7 +105,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     qi = QuestionInterpretation(question=question)
     facet_kinds = {f.kind for f in facets}
 
-    _operation(qi, spec, facet_kinds, AT)
+    _operation(qi, spec, facet_kinds, AT, dim_terms)
     _subject(qi, spec)
     _dimensions(qi, spec, dim_terms, facets)
     _filters(qi, spec, facets)
@@ -158,7 +161,75 @@ def project(question: str, *, semantics: dict, frame=None,
 
 
 # --------------------------------------------------------------------------- #
-def _operation(qi, spec, facet_kinds, AT) -> None:
+#: How the ranking engine's own basis names read as contract bases. The engine
+#: is the OWNER and keeps its vocabulary; this is the mapping, in one place, and
+#: it adds no basis the engine does not already implement.
+_RANK_BASIS_TO_CONTRACT = {
+    "balance_absolute": ORDER_BASIS_ABSOLUTE,
+    "balance_percent": ORDER_BASIS_PERCENT,
+    "balance_share": ORDER_BASIS_SHARE,
+    "count_share": ORDER_BASIS_SHARE,
+    "count_absolute": ORDER_BASIS_COUNT,
+}
+
+#: The engine spells "either direction" as `movement`; the contract spells it
+#: `either`, because in the contract `movement` already means something else —
+#: whether the quantity is a change rather than a level. Mapping rather than
+#: reusing the word keeps `ordering_direction` and `ordering_of` from colliding.
+_RANK_DIRECTION_TO_CONTRACT = {
+    "increase": ORDER_INCREASE, "decrease": ORDER_DECREASE,
+    "movement": ORDER_EITHER,
+}
+
+
+def _ordering_values(question, spec, dim_terms) -> dict:
+    """The four ordering facts, from the EXISTING owner. No new reading.
+
+    `rank_request.detect_rank_request` already resolves direction, basis and
+    limit, and `period_change.recognition` already decides whether a question is
+    about a change. Both are called here so their answers are CARRIED rather
+    than re-derived: this function invents nothing, and if either owner changes
+    its mind the contract changes with it.
+
+    `ordering_of` is the only fact neither owner states outright, and it is
+    derived from a fact they do state — whether the question is about a period
+    change. It is left None when that cannot be told, because a consumer must
+    distinguish "ranks a level" from "does not say".
+    """
+    from mi_agent.period_change import rank_request as _rank
+
+    out = {}
+    # THE TERM THE RESOLVER ALREADY FOUND. `detect_rank_request` returns None
+    # without one — ranking with nothing to rank is not a ranking — so the
+    # contract must hand it the same term the dimension claim will carry, not a
+    # placeholder. Passing "" here silently produced four None fields on every
+    # question, which looked exactly like "the question named no ordering".
+    term = next((t for _k, t, _a in (dim_terms or ()) if t), None)
+    try:
+        request = _rank.detect_rank_request(question, term)
+    except Exception:  # noqa: BLE001 - the contract must not fail on a reader
+        request = None
+    if request is not None:
+        direction = _RANK_DIRECTION_TO_CONTRACT.get(
+            getattr(request, "direction", None))
+        if direction in ORDER_DIRECTIONS:
+            out["ordering_direction"] = direction
+        out["ordering_basis"] = _RANK_BASIS_TO_CONTRACT.get(
+            getattr(request, "basis", None))
+        limit = getattr(request, "top_n", None)
+        if isinstance(limit, int) and limit > 0:
+            out["ordering_limit"] = limit
+    # LEVEL or MOVEMENT. Read from the same two signals the parser already
+    # settled — a comparison pair, or a compare/bridge temporal mode — so this
+    # agrees with `type == MOVEMENT` by construction rather than by coincidence.
+    if (getattr(spec, "compare_periods", None)
+            or getattr(spec, "temporal_mode", None) == "compare"
+            or getattr(spec, "bridge_query", False)):
+        out["ordering_of"] = ORDER_OF_MOVEMENT
+    return out
+
+
+def _operation(qi, spec, facet_kinds, AT, dim_terms=()) -> None:
     asked = AT.asked(qi.question)
     qi.notes.append("answer_type.asked=%s" % asked)
 
@@ -167,8 +238,10 @@ def _operation(qi, spec, facet_kinds, AT) -> None:
                                       source="parser.forecast/facet.projection")
         return
     if facet_kinds & _RANKING_FACETS or getattr(spec, "ranking_mode", None):
-        qi.operation = OperationClaim(state=FILLED, type=RANKING,
-                                      source="parser.ranking_mode/facet.ranking")
+        qi.operation = OperationClaim(
+            state=FILLED, type=RANKING,
+            source="parser.ranking_mode/facet.ranking",
+            **_ordering_values(qi.question, spec, dim_terms))
         return
     if getattr(spec, "compare_periods", None) or \
             getattr(spec, "temporal_mode", None) == "compare" or \
@@ -257,6 +330,13 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
         qi.dimensions.append(DimensionClaim(
             state=FILLED, raw_text=term, span=_span_of(qi.question, term),
             role=role, candidate_concept=key, source=src,
+            # THE ALTERNATES, carried instead of discarded. `dim_terms` has
+            # always been a triple and this loop always threw the third element
+            # away as `_alt`; the resolver computes it precisely so an
+            # availability difference is not read as a substitution, and the
+            # contract dropping it is why "which region grew the most" could be
+            # refused as ungoverned on a book carrying the alternate.
+            alternate_concepts=tuple(_alt or ()),
             # CORRECTION 5: an unresolved role must say WHY.
             reason=ROLE_UNATTRIBUTED if role == UNRESOLVED_ROLE else None))
 

@@ -43,14 +43,23 @@ if str(_REPO) not in sys.path:
 from migration_phase0.route_ownership_period_change import (  # noqa: E402
     PERIOD_CHANGE_ROUTES, _grade, _questions, funded_runs)
 
-#: A question is about a CHANGE when it uses a change verb or names a span.
-#: Deliberately wider than any single recogniser, because the point of the
-#: census is to find questions a recogniser misses.
-_CHANGE_RE = re.compile(
-    r"\b(?:grew|grow|grown|growth|increas|ris(?:e|en|ing)|gain|expand|added|add|"
-    r"declin|f[ae]ll|drop|decreas|shr(?:ank|unk|ink)|reduc|lost|los(?:e|ing)|"
-    r"chang|mov(?:e|ed|ement)|since|versus|compared|between|trend|over the last|"
-    r"month[- ]on[- ]month|year[- ]on[- ]year)\b", re.I)
+#: A question is about a CHANGE only when it uses a change VERB or an explicit
+#: TEMPORAL phrase.
+#:
+#: `versus` and `compared` are deliberately NOT here. The first version of this
+#: classifier included them and reported one ranked movement in the corpus:
+#: "What is the largest geographic concentration VERSUS LIMIT?" — a ranking of a
+#: LEVEL against a threshold, not a movement over time. Counting it as a
+#: movement would have been this census committing the exact level/movement
+#: conflation it exists to measure.
+_CHANGE_VERB_RE = re.compile(
+    r"\b(?:grew|grow|grown|growth|increas\w*|ris(?:e|en|ing)|gain\w*|expand\w*|"
+    r"added|declin\w*|f[ae]ll\w*|drop\w*|decreas\w*|shr(?:ank|unk|ink\w*)|"
+    r"reduc\w*|lost|chang\w*|mov(?:e|ed|ement)\w*)\b", re.I)
+_TEMPORAL_RE = re.compile(
+    r"\b(?:since|over the last|last (?:month|week|quarter|year)|"
+    r"month[- ]on[- ]month|year[- ]on[- ]year|trend|between \w+ and \w+|"
+    r"from \w+ to \w+)\b", re.I)
 #: A LEVEL superlative — "the largest region" is a ranking of a level, and must
 #: never silently become a ranking of a movement, nor the reverse.
 _LEVEL_ONLY_RE = re.compile(
@@ -65,7 +74,8 @@ def _intended(question: str, has_rank: bool, has_dimension: bool) -> str:
     """What the question asks for, derived from the question alone."""
     if not has_rank:
         return "not_ranking"
-    change = bool(_CHANGE_RE.search(question))
+    change = bool(_CHANGE_VERB_RE.search(question)
+                   or _TEMPORAL_RE.search(question))
     if change:
         return "ranked_movement" if has_dimension else "ranked_movement_no_dimension"
     if _LEVEL_ONLY_RE.search(question):
