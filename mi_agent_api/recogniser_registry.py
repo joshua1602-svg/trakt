@@ -157,6 +157,26 @@ class RouteRequest:
     #: Memo for :meth:`resolve_interpretation`.
     _interpretation_memo: Dict[str, Any] = field(
         default_factory=dict, repr=False, compare=False)
+    #: PRE-CLAIM WORKING, carried forward. A recogniser reads the question by
+    #: design — that is what recognition IS — and several of them build a rich
+    #: reading in the process and then throw it away, leaving the handler to
+    #: rebuild it from the sentence AFTER the route has been claimed. Measured:
+    #: `period_change` ran its recogniser twice per request, and the second run
+    #: was the route's single largest post-claim raw-question read.
+    #:
+    #: Generic on purpose. It is a place to put a value, not a slot named after
+    #: any route or concept, so nothing here knows what a period change is.
+    _recognition_memo: Dict[str, Any] = field(
+        default_factory=dict, repr=False, compare=False)
+
+    def remember_recognition(self, key: str, value: Any) -> Any:
+        """Keep a recogniser's own pre-claim reading for its handler to consume."""
+        self._recognition_memo[key] = value
+        return value
+
+    def recalled_recognition(self, key: str) -> Optional[Any]:
+        """The pre-claim reading stored under ``key``, or ``None``."""
+        return self._recognition_memo.get(key)
 
     def resolve_interpretation(self) -> Optional[Any]:
         """This request's governed interpretation contract, built on first use.

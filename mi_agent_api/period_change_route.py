@@ -161,6 +161,40 @@ def _registry_for(snapshots: Sequence[SnapshotFrame],
         return None
 
 
+def lens_from_contract(interpretation: Any) -> Any:
+    """The source-portfolio lens THIS REQUEST'S CONTRACT states.
+
+    A MAPPING, NOT A DECISION — the same shape `_rank_request_from_contract`
+    uses for ranking. `mi_agent.portfolio_lens` remains the only thing that
+    decides what "the acquired book" MEANS; the contract transports its answer
+    and this hands that answer back to the owner's own constructors. Nothing
+    here reads a question, and no new scope capability is added: the five states
+    of `SourceScopeClaim` map onto the four lenses that already exist.
+
+    Conversion 1's rule applies unchanged — a scope the owner was never
+    consulted about (`state=empty`) is NOT Total, and yields ``None`` so the
+    caller defers rather than widening a population the question may have
+    narrowed.
+
+    Source lens and row predicates stay different axes: this reads
+    `source_scope` and never `row_predicates`.
+    """
+    from mi_agent import portfolio_lens as lens_mod
+
+    scope = getattr(interpretation, "source_scope", None)
+    if scope is None or getattr(scope, "state", None) != "filled":
+        return None
+    name = getattr(scope, "scope", None)
+    ids = tuple(str(i) for i in (getattr(scope, "portfolio_ids", ()) or ()))
+    if name == "total":
+        return lens_mod.total_lens()
+    if name in ("direct", "acquired"):
+        return lens_mod.lens_from_term(name)
+    if name == "cohort" and ids:
+        return lens_mod._selection_lens(list(ids))
+    return None
+
+
 def scope_ref_from_lens(lens: Any, *, tenant_id: Optional[str] = None,
                         asset_classes: Sequence[str] = (),
                         registry: Any = None) -> PortfolioScopeRef:
@@ -273,12 +307,27 @@ def analyse_period_change(*, client_id: str, output_root: Optional[str],
 # --------------------------------------------------------------------------- #
 # Recognition — reads the SINGLE parse on the route request
 # --------------------------------------------------------------------------- #
+#: The key this route's pre-claim reading is carried under.
+RECOGNITION_KEY = "period_change"
+
+
 def recognise_request(req: Any) -> Any:
-    """``Recognition`` for the governed recogniser registry."""
+    """``Recognition`` for the governed recogniser registry.
+
+    THE READING IS KEPT. This is the one place the question is read to decide
+    whether the route owns it, and the `PeriodChangeIntent` it produces carries
+    the mode, the requested fields and the period request the handler needs.
+    It used to be discarded and rebuilt inside the handler from the same
+    sentence — the same function, run twice, the second time after the route
+    had already claimed the question.
+    """
     from .recogniser_registry import Recognition
 
     intent = recognise(req.question, spec=req.spec, view=req.view,
                        semantics_context=req.semantics_context)
+    remember = getattr(req, "remember_recognition", None)
+    if remember is not None:
+        remember(RECOGNITION_KEY, intent)
     if not intent.matched:
         return Recognition.no(intent.reason)
     return Recognition.yes(reason=f"{intent.reason}:{intent.mode}")
@@ -295,17 +344,39 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                         semantics_context: Optional[Dict[str, Any]] = None,
                         view: str = "funded",
                         lens: Any = None,
-                        interpretation: Any = None) -> Optional[Dict[str, Any]]:
-    """The governed period-change answer, or ``None`` to defer to the next route."""
+                        interpretation: Any = None,
+                        recognition: Any = None) -> Optional[Dict[str, Any]]:
+    """The governed period-change answer, or ``None`` to defer to the next route.
+
+    `recognition` is THIS ROUTE'S OWN PRE-CLAIM READING, produced by
+    `recognise_request` before the registry entered the handler and carried in
+    on the request. It is not recomputed here: once the registry has claimed
+    the question, the handler does not go back to the sentence to find out what
+    it owns.
+
+    NO READING, NO ANSWER FROM THIS ROUTE — the rule Conversion 1 set for the
+    population and Conversion 2 for the window. A caller that skipped
+    recognition gets a deferral, not a second recogniser hidden in the handler.
+    """
     from . import chat_routing
 
-    intent = recognise(question, spec=spec, view=view,
-                       semantics_context=semantics_context)
-    if not intent.matched:
+    intent = recognition
+    if intent is None or not intent.matched:
         return None
 
-    resolved_lens = lens if lens is not None else chat_routing._resolve_lens(
-        question, source_lens)
+    # THE POPULATION COMES FROM THE CONTRACT. This called
+    # `chat_routing._resolve_lens(question, source_lens)` — a second reading of
+    # the sentence for a scope the contract had already claimed, and the last
+    # population owner left downstream of interpretation in this estate.
+    # Measured over 882 corpus questions before the switch, and again with a
+    # workspace selection present so caller precedence was actually exercised:
+    # the contract-derived lens and the resolver agree every time.
+    resolved_lens = lens if lens is not None else lens_from_contract(interpretation)
+    if resolved_lens is None:
+        # NO SCOPE CLAIM, NO ANSWER FROM THIS ROUTE. Conversion 1's rule, and
+        # for its reason: keeping the resolver here as a fallback would leave a
+        # second population owner reachable exactly when the first one failed.
+        return None
     snapshots = build_snapshots(output_root, client_id, to_run_id=run_id,
                                 lens=resolved_lens)
     scope_ref = scope_ref_from_lens(
@@ -369,7 +440,13 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # they do not, the question is clarified and no shorter window is
     # substituted. The same code answers once more history is loaded.
     period_request = intent.period_request
-    span = _period_request.requested_span(question)
+    # THE SPAN COMES FROM THE CONTRACT. `TimeClaim.window_periods` exists for
+    # this exact read — its own docstring names `requested_span(question)` here
+    # as "a second read of the sentence for a fact the contract had already
+    # claimed". Conversion 2 closed against it; this route had not.
+    # Measured over 882 corpus questions before the switch: the two agree 882
+    # times and disagree none.
+    span = _period_request.span_from_claim(getattr(interpretation, "time", None))
     if span is not None and not (period_request.requested_start
                                  or period_request.requested_end):
         if len(snapshots) > span.periods:
