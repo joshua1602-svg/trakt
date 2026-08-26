@@ -95,8 +95,8 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
     period-change answer covers exactly the portfolios every other routed answer
     would cover for the same lens.
     """
-    from . import analytical_plan as _plan
     from . import chat_routing
+    from . import contract_scope as _scope
     from . import evolution as evolution_mod
     from mi_agent import portfolio_scope as scope_mod
 
@@ -325,8 +325,8 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     population and Conversion 2 for the window. A caller that skipped
     recognition gets a deferral, not a second recogniser hidden in the handler.
     """
-    from . import analytical_plan as _plan
     from . import chat_routing
+    from . import contract_scope as _scope
 
     intent = recognition
     if intent is None or not intent.matched:
@@ -340,7 +340,7 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # workspace selection present so caller precedence was actually exercised:
     # the contract-derived lens and the resolver agree every time.
     resolved_lens = (lens if lens is not None
-                     else _plan.lens_from_contract(interpretation))
+                     else _scope.lens_from_contract(interpretation))
     if resolved_lens is None:
         # NO SCOPE CLAIM, NO ANSWER FROM THIS ROUTE. Conversion 1's rule, and
         # for its reason: keeping the resolver here as a fallback would leave a

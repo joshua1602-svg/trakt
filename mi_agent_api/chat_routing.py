@@ -2639,8 +2639,9 @@ CONCENTRATION_READING_KEY = "concentration"
 
 
 def _lens_from_contract(interpretation):
-    """The source-portfolio lens the contract states. See `analytical_plan`."""
-    return _plan.lens_from_contract(interpretation)
+    """The source-portfolio lens the contract states. See `contract_scope`."""
+    from . import contract_scope as _scope
+    return _scope.lens_from_contract(interpretation)
 
 
 def _recognise_concentration(request: RouteRequest) -> Recognition:
@@ -2767,9 +2768,12 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     # provenance that decides precedence against a workspace selection —
     # measured equivalent to `_resolve_lens` on all 882 corpus questions, and
     # again with a workspace selection present.
+    # UNRESOLVABLE IS NOT ABSENT. A book the registry does not hold must reach
+    # the workflow as the name the reader used, so it refuses by that name —
+    # not as "no scope", which is the whole book.
     try:
-        lens = _lens_from_contract(request.resolve_interpretation())
-        context_id = _portfolio_lens.context_id(lens) if lens is not None else None
+        from . import contract_scope as _scope
+        context_id = _scope.requested_context_id(request.resolve_interpretation())
     except Exception:  # noqa: BLE001 - an identity fault must not fail the route
         context_id = None
 
