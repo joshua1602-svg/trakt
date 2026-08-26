@@ -1,0 +1,46 @@
+# Generalisation supplement — frozen before execution.
+#
+# NOT a paraphrase bank. Each entry pairs a governed categorical value with a
+# DIFFERENT analytical shape, because the defect this exists to catch is a user
+# constraint recognised in one formulation and silently lost in another: the
+# frozen 91-question bank asked "how many drawdown loans" and never asked the
+# same thing about lump sum, occupancy, status or channel, and never asked any
+# of them as a balance, a grouping, a ranking or a movement.
+#
+# expect: DELIVER — the constraint must be applied and evidenced
+#         REFUSE  — safe refusal or clarification is the correct outcome
+version: 1
+questions:
+  # categorical value + count
+  - {q: "How many lump sum loans do we have?", shape: "value+count", expect: DELIVER, population: 396}
+  - {q: "How many drawdown loans do we have?", shape: "value+count", expect: DELIVER, population: 244}
+  - {q: "How many performing loans do we have?", shape: "value+count", expect: DELIVER, population: 619}
+  - {q: "How many owner occupied loans do we have?", shape: "value+count", expect: DELIVER, population: 585}
+  - {q: "How many second home loans do we have?", shape: "value+count", expect: DELIVER, population: 55}
+  # categorical value + balance
+  - {q: "What is the balance for lump sum loans?", shape: "value+balance", expect: DELIVER, population: 396}
+  - {q: "What is the balance for drawdown loans?", shape: "value+balance", expect: DELIVER, population: 244}
+  - {q: "What is the balance for owner occupied loans?", shape: "value+balance", expect: DELIVER, population: 585}
+  - {q: "What is the balance for redeemed loans?", shape: "value+balance", expect: DELIVER, population: 21}
+  # categorical value + grouping
+  - {q: "Balance by region for drawdown loans.", shape: "value+grouping", expect: DELIVER, population: 244}
+  - {q: "Balance by region for lump sum loans.", shape: "value+grouping", expect: DELIVER, population: 396}
+  - {q: "Loan count by region for owner occupied loans.", shape: "value+grouping", expect: DELIVER, population: 585}
+  # leading clause
+  - {q: "For lump sum loans, balance by region", shape: "value+leading", expect: DELIVER, population: 396}
+  - {q: "For drawdown loans, how many do we have?", shape: "value+leading", expect: DELIVER, population: 244}
+  # categorical value + ranking
+  - {q: "Which region has the largest balance for drawdown loans?", shape: "value+ranking", expect: DELIVER, population: 244}
+  - {q: "Which broker channel has the largest balance for lump sum loans?", shape: "value+ranking", expect: DELIVER, population: 396}
+  # categorical value + movement
+  - {q: "How did balance change since last month for drawdown loans?", shape: "value+movement", expect: EITHER}
+  - {q: "Which region added the most balance since last month for lump sum loans?", shape: "value+movement", expect: EITHER}
+  # ambiguous value — clarification is the correct outcome
+  - {q: "How many broker loans do we have?", shape: "ambiguous value", expect: REFUSE}
+  - {q: "How many direct loans do we have?", shape: "ambiguous value", expect: EITHER}
+  # value that no governed field carries — must not bind to anything
+  - {q: "How many platinum loans do we have?", shape: "unknown value", expect: EITHER}
+  - {q: "What is the balance for offshore loans?", shape: "unknown value", expect: EITHER}
+  # asset class + loan type
+  - {q: "Show balance by loan type.", shape: "loan type dimension", expect: DELIVER}
+  - {q: "Which loan type has the largest balance?", shape: "loan type ranking", expect: DELIVER}
