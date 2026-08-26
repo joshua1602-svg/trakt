@@ -53,6 +53,13 @@ def resolve_metric_key(dataset: str, metric: Optional[str], aggregation: str
     # funded (default)
     if agg in ("count", "count_distinct"):
         return "loan_count", "Loan count", "count"
+    # THE AGGREGATION IS PART OF THE MEASURE, not decoration on it. This read
+    # `count` and then ignored the aggregation entirely, so an AVERAGE balance
+    # request fell through to the total — the same series under a different
+    # question. Averages of the other governed metrics already have their own
+    # keys below; the balance was the one with no average to resolve to.
+    if agg in ("avg", "average", "mean") and metric == "current_outstanding_balance":
+        return "avg_balance", "Average balance", "gbp"
     if metric == "current_loan_to_value":
         return "wa_ltv", "WA current LTV", "percent"
     if metric == "current_interest_rate":

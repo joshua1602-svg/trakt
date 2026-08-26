@@ -24,7 +24,7 @@ All series reuse the governed evolution time-series; nothing is re-discovered.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Sequence
 
 from . import evolution as evolution_mod
 
@@ -358,7 +358,17 @@ def _withdraw_kfi_model(model_b: Dict[str, Any]) -> Dict[str, Any]:
 def build_extrapolation(output_root, pipeline_root, client_id: str,
                         to_run_id: Optional[str], *,
                         history_model: Optional[Dict[str, Any]] = None,
-                        scope=None) -> Dict[str, Any]:
+                        scope=None,
+                        extra_thresholds: Sequence[float] = ()) -> Dict[str, Any]:
+    """``extra_thresholds`` — targets the READER named, added to the governed
+    ladder for this request only.
+
+    The ladder is a fixed list of round numbers. A question naming a target the
+    ladder does not carry had no milestone to answer from, and the caller then
+    reported the nearest one it did carry as though it were the answer. Asking
+    the projector about the number actually requested is what removes that
+    substitution at the source; the ladder itself is unchanged.
+    """
     """Compose Models A/B/C from the governed funded + pipeline + forecast series,
     with the funded side narrowed to the governed portfolio ``scope``."""
     funded = evolution_mod.funded_evolution(output_root, client_id, to_run_id,
@@ -399,8 +409,11 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
 
     # Model A — completion run-rate.
     comp = completion_history(funded_periods)
-    model_a = run_rate_model(current_balance, [c["completion_amount"] for c in comp],
-                             reporting_period=reporting_period)
+    model_a = run_rate_model(
+        current_balance, [c["completion_amount"] for c in comp],
+        reporting_period=reporting_period,
+        thresholds=sorted({float(t) for t in _THRESHOLDS}
+                          | {float(t) for t in (extra_thresholds or ())}))
     model_a["completionHistory"] = comp
 
     # Model B — KFI conversion. Uses the RECENT weekly completion-vs-KFI rate

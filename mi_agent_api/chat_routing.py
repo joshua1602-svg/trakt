@@ -72,6 +72,7 @@ _PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
 # Per evolution-metric display: (answer_style, chart valueFormat, chart scale).
 _METRIC_DISPLAY: Dict[str, Tuple[str, str, Optional[str]]] = {
     "funded_balance": ("gbp", "gbp", None),
+    "avg_balance": ("gbp", "gbp", None),
     "pipeline_amount": ("gbp", "gbp", None),
     "weighted_expected_funded_amount": ("gbp", "gbp", None),
     "loan_count": ("count", "number", None),
@@ -101,7 +102,20 @@ def _gbp(v: Optional[float]) -> str:
     return currency_mod.format_money(v, suffixes=("bn", "m", "k"))
 
 
-def _disp(value: Optional[float], metric_key: str) -> str:
+def _disp(value: Optional[float], metric_key: str,
+          decimals: Optional[int] = None) -> str:
+    """Render a metric in ITS OWN declared unit.
+
+    `_METRIC_DISPLAY` is the canonical statement of whether a metric is carried
+    as a FRACTION (0.0626) or as PERCENTAGE POINTS (36.26). A caller that picks
+    a formatter by eye has to remember which, and the portfolio summary did not:
+    it rendered `wa_interest_rate` — a fraction, so declared here — with the
+    points formatter and published **0.06%** for a book yielding **6.2644%**, a
+    hundredfold error in the first figure a reader sees.
+
+    Reading the declaration is what makes that unrepresentable, which is why the
+    fix is here and not a ×100 at the summary's call site.
+    """
     if value is None:
         return "—"
     style = _METRIC_DISPLAY.get(metric_key, ("decimal", "decimal", None))[0]
@@ -110,9 +124,9 @@ def _disp(value: Optional[float], metric_key: str) -> str:
     if style == "count":
         return f"{int(round(float(value))):,}"
     if style == "pct_fraction":
-        return f"{float(value) * 100:.1f}%"
+        return f"{float(value) * 100:.{1 if decimals is None else decimals}f}%"
     if style == "pct_points":
-        return f"{float(value):.2f}%"
+        return f"{float(value):.{2 if decimals is None else decimals}f}%"
     return f"{float(value):,.2f}"
 
 
@@ -526,7 +540,7 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
         detail.append(f"weighted-average current LTV is {_pct_points(m['wa_ltv_points'])}")
     if m["wa_interest_rate"] is not None:
         detail.append(f"the weighted-average interest rate is "
-                      f"{_pct_points(m['wa_interest_rate'], 2)}")
+                      f"{_disp(m['wa_interest_rate'], 'wa_interest_rate', 2)}")
     if m["avg_borrower_age"] is not None:
         detail.append(f"the average youngest-borrower age is "
                       f"{_years(m['avg_borrower_age'])}")
@@ -555,7 +569,8 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
         {"label": "Loans funded", "value": _count(m["loan_count"])},
         {"label": "Funded balance", "value": _gbp(m["funded_balance"])},
         {"label": "WA current LTV", "value": _pct_points(m["wa_ltv_points"])},
-        {"label": "WA interest rate", "value": _pct_points(m["wa_interest_rate"], 2)},
+        {"label": "WA interest rate",
+         "value": _disp(m["wa_interest_rate"], "wa_interest_rate", 2)},
         {"label": "Avg borrower age", "value": _years(m["avg_borrower_age"])},
         {"label": "Data cut-off", "value": cut_off},
     ]
@@ -1186,14 +1201,19 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
 # --------------------------------------------------------------------------- #
 def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root,
                     pipeline_root, history_model, portfolio_id, as_of) -> Dict[str, Any]:
+    # THE TARGET THE READER NAMED goes to the projector, so the milestone it
+    # answers from is the one asked about rather than the nearest round number
+    # the fixed ladder happens to carry.
+    _target = spec.forecast_target_value
     fx = fx_mod.build_extrapolation(output_root, pipeline_root, client_id, run_id,
-                                    history_model=history_model)
+                                    history_model=history_model,
+                                    extra_thresholds=([_target] if _target else ()))
     rr = fx.get("completionRunRateForecast", {})
     kfi = fx.get("kfiConversionForecast", {})
     weighted = fx.get("currentWeightedPipelineForecast", {})
     cur = fx.get("currentFundedBalance", 0.0)
     kind = spec.forecast_question or "extrapolation_curve"
-    target = spec.forecast_target_value
+    target = _target
     caveat = "Downside/base/upside are indicative scenario bands, not statistically validated confidence intervals."
     warnings = [caveat]
 
@@ -1214,16 +1234,32 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
     milestones = rr.get("milestones", [])
 
     def _ms(thr: float) -> Optional[Dict[str, Any]]:
+        """The milestone FOR THIS THRESHOLD, or the next one above it.
+
+        NEVER `milestones[-1]`. That fallback returned the largest milestone the
+        projection happened to carry whenever the requested threshold was beyond
+        it, and the caller then reported that milestone's state as the answer for
+        the threshold actually asked about. Measured: the milestone list tops out
+        at £75m — all reached — so "when do we reach £250m?" answered "the book
+        has already reached £250.0m" on a book holding £172.1m.
+        """
         exact = next((m for m in milestones if m["threshold"] == thr), None)
         if exact:
             return exact
         above = [m for m in milestones if m["threshold"] >= thr]
-        return above[0] if above else (milestones[-1] if milestones else None)
+        return above[0] if above else None
 
     if kind in ("reach_threshold",) and target:
         m = _ms(target)
-        if m and m.get("reached"):
+        # THE ARITHMETIC DECIDES, not a milestone flag. "Already reached" is a
+        # statement about the CURRENT balance and the REQUESTED target, and it is
+        # true exactly when one is at least the other.
+        if float(cur or 0) >= float(target):
             answer = f"The book has already reached {_gbp(target)} (current funded balance {_gbp(cur)})."
+        elif m and m.get("reached"):
+            answer = (f"Current funded balance is {_gbp(cur)}; {_gbp(target)} is "
+                      f"beyond the projection horizon, so I cannot say when it is "
+                      f"reached. {caveat}")
         elif m:
             answer = (f"At the current base completion run-rate (~{_gbp(base)}/month, "
                       f"{_gbp(ann)}/year), the book reaches {_gbp(target)} around "
@@ -1442,8 +1478,14 @@ def _route_scenario(question, spec, spec_dict, *, client_id, run_id, output_root
                 {"key": "scenario", "label": f"Scenario ({change_txt})", "align": "right", "format": "text"},
             ], rows=trows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
 
-    if target is not None and res["baseTargetDate"] == "reached":
+    if target is not None and float(cur or 0) >= float(target):
         answer = f"The book has already reached {_gbp(target)} (current funded balance {_gbp(cur)})."
+    elif target is not None and res["baseTargetDate"] == "reached":
+        # The projection says "reached" for a threshold the book has NOT reached:
+        # the same substituted-milestone defect as above, seen from the scenario
+        # side. Say what is true rather than repeat the flag.
+        answer = (f"Current funded balance is {_gbp(cur)}; {_gbp(target)} is beyond "
+                  f"the projection horizon, so a scenario cannot be dated to it. {caveat}")
     elif target is not None and res["monthsSaved"] is None:
         answer = (f"Even with a {change_txt} completion run-rate (~{_gbp(res['scenarioMonthlyRunRate'])}/mo) "
                   f"the book doesn't reach {_gbp(target)} within the projection horizon. {caveat}")

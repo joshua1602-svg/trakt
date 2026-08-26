@@ -439,6 +439,12 @@ def _forecast_route_owns(question, spec, reading) -> bool:
         return False
 
 
+#: How far ahead the open-pipeline composition can honestly speak. The governed
+#: pipeline extract carries cases in flight; beyond a quarter it is projecting
+#: business that does not exist yet, which this plan does not model.
+PIPELINE_OUTLOOK_HORIZON_MONTHS = 3
+
+
 def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
                                  ) -> Optional[AnalyticalPlan]:
     """Q: given the pipeline, what is the forecast funded balance?"""
@@ -451,6 +457,21 @@ def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
     if _any(text, ("run rate", "run-rate")):
         return None  # the run-rate route owns this
     if _forecast_route_owns(question, spec, reading):
+        return None
+    # A STATED HORIZON THIS PLAN CANNOT REACH IS NOT THIS PLAN'S QUESTION.
+    #
+    # This composition projects the OPEN PIPELINE — the cases already in flight
+    # and when they are expected to complete. It says nothing about where the
+    # book lands in a year, still less in five. Measured before this guard:
+    # "in five years", "in 12 months" and "in 5 years" all returned the same
+    # open-pipeline composition, with the horizon named nowhere in the answer.
+    #
+    # Declining is pre-claim and generic: the horizon is read by the governed
+    # owner, compared against what this plan can honour, and no route name or
+    # duration is written here.
+    from question_interpretation.lexical import forecast_horizon_months
+    horizon = forecast_horizon_months(question)
+    if horizon is not None and horizon > PIPELINE_OUTLOOK_HORIZON_MONTHS:
         return None
     return AnalyticalPlan(
         intent=INTENT_FUNDED_BALANCE_OUTLOOK,

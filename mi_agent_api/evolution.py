@@ -150,6 +150,13 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
             "metrics": {
                 "funded_balance": _bal_sum(df),
                 "loan_count": int(len(df)),
+                # AVERAGE BALANCE PER LOAN. Derived from the two figures either
+                # side of it, so it cannot disagree with them. Without it,
+                # "show average balance over time" resolved to `funded_balance`
+                # and returned the TOTAL series — byte-identical to "show funded
+                # balance over time", with nothing saying the measure had
+                # changed.
+                "avg_balance": (_bal_sum(df) / len(df)) if len(df) else None,
                 # Fractions, per the contract on _pct_fraction. This route used
                 # the raw weighted average, so it emitted whatever the tape
                 # stored while the cohort routes emitted fractions — the same
@@ -298,6 +305,7 @@ def _group_balance(df, col: str) -> Dict[str, float]:
 
 def funded_bridge(output_root: str | os.PathLike, client_id: str,
                   dimension_col, *, start_period: Optional[str] = None,
+                  window_periods: Optional[int] = None,
                   to_run_id: Optional[str] = None,
                   lens_filters: Optional[Dict[str, str]] = None,
                   lens_label: str = "Total", top_n: int = 8) -> Dict[str, Any]:
@@ -343,6 +351,16 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
     if start_period:
         sp = str(start_period)[:7]
         start = next((f for f in scoped if _period_label(f) == sp), None)
+    if start is None and window_periods:
+        # A STATED WINDOW OPENS THE BRIDGE. "last month" names no start period
+        # but does say how far back it reaches, and the plan declares that as
+        # `window_periods`. Without this the bridge fell to the earliest
+        # snapshot below and reported five months of movement for a question
+        # about one. Clamped to the history that exists — a window reaching
+        # further back than the tape opens at the earliest period, which is the
+        # same governed behaviour as before for that case.
+        index = max(0, len(scoped) - 1 - int(window_periods))
+        start = scoped[index]
     if start is None or _period_label(start) == _period_label(end):
         start = scoped[0]                  # default: earliest available period
     if _period_label(start) == _period_label(end):

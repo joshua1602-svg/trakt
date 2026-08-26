@@ -1030,6 +1030,7 @@ def run_mi_agent_query(
         receipt = _receipt_mod.build_receipt(
             spec=spec, query_result=qres, semantics=semantics, facets=_facets,
             parser_confidence=(parse_meta or {}).get("parser_confidence"),
+            dataset=dataset,
             period=_reporting_date_label(df))
         verdict, message = _receipt_mod.assess(
             receipt, substitution=_substitution, semantics=semantics)

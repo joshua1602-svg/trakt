@@ -1307,6 +1307,12 @@ class ExecutionReceipt:
     #: "entire funded portfolio" default, which would misdescribe (say) a
     #: two-book comparison as a whole-book aggregate.
     routed: bool = False
+    #: WHICH GOVERNED DATASET the figure came from. The unfiltered-population
+    #: phrase used to be the literal "entire funded portfolio" whatever had been
+    #: computed, so "what is the pipeline balance?" returned the right number —
+    #: £3.6m over 8 cases — described as the funded book. The number was never
+    #: wrong; the sentence naming its population was.
+    dataset: Optional[str] = None
 
     # -- derived views ---------------------------------------------------- #
     def not_applied(self) -> List[RequestedFacet]:
@@ -1336,8 +1342,10 @@ class ExecutionReceipt:
             parts.extend(self.filters)
         elif self.measure and not self.dimensions and not self.routed:
             # State the population explicitly so an unfiltered answer can never
-            # be mistaken for a filtered one.
-            parts.append("entire funded portfolio")
+            # be mistaken for a filtered one — and name the DATASET it came
+            # from, because "unfiltered" is a different fact from "funded".
+            parts.append("entire pipeline" if (self.dataset or "") == "pipeline"
+                         else "entire funded portfolio")
         if self.dimensions:
             parts.append(("ranked by " if self.ranking else "grouped by ")
                          + _join(self.dimensions))
@@ -2481,6 +2489,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
                   parser_confidence: Optional[str] = None,
                   period: Optional[str] = None,
                   comparison_period: Optional[str] = None,
+                  dataset: Optional[str] = None,
                   scenario: Optional[str] = None) -> ExecutionReceipt:
     """The receipt for one executed point-in-time query."""
     meta = getattr(query_result, "metadata", None) or {}
@@ -2512,6 +2521,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         population_total=int(total) if total is not None else None,
         group_count=group_count,
         narrowed=narrowed,
+        dataset=dataset,
         period=period,
         comparison_period=comparison_period,
         scenario=scenario,

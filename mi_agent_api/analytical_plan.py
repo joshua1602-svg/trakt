@@ -974,11 +974,27 @@ def build_funded_bridge_plan(interpretation, *, dimension_key: Optional[str],
     # The fallback keeps a contract built by an older projection working.
     _periods = comparison_periods(interpretation)
     _from = _periods[0] if _periods else comparison_period(interpretation)
+    # A WINDOW IS A PERIOD STATEMENT TOO.
+    #
+    # A question can pin the opening period by NAMING it ("from October") or by
+    # stating how far back it reaches ("last month", "over the last 3 months").
+    # This plan read only the first, so "show the balance bridge for last month"
+    # arrived with `comparison_periods=[]`, `window_periods=1`, and opened at
+    # the EARLIEST snapshot instead: a bridge labelled for one month that showed
+    # five, +£59.2m where the month moved +£22.6m.
+    #
+    # `window_periods` is the contract's own magnitude — the same field
+    # Conversion 2 and C7 read for a span — so the window is declared here and
+    # the executor opens that many periods back. No wording is read anywhere.
+    _window = getattr(getattr(interpretation, "time", None), "window_periods", None)
+    _period_inputs = {"dataset": "funded", "take": "pair", "from": _from,
+                      "disclose": "periodsAvailable"}
+    if _from is None and _window:
+        _period_inputs["window_periods"] = int(_window)
     steps: List[Step] = [
-        Step(STACK_PERIODS,
-             {"dataset": "funded", "take": "pair", "from": _from,
-              "disclose": "periodsAvailable"},
-             because=("a bridge opens at a named start period, else the earliest "
+        Step(STACK_PERIODS, _period_inputs,
+             because=("a bridge opens at a named start period, else the period "
+                      "the stated window reaches back to, else the earliest "
                       "governed period, and closes at the latest")),
         _population_step(getattr(interpretation, "source_scope", None)),
         Step(RESOLVE_MEASURE, {"metric": "funded_balance", "aggregation": "sum"},
@@ -1007,6 +1023,12 @@ def bridge_start_period(plan: Plan) -> Optional[str]:
     """The start period this plan opens at, from the plan alone."""
     step = next((s for s in plan.steps if s.primitive == STACK_PERIODS), None)
     return (step.inputs.get("from") if step else None)
+
+
+def bridge_window_periods(plan: Plan) -> Optional[int]:
+    """How many governed periods back this plan opens, when it states a window."""
+    step = next((s for s in plan.steps if s.primitive == STACK_PERIODS), None)
+    return (step.inputs.get("window_periods") if step else None)
 
 
 def funded_bridge(output_root, client_id: str, *, interpretation,
@@ -1042,6 +1064,7 @@ def funded_bridge(output_root, client_id: str, *, interpretation,
     out = evolution_mod.funded_bridge(
         output_root, client_id, dimension_columns,
         start_period=bridge_start_period(plan), to_run_id=to_run_id,
+        window_periods=bridge_window_periods(plan),
         lens_filters=lens_filters(plan), lens_label=label,
         top_n=BRIDGE_TOP_N)
     if out.get("available"):

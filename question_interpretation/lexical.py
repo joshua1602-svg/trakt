@@ -111,6 +111,53 @@ def condition_span(text: str) -> Optional[Tuple[int, int]]:
     return (match.start(), boundary.start() if boundary else len(body))
 
 
+#: WORDS THAT NAME A FORWARD HORIZON. One governed reader, because a forward
+#: question that states how far ahead it looks and is answered over a different
+#: horizon has had a declared element replaced — the same defect class as a
+#: replaced period, one tense along. Measured before this existed: "what will
+#: the book be worth in five years?", "…in 12 months?" and "…in 5 years?" all
+#: returned the identical open-pipeline composition, with the horizon named
+#: nowhere in the answer.
+_HORIZON_UNITS: Tuple[Tuple[str, int], ...] = (
+    ("year", 12), ("yr", 12), ("quarter", 3), ("month", 1), ("week", 0))
+
+_HORIZON_WORDS = {
+    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12,
+    "eighteen": 18, "twenty": 20, "next": 1,
+}
+
+_HORIZON_RE = re.compile(
+    r"\b(?:in|over|within|across|after|for)\s+(?:the\s+)?(?:next\s+)?"
+    r"([0-9]+|" + "|".join(_HORIZON_WORDS) + r")\s*"
+    r"(year|yr|quarter|month|week)s?\b", re.I)
+
+_HORIZON_NEXT_RE = re.compile(r"\bnext\s+(year|quarter|month)\b", re.I)
+
+
+def forecast_horizon_months(question: Optional[str]) -> Optional[int]:
+    """How many months ahead the question looks, or ``None``.
+
+    Returns MONTHS so a consumer compares one number against its own projection
+    horizon. A week-scale horizon returns 0 — stated, and shorter than a month —
+    rather than None, because "none stated" and "very short" are different facts.
+    """
+    text = (question or "").lower()
+    match = _HORIZON_RE.search(text)
+    if match:
+        token, unit = match.group(1), match.group(2)
+        count = (int(token) if token.isdigit()
+                 else _HORIZON_WORDS.get(token))
+        if count is None:
+            return None
+        factor = dict(_HORIZON_UNITS).get(unit, 1)
+        return int(count * factor)
+    bare = _HORIZON_NEXT_RE.search(text)
+    if bare:
+        return dict(_HORIZON_UNITS).get(bare.group(1), 1)
+    return None
+
+
 def grouping_cut(text: str) -> Optional[int]:
     """Offset where the first GROUPING clause begins, or None.
 

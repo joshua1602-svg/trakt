@@ -1107,6 +1107,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             llm_enabled=llm_enabled, model=llm_model,
             extra_filters=req.filters or None,
             source_portfolio_lens=req.source_portfolio_lens or None,
+            # THE DATASET THIS FRAME CAME FROM. The receipt describes an
+            # unfiltered population, and with nothing to describe it WITH it
+            # said "entire funded portfolio" whatever had been read — so a
+            # pipeline figure was published under the funded book's name.
+            dataset=view,
             parsed=parsed)
         result = adapt_workflow_result(
             workflow, portfolio_id=portfolio_id, as_of=req.as_of_date)
