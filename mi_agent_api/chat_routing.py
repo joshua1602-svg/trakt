@@ -2182,12 +2182,22 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
 
     result = geo
     if not result.get("available"):
+        # DEFER, DON'T DECLINE ON EVERYONE'S BEHALF.
+        #
+        # This returned ok=True with "I can't build a geographic exposure view
+        # for this book" — a refusal wearing a success flag — and, because it
+        # had already claimed the question, nothing else got to answer. So
+        # "which region has the largest balance?" refused on a book whose very
+        # next question, "show balance by region", returns seven regions: this
+        # capability needs an ITL3 area or a property postcode, and the
+        # governed obligor-region breakdown needs neither.
+        #
+        # Returning None is the estate's own pre-claim deferral: this route
+        # cannot answer, so the next candidate may. A book that genuinely has
+        # no region at all still refuses, one route further on, on its terms.
         reason = result.get("reason", "no ITL3 area or property postcode on the tape")
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=(f"I can't build a geographic exposure view for this book: "
-                                 f"{reason}."),
-                         route="geo_exposure", lens_applied=True,
-                         warnings=lens_warnings + [f"insufficient-data: {reason}"])
+        _logger.info("geo_exposure deferring: %s", reason)
+        return None
 
     areas = result.get("areas", [])
     top = areas[0]
