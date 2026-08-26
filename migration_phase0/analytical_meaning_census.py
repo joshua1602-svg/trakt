@@ -56,6 +56,11 @@ CONVERSIONS: Tuple[Tuple[str, str, str, Path], ...] = (
     ("C5", "temporal_compare", "_route_compare", CHAT),
     ("C6", "evolution (+_funnel, +_pipeline_stage)", "_route_evolution", CHAT),
     ("C7", "period_change_analysis", "route_period_change", PCR),
+    # NOT a core route, and reported anyway. `concentration_analysis` sits on
+    # the GENERIC funded-book path and was the estate's last independent
+    # whole-question interpreter; a census that stopped at the seven would have
+    # scored 0 while it still read the sentence after the claim.
+    ("Cx", "concentration_analysis", "_route_concentration", CHAT),
 )
 
 #: K0 — RECOGNITION. What each route's registered `recognise` predicate reads.
@@ -74,6 +79,8 @@ RECOGNISERS: Dict[str, Tuple[str, str]] = {
     "C6": ("_is_evolution(question, spec)", "raw question + spec"),
     "C7": ("recognise_request -> recognise(question, spec, view, semantics)",
            "raw question + spec + view"),
+    "Cx": ("_recognise_concentration -> is_concentration_question(question, spec)",
+           "raw question + spec"),
 }
 
 #: Names that ARE the raw question.
