@@ -519,6 +519,21 @@ SERIES_PHRASES: Tuple[str, ...] = (
     # "between periods" names two ends of one axis. Kept to the PLURAL: "between
     # January and March" is a span, not a series request, and must not match.
     "between periods", "between the periods", "between reporting periods",
+    # THE EVOLUTION FAMILY, minus the noun. "How has the pipeline EVOLVED?"
+    # names a time axis and no grain, which is exactly what this list is for.
+    # Evidence: the frozen CFO bank refused it as unmapped, while "show pipeline
+    # EVOLUTION by stage" answered — the routing layer carried the NOUN in a
+    # marker list of its own and this owner carried none of the family, so one
+    # inflection of one word decided whether a time axis existed.
+    #
+    # "evolution" itself is deliberately NOT added. It is already carried by the
+    # parser's legacy trend words, so adding it here changes nothing about which
+    # questions are a series — but it does change which WORDING this function
+    # returns, and a refusal quotes that wording back: "Show regional
+    # concentration EVOLUTION OVER TIME" would be quoted as "evolution" rather
+    # than the phrase the reader's own axis request used. The verbs carry no
+    # such conflict.
+    "evolved", "evolving", "evolve", "evolves",
 )
 
 _SERIES_PHRASE_RE = re.compile(

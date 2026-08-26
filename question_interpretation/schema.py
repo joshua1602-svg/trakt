@@ -68,6 +68,36 @@ NEUTRAL = "neutral"
 OPERATION_TYPES = (COUNT, AMOUNT, AVERAGE, MOVEMENT, RANKING, FORWARD, NEUTRAL)
 
 # --------------------------------------------------------------------------- #
+# THE ANALYTIC the question asks for, where it asks for a NAMED one.
+#
+# `type` says what KIND of answer is wanted — a count, an amount, a ranking.
+# It does not say whether the reader asked for a named ANALYSIS of how the book
+# is distributed. Measured, that is the difference between two questions the
+# contract could not tell apart at all:
+#
+#     "Which region has the largest balance?"        type=ranking  analytic=None
+#     "What is the largest geographic area
+#      concentration?"                               type=ranking  analytic=concentration
+#
+# Every other governed field was identical on those two — the four ordering
+# values, `modifiers`, the subject claim, the dimension claims and `residue` —
+# so route ownership fell back to wording tests inside the routing layer, and a
+# plain ranked stratification of a governed dimension was claimed by a
+# specialist capability it did not ask for.
+#
+# GENERIC BY CONSTRUCTION. `concentration` names a SHAPE OF ANALYSIS — how the
+# book distributes across a governed dimension family — and says nothing about
+# which family. It is the reading of
+# `mi_workflows.concentration_analysis.names_a_concentration_analytic`, which
+# owns that vocabulary; nothing here matches a phrase, and no geography, product
+# or broker word appears in this module.
+#
+# `None` is not "not a concentration": it is "no analytic was NAMED", which is
+# the ordinary case and must stay distinguishable from a named one.
+ANALYTIC_CONCENTRATION = "concentration"
+ANALYTICS = (ANALYTIC_CONCENTRATION,)
+
+# --------------------------------------------------------------------------- #
 # THE ORDERING FACTS — the third application of the closure pattern.
 #
 # `OperationClaim.type == RANKING` says a ranking was NAMED. It does not say
@@ -295,11 +325,20 @@ class OperationClaim(Slot):
     ordering_basis: Optional[str] = None
     ordering_limit: Optional[int] = None
     ordering_of: Optional[str] = None
+    #: THE NAMED ANALYTIC, or None when the question named none. See the
+    #: vocabulary block above. Orthogonal to `type`: a question may ask for a
+    #: concentration analytic AND rank it, and both facts have to survive.
+    analytic: Optional[str] = None
+    #: Why the analytic reading came out as it did, in the OWNER's words.
+    #: Carried so a consumer can attribute the decision rather than re-derive it.
+    analytic_reason: Optional[str] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.type is not None and self.type not in OPERATION_TYPES:
             raise ValueError("unknown operation type %r" % (self.type,))
+        if self.analytic is not None and self.analytic not in ANALYTICS:
+            raise ValueError("unknown analytic %r" % (self.analytic,))
         for value, allowed, label in (
                 (self.ordering_direction, ORDER_DIRECTIONS, "ordering direction"),
                 (self.ordering_basis, ORDER_BASES, "ordering basis"),
@@ -323,6 +362,8 @@ class OperationClaim(Slot):
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
         d.update({"type": self.type, "modifiers": list(self.modifiers),
+                  "analytic": self.analytic,
+                  "analytic_reason": self.analytic_reason,
                   "ordering_direction": self.ordering_direction,
                   "ordering_basis": self.ordering_basis,
                   "ordering_limit": self.ordering_limit,

@@ -266,6 +266,21 @@ EXPLICIT_DIMENSION_TERMS = {
     "region": "geographic_region_obligor",
     "account status": "account_status",
     "status": "account_status",
+    # THE PIPELINE AXIS, curated for the same reason "region" is. Both bare
+    # words sit on `_GENERIC_DIM_TOKENS`, which drops over-generic single tokens
+    # harvested from the registry so a synonym cannot hijack an unrelated
+    # question — and this curated map is the governed way past it.
+    #
+    # Without it, "show the pipeline BY STAGE" resolved no dimension at all and
+    # was refused as unmapped, on a tape that carries `pipeline_stage` with five
+    # values and answers "show pipeline evolution by stage" happily. No other
+    # governed field claims the word, and a funded tape carries no such column,
+    # so a funded question naming it refuses by name rather than answering
+    # something else.
+    "stage": "pipeline_stage",
+    "stages": "pipeline_stage",
+    "pipeline stage": "pipeline_stage",
+    "funnel stage": "pipeline_stage",
     "borrower age bucket": "age_bucket",
     "age bucket": "age_bucket",
     "age band": "age_bucket",
@@ -635,6 +650,10 @@ _GENERIC_METRIC_TOKENS = {
     "balance", "value", "amount", "rate", "count", "age", "ltv", "exposure",
     "total", "sum", "principal", "interest", "loan", "loans", "mortgage",
     "income", "margin", "ratio", "period", "number", "term",
+    # The PIPELINE population noun, on the same footing as "loan"/"loans". A
+    # pipeline row is a case; "how many CASES are at offer stage" surfaced
+    # "cases" as an unresolved measure and refused.
+    "case", "cases",
 }
 
 
@@ -734,6 +753,13 @@ _ANALYTICAL_FRAMING_WORDS = frozenset({
     # "which broker has the worst arrears" still answers on arrears.
     "mix", "composition", "profile", "position", "snapshot", "spread",
     "exposure", "exposures", "book", "portfolio", "portfolios",
+    # THE DATASET NOUNS, on the same footing as "book" and "portfolio".
+    # `workspace.resolve_dataset` owns "pipeline" — it is what the answer is
+    # built FROM, not a measure of it. Without it here, "show the PIPELINE by
+    # stage" surfaced "pipeline" as an unresolved measure and refused, while
+    # "show the BOOK by region" answered with the governed default. One word's
+    # absence, two behaviours for one sentence shape.
+    "pipeline", "pipelines",
 })
 
 #: Minimum token length for a residue word to count as a named measure. Filters
@@ -741,8 +767,48 @@ _ANALYTICAL_FRAMING_WORDS = frozenset({
 _METRIC_RESIDUE_MIN_LEN = 3
 
 
+#: Generic measure words that name more than one governed measure on a book
+#: carrying both. The CANDIDATES come from the registry, never from a list here.
+_AMBIGUOUS_MEASURE_WORDS = {
+    "value": ("balance", "valuation"),
+    "amount": ("balance", "valuation"),
+}
+
+
+def _ambiguous_measure_word(metric_part: str, semantics: dict,
+                            available_columns=None
+                            ) -> Optional[Tuple[str, str]]:
+    """``(word, "A or B")`` when the only measure word named is ambiguous here.
+
+    Ambiguous only where the dataset ACTUALLY CARRIES more than one candidate:
+    on a tape with a balance and no valuation there is nothing to disambiguate
+    and the caller's existing default stands.
+    """
+    text = f" {str(metric_part or '').strip().lower()} "
+    fields = _fields(semantics)
+    available = {str(c) for c in (available_columns or ())}
+    for word, concepts in _AMBIGUOUS_MEASURE_WORDS.items():
+        if not re.search(r"\b" + re.escape(word) + r"\b", text):
+            continue
+        names = []
+        for key, entry in fields.items():
+            if (entry or {}).get("role") != "metric":
+                continue
+            canonical = (entry or {}).get("canonical_field", key)
+            if available and canonical not in available and key not in available:
+                continue
+            label = str((entry or {}).get("business_name") or key)
+            if any(c in key.lower() or c in label.lower() for c in concepts):
+                names.append(label)
+        names = sorted(dict.fromkeys(names))
+        if len(names) > 1:
+            return word, " or ".join(names[:3])
+    return None
+
+
 def _metric_side_residue(metric_part: str, semantics: dict,
-                         available_columns=None) -> Optional[str]:
+                         available_columns=None,
+                         available_values=None) -> Optional[str]:
     """The measure the user named that this dataset does not carry, if any.
 
     ``_deterministic_parse`` used to default an unresolved metric to the balance
@@ -769,6 +835,20 @@ def _metric_side_residue(metric_part: str, semantics: dict,
     terms |= set(EXPLICIT_DIMENSION_TERMS)
     terms |= set(_NUMERIC_AXIS_BUCKET)
     terms |= _REGION_GENERIC_TERMS | _BORROWER_GENERIC_TERMS
+    # THE BOOK'S OWN CATEGORY VALUES ARE NOT NAMED MEASURES. A word another
+    # governed owner has already claimed as a VALUE — a pipeline stage, a
+    # product type, a region — is the population the reader named, not a measure
+    # this dataset fails to carry. Measured: "what is the value of outstanding
+    # OFFERS?" refused with residue "outstanding offers", on a tape whose
+    # `pipeline_stage` carries `offer`, and whose governed stage reader had
+    # already resolved it.
+    for _field, _values in (available_values or {}).items():
+        for _v in (_values.keys() if hasattr(_values, "keys") else _values):
+            v = re.sub(r"[\s_]+", " ", str(_v or "").strip().lower())
+            if len(v) >= 2:
+                terms.add(v)
+                if not v.endswith("s"):
+                    terms.add(v + "s")     # the plural the reader writes
     for term in sorted(terms, key=len, reverse=True):
         if len(term) < 2:
             continue
@@ -1131,13 +1211,41 @@ def _mask_spans(text: str, spans) -> str:
 #: ``_detect_ranking``; this only extracts the N. "bottom"/"smallest"/"lowest"
 #: were missing, so a Bottom-N question kept its ascending sort but silently lost
 #: its limit and returned every group.
+#: Retained for callers that still reference it. The LIMIT itself is no longer
+#: read here — see `_detect_top_n`.
 _TOP_N_RE = re.compile(
     r"\b(?:top|bottom|first|last|largest|biggest|highest|smallest|lowest)\s+(\d+)\b")
 
 
 def _detect_top_n(q: str) -> Optional[int]:
-    m = _TOP_N_RE.search(q)
-    return int(m.group(1)) if m else None
+    """The ordering LIMIT, from the estate's single owner of it.
+
+    ONE READER, NOT TWO. `question_interpretation.lexical.ordering_request`
+    "owns direction, basis and limit for the whole estate" — its words — and the
+    governed contract carries its answer as `OperationClaim.ordering_limit`.
+    This function had a regex of its own, and the two disagreed:
+
+        "What are the top THREE regions by balance?"
+            contract  ordering_limit = 3
+            spec      top_n          = None      -> all seven regions returned
+
+    The regex above matches digits only, so every word-form limit the owner
+    reads was silently dropped between the contract and execution — an explicit
+    constraint lost, with no disclosure. Delegating is not a widening: over the
+    numeric forms the owner returns exactly what the regex did (measured on
+    top/bottom/first/largest/smallest 1-5), and it additionally reads the words
+    the reader actually typed.
+    """
+    try:
+        from question_interpretation.lexical import ordering_request
+    except Exception:  # noqa: BLE001 - no owner, fall back to the local reading
+        m = _TOP_N_RE.search(q)
+        return int(m.group(1)) if m else None
+    order = ordering_request(q)
+    if not getattr(order, "requested", False):
+        return None
+    limit = getattr(order, "limit", None)
+    return int(limit) if isinstance(limit, int) and limit > 0 else None
 
 
 # --------------------------------------------------------------------------- #
@@ -3443,12 +3551,70 @@ def _deterministic_parse(question: str, semantics: dict,
                                 "condition (filtered population over total).",
                     output_format="table"),
                     _det_meta("medium", explicit, dim_terms))
+            # A GOVERNED SCOPE IS A POPULATION TOO.
+            #
+            # The branch above needs a ROW filter, and "what proportion of the
+            # book is in the ACQUIRED PORTFOLIO?" names its population as a
+            # governed portfolio scope instead — resolved by `portfolio_lens`
+            # and applied downstream as `source_portfolio_id`. With no row
+            # filter here the share was never requested, an absolute figure was
+            # computed, and the answer refused for not being a proportion:
+            #
+            #   "an absolute figure was calculated for the filtered population,
+            #    not its proportion of the book"
+            #
+            # on a book where the same request over a row value ("what share of
+            # the balance is in Scotland?") answers. The predicate arrives from
+            # the scope owner before execution, so the numerator is the scope
+            # and the denominator stays the whole book — measured at 31.79% for
+            # the acquired book, which is £54.7m of £172.1m.
+            #
+            # `mentions_portfolio` is the scope owner's own test, asked here
+            # rather than re-read: no scope vocabulary lives in this module.
+            from .portfolio_lens import mentions_portfolio as _names_scope
+
+            if _names_scope(q):
+                return (MIQuerySpec(
+                    intent="summary", chart_type="none",
+                    metric=share[1] or _balance_metric(semantics, available_columns),
+                    aggregation="share", title=title,
+                    unavailable_filters=share_unavail,
+                    explanation="Share of the whole book in the named governed "
+                                "portfolio scope (scope population over total).",
+                    output_format="table"),
+                    _det_meta("medium", explicit, dim_terms))
         if wants_summary:
             return (MIQuerySpec(
                 intent="summary", chart_type="none", aggregation="count", title=title,
                 explanation="Whole-book portfolio summary (count + balance).",
                 output_format="text"),
                 _det_meta("medium", explicit, dim_terms, note="portfolio_summary"))
+        # AN AMBIGUOUS MEASURE WORD IS NAMED, NOT ABSENT — checked before the
+        # unmapped fallback, which is where such a question actually lands.
+        #
+        # `_GENERIC_METRIC_TOKENS` holds "recognised metric words even when too
+        # ambiguous to map to one field", so a question whose ONLY measure word
+        # is one of them leaves no residue and no metric, and was answered
+        # "I couldn't map this question to a governed analytic":
+        #
+        #     "What is the VALUE of outstanding offers?"
+        #
+        # on a tape carrying both `current_outstanding_balance` and
+        # `current_valuation_amount`, whose OFFER population resolved perfectly
+        # well. Nothing was un-understood; one word had two governed meanings.
+        # This names them and substitutes neither.
+        _ambiguous = _ambiguous_measure_word(q, semantics, available_columns)
+        if _ambiguous:
+            word, candidates = _ambiguous
+            return (MIQuerySpec(
+                intent="summary", chart_type="none", aggregation="count",
+                title=title,
+                explanation=(f"'{word}' could mean more than one governed "
+                             f"measure in this dataset ({candidates}). Say "
+                             "which one and I will answer; no measure was "
+                             "substituted."),
+                output_format="text"),
+                _det_meta("low", explicit, dim_terms, note="unresolved_metric"))
         return (MIQuerySpec(
             intent="summary", chart_type="none", aggregation="count", title=title,
             explanation="Could not map question to a governed analytic.",
@@ -3500,7 +3666,8 @@ def _deterministic_parse(question: str, semantics: dict,
         # unicorn ratio by region") used to default to balance and answer with
         # ok:true — a confident answer to a question nobody asked. Refuse it,
         # naming the term, so the governed response is traceable.
-        residue = _metric_side_residue(metric_part, semantics, available_columns)
+        residue = _metric_side_residue(metric_part, semantics, available_columns,
+                                       available_values)
         if residue:
             return (MIQuerySpec(
                 intent="summary", chart_type="none", aggregation="count",

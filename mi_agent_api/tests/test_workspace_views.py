@@ -182,29 +182,32 @@ class TestWorkspaceApi(unittest.TestCase):
         self.assertEqual(pipeline["metadata"]["datasetContext"], "pipeline")
         self.assertTrue(funded["ok"], funded.get("validation"))
 
-    def test_an_unqualified_measure_on_the_pipeline_is_now_unreachable(self):
-        """A NARROWING, recorded rather than hidden.
+    def test_naming_the_tape_in_the_sentence_now_reaches_the_pipeline(self):
+        """THE DAY IT IS FIXED — this is that day, and this test says so.
 
-        "amount by region" on the pipeline tab used to be answered from the
-        pipeline. It is now answered from the funded book, because the question
-        names no dataset — that is the intended rule. The shorthand has no
-        replacement, though, because naming the tape in the sentence feeds
-        `pipeline` to the MEASURE parser, which rejects it:
+        Its previous form asserted the opposite, and explained why:
 
-            "'pipeline' is not a governed measure in this dataset"
+            "naming the tape in the sentence feeds `pipeline` to the MEASURE
+             parser, which rejects it: 'pipeline' is not a governed measure in
+             this dataset. Fixing it means teaching measure resolution to
+             ignore a word the dataset owner has already consumed, which is a
+             separate task with its own blast radius.
 
-        That parser behaviour is PRE-EXISTING — `pipeline amount by region` was
-        already `ok=False` before this change, on every tab — but it was masked
-        by the tab shortcut and is now load-bearing. Fixing it means teaching
-        measure resolution to ignore a word the dataset owner has already
-        consumed, which is a separate task with its own blast radius.
+             Asserted so that the day it is fixed, this test fails and says so."
 
-        Asserted so that the day it is fixed, this test fails and says so.
+        That is exactly what changed. `workspace.resolve_dataset` owns
+        "pipeline" — it names the tape the answer is built FROM — so the word is
+        now analytical framing on the same footing as "book" and "portfolio",
+        and the measure resolver no longer surfaces it as an unresolved measure.
+        "Show the book by region" and "show the pipeline by stage" are one
+        sentence shape again, and both answer with the governed default measure.
         """
         body = self._query("pipeline amount by region", "pipeline")
         self.assertEqual(body["metadata"]["datasetContext"], "pipeline")
-        self.assertFalse(body["ok"])
-        self.assertIn("pipeline", " ".join(body["validation"]["errors"]).lower())
+        self.assertTrue(body["ok"], body.get("answer"))
+        # The dataset is the pipeline's and the axis is the one that was asked
+        # for — the two facts the old refusal cost.
+        self.assertIn("region", (body.get("answer") or "").lower())
 
     def test_unsupported_query_fails_gracefully(self):
         # A dimension absent from the pipeline dataset returns a controlled

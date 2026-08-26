@@ -2959,7 +2959,10 @@ fields:
     business_description: Pipeline funnel stage (KFI / application / offer / completion / funded).
     description: ''
     synonyms:
+    - stage
+    - stages
     - pipeline stage
+    - pipeline stages
     - funnel stage
     - application stage
     - pipeline status

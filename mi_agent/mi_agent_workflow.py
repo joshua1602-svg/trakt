@@ -183,6 +183,11 @@ _AGG_LABEL = {
 }
 
 
+#: The governed pipeline-stage field, named once. The VALUE and whether a
+#: sentence carries one are `question_interpretation.lexical`'s to decide.
+_STAGE_FIELD = "pipeline_stage"
+
+
 def _bn(semantics: dict, key: Optional[str]) -> Optional[str]:
     if not key:
         return None
@@ -717,6 +722,33 @@ def run_mi_agent_query(
                 "TOTAL book "
                 f"({', '.join(_portfolio_scope.portfolio_ids) or 'no portfolios'}) "
                 "rather than the requested scope.")
+
+    # ---- the governed PIPELINE STAGE, carried into execution ---------------
+    #
+    # `lexical.pipeline_stage_request` is THE single reader of a stage in a
+    # sentence, and the contract already carries its answer as a FilterClaim.
+    # The ROUTED pipeline paths consume it through `analytical_plan.
+    # governed_stage_step`; the point-in-time path had no such step, so the
+    # narrowing reached the receipt as a REQUEST and never reached the
+    # calculation:
+    #
+    #     "What is the balance of offer stage cases?"
+    #        "Offer (Pipeline Stage) — this narrowing was not applied"
+    #
+    # — a refusal over a tape carrying `pipeline_stage` with five values. The
+    # owner is asked, not re-read: the canonical value comes back from it
+    # (OFFER, not "offer issued"), and it is applied only where the loaded
+    # dataset actually carries the column, so a funded question is untouched.
+    if _STAGE_FIELD in available_columns and _STAGE_FIELD not in (spec.filters or {}):
+        try:
+            from question_interpretation.lexical import pipeline_stage_request
+            _stage, _axis = pipeline_stage_request(question)
+        except Exception:  # noqa: BLE001 - no owner, no claim
+            _stage = None
+        if _stage:
+            spec.filters = dict(spec.filters or {})
+            spec.filters[_STAGE_FIELD] = _stage
+            warnings.append(f"pipeline stage applied: {_stage}")
 
     # ---- merge drill-through filters into the parsed spec -----------------
     # Additive: caller-supplied filters (e.g. a UI drill into one region/broker/

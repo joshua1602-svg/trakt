@@ -1071,8 +1071,13 @@ CURATION: Dict[str, dict] = {
         "business_name": "Pipeline Stage",
         "business_description": "Pipeline funnel stage "
                                "(KFI / application / offer / completion / funded).",
-        "synonyms": ["pipeline stage", "funnel stage", "application stage",
-                     "pipeline status"],
+        # "stage" ALONE. Every synonym here was a two-word phrase, so the
+        # plainest thing a reader types — "show the pipeline by STAGE" — matched
+        # no governed dimension at all, and the question was refused as
+        # unmapped on a tape that carries the column and five values. No other
+        # governed field claims the bare word.
+        "synonyms": ["stage", "stages", "pipeline stage", "pipeline stages",
+                     "funnel stage", "application stage", "pipeline status"],
         "overrides": {"role": "dimension", "format": "string"},
     },
     "pipeline_snapshot_date": {

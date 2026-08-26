@@ -173,6 +173,44 @@ def _envelope(*, ok: bool, question: str, answer: str, spec: Dict[str, Any],
     }
 
 
+def _undeliverable(**kwargs) -> Dict[str, Any]:
+    """THE governed "the analysis you asked for was not produced" envelope.
+
+    `ok: true` MEANS THE REQUESTED ANALYSIS WAS DELIVERED.
+
+    Twenty-three routed sites used to say `ok=True` with no artifacts and an
+    answer that explained an inability — "I can't build a geographic exposure
+    view for this book", "No weekly pipeline extracts are available", "I
+    couldn't resolve a dimension to attribute the bridge by". A caller reading
+    the envelope saw a success; a reader reading the prose saw a refusal. On the
+    API those are the same field, and it was telling them different things.
+
+    NO NEW PUBLIC TAXONOMY. This is the existing governed contract for "I will
+    not answer that": `ok:false` plus `metadata.controlledUnsupported`, which
+    `mi_service` classifies as `UNSUPPORTED_QUESTION` (HTTP 200, `ok:false`) —
+    the same shape `_capability_unavailable_envelope` already publishes.
+
+    A ZERO-ROW ANSWER IS NOT THIS. "There are no funded loans in the acquired
+    book" is an analysis that ran over an empty population, and it keeps
+    `ok=True`: turning an empty result into a failure would be the opposite
+    error. Three sites are deliberately left as they were — the two empty-scope
+    statements, and the run-rate branch that reports the current balance and
+    discloses that it could not extrapolate.
+    """
+    kwargs.pop("ok", None)
+    kwargs.pop("artifacts", None)
+    answer = kwargs.get("answer") or "This analysis could not be produced."
+    kwargs.setdefault("error", answer)
+    envelope = _envelope(ok=False, artifacts=[], **kwargs)
+    # THE ESTATE'S EXISTING MARKERS, all three, exactly as the portfolio
+    # comparison route already stamps them. A caller that recognised a
+    # controlled refusal by `controlledRefusal` must keep recognising it.
+    envelope["controlledRefusal"] = True
+    envelope["metadata"]["controlledRefusal"] = True
+    envelope["metadata"]["controlledUnsupported"] = True
+    return envelope
+
+
 # --------------------------------------------------------------------------- #
 # Artifact builders (existing artifact union — chart | table | risk)
 # --------------------------------------------------------------------------- #
@@ -646,9 +684,8 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
                 ok=False, question=question, spec=spec_dict, artifacts=[],
                 answer=message, error=message, route="period_movement",
                 warnings=[message])
-        return _envelope(
-            ok=True, question=question, spec=spec_dict, artifacts=[],
-            answer=f"I can't compare against the prior month yet: "
+        return _undeliverable(
+            question=question, spec=spec_dict, answer=f"I can't compare against the prior month yet: "
                    f"{mv.get('reason', 'insufficient reporting periods')}.",
             route="period_movement",
             warnings=["insufficient-data: a month-on-month comparison needs two "
@@ -841,8 +878,8 @@ def _route_compare(question, spec_dict, *, client_id, run_id, output_root,
                   f"{out.get('reason', 'a period is unavailable')}.")
         if len(avail) <= 1:
             answer += " Only one reporting period is available."
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[], route="temporal_compare",
+        return _undeliverable(question=question, answer=answer, spec=spec_dict,
+                         route="temporal_compare",
                          warnings=["insufficient-data: cross-period comparison needs two periods."])
 
     va, vb = out["valueA"], out["valueB"]
@@ -1036,9 +1073,9 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
         pts = funnel.get("series", {}).get(funnel_stage, [])
         summ = funnel.get("summary", {}).get(funnel_stage, {})
         if not pts:
-            return _envelope(ok=True, question=question,
+            return _undeliverable(question=question,
                              answer=f"No weekly {funnel_stage.title()} extracts are available yet.",
-                             spec=spec_dict, artifacts=[], route="evolution_funnel",
+                             spec=spec_dict, route="evolution_funnel",
                              warnings=["insufficient-data: no weekly pipeline extracts."])
         flow_pts = funnel.get("flowSeries", {}).get(funnel_stage, [])
         # Weekly-flow rows (bars); fall back to the stock level only when no flow
@@ -1079,9 +1116,9 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
         pipe = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
         by_stage = pipe.get("byStage", [])
         if not by_stage:
-            return _envelope(ok=True, question=question,
+            return _undeliverable(question=question,
                              answer="No weekly pipeline extracts are available to build a stage trend.",
-                             spec=spec_dict, artifacts=[], route="evolution_pipeline_stage",
+                             spec=spec_dict, route="evolution_pipeline_stage",
                              warnings=["insufficient-data: no weekly pipeline extracts."])
         periods = sorted({r["period"] for r in by_stage})
         stages = sorted({r["stage"] for r in by_stage})
@@ -1102,6 +1139,17 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                         artifacts=[chart],
                         reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
                         route="evolution_pipeline_stage")
+        # DECLARE THE AXIS IT ACTUALLY SPLIT BY. This branch builds one series
+        # per governed stage, so the answer IS broken down by `pipeline_stage` —
+        # and until the word "stage" resolved to that governed dimension,
+        # nothing raised a grouping facet for it and nothing had to say so.
+        # Now that it does, an undeclared axis reads as a request the route
+        # dropped, and the question was refused over a chart that had honoured
+        # it. Declared from the EXECUTED series, exactly as the bridge route
+        # declares `dimensionCol`.
+        from question_interpretation.lexical import PIPELINE_STAGE_FIELD
+
+        out.setdefault("metadata", {})["groupedBy"] = [PIPELINE_STAGE_FIELD]
         return _declare_grain(out, "week")
 
     # Funded / pipeline single-metric evolution.
@@ -1120,9 +1168,9 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
         evo = evolution_mod.funded_evolution(output_root, client_id, run_id)
     periods = evo.get("periods", [])
     if not periods:
-        return _envelope(ok=True, question=question,
+        return _undeliverable(question=question,
                          answer=f"No reporting periods are available to build a {label.lower()} trend.",
-                         spec=spec_dict, artifacts=[], route="evolution",
+                         spec=spec_dict, route="evolution",
                          warnings=["insufficient-data: no governed reporting periods."])
     # The observation identity is whatever the series publishes as its own grain.
     # The pipeline producer publishes a day-level `week` per governed weekly
@@ -1438,8 +1486,7 @@ def _route_scenario(question, spec, spec_dict, *, client_id, run_id, output_root
     rr = fx.get("completionRunRateForecast", {})
     cur = fx.get("currentFundedBalance", 0.0)
     if not rr.get("available"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=("I can't run a what-if on the completion run-rate yet: "
+        return _undeliverable(question=question, spec=spec_dict, answer=("I can't run a what-if on the completion run-rate yet: "
                                  f"{rr.get('caveat', 'insufficient completion history')}."),
                          route="scenario",
                          warnings=["insufficient-data: no run-rate to perturb."])
@@ -1667,8 +1714,8 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
         answer = (f"Contractual risk limits are unavailable for this portfolio "
                   f"({rl.get('limitsReason', 'extraction required')}). "
                   "I can show observed concentrations once limits are provided.")
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[], route="risk_limits",
+        return _undeliverable(question=question, answer=answer, spec=spec_dict,
+                         route="risk_limits",
                          warnings=["limits unavailable / needs review."])
 
     # Scope to a single category when asked ("geographic concentration limits").
@@ -1680,9 +1727,8 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
             summ = risk_mod._summary(tests)
             cat_label = category.replace("_", " ") + ": "
         else:
-            return _envelope(
-                ok=True, question=question, spec=spec_dict, artifacts=[],
-                route="risk_limits",
+            return _undeliverable(
+                question=question, spec=spec_dict, route="risk_limits",
                 answer=(f"No {category.replace('_', ' ')} limits are configured for this "
                         "portfolio."),
                 warnings=[f"no tests in category '{category}'."])
@@ -1837,8 +1883,7 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
     dim_key, dim_col, dim_label = _bridge_dimension(
         (_plan.grouping_concepts(interpretation) or (None,))[0], semantics)
     if not dim_col:
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer="I couldn't resolve a dimension to attribute the bridge by.",
+        return _undeliverable(question=question, spec=spec_dict, answer="I couldn't resolve a dimension to attribute the bridge by.",
                          route="funded_bridge", warnings=["no attribution dimension resolved."])
 
     br = _plan.funded_bridge(
@@ -1848,8 +1893,7 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
     lens_label_text, lens_narrowed = br.get("lens") or "Total", None
 
     if not br.get("available"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=(f"I can't build a funded balance bridge yet: "
+        return _undeliverable(question=question, spec=spec_dict, answer=(f"I can't build a funded balance bridge yet: "
                                  f"{br.get('reason', 'insufficient reporting periods')}."),
                          route="funded_bridge",
                          warnings=["insufficient-data: a bridge needs two funded reporting periods."])
@@ -1971,8 +2015,7 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
 
     scope = lens.label + (f", {vintage} vintage" if vintage else "")
     if not prog.get("available"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=(f"I can't build a progression for {scope}: "
+        return _undeliverable(question=question, spec=spec_dict, answer=(f"I can't build a progression for {scope}: "
                                  f"{prog.get('reason', 'no matching loans')}."),
                          route="cohort_progression",
                          warnings=[f"insufficient-data: {prog.get('reason', 'no matching cohort')}"])
@@ -2093,8 +2136,60 @@ def _defers_to_period_change(question: str, *, spec: Any = None,
         return False
 
 
+def _is_a_generic_ranking(interpretation: Any) -> bool:
+    """The CONTRACT says: a ranked stratification, with NO analytic named.
+
+    ROUTE ENTITLEMENT, decided by the governed contract instead of by wording.
+
+    The specialist route's wording tests cannot separate these two, and that was
+    measured field by field before this existed — `OperationClaim.type`, all
+    four ordering values, `modifiers`, the subject claim, the dimension claims
+    and `residue` are identical on both:
+
+        "Which region has the largest balance?"                 generic
+        "What is the largest geographic area concentration?"    specialist
+
+    `OperationClaim.analytic` is the fact that separates them. It is
+    `mi_workflows.concentration_analysis`'s reading, carried on the contract —
+    the owner of that vocabulary, asked once, before precedence. A RANKING with
+    no analytic named is a measure ordered over an axis: the generic
+    compositional path answers it with the requested direction, limit, filters
+    and portfolio lens, none of which the ITL3 engine honours.
+
+    A question that names BOTH — "the largest geographic area CONCENTRATION" —
+    keeps the specialist route, because the analytic it named is the specialist
+    one.
+
+    The grouping dimension is required as well: a ranking with no axis is not a
+    stratification of anything, and the specialist route keeps that too.
+
+    ENTITLEMENT ONLY. This runs before any claim, so no handler has executed and
+    nothing is handed on after a failure — `tests/test_failclosed_route_
+    execution.py` is unchanged and still green.
+    """
+    if interpretation is None:
+        return False
+    try:
+        from question_interpretation.schema import FILLED, GROUPING, RANKING
+    except Exception:  # noqa: BLE001 - no contract vocabulary, no change
+        return False
+    operation = getattr(interpretation, "operation", None)
+    if operation is None:
+        return False
+    if getattr(operation, "analytic", None) is not None:
+        return False                      # a named analytic is the specialist's
+    if getattr(operation, "type", None) != RANKING:
+        return False
+    if getattr(operation, "state", None) != FILLED:
+        return False
+    return any(getattr(d, "role", None) == GROUPING
+               and getattr(d, "state", None) == FILLED
+               for d in (getattr(interpretation, "dimensions", None) or ()))
+
+
 def _is_geo_exposure(question: str, *, spec: Any = None,
-                     view: str = "funded") -> bool:
+                     view: str = "funded",
+                     interpretation_provider: Any = None) -> bool:
     q = f" {question.lower()} "
     if any(t in q for t in _RISK_LIMIT_TERMS):
         return False  # a limit/breach question is a risk-monitor question
@@ -2116,7 +2211,19 @@ def _is_geo_exposure(question: str, *, spec: Any = None,
         # mention geography — not a request for the ITL3 concentration view.
         # Routing it here discarded top_n, the metric and the lens.
         return False
-    return any(t in q for t in _GEO_TERMS) and any(m in q for m in _GEO_MARKERS)
+    if not (any(t in q for t in _GEO_TERMS) and any(m in q for m in _GEO_MARKERS)):
+        return False
+    # THE CONTRACT HAS THE LAST WORD, and is asked LAST on purpose: building it
+    # reads the frame and detects facets, so it is paid only for the handful of
+    # questions the wording tests have already brought this far — and for those
+    # it is memoised on the request, which this route's handler resolves anyway.
+    if interpretation_provider is not None:
+        try:
+            if _is_a_generic_ranking(interpretation_provider()):
+                return False
+        except Exception:  # noqa: BLE001 - a contract fault must not lose a route
+            logger.exception("geo entitlement contract check failed for %r", question)
+    return True
 
 
 def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
@@ -2146,8 +2253,7 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
         # from here exactly when the contract failed.
         return None
     if frame_resolver is None:
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer="I can't resolve the funded book for a geographic view here.",
+        return _undeliverable(question=question, spec=spec_dict, answer="I can't resolve the funded book for a geographic view here.",
                          route="geo_exposure", lens_applied=True,
                          warnings=["insufficient-data: no funded frame available."])
     try:
@@ -2156,8 +2262,7 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
         df = None
     if df is None or not len(df):
         scope = "this run" if run_id else "the active reporting dataset"
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=f"I couldn't load the funded book for {scope} to map exposure.",
+        return _undeliverable(question=question, spec=spec_dict, answer=f"I couldn't load the funded book for {scope} to map exposure.",
                          route="geo_exposure", lens_applied=True,
                          warnings=[f"insufficient-data: no funded frame for {scope}."])
 
@@ -2208,8 +2313,7 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
         # So the route keeps the question and explains what it could not build.
         # The cost is two false refusals, documented rather than traded away.
         reason = result.get("reason", "no ITL3 area or property postcode on the tape")
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=(f"I can't build a geographic exposure view for this book: "
+        return _undeliverable(question=question, spec=spec_dict, answer=(f"I can't build a geographic exposure view for this book: "
                                  f"{reason}."),
                          route="geo_exposure", lens_applied=True,
                          warnings=lens_warnings + [f"insufficient-data: {reason}"])
@@ -2283,8 +2387,7 @@ def _route_conversion(question, spec_dict, *, history_model, portfolio_id, as_of
     prog = model.get("cohortProgression")
     conv = model.get("cumulativeCohortConversion")
     if not prog or not prog.get("weeks"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=("I can't compute cumulative cohort conversion yet — it needs the "
+        return _undeliverable(question=question, spec=spec_dict, answer=("I can't compute cumulative cohort conversion yet — it needs the "
                                  "weekly pipeline snapshots that track KFI cases through to funding."),
                          route="cohort_conversion",
                          warnings=["insufficient-data: no cohort-tracked pipeline history."])
@@ -2494,9 +2597,9 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     """Adapter: collaborators in, workflow result out, envelope re-keying only."""
     route = prc_mod.WORKFLOW_ID
     if request.frame_resolver is None:
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I can't resolve the governed funded book to compare portfolios here.",
             warnings=["insufficient-data: no funded frame available."])
     try:
@@ -2504,18 +2607,18 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
         df = None
     if df is None or not len(df):
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I couldn't load the governed funded book to compare portfolios.",
             warnings=["insufficient-data: no funded frame available."])
     try:
         bsr = load_business_semantics()
     except Exception as exc:  # noqa: BLE001 - a controlled outcome, never a 500
         _logger.warning("business semantics registry unavailable: %s", exc)
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=("Portfolio comparison is unavailable: the Business "
                     "Semantics Registry could not be loaded, and comparison is "
                     "only performed over governed semantics."),
@@ -2535,9 +2638,9 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     warnings.extend(f"limitation: {note}" for note in result.get("limitations") or [])
 
     if not result.get("available"):
-        envelope = _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        envelope = _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=f"I can't compare portfolios here: {result.get('reason')}.",
             warnings=warnings)
         envelope["workflow"] = result
@@ -2798,9 +2901,9 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     """Adapter: collaborators in, workflow result out, envelope re-keying only."""
     route = conc_mod.WORKFLOW_ID
     if request.frame_resolver is None:
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I can't resolve the governed funded book to measure concentration here.",
             warnings=["insufficient-data: no funded frame available."])
     try:
@@ -2808,18 +2911,18 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
         df = None
     if df is None or not len(df):
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I couldn't load the governed funded book to measure concentration.",
             warnings=["insufficient-data: no funded frame available."])
     try:
         bsr = load_business_semantics()
     except Exception as exc:  # noqa: BLE001 - a controlled outcome, never a 500
         _logger.warning("business semantics registry unavailable: %s", exc)
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=("Concentration analysis is unavailable: the Business "
                     "Semantics Registry could not be loaded, and concentration "
                     "is only measured over governed semantics."),
@@ -2855,9 +2958,9 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     warnings.extend(f"limitation: {note}" for note in result.get("limitations") or [])
 
     if not result.get("available"):
-        envelope = _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        envelope = _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=f"I can't measure concentration here: {result.get('reason')}.",
             warnings=warnings)
         envelope["workflow"] = result
@@ -3134,8 +3237,9 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="geo_exposure", priority=60, lens_aware=True,
             description="Funded exposure by UK ITL3 area.",
-            recognise=lambda r: _is_geo_exposure(r.question, spec=r.spec,
-                                                 view=r.view),
+            recognise=lambda r: _is_geo_exposure(
+                r.question, spec=r.spec, view=r.view,
+                interpretation_provider=r.resolve_interpretation),
             handle=lambda r: _route_geo(
                 r.question, r.spec_dict, client_id=r.client_id, run_id=r.run_id,
                 frame_resolver=r.frame_resolver, portfolio_id=r.portfolio_id,

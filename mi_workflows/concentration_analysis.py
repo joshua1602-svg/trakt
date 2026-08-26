@@ -120,6 +120,23 @@ _MIX_RE = re.compile(
 #: Deliberately narrow: "balance by broker" and every other "<metric> by X"
 #: stays with the point-in-time stratification path.
 _EXPOSURE_BY_RE = re.compile(r"\bexposures?\s+by\s+\w")
+
+#: "<family> exposure" and "most/least exposed" — the EXPOSURE construction, in
+#: the same shape as `_MIX_RE` and over the same governed dimension families.
+#:
+#: "Show geographic exposure." and "Where are we most exposed geographically?"
+#: are exposure analytics that name no dimension after a "by", so neither
+#: `_EXPOSURE_BY_RE` nor `_CONCENTRATION_TERMS` read them. Bounded to a family
+#: word exactly as the mix construction is, so "what is our exposure to Wales?"
+#: — exposure TO a value, not exposure OF a family — is untouched and stays with
+#: the point-in-time path.
+_EXPOSURE_FAMILY = (
+    r"product|products|geographic|geography|regional|region|broker|brokers|"
+    r"originator|origination|channel|industry|sector|collateral|currency|"
+    r"customer|tenure|occupancy|rating|portfolio")
+_FAMILY_EXPOSURE_RE = re.compile(
+    r"\b(?:" + _EXPOSURE_FAMILY + r")\s+exposures?\b|"
+    r"\bmost\s+exposed\b|\bleast\s+exposed\b")
 _DISTRIBUTION_BY_RE = re.compile(r"\bdistribution\s+(?:of\s+exposures?\s+)?by\s+\w")
 
 #: "largest exposures" / "top 10 loans" / "biggest borrowers" — single-name or
@@ -225,24 +242,61 @@ def rejection_reason(question: str, spec: Any = None) -> Optional[str]:
     return None
 
 
+def names_a_concentration_analytic(question: str) -> Optional[str]:
+    """THE ANALYTIC READING, with no route precedence in it. Reason, or ``None``.
+
+    THIS MODULE IS THE OWNER of "does the reader want a concentration /
+    exposure analysis?", and `is_concentration_question` below has always been
+    two questions welded together: the analytic reading, and whether a more
+    specific ROUTE owns the question anyway. Welded, the analytic reading could
+    not be consulted by anything that needed it BEFORE route precedence — which
+    is exactly what the governed contract needs, because precedence is what the
+    contract is supposed to decide.
+
+    Measured, and the reason this split exists: every geographic concentration
+    question was rejected by `rejection_reason` as "owned by the ITL3 geographic
+    exposure capability" before its concentration language was ever read. So the
+    only fact that separates
+
+        "Which region has the largest balance?"      (a ranked stratification)
+        "Show geographic exposure."                  (a concentration analytic)
+
+    was unreachable, and route ownership fell back to wording tests inside the
+    routing layer.
+
+    Nothing here mentions geography, or any other dimension family in
+    particular: the four tests are the ones this module already used, over the
+    vocabulary it already owned.
+
+    `is_concentration_question` is unchanged in behaviour — it applies
+    precedence first and then asks this.
+    """
+    q = f" {str(question or '').strip().lower()} "
+    if any(t in q for t in _CONCENTRATION_TERMS):
+        return "concentration / diversification language"
+    if _MIX_RE.search(q):
+        return "composition (mix) language over a governed dimension family"
+    if _EXPOSURE_BY_RE.search(q) or _DISTRIBUTION_BY_RE.search(q):
+        return "exposure / distribution by a dimension"
+    if _FAMILY_EXPOSURE_RE.search(q):
+        return "exposure of a governed dimension family"
+    if _TOP_EXPOSURE_RE.search(q):
+        return "largest / top exposure language"
+    return None
+
+
 def is_concentration_question(question: str, spec: Any = None) -> Tuple[bool, str]:
     """``(matched, reason)`` — pure recognition for the chat recogniser.
 
     Matches concentration / composition / diversification language over one
     portfolio scope; defers everything owned by a more specific route.
     """
-    q = f" {str(question or '').strip().lower()} "
     rejection = rejection_reason(question, spec)
     if rejection is not None:
         return False, rejection
-    if any(t in q for t in _CONCENTRATION_TERMS):
-        return True, "concentration / diversification language"
-    if _MIX_RE.search(q):
-        return True, "composition (mix) language over a governed dimension family"
-    if _EXPOSURE_BY_RE.search(q) or _DISTRIBUTION_BY_RE.search(q):
-        return True, "exposure / distribution by a dimension"
-    if _TOP_EXPOSURE_RE.search(q):
-        return True, "largest / top exposure language"
+    reason = names_a_concentration_analytic(question)
+    if reason is not None:
+        return True, reason
     return False, "no concentration language"
 
 

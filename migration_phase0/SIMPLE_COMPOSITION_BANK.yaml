@@ -1,0 +1,72 @@
+# Simple-composition completeness bank.
+#
+# ONE QUESTION, ASKED 36 TIMES: if primitives A, B and C all exist, does A+B+C
+# compose without a bespoke route?
+#
+# Not a paraphrase bank. Each row is a small cross-product of concepts the
+# estate already governs — a measure, an axis, a population, an ordering, a
+# dataset, a period — chosen so that the SAME primitive appears in more than one
+# row in different company. A row that fails while its neighbours pass is a
+# wiring gap, not a missing capability.
+#
+# `expect` is pre-registered: DELIVER or REFUSE, decided from what the estate
+# governs, BEFORE the bank was run. `truth` is computed from the tape by the
+# oracle where a deterministic figure exists; `rows` is the exact row count an
+# explicit limit or a governed axis must produce.
+#
+# Fixture: /tmp/cfo_env — 640 funded loans at 2026-06-30 (£172,055,547) across
+# direct_001 + acquired_001, five monthly snapshots; 8 pipeline cases across
+# five governed stages.
+version: 1
+questions:
+  # ---- measure x axis ----------------------------------------------------- #
+  - {id: S01, q: "Show balance by region.",                       expect: DELIVER, rows: 7}
+  - {id: S02, q: "Show balance by broker channel.",               expect: DELIVER, rows: 4}
+  - {id: S03, q: "Show balance by product type.",                 expect: DELIVER, rows: 2}
+  - {id: S04, q: "How many loans by region?",                     expect: DELIVER, rows: 7}
+  - {id: S05, q: "Count by product type.",                        expect: DELIVER, rows: 2}
+  # ---- ranking = measure x axis x direction ------------------------------- #
+  - {id: S06, q: "Which region has the largest balance?",         expect: DELIVER, leader: Scotland}
+  - {id: S07, q: "Which region has the smallest balance?",        expect: DELIVER, leader: South West}
+  - {id: S08, q: "Which broker channel has the largest balance?", expect: DELIVER, leader: Delta Advisers}
+  - {id: S09, q: "Which broker channel has the smallest balance?",expect: DELIVER, leader: Beta Partners}
+  - {id: S10, q: "Which product type has the largest balance?",   expect: DELIVER, leader: lump_sum}
+  # ---- ranking x explicit limit ------------------------------------------- #
+  - {id: S11, q: "What are the top three regions by balance?",    expect: DELIVER, rows: 3}
+  - {id: S12, q: "Top 5 regions by balance",                      expect: DELIVER, rows: 5}
+  - {id: S13, q: "Top 2 brokers by balance",                      expect: DELIVER, rows: 2}
+  - {id: S14, q: "Smallest 3 regions by balance",                 expect: DELIVER, rows: 3}
+  - {id: S15, q: "Top 1 region by balance",                       expect: DELIVER, rows: 1}
+  # ---- population = a named categorical value ----------------------------- #
+  - {id: S16, q: "How many lump sum loans do we have?",           expect: DELIVER, count: 396}
+  - {id: S17, q: "How many drawdown loans do we have?",           expect: DELIVER, count: 244}
+  - {id: S18, q: "How many Gamma Direct loans do we have?",       expect: DELIVER, count: 147}
+  - {id: S19, q: "What is the total balance for Wales loans?",    expect: DELIVER, count: 93}
+  - {id: S20, q: "How many Gamma Direct loans are in the Direct book?", expect: DELIVER, count: 104}
+  # ---- population x axis --------------------------------------------------- #
+  - {id: S21, q: "Show balance by region for lump sum loans.",    expect: DELIVER, rows: 7}
+  - {id: S22, q: "Which broker channel has the largest balance for lump sum loans?", expect: DELIVER}
+  # ---- scope --------------------------------------------------------------- #
+  - {id: S23, q: "How many loans are in the direct book?",        expect: DELIVER, count: 441}
+  - {id: S24, q: "How many loans are in the acquired book?",      expect: DELIVER, count: 199}
+  # ---- share / proportion --------------------------------------------------- #
+  - {id: S25, q: "What share of the book is drawdown?",           expect: DELIVER}
+  - {id: S26, q: "What share of the balance is in Scotland?",     expect: DELIVER}
+  # ---- concentration ------------------------------------------------------- #
+  # The whole-book forms are governed REFUSALS on this deployment: the registry
+  # marks both dimensions originator-specific and the scope spans two
+  # portfolios, so combining them would compare unlike categories. Scoped to one
+  # book the same request delivers, which is what makes the refusal a governance
+  # decision rather than a gap.
+  - {id: S27, q: "Show concentration.",                           expect: DELIVER}
+  - {id: S28, q: "Show broker concentration.",                    expect: REFUSE}
+  - {id: S29, q: "Show product concentration for the direct book.", expect: DELIVER}
+  # ---- pipeline ------------------------------------------------------------ #
+  - {id: S30, q: "What is the pipeline balance?",                 expect: DELIVER, count: 8}
+  - {id: S31, q: "Show the pipeline by stage.",                   expect: DELIVER, rows: 5}
+  - {id: S32, q: "Show pipeline evolution by stage",              expect: DELIVER}
+  - {id: S33, q: "How many cases are at offer stage?",            expect: DELIVER, count: 3}
+  - {id: S34, q: "What is the balance of offer stage cases?",     expect: DELIVER, count: 3}
+  # ---- period -------------------------------------------------------------- #
+  - {id: S35, q: "How does the current month compare with the previous month?", expect: DELIVER}
+  - {id: S36, q: "Which region added the most balance since last month?", expect: DELIVER, leader: Scotland}

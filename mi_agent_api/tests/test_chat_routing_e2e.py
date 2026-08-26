@@ -251,8 +251,23 @@ def test_geographic_exposure_degrades_honestly_without_itl3_or_postcode():
     # The default fixture tape carries region NAMES only (no ITL3 code / postcode),
     # so the ITL3 engine can't resolve areas — the route still owns the answer and
     # explains why, rather than silently falling back.
+    #
+    # WHAT THIS TEST PROTECTS, and still protects: the SPECIALIST ROUTE KEEPS THE
+    # QUESTION. It must not be handed to another analytical answer because its
+    # own data is missing. `route == "geo_exposure"` is that property and is
+    # unchanged.
+    #
+    # WHAT CHANGED, and why: it also asserted `ok is True`. An envelope that
+    # says "I can't build a geographic exposure view" is not a delivered
+    # analysis, and `ok` is the field a machine caller reads to find out. The
+    # governed representation for "I will not answer that" already existed —
+    # `ok:false` + `metadata.controlledUnsupported`, HTTP 200 — and this now
+    # uses it, along with twenty-two sibling sites across the routed estate.
+    # The prose, the empty artifact list and the route are all as they were.
     r = _ask("Where is the book concentrated geographically?")
-    assert r["ok"] is True and r["metadata"]["route"] == "geo_exposure"
+    assert r["metadata"]["route"] == "geo_exposure"
+    assert r["ok"] is False
+    assert r["metadata"]["controlledUnsupported"] is True
     assert "geographic exposure" in r["answer"].lower()
     assert r["artifacts"] == []
 

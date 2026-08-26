@@ -34,7 +34,8 @@ from typing import Any, Dict, List, Optional
 
 from . import lexical as _LEX
 from .schema import (
-    AMOUNT, AVERAGE, BASE_ACQUIRED, BASE_DIRECT, BASE_FUNDED, BOUND, COUNT,
+    AMOUNT, ANALYTIC_CONCENTRATION, AVERAGE,
+    BASE_ACQUIRED, BASE_DIRECT, BASE_FUNDED, BOUND, COUNT,
     EMPTY, FIELD, FILLED, FILTER, FORWARD,
     GRAINS, GROUPING, MOVEMENT, NEUTRAL,
     PROV_CALLER_CONTEXT, PROV_DEFAULT, PROV_EXPLICIT_USER, PROV_UNRESOLVED,
@@ -225,17 +226,46 @@ def _ordering_values(question, spec, dim_terms) -> dict:
     return out
 
 
+def _named_analytic(question):
+    """``(analytic, reason)`` from the OWNER of the concentration vocabulary.
+
+    One call, to the module that already decides this for the concentration
+    route. Nothing here matches a phrase and no vocabulary lives in this module:
+    if the owner widens what it recognises, this widens with it.
+
+    The PRECEDENCE-FREE reading is asked for deliberately. `is_concentration_
+    question` answers "does the concentration ROUTE own this", which folds in
+    who else might; the contract needs "did the reader name a concentration
+    analytic", because deciding who owns it is what the contract is for.
+    """
+    try:
+        from mi_workflows.concentration_analysis import (
+            names_a_concentration_analytic,
+        )
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        return None, None
+    try:
+        reason = names_a_concentration_analytic(question)
+    except Exception:  # noqa: BLE001
+        return None, None
+    return (ANALYTIC_CONCENTRATION, reason) if reason else (None, None)
+
+
 def _operation(qi, spec, facet_kinds, AT, dim_terms=()) -> None:
     asked = AT.asked(qi.question)
     qi.notes.append("answer_type.asked=%s" % asked)
+    analytic, analytic_reason = _named_analytic(qi.question)
 
     if facet_kinds & _FORWARD_FACETS or getattr(spec, "forecast_question", None):
         qi.operation = OperationClaim(state=FILLED, type=FORWARD,
+                                      analytic=analytic,
+                                      analytic_reason=analytic_reason,
                                       source="parser.forecast/facet.projection")
         return
     if facet_kinds & _RANKING_FACETS or getattr(spec, "ranking_mode", None):
         qi.operation = OperationClaim(
             state=FILLED, type=RANKING,
+            analytic=analytic, analytic_reason=analytic_reason,
             source="parser.ranking_mode/facet.ranking",
             **_ordering_values(qi.question, spec, dim_terms))
         return
@@ -243,11 +273,20 @@ def _operation(qi, spec, facet_kinds, AT, dim_terms=()) -> None:
             getattr(spec, "temporal_mode", None) == "compare" or \
             getattr(spec, "bridge_query", False):
         qi.operation = OperationClaim(state=FILLED, type=MOVEMENT,
+                                      analytic=analytic,
+                                      analytic_reason=analytic_reason,
                                       source="parser.compare/bridge")
         return
     mapped = _AGG_TO_OPERATION.get(getattr(spec, "aggregation", None))
     if mapped is None:
         qi.notes.append("operation: no source supplies it")
+        if analytic is not None:
+            # A NAMED ANALYTIC IS A CLAIM even where no operation type is. The
+            # slot would otherwise be EMPTY for "show geographic exposure",
+            # dropping the one fact that separates it from a ranking.
+            qi.operation = OperationClaim(
+                state=FILLED, analytic=analytic, analytic_reason=analytic_reason,
+                source="mi_workflows.analytical.concentration_analysis")
         return
     # The two independent readings, recorded when they differ. Not reconciled:
     # reconciling here would hide the disagreement Stage 1 exists to report.
@@ -256,6 +295,8 @@ def _operation(qi, spec, facet_kinds, AT, dim_terms=()) -> None:
         qi.notes.append("operation DISAGREEMENT parser=%s answer_type=%s"
                         % (mapped, from_answer_type))
     qi.operation = OperationClaim(state=FILLED, type=mapped,
+                                  analytic=analytic,
+                                  analytic_reason=analytic_reason,
                                   source="parser.aggregation")
 
 
@@ -309,8 +350,24 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
     bridge_dim = getattr(spec, "bridge_dimension", None)
 
     seen = set()
+
+
     for key, term, _alt in dim_terms:
         if key in seen:
+            continue
+        if key == _LEX.PIPELINE_STAGE_FIELD:
+            # YIELDED TO ITS OWNER, below. This loop can only say `unresolved`
+            # for a key the parser did not put in `spec.dimension`, and
+            # `lexical.pipeline_stage_request` supplies the ROLE — narrowing to
+            # one stage, or splitting by the axis. Measured when the loop
+            # claimed it first: `seen` suppressed the owner's claim,
+            # `governed_stage` read no axis, and "show pipeline evolution by
+            # stage" fell off `evolution_pipeline_stage` and refused. Measured
+            # when the owner's block was simply moved ABOVE this loop instead:
+            # it also reads "declined" as the WITHDRAWN stage, so a
+            # period-change question about a region was ranked by
+            # `pipeline_stage` — the canary caught it. Order is preserved for
+            # every other key; only this one is the owner's.
             continue
         seen.add(key)
         if key in parser_groups:
@@ -345,6 +402,8 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
                 candidate_concept=key, source="parser.dimension(no facet term)"))
             qi.notes.append("dimension %s: parser only, no raw text available" % key)
 
+
+
     # THE PIPELINE STAGE AXIS.
     #
     # `pipeline_stage` is a governed dimension in the pipeline field contract and
@@ -357,6 +416,11 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
     # question naming one stage is NARROWING to it, and one naming only the axis
     # is SPLITTING by it. Naming both narrows — "offer-stage cases" asks about
     # offers, not for a split across all five.
+    #
+    # This runs AFTER the loop and the loop yields the key to it — see the note
+    # there. Position matters: this reader also reads "declined" as WITHDRAWN,
+    # so claiming ahead of the loop would let a spurious stage outrank a
+    # genuine dimension.
     stage, names_axis = _LEX.pipeline_stage_request(qi.question)
     if (stage or names_axis) and _LEX.PIPELINE_STAGE_FIELD not in seen:
         seen.add(_LEX.PIPELINE_STAGE_FIELD)

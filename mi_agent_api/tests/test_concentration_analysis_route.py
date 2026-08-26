@@ -189,7 +189,13 @@ class TestAdapterEnvelope:
         env = _route("Show product concentration for acquired_009", semantics,
                      frame_resolver=lambda c, r: _frame())
         assert env["metadata"]["route"] == conc.WORKFLOW_ID
-        assert env["ok"] is True                 # controlled, not an error
+        # CONTROLLED, AND NOT A SUCCESS. `ok:true` now means the requested
+        # analysis was DELIVERED; this one was not. The controlled outcome is
+        # `ok:false` + `controlledUnsupported`, which `mi_service` classifies as
+        # UNSUPPORTED_QUESTION (HTTP 200) — still not a 500, which is what this
+        # test has always been about.
+        assert env["ok"] is False
+        assert env["metadata"]["controlledUnsupported"] is True
         assert "acquired_009" in env["answer"]
         assert env["workflow"]["available"] is False
 

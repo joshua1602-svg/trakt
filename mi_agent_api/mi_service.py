@@ -557,8 +557,20 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
     refused: the requested category is present and no single figure is being
     passed off as the narrow one. Never refuses on an unprovable facet, so a
     working governed route cannot be disabled by this check.
+
+    It runs on a CONTROLLED NON-DELIVERY too, and for the same reason
+    `_guard_unresolved_scope` does: the route said it could not produce the
+    analysis, and a facet owner may have a more specific reason than the one the
+    route reached for. Measured — "Show funded balance evolution by month for
+    London" came back as "No reporting periods are available to build a funded
+    balance trend" once that envelope stopped being success-shaped, in place of
+    the geographic-scope refusal that names what the reader actually asked for.
+    An execution FAILURE is still excluded: a route that broke has adjudicated
+    nothing.
     """
-    if not isinstance(routed, dict) or not routed.get("ok"):
+    if not isinstance(routed, dict):
+        return routed
+    if not routed.get("ok") and not _is_controlled_non_delivery(routed):
         return routed
     try:
         from mi_agent import execution_receipt as receipt_mod
@@ -903,6 +915,31 @@ def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str,
     return envelope
 
 
+def _is_controlled_non_delivery(envelope: Dict[str, Any]) -> bool:
+    """A route said "I could not produce this" — not "here it is", not "it broke".
+
+    THE SCOPE DISCLOSURE OUTRANKS A DATA-AVAILABILITY MESSAGE. These guards used
+    to test `ok` alone, which was sound while a route that could not deliver
+    still returned `ok=True`: the guard ran, saw the unheld portfolio, and
+    replaced the generic message with the specific one. Once such an envelope
+    became the `ok:false` controlled refusal it always should have been, the
+    guard stopped running and the reader was told
+
+        "I can't build a funded balance bridge yet: at least two funded
+         reporting periods are needed for a bridge."
+
+    about a book this platform has never onboarded — true, and not the thing
+    they needed to know. So the precondition is now "was this DELIVERED, or was
+    it a controlled non-delivery whose reason a more specific owner can improve".
+
+    An execution FAILURE is deliberately excluded: `_execution_failure_envelope`
+    carries no `controlledUnsupported`, and a route that broke has not reasoned
+    about scope at all.
+    """
+    meta = envelope.get("metadata") or {}
+    return bool(meta.get("controlledUnsupported")) and not meta.get("executionFailure")
+
+
 def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
                             semantics: Dict[str, Any], frame) -> Dict[str, Any]:
     """PHASE 1E. A portfolio the question NAMED and the registry does not hold.
@@ -930,7 +967,9 @@ def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
     calls `active_frame()`, which populates a TTL cache, and a disclosure step
     has no business changing what the next request reads.
     """
-    if not isinstance(envelope, dict) or not envelope.get("ok"):
+    if not isinstance(envelope, dict):
+        return envelope
+    if not envelope.get("ok") and not _is_controlled_non_delivery(envelope):
         return envelope
     try:
         from mi_agent import execution_receipt as receipt_mod
