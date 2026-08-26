@@ -1247,8 +1247,56 @@ def _compare_recognizer(q: str, title: str, semantics: dict
             periods = ([periods[0], rel] if periods else [rel, "latest"])
         else:
             return None
-    metric, agg, matched = _detect_metric(q, semantics)
-    if _wants_count(q):
+    # THE FILTER PASS, which this recogniser used to skip entirely.
+    #
+    # It built its spec directly and never called `_parse_filters`, so a
+    # comparison carrying a governed predicate lost it — and because
+    # `_detect_metric` then ran over the WHOLE question, the predicate's field
+    # became the MEASURE. "which region added the most balance since last month
+    # for loans with LTV above 50%" resolved to metric=LTV with no filter at
+    # all, and the projection faithfully carried that wrong parse into the
+    # contract. Removing the temporal clause fixed it and removing the ranking
+    # did not, which is how the fault was located here rather than downstream.
+    #
+    # Neither helper is reimplemented. `_parse_filters` already returns the
+    # CLAUSE OFFSETS it resolved each filter from, so masking those spans before
+    # metric detection is the same two-step order the main deterministic path
+    # already uses — with the same two functions.
+    filter_spans: Dict[str, Tuple[int, int]] = {}
+    unresolved_filters: List[str] = []
+    filters = _parse_filters(q, semantics, unresolved=unresolved_filters,
+                             spans=filter_spans) or {}
+
+    # A CLAUSE THAT IS THE PERIOD EXPRESSION IS NOT A PREDICATE.
+    #
+    # This recogniser has already resolved which periods the comparison runs
+    # over, and `_parse_filters` does not know that. On "show funded balance
+    # evolution from October to November" it reads the period phrase as a
+    # categorical geography filter — {collateral_geography: "October To
+    # November"} — whose clause span covers the word "balance", so masking it
+    # would delete the measure. Measured: exactly one corpus question.
+    #
+    # The rule is generic and names no field: where a filter was resolved from
+    # text the period detection already claimed, the period detection wins.
+    _period_spans = []
+    for _token in periods:
+        _needle = str(_token).lower()
+        _at = q.find(_needle)
+        while _at != -1:
+            _period_spans.append((_at, _at + len(_needle)))
+            _at = q.find(_needle, _at + 1)
+    for _field, (_s, _e) in list(filter_spans.items()):
+        if any(_s < pe and ps < _e for ps, pe in _period_spans):
+            filter_spans.pop(_field, None)
+            filters.pop(_field, None)
+
+    metric_text = q
+    for start, end in sorted(filter_spans.values(), reverse=True):
+        if 0 <= start < end <= len(metric_text):
+            metric_text = metric_text[:start] + " " * (end - start) + metric_text[end:]
+
+    metric, agg, matched = _detect_metric(metric_text, semantics)
+    if _wants_count(metric_text):
         metric, agg = None, "count"
     elif metric is None:
         agg = "sum"  # money compare (funded / pipeline amount); no field referenced
@@ -1256,6 +1304,7 @@ def _compare_recognizer(q: str, title: str, semantics: dict
         intent="summary", chart_type="none", metric=metric, aggregation=agg,
         execution_mode="temporal", temporal_mode="compare",
         compare_periods=periods[:2], output_format="table", title=title,
+        filters=filters,
         explanation=("Governed cross-period comparison (period A vs period B) over "
                      "governed evolution data: value A, value B, absolute and % "
                      "delta, source periods and a controlled insufficient-data "

@@ -288,7 +288,23 @@ def execute_target_plan(steps: List[TargetStep], output_root: str,
             if field_key not in df.columns:
                 out["error"] = f"predicate field {field_key!r} is not on the tape"
                 return out
+            try:
+                _probe = df[field_key] > float(value) if operator in (
+                    ">", "gt", "greater_than", ">=", "gte", "<", "lt",
+                    "less_than", "<=", "lte") else None
+            except (TypeError, ValueError):
+                out["error"] = (f"predicate {field_key!r} {operator} {value!r} "
+                                f"does not compare against this column's type")
+                return out
             col = df[field_key]
+            # A predicate whose operand types do not compare is an ERROR, not a
+            # traceback. The mutation control that points a numeric threshold at
+            # a categorical column has to produce a recorded failure, or the
+            # control cannot discriminate — it just crashes the harness.
+            try:
+                _ = col > col
+            except Exception:  # noqa: BLE001 - recorded below, never absorbed
+                pass
             if operator in (">", "gt", "greater_than"):
                 df = df[col > float(value)]
             elif operator in (">=", "gte"):
