@@ -191,6 +191,10 @@ export function AgentCaseScreen() {
   const current = stages.find((stage) => stage.status === "current");
   const packStage = packOwner(status);
   const yours = operatorBlocking(onboarding.blocking);
+  // The case's own screens in Client Onboarding, where every field is
+  // answerable regardless of whether the conversation can read it.
+  const onboardingLink = status.occ_links.find((link) =>
+    link.to.startsWith("/onboarding/"));
   const openDecisions = status.open_decisions.filter((d) => d.status === "open");
 
   /** One stage's workflow content. Rendered under exactly one stage. */
@@ -620,18 +624,7 @@ export function AgentCaseScreen() {
             </Panel>
           )}
 
-          {yours.length > 0 && (
-            <Panel title={copy.agent.missingHeading}>
-              <p className="mb-2 text-xs text-stone-500">{copy.agent.missingHelp}</p>
-              <ul className="list-disc space-y-1 pl-4 text-sm text-stone-600">
-                {yours.map((problem) => (
-                  <li key={`${problem.section}-${problem.field}-${problem.index}`}>
-                    {problem.message}
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          )}
+          <OperatorNeedsPanel problems={yours} to={onboardingLink?.to ?? ""} />
 
           {status.observations.length > 0 && (
             <Panel title={copy.agent.observationsHeading}>
@@ -1576,6 +1569,47 @@ function CriteriaPanel({
         <CriteriaList criteria={criteria} />
       </div>
     </details>
+  );
+}
+
+/**
+ * What the OPERATOR still has to supply, and where to supply it.
+ *
+ * Naming a blocker without a route to it is what sent an operator round a
+ * loop: every panel said something was missing, none said where to put it, and
+ * the only thing on screen that resembled a route — "use the conversation" —
+ * could not set the field in question. The onboarding case serves every field
+ * on this list whatever its source, so that is where this points.
+ */
+export function OperatorNeedsPanel({
+  problems,
+  to,
+}: {
+  problems: CaseProblem[];
+  /** The case's own screens in Client Onboarding. */
+  to: string;
+}) {
+  if (problems.length === 0) return null;
+  return (
+    <Panel title={copy.agent.missingHeading}>
+      <p className="mb-2 text-xs text-stone-500">{copy.agent.missingHelp}</p>
+      <ul className="list-disc space-y-1 pl-4 text-sm text-stone-600">
+        {problems.map((problem) => (
+          <li key={`${problem.section}-${problem.field}-${problem.index}`}>
+            {problem.message}
+          </li>
+        ))}
+      </ul>
+      {to && (
+        <Link
+          to={to}
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline"
+        >
+          {copy.agent.missingWhere}
+          <ExternalLink className="h-3 w-3" aria-hidden />
+        </Link>
+      )}
+    </Panel>
   );
 }
 

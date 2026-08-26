@@ -494,6 +494,11 @@ export const copy = {
       "What the client owes is listed under the client questions. These are " +
       "the ones nobody has asked them for, because they are not the client's " +
       "to answer.",
+    // Where to actually answer them. Without this the page named the blockers
+    // and offered no route to any of them: the only thing on screen that
+    // looked like one was "use the conversation", which cannot set every
+    // field, so an operator could be sent round a loop that never closes.
+    missingWhere: "Answer these in the onboarding case",
     criteriaOnboarding: "The onboarding",
     criteriaExecution: "The practice run",
     criteriaBoundary: "The practice boundary",
@@ -664,8 +669,12 @@ export const copy = {
     actionsHeading: "Governed controls",
     actionsHelp:
       "These are the same governed steps the conversation drives. Use whichever you prefer.",
+    // Scoped deliberately: these are the governed ACTIONS the conversation can
+    // drive, not the way to answer everything the case is waiting on. Read as
+    // the latter it sent operators to the chat box for fields it cannot set.
     actionsInConversation:
-      "What you can do next needs a detail Trakt has to be told — use the conversation:",
+      "These governed steps need a detail Trakt has to be told, so they run " +
+      "from the conversation:",
     actionsNone: "This case is finished. There is nothing further to do.",
     uploadHeading: "Provide the client response",
     uploadHelp:

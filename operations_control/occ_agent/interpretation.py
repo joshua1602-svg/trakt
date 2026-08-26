@@ -134,6 +134,13 @@ class Interpretation:
     confidence: Dict[str, float] = field(default_factory=dict)
     #: Clauses nothing could be read from. Reported, never dropped.
     unrecognised: List[str] = field(default_factory=list)
+    #: Clauses Trakt DID read and deliberately declined to resolve — two values
+    #: of one delivery field with no stream to attach either to. They are also
+    #: in ``unrecognised``, which is what puts them in front of the operator;
+    #: this list is what stops the turn being discarded as saying nothing, so
+    #: they see their own words and the reason rather than a generic "could not
+    #: tell what to do with that".
+    refused: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -358,24 +365,41 @@ class DeterministicInterpreter:
             if hit.confidence < 1.0:
                 out.confidence[hit.ref.path] = hit.confidence
 
-        # Which cadence belongs to which stream. Decided from the sentence's
-        # own shape rather than from whichever cadence the generic reader
-        # happened to bind last, so "weekly pipeline, monthly MI" registers a
-        # weekly pipeline and a monthly funded book.
-        paired, blanket = stream_cadences(raw, self.catalogue)
-        for stream, cadence in paired.items():
-            out.stream_delivery.setdefault(stream, {})["cadence"] = cadence
-            if stream not in out.streams:
-                out.streams.append(stream)
-            out.provenance[f"{DELIVERY_SECTION}.cadence"] = PROV_HUMAN
-        if paired:
-            # The blanket is what is LEFT once each stream has taken its own.
-            # Without this the paired cadence would also be applied to every
-            # other registration, which is the defect in the other direction.
-            if blanket:
-                out.delivery["cadence"] = blanket
-            else:
-                out.delivery.pop("cadence", None)
+        # Which value belongs to which stream, for every delivery field the
+        # catalogue gives a closed option list. Decided from the sentence's own
+        # shape rather than from whichever value the generic reader happened to
+        # bind last, so "weekly pipeline, monthly MI" registers a weekly
+        # pipeline and a monthly funded book.
+        #
+        # This was cadence-only, and the field it most needed to cover was
+        # file_format: a mixed pack ("the funded files are csv and the pipeline
+        # files are xlsx") read as ONE blanket format, silently dropping the
+        # first and applying the second to every registration. file_format is
+        # inferred and required, and inference abstains on a mixed pack — so
+        # the operator's only way to supply it wrote the wrong answer to both.
+        ambiguous: List[str] = []
+        for key in pairable_fields(self.catalogue):
+            paired, blanket, unpaired = stream_values(raw, self.catalogue, key)
+            for stream, value in paired.items():
+                out.stream_delivery.setdefault(stream, {})[key] = value
+                if stream not in out.streams:
+                    out.streams.append(stream)
+                out.provenance[f"{DELIVERY_SECTION}.{key}"] = PROV_HUMAN
+            if unpaired:
+                # Two values of one field with nothing to pair them to. The
+                # generic reader has already bound whichever it read last;
+                # that reading is withdrawn rather than applied.
+                out.delivery.pop(key, None)
+                out.provenance.pop(f"{DELIVERY_SECTION}.{key}", None)
+                ambiguous.extend(unpaired)
+            elif paired:
+                # The blanket is what is LEFT once each stream has taken its
+                # own. Without this the paired value would also be applied to
+                # every other registration, the defect in the other direction.
+                if blanket:
+                    out.delivery[key] = blanket
+                else:
+                    out.delivery.pop(key, None)
 
         # The telegraphic shape of an opening instruction.
         rows: Dict[str, List[Dict[str, Any]]] = {}
@@ -418,6 +442,15 @@ class DeterministicInterpreter:
             clause for clause in reading.unrecognised
             if clause not in consumed
             and not vocabulary.match_all(clause.lower())]
+        # A clause naming two values of one delivery field, with no stream to
+        # attach either to, is reported rather than resolved. It reaches the
+        # operator through the same disclosure as anything else Trakt could not
+        # read, and the turn applies nothing until they say which is which.
+        for clause in ambiguous:
+            if clause not in out.unrecognised:
+                out.unrecognised.append(clause)
+            if clause not in out.refused:
+                out.refused.append(clause)
         out.validate(self.catalogue)
         return out
 
@@ -619,6 +652,8 @@ def _says_something(interpretation: Interpretation,
     """
     if interpretation.reporting_period or interpretation.delivery:
         return True
+    if interpretation.refused or interpretation.stream_delivery:
+        return True
     if interpretation.streams or interpretation.expected_artefacts:
         return True
     for step, payload in (interpretation.steps or {}).items():
@@ -638,7 +673,13 @@ def _says_something(interpretation: Interpretation,
 #: Where one delivery statement ends and the next begins. A comma counts:
 #: "weekly pipeline, monthly MI" is two statements, and a reader that ignored
 #: the comma would happily pair "pipeline" with "monthly".
-_SEGMENT_RE = re.compile(r"[,.;\n]+")
+#:
+#: "and" counts for the same reason. "The funded files are csv and the pipeline
+#: files are xlsx" is two statements, and read as one the proximity rule paired
+#: csv with PIPELINE — the nearest dataset to it by raw character distance is
+#: the one it does not belong to, because "and the pipeline" sits between the
+#: value and its own stream.
+_SEGMENT_RE = re.compile(r"[,.;\n]+|\band\b")
 
 #: How far apart a cadence and its stream may sit and still be one statement,
 #: in characters. "a funded book monthly" is a pairing; two clauses apart is a
@@ -682,65 +723,106 @@ def _mentions(segment: str, vocabulary: Dict[str, str]
     return sorted(out)
 
 
-def stream_cadences(text: str, cat: Catalogue) -> Tuple[Dict[str, str], str]:
-    """Which cadence belongs to which stream, and which belongs to all of them.
+def pairable_fields(cat: Catalogue) -> Tuple[str, ...]:
+    """The delivery fields a single stream can claim its own value of.
 
-    Returns ``({stream: cadence}, blanket_cadence)``.
+    Every delivery field the catalogue gives a closed option list, except the
+    one that NAMES the stream. Derived rather than listed, so a new
+    option-backed delivery field pairs without a change here.
+    """
+    section = cat.section(DELIVERY_SECTION)
+    return tuple(f.key for f in ((section.fields if section else None) or [])
+                 if f.key != "dataset" and f.options)
 
-    The rule is proximity within a single statement: a stream takes the cadence
-    nearest to it, closest pairing first, and each cadence is claimed once. A
-    cadence that no stream claims is the blanket answer for every registration
-    that did not state its own.
+
+def stream_values(text: str, cat: Catalogue, key: str
+                  ) -> Tuple[Dict[str, str], str, List[str]]:
+    """Which value of one delivery field belongs to which stream.
+
+    Returns ``({stream: value}, blanket_value, ambiguous_clauses)``.
+
+    The rule is proximity within a single statement: a stream takes the value
+    nearest to it, closest pairing first, and each value is claimed once. A
+    value no stream claims is the blanket answer for every registration that
+    did not state its own.
 
     So "a weekly pipeline, monthly MI" registers a weekly pipeline and leaves
     monthly to the funded book, and "a funded book monthly and a pipeline
     weekly" reads both — where an order-based rule matched whichever pattern it
     tried first and silently dropped the other pairing.
 
+    ``ambiguous_clauses`` is the refusal. When a sentence names two DIFFERENT
+    values of one field and nothing pairs them to a stream, there is no honest
+    blanket: taking the first drops the second, and taking the last drops the
+    first. Both are a wrong answer written confidently, which is worse than no
+    answer, so the clauses are handed back to be reported instead.
+
     Deliberately conservative in one respect: "MI" is not treated as naming the
     funded book. That would be Trakt inferring a stream from a PRODUCT, and the
-    same rule would then attach a cadence to a book the client never mentioned.
-    An unpaired cadence stays blanket, which is both truthful and correctable.
+    same rule would then attach a value to a book the client never mentioned.
+    An unpaired value stays blanket, which is both truthful and correctable.
     """
-    cadences = _vocabulary(cat, "cadence")
+    values = _vocabulary(cat, key)
     datasets = _vocabulary(cat, "dataset")
-    if not cadences or not datasets:
-        return {}, ""
+    if not values or not datasets:
+        return {}, "", []
 
     paired: Dict[str, str] = {}
     blanket = ""
-    for segment in _SEGMENT_RE.split(str(text or "")):
-        segment = segment.strip()
-        if not segment:
+    ambiguous: List[str] = []
+    # Sentence by sentence, then statement by statement within it. The pairing
+    # happens per statement; the AMBIGUITY is judged per sentence, because two
+    # sentences each naming one format are not in conflict — and because the
+    # sentence is what gets quoted back, where a bare statement fragment would
+    # be quoted at an operator who never wrote it on its own.
+    for sentence in re.split(r"[.;\n]+", str(text or "")):
+        sentence = sentence.strip()
+        if not sentence:
             continue
-        cadence_hits = _mentions(segment, cadences)
-        dataset_hits = _mentions(segment, datasets)
-        if not cadence_hits:
-            continue
-
-        # Every possible pairing, closest first. Greedy from there, so the
-        # nearest reading wins and nothing is claimed twice.
-        options = sorted(
-            ((min(abs(d_s - c_e), abs(c_s - d_e)), d_s, c_s, stream, cadence)
-             for d_s, d_e, stream in dataset_hits
-             for c_s, c_e, cadence in cadence_hits),
-            key=lambda row: row[:3])
-        taken_cadence: set = set()
-        taken_stream: set = set()
-        for distance, _d_s, c_s, stream, cadence in options:
-            if distance > _PAIR_REACH:
+        loose: List[str] = []
+        for segment in _SEGMENT_RE.split(sentence):
+            segment = segment.strip()
+            if not segment:
                 continue
-            if stream in taken_stream or c_s in taken_cadence:
+            value_hits = _mentions(segment, values)
+            dataset_hits = _mentions(segment, datasets)
+            if not value_hits:
                 continue
-            taken_stream.add(stream)
-            taken_cadence.add(c_s)
-            paired.setdefault(stream, cadence)
 
-        if not blanket:
-            spare = [cadence for c_s, _c_e, cadence in cadence_hits
-                     if c_s not in taken_cadence]
-            if spare:
-                blanket = spare[0]
+            # Every possible pairing, closest first. Greedy from there, so the
+            # nearest reading wins and nothing is claimed twice.
+            options = sorted(
+                ((min(abs(d_s - v_e), abs(v_s - d_e)), d_s, v_s, stream, value)
+                 for d_s, d_e, stream in dataset_hits
+                 for v_s, v_e, value in value_hits),
+                key=lambda row: row[:3])
+            taken_value: set = set()
+            taken_stream: set = set()
+            for distance, _d_s, v_s, stream, value in options:
+                if distance > _PAIR_REACH:
+                    continue
+                if stream in taken_stream or v_s in taken_value:
+                    continue
+                taken_stream.add(stream)
+                taken_value.add(v_s)
+                paired.setdefault(stream, value)
+
+            loose.extend(value for v_s, _v_e, value in value_hits
+                         if v_s not in taken_value)
+
+        distinct = list(dict.fromkeys(loose))
+        if len(distinct) > 1:
+            ambiguous.append(sentence)      # refused, not guessed
+        elif distinct and not blanket:
+            blanket = distinct[0]
+    if ambiguous:
+        return paired, "", ambiguous
+    return paired, blanket, []
+
+
+def stream_cadences(text: str, cat: Catalogue) -> Tuple[Dict[str, str], str]:
+    """:func:`stream_values` for cadence, in its original two-part shape."""
+    paired, blanket, _ambiguous = stream_values(text, cat, "cadence")
     return paired, blanket
 
 

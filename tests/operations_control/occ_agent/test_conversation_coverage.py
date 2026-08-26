@@ -184,3 +184,39 @@ def test_recognition_is_deterministic():
     second = [(f.ref.path, f.value, f.confidence)
               for f in _extraction.read(text, catalogue()).found]
     assert first == second
+
+
+# --------------------------------------------------------------------------- #
+# An identifier is not a sentence
+# --------------------------------------------------------------------------- #
+
+def test_a_portfolio_id_is_not_read_as_the_words_inside_it():
+    """``direct_001`` is an identifier, not the enum value "direct".
+
+    Separators were flattened before matching so that "equity-release" and
+    "equity_release" read as one phrase. That also turned ``direct_001`` into
+    the words "direct 001", so the bare-option matcher found ``portfolio_type``
+    inside a portfolio id — and naming a source in order to answer a question
+    about it proposed changing the book's type instead. The answer was dropped
+    and an unrelated field on another section was changed.
+    """
+    reading = _extraction.read(
+        "The file format for direct_001/funded is csv", CAT)
+    found = {f.ref.path: f.value for f in reading.found}
+    assert "portfolios.portfolio_type" not in found
+    # And the sentence still reads for what it actually says.
+    assert found.get("sources.file_format") == "csv"
+    assert found.get("sources.dataset") == "funded"
+
+
+def test_the_phrase_flattening_it_existed_for_still_works():
+    for text in ("equity_release book", "equity-release book",
+                 "equity release book"):
+        found = {f.ref.path: f.value for f in _extraction.read(text, CAT).found}
+        assert found.get("portfolios.asset_class") == "equity_release", text
+
+
+def test_an_option_word_standing_alone_is_still_read():
+    found = {f.ref.path: f.value
+             for f in _extraction.read("the direct book", CAT).found}
+    assert found.get("portfolios.portfolio_type") == "direct"

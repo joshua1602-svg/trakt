@@ -669,8 +669,12 @@ def _by_option(clause: str, cat: Catalogue, taken: List[Tuple[int, int]],
         for token, value in _bare_tokens(ref):
             if value in picked or token in ambiguous:
                 continue
-            m = re.search(rf"(?<![a-z0-9]){re.escape(_loose(token))}"
-                          rf"(?![a-z0-9])", loose)
+            # The separators must bound the match too: without them "direct"
+            # matches the head of the portfolio id "direct_001", and naming a
+            # source in order to answer a question about it proposes a change
+            # to the book's type instead.
+            m = re.search(rf"(?<![a-z0-9_\-]){re.escape(_loose(token))}"
+                          rf"(?![a-z0-9_\-])", loose)
             if not m or _overlaps(taken, (m.start(), m.end())):
                 continue
             picked.append(value)
@@ -792,8 +796,9 @@ def _match_option(text: str, ref: FieldRef
     for token, value in _bare_tokens(ref, minimum=2):
         if value in picked:
             continue
-        m = re.search(rf"(?<![a-z0-9]){re.escape(_loose(token))}(?![a-z0-9])",
-                      head)
+        m = re.search(
+            rf"(?<![a-z0-9_\-]){re.escape(_loose(token))}(?![a-z0-9_\-])",
+            head)
         if not m:
             continue
         picked.append(value)
@@ -807,9 +812,19 @@ def _match_option(text: str, ref: FieldRef
 
 
 def _loose(text: str) -> str:
-    """Lower-cased with separators flattened, so "equity-release",
-    "equity_release" and "equity release" are one phrase."""
-    return re.sub(r"[\s_\-]+", " ", str(text or "").lower())
+    """Lower-cased with phrase separators flattened, so "equity-release",
+    "equity_release" and "equity release" are one phrase.
+
+    An underscore or hyphen between two LETTERS joins one phrase. One that
+    joins a word to a NUMBER is part of an identifier, and flattening it made
+    ``direct_001`` read as the words "direct 001" — so the bare-option matcher
+    found the enum value "direct" inside a portfolio id and proposed changing
+    the book's type. Naming a source to answer a question about it therefore
+    produced a change to an unrelated field, on a different section.
+    """
+    lowered = str(text or "").lower()
+    lowered = re.sub(r"(?<=[a-z])[_\-]+(?=[a-z])", " ", lowered)
+    return re.sub(r"\s+", " ", lowered)
 
 
 def _match_named(text: str, names: Dict[str, str]
