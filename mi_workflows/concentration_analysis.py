@@ -512,6 +512,29 @@ def _share_pct(value: Optional[float]) -> str:
     return f"{pct:.2g}%"
 
 
+@dataclass(frozen=True)
+class ConcentrationReading:
+    """What THIS WORKFLOW reads from a question, read once and carried.
+
+    Both fields name framings the governed contract does not carry a concept
+    for — an analytical concept in this workflow's own vocabulary, and whether
+    the question asks about single names rather than a dimension. They are
+    genuinely specialist, so they stay this module's to read; what changes is
+    WHEN. `read_question` is called by the RECOGNISER, before the route claims
+    the question, and the result travels to the handler. Nothing downstream of
+    the claim reads the sentence.
+    """
+
+    concept: Optional[str] = None
+    single_name_kind: Optional[str] = None
+
+
+def read_question(question: str) -> ConcentrationReading:
+    """This workflow's pre-claim reading of one question."""
+    return ConcentrationReading(concept=requested_concept(question),
+                                single_name_kind=requested_single_name_kind(question))
+
+
 def run_concentration_analysis(
         df: pd.DataFrame, *,
         question: str,
@@ -522,22 +545,41 @@ def run_concentration_analysis(
         as_of: Optional[str] = None,
         spec: Any = None,
         parse_meta: Optional[Mapping[str, Any]] = None,
-        context_id: Optional[str] = None) -> Dict[str, Any]:
+        context_id: Optional[str] = None,
+        reading: Optional["ConcentrationReading"] = None) -> Dict[str, Any]:
     """Run the workflow over one governed frame. Returns the result contract.
 
-    ``context_id`` is the pre-resolved workspace scope (question text wins over
-    a workspace selection — the adapter applies that precedence); when omitted
-    the scope named in the question resolves through the same governed
-    registry every other channel uses. Never raises for an analytical reason:
-    every non-answer is a controlled result with ``available: False`` and an
-    explanation.
+    ``context_id`` is the pre-resolved workspace scope. ``reading`` is this
+    question's PRE-CLAIM reading — the concept and the single-name kind, read
+    once by the recogniser before the route was claimed and carried in.
+
+    THE QUESTION IS NO LONGER INTERPRETED HERE. It used to be: this function
+    called `requested_concept(question)` and `requested_single_name_kind(
+    question)` after the route had already claimed the question, and resolved a
+    portfolio lens from the wording when no context arrived. Three semantic
+    decisions taken downstream of interpretation, in a workflow with eleven
+    vocabularies of its own. The deterministic concentration calculation below
+    is unchanged and stays here — it is genuinely specialist. Reading the
+    sentence is not.
+
+    Never raises for an analytical reason: every non-answer is a controlled
+    result with ``available: False`` and an explanation.
     """
+    if reading is None:
+        # NO READING, NO ANSWER FROM THIS WORKFLOW. Falling back to
+        # `read_question(question)` here would leave the interpreter reachable
+        # exactly when the caller forgot to supply one — one owner, or none,
+        # the rule Conversion 1 set for the population.
+        return _controlled_failure(
+            "the question was not read before this workflow ran",
+            question=question, bsr=bsr, as_of=as_of)
     reg = registry if registry is not None else registry_for_frame(df, client_id=client_id)
 
     # ---- scope: ONE governed portfolio scope ------------------------------ #
+    # THE SCOPE ARRIVES RESOLVED. The fallback that read it from the wording is
+    # gone: a second population owner reachable exactly when the first one
+    # failed is the worst moment for two owners to disagree.
     requested_context = context_id
-    if requested_context is None:
-        requested_context = _lens_mod.context_id(_lens_mod.resolve_lens(question))
     scope = resolve_scope(reg, requested_context)
     if scope.fell_back_to_total and scope.requested_context_id:
         available = ", ".join(reg.ids()) or "none"
@@ -589,7 +631,7 @@ def run_concentration_analysis(
                                    multi_portfolio_scope=multi_portfolio,
                                    columns=columns)
 
-    single_name_kind = requested_single_name_kind(question)
+    single_name_kind = reading.single_name_kind
 
     #: The parse's dimension counts only when the user actually named it —
     #: the deterministic parser substitutes a default dimension for generic
@@ -620,7 +662,7 @@ def run_concentration_analysis(
                              if e.analytical_concept == requested_entry.analytical_concept
                              and e.source_field != parsed_dimension)
     else:
-        concept = requested_concept(question)
+        concept = reading.concept
         if explicit_dimension and parsed_dimension and bsr.get(parsed_dimension) is None:
             limitations.append(
                 f"'{parsed_dimension}' is not governed by the Business "

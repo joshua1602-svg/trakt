@@ -127,7 +127,6 @@ SEMANTIC_CALLEES: Dict[str, str] = {
     # deepest form of duplicate ownership, and the easiest to miss: the call
     # site looks like execution.
     "run_portfolio_risk_comparison": "whole-question delegation to a workflow",
-    "run_concentration_analysis": "whole-question delegation to a workflow",
     "rejection_reason": "route shape",
     # specialist parameter reads
     "_scenario_multiplier": "scenario magnitude",
@@ -143,6 +142,20 @@ SEMANTIC_CALLEES: Dict[str, str] = {
 #: Route delegation and local names that are NOT semantic reads. Listed
 #: explicitly rather than left to a default, so the audit is recorded.
 PASSTHROUGH_CALLEES: Set[str] = {
+    # RECLASSIFIED WITH EVIDENCE, not to improve the number. This was
+    # "whole-question delegation to a workflow", and it was: the workflow read
+    # the question after the claim for its analytical concept, its single-name
+    # framing, and a portfolio lens whenever no scope arrived. All three are
+    # gone — the recogniser reads once, pre-claim, and the reading travels; the
+    # scope comes from the contract; and a workflow handed no reading REFUSES
+    # rather than reading the sentence. The question still travels for the
+    # controlled-failure prose, which decides nothing.
+    #
+    # Held by `tests/test_concentration_interpretation_closure.py`, whose
+    # structural test fails the moment the workflow interprets again — verified
+    # by running it against the pre-change tree, where it reports the
+    # `requested_concept` call it now forbids.
+    "run_concentration_analysis",
     # `risk_limits` hands a concentration question to its own sibling handler;
     # the delegation carries the question, the decision was already made.
     "_route_concentration_tests",

@@ -453,43 +453,16 @@
     "route": "concentration_analysis",
     "kind": "generic",
     "handler": "_route_concentration",
-    "line": 2754,
+    "line": 2776,
     "callee": "run_concentration_analysis",
-    "bucket": "B_SEMANTIC",
-    "concept": "whole-question delegation to a workflow"
+    "bucket": "A_EXECUTION",
+    "concept": "route delegation; audited"
   },
   {
     "route": "concentration_analysis",
     "kind": "generic",
     "handler": "_route_concentration",
-    "line": 2795,
-    "callee": "_envelope",
-    "bucket": "C_PRESENTATION",
-    "concept": "wording shown to the reader"
-  },
-  {
-    "route": "concentration_analysis",
-    "kind": "generic",
-    "handler": "_route_concentration",
-    "line": 2714,
-    "callee": "_envelope",
-    "bucket": "C_PRESENTATION",
-    "concept": "wording shown to the reader"
-  },
-  {
-    "route": "concentration_analysis",
-    "kind": "generic",
-    "handler": "_route_concentration",
-    "line": 2724,
-    "callee": "_envelope",
-    "bucket": "C_PRESENTATION",
-    "concept": "wording shown to the reader"
-  },
-  {
-    "route": "concentration_analysis",
-    "kind": "generic",
-    "handler": "_route_concentration",
-    "line": 2764,
+    "line": 2818,
     "callee": "_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -504,10 +477,37 @@
     "concept": "wording shown to the reader"
   },
   {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2743,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2787,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
+    "route": "concentration_analysis",
+    "kind": "generic",
+    "handler": "_route_concentration",
+    "line": 2752,
+    "callee": "_envelope",
+    "bucket": "C_PRESENTATION",
+    "concept": "wording shown to the reader"
+  },
+  {
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 475,
+    "line": 444,
     "callee": "PeriodChangeRequest",
     "bucket": "A_EXECUTION",
     "concept": "route delegation; audited"
@@ -516,7 +516,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 514,
+    "line": 483,
     "callee": "_render",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -525,7 +525,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 396,
+    "line": 365,
     "callee": "_rank_refusal_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -534,7 +534,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 506,
+    "line": 475,
     "callee": "_rank_refusal_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -543,7 +543,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 419,
+    "line": 388,
     "callee": "_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -552,7 +552,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 500,
+    "line": 469,
     "callee": "_failure_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -561,7 +561,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 470,
+    "line": 439,
     "callee": "_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -570,7 +570,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 491,
+    "line": 460,
     "callee": "_rank_refusal_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"

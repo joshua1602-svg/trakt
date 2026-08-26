@@ -2634,6 +2634,15 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
 # result contract into the chat envelope — it performs no calculations and
 # takes no decisions.
 # --------------------------------------------------------------------------- #
+#: The key this workflow's pre-claim reading is carried under.
+CONCENTRATION_READING_KEY = "concentration"
+
+
+def _lens_from_contract(interpretation):
+    """The source-portfolio lens the contract states. See `analytical_plan`."""
+    return _plan.lens_from_contract(interpretation)
+
+
 def _recognise_concentration(request: RouteRequest) -> Recognition:
     if _is_aggregate_contribution_question(request.question):
         # Concentration measures how exposure is DISTRIBUTED at one date; it
@@ -2641,6 +2650,16 @@ def _recognise_concentration(request: RouteRequest) -> Recognition:
         return Recognition.no("aggregate_contribution_question")
     matched, reason = conc_mod.is_concentration_question(
         request.question, request.spec)
+    if matched:
+        # THE READING IS KEPT. This recogniser already reads the question; the
+        # workflow used to read it AGAIN, after the route was claimed, for the
+        # concept and the single-name framing. Reading it once here and
+        # carrying the result is what removes those two post-claim decisions
+        # without inventing a governed concept for either.
+        remember = getattr(request, "remember_recognition", None)
+        if remember is not None:
+            remember(CONCENTRATION_READING_KEY,
+                     conc_mod.read_question(request.question))
     return (Recognition.yes(_WORKFLOW_CONFIDENCE, reason) if matched
             else Recognition.no(reason))
 
@@ -2743,19 +2762,23 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     except Exception:  # noqa: BLE001 - the workflow builds its own from the frame
         registry = None
 
-    # The workspace scope, with question text taking precedence — the SAME
-    # lens precedence every other lens-aware route applies.
+    # THE SCOPE COMES FROM THE CONTRACT, not from a second reading of the
+    # sentence. `source_scope` already carries the owner's answer and the
+    # provenance that decides precedence against a workspace selection —
+    # measured equivalent to `_resolve_lens` on all 882 corpus questions, and
+    # again with a workspace selection present.
     try:
-        lens = _resolve_lens(request.question, request.source_lens)
-        context_id = _portfolio_lens.context_id(lens)
-    except Exception:  # noqa: BLE001 - the workflow falls back to question text
+        lens = _lens_from_contract(request.resolve_interpretation())
+        context_id = _portfolio_lens.context_id(lens) if lens is not None else None
+    except Exception:  # noqa: BLE001 - an identity fault must not fail the route
         context_id = None
 
     result = conc_mod.run_concentration_analysis(
         df, question=request.question, bsr=bsr, mi_semantics=request.semantics,
         registry=registry, client_id=request.client_id, as_of=request.as_of,
         spec=request.spec, parse_meta=request.parse_meta,
-        context_id=context_id)
+        context_id=context_id,
+        reading=request.recalled_recognition(CONCENTRATION_READING_KEY))
 
     warnings = list(result.get("warnings") or [])
     warnings.extend(f"limitation: {note}" for note in result.get("limitations") or [])

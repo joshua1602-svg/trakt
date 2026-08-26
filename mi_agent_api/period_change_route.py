@@ -95,6 +95,7 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
     period-change answer covers exactly the portfolios every other routed answer
     would cover for the same lens.
     """
+    from . import analytical_plan as _plan
     from . import chat_routing
     from . import evolution as evolution_mod
     from mi_agent import portfolio_scope as scope_mod
@@ -159,40 +160,6 @@ def _registry_for(snapshots: Sequence[SnapshotFrame],
     except Exception:  # noqa: BLE001 - metadata must never break an answer
         logger.exception("portfolio registry unavailable for client %r", client_id)
         return None
-
-
-def lens_from_contract(interpretation: Any) -> Any:
-    """The source-portfolio lens THIS REQUEST'S CONTRACT states.
-
-    A MAPPING, NOT A DECISION — the same shape `_rank_request_from_contract`
-    uses for ranking. `mi_agent.portfolio_lens` remains the only thing that
-    decides what "the acquired book" MEANS; the contract transports its answer
-    and this hands that answer back to the owner's own constructors. Nothing
-    here reads a question, and no new scope capability is added: the five states
-    of `SourceScopeClaim` map onto the four lenses that already exist.
-
-    Conversion 1's rule applies unchanged — a scope the owner was never
-    consulted about (`state=empty`) is NOT Total, and yields ``None`` so the
-    caller defers rather than widening a population the question may have
-    narrowed.
-
-    Source lens and row predicates stay different axes: this reads
-    `source_scope` and never `row_predicates`.
-    """
-    from mi_agent import portfolio_lens as lens_mod
-
-    scope = getattr(interpretation, "source_scope", None)
-    if scope is None or getattr(scope, "state", None) != "filled":
-        return None
-    name = getattr(scope, "scope", None)
-    ids = tuple(str(i) for i in (getattr(scope, "portfolio_ids", ()) or ()))
-    if name == "total":
-        return lens_mod.total_lens()
-    if name in ("direct", "acquired"):
-        return lens_mod.lens_from_term(name)
-    if name == "cohort" and ids:
-        return lens_mod._selection_lens(list(ids))
-    return None
 
 
 def scope_ref_from_lens(lens: Any, *, tenant_id: Optional[str] = None,
@@ -358,6 +325,7 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     population and Conversion 2 for the window. A caller that skipped
     recognition gets a deferral, not a second recogniser hidden in the handler.
     """
+    from . import analytical_plan as _plan
     from . import chat_routing
 
     intent = recognition
@@ -371,7 +339,8 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # Measured over 882 corpus questions before the switch, and again with a
     # workspace selection present so caller precedence was actually exercised:
     # the contract-derived lens and the resolver agree every time.
-    resolved_lens = lens if lens is not None else lens_from_contract(interpretation)
+    resolved_lens = (lens if lens is not None
+                     else _plan.lens_from_contract(interpretation))
     if resolved_lens is None:
         # NO SCOPE CLAIM, NO ANSWER FROM THIS ROUTE. Conversion 1's rule, and
         # for its reason: keeping the resolver here as a fallback would leave a

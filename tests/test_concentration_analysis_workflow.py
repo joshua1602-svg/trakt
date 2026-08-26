@@ -59,7 +59,20 @@ def _frame(**overrides) -> pd.DataFrame:
 
 
 def _run(df, question="Show product concentration", *, bsr, **kw):
+    """Run the workflow the way the ROUTER runs it.
+
+    The workflow no longer resolves a portfolio scope or a concept from the
+    question after the route is claimed — the recogniser reads the question
+    once, pre-claim, and the adapter hands the reading and the resolved scope
+    in. This harness stands in for the router and does the same two steps. No
+    assertion below changes; what changes is who reads the sentence.
+    """
+    from mi_agent import portfolio_lens as _lens_mod
+
     kw.setdefault("as_of", "2026-06-30")
+    if "context_id" not in kw:
+        kw["context_id"] = _lens_mod.context_id(_lens_mod.resolve_lens(question))
+    kw.setdefault("reading", ca.read_question(question))
     return ca.run_concentration_analysis(df, question=question, bsr=bsr, **kw)
 
 
