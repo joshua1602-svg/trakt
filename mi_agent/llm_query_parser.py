@@ -1967,6 +1967,13 @@ def _grouped_metric(metric_part: str, q: str, semantics: dict) -> Tuple[Optional
 #: "in London?" (a question mark), "for London" and "in the South East" all
 #: failed while "in london" succeeded — the shapes a person actually types were
 #: exactly the ones that missed.
+#: "<value> loans / cases / mortgages / book" — a category used as an adjective.
+#: Resolved ONLY against values the book carries, so it cannot manufacture a
+#: filter from an ordinary adjective.
+_ATTRIBUTIVE_CATEGORICAL_RE = re.compile(
+    r"((?:[a-z][a-z_]*\s+){1,4}?)(?:loans?|cases?|mortgages?|accounts?|book)\b",
+    re.I)
+
 _CATEGORICAL_FILTER_RE = re.compile(
     # "to" is NOT a general scope preposition. Admitting it outright made
     # "when is it expected to complete?" bind a geography called "Complete",
@@ -2118,7 +2125,41 @@ def _contribution_request(q: str, semantics: dict, available_columns=None
     return metric, weight
 
 
-def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None
+def _categorical_value_field(value: str, available_values) -> Optional[Tuple[str, str]]:
+    """The governed field whose values include ``value`` — ``(field, value)``.
+
+    THE FIELD COMES FROM THE VALUE, not from a fixed choice. `_parse_categorical
+    _filter` resolved every categorical phrase to the REGION field whatever had
+    been named, which is why "what is the balance for lump sum loans?" refused
+    citing `geographic_region_obligor`: a product type was bound to geography,
+    matched nothing, and the refusal named a field the reader never mentioned.
+
+    Matching is against the values THE BOOK ACTUALLY CARRIES (see
+    `execution_receipt.book_values`), so nothing here holds a vocabulary of its
+    own and an asset class the tape does not carry offers no values to match.
+
+    A value two governed fields both claim returns ``None``: an ambiguous
+    narrowing must be disclosed, never resolved by preference.
+    """
+    if not available_values:
+        return None
+    probe = re.sub(r"[\s_]+", " ", str(value or "").strip().lower())
+    if not probe:
+        return None
+    hits = []
+    for field, values in available_values.items():
+        for known, spelled in (values.items() if hasattr(values, "items")
+                               else ((v, v) for v in values)):
+            if re.sub(r"[\s_]+", " ", known) == probe:
+                hits.append((field, spelled))
+                break
+    if len(hits) != 1:
+        return None
+    return hits[0]
+
+
+def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None,
+                              available_values=None
                               ) -> Optional[Tuple[str, str]]:
     """Detect a categorical region filter in a clause -> (field_key, value).
 
@@ -2134,9 +2175,30 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     # Governed SCOPE phrases (P1I-A) and governed SEASONING phrases (P1J-1) are
     # both claimed before the place-resolver runs. Either one read as a place
     # invents a region that does not exist — "Entire", "Current", "Front".
-    m = _CATEGORICAL_FILTER_RE.search(
-        mask_segment_phrases(mask_scope_phrases(clause)).strip())
+    masked = mask_segment_phrases(mask_scope_phrases(clause)).strip()
+    m = _CATEGORICAL_FILTER_RE.search(masked)
     if not m:
+        # THE ATTRIBUTIVE FORM. "how many lump sum loans do we have?" names a
+        # category with no preposition in front of it, so the prepositional
+        # pattern above never matched and the narrowing vanished silently — the
+        # whole book came back as the answer to a question about 396 loans.
+        #
+        # Safe only because the value must be one the BOOK CARRIES: a phrase no
+        # governed field claims resolves to nothing, so this cannot invent a
+        # filter out of an adjective.
+        if available_values:
+            for attributive in _ATTRIBUTIVE_CATEGORICAL_RE.finditer(masked):
+                words = attributive.group(1).split()
+                # LONGEST SUFFIX FIRST. The words before the noun are a mixture
+                # of question framing and the category — "how many lump sum
+                # loans" — so the candidate is the tail, tried from longest to
+                # shortest. Only a value the book carries resolves, so a wrong
+                # tail simply does not match.
+                for start in range(len(words)):
+                    owned = _categorical_value_field(" ".join(words[start:]),
+                                                     available_values)
+                    if owned is not None:
+                        return owned
         return None
     value = m.group(1).strip()
     # "for loans in Wales" captures "loans in wales" — peel leading filler and
@@ -2153,6 +2215,16 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     if not value or value in _CATEGORICAL_STOPWORDS:
         return None
     if any(word in _NON_PLACE_TERMS for word in value.split()):
+        return None
+    # THE BOOK'S OWN VALUES DECIDE THE FIELD, when the book is known.
+    owned = _categorical_value_field(value, available_values)
+    if owned is not None:
+        return owned[0], owned[1]
+    if available_values:
+        # The book is known and no governed field claims this value. Binding it
+        # to region anyway is how a product type became a geography; returning
+        # None lets the caller record it as an UNRESOLVED narrowing, which the
+        # fail-closed machinery discloses rather than dropping.
         return None
     field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"
     if field not in _fields(semantics):
@@ -2231,7 +2303,8 @@ _POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
 
 def _parse_filters(q: str, semantics: dict, available_columns=None,
                    unresolved: Optional[List[str]] = None,
-                   spans: Optional[Dict[str, Tuple[int, int]]] = None
+                   spans: Optional[Dict[str, Tuple[int, int]]] = None,
+                   available_values=None
                    ) -> Dict[str, Any]:
     """Parse one or more filters joined by ``and`` / ``with`` / ``where`` (numeric
     thresholds — prefix OR postfix — and a categorical value).
@@ -2325,7 +2398,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
                 if spans is not None:
                     spans[age_field] = (clause_start, clause_end)
                 continue
-        cat = _parse_categorical_filter(clause, semantics, available_columns)
+        cat = _parse_categorical_filter(clause, semantics, available_columns,
+                                        available_values)
         if cat:
             filters[cat[0]] = cat[1]
             if spans is not None:
@@ -2334,7 +2408,9 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
 
 
 def _grouped_value_filters(q: str, semantics: dict, available_columns,
-                           exclude_dims: Iterable[str] = ()) -> Tuple[Dict[str, Any], List[str]]:
+                           exclude_dims: Iterable[str] = (), *,
+                           available_values=None
+                           ) -> Tuple[Dict[str, Any], List[str]]:
     """Value filters expressed ALONGSIDE a grouping, e.g. 'balance by region where
     LTV above 50%' or 'balance by broker in the north'. Execution applies filters
     to the mask BEFORE grouping, so a grouped spec may legitimately carry them.
@@ -2344,7 +2420,8 @@ def _grouped_value_filters(q: str, semantics: dict, available_columns,
     the filtered-KPI branch so a grouped filter is never silently discarded."""
     exclude = set(exclude_dims or ())
     unavailable: List[str] = []
-    filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable)
+    filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable,
+                             available_values=available_values)
     # A borrower-structure value filter ("... for joint borrowers") resolves to a
     # categorical filter (or an unavailable note). Skip it when the grouping IS
     # the borrower dimension (that is the breakdown, not a filter).
@@ -2648,7 +2725,8 @@ def _qualitative_threshold(q: str) -> Optional[str]:
 
 
 def _deterministic_parse(question: str, semantics: dict,
-                         available_columns=None) -> Tuple[MIQuerySpec, dict]:
+                         available_columns=None,
+                         available_values=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
 
     Honours explicitly-requested dimensions EXACTLY and never substitutes an
@@ -2747,7 +2825,8 @@ def _deterministic_parse(question: str, semantics: dict,
         # geographic region south west".
         unresolved_notes: List[str] = []
         filters = _parse_filters(q, semantics, available_columns,
-                                 unresolved=unresolved_notes)
+                                 unresolved=unresolved_notes,
+                                 available_values=available_values)
         # Borrower-structure intent ("how many joint borrowers"): resolve joint/sole
         # to a filter. When the field is unavailable, record the predicate as
         # UNAVAILABLE (never silently dropped).
@@ -2807,7 +2886,8 @@ def _deterministic_parse(question: str, semantics: dict,
     is_show_loans = (bool(re.search(r"\b(show|list|display|drill)\b", q))
                      and bool(re.search(r"\bloans?\b", q)) and " by " not in q)
     if is_show_loans:
-        d_filters = _parse_filters(q, semantics, available_columns)
+        d_filters = _parse_filters(q, semantics, available_columns,
+                                   available_values=available_values)
         bstruct = _borrower_structure_filter(q, semantics, available_columns)
         if bstruct is not None:
             d_filters.update(bstruct[0])
@@ -2898,13 +2978,13 @@ def _deterministic_parse(question: str, semantics: dict,
             if len(full_dims) >= 3:
                 # 3+ dimensions cannot be charted -> a table/pivot over all of them.
                 g_filters, g_unavail = _grouped_value_filters(
-                    q, semantics, available_columns, exclude_dims=full_dims)
+                    q, semantics, available_columns, exclude_dims=full_dims, available_values=available_values)
                 return _build_multi_dim_table_spec(
                     metric, full_dims, semantics, title, True,
                     [c[1] for c in seg_classes], has_count=("count" in matched),
                     filters=g_filters, unavailable_filters=g_unavail)
             g_filters, g_unavail = _grouped_value_filters(
-                q, semantics, available_columns, exclude_dims=dims)
+                q, semantics, available_columns, exclude_dims=dims, available_values=available_values)
             return _build_two_dim_spec(metric, dims, semantics, title, True,
                                        [c[1] for c in seg_classes[:2]],
                                        has_count=("count" in matched),
@@ -2923,7 +3003,7 @@ def _deterministic_parse(question: str, semantics: dict,
             and "treemap" not in q):
         metric, _agg, matched = _detect_metric(remaining, semantics)
         g_filters, g_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=dim_keys)
+            q, semantics, available_columns, exclude_dims=dim_keys, available_values=available_values)
         if len(dim_keys) >= 3:
             # 3+ dimensions -> a table/pivot over ALL of them (never truncate).
             return _build_multi_dim_table_spec(
@@ -2950,7 +3030,7 @@ def _deterministic_parse(question: str, semantics: dict,
             metric, agg = _balance_metric(semantics), "sum"
         conf = "high" if len(g_keys) >= 1 else "low"
         g_filters, g_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=g_keys[:3])
+            q, semantics, available_columns, exclude_dims=g_keys[:3], available_values=available_values)
         return (MIQuerySpec(
             intent="chart", chart_type="treemap", metric=metric,
             hierarchy=g_keys[:3], aggregation=agg, top_n=top_n, title=title,
@@ -3084,7 +3164,7 @@ def _deterministic_parse(question: str, semantics: dict,
         # executor filters `work` before _execute_line), so attach it — a
         # filtered trend is never silently returned unfiltered.
         line_filters, line_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=[])
+            q, semantics, available_columns, exclude_dims=[], available_values=available_values)
         # If a FILTER-field keyword hijacked the metric (e.g. "balance trend where
         # LTV above 50%" -> metric=LTV, because the LTV filter term is also read as
         # a metric) but a balance measure is explicitly named, prefer balance so
@@ -3162,7 +3242,7 @@ def _deterministic_parse(question: str, semantics: dict,
         share = _share_request(q, semantics, available_columns)
         if share and not (re.search(r"\bby\b", q) or dim_terms):
             share_filters, share_unavail = _grouped_value_filters(
-                q, semantics, available_columns)
+                q, semantics, available_columns, available_values=available_values)
             if share_filters:
                 return (MIQuerySpec(
                     intent="summary", chart_type="none",
@@ -3206,7 +3286,7 @@ def _deterministic_parse(question: str, semantics: dict,
         # while "exposure to borrowers over 85" did not. Same helper the bar
         # branch uses, so an unavailable predicate is surfaced, never dropped.
         kpi_filters, kpi_unavail = _grouped_value_filters(
-            q, semantics, available_columns)
+            q, semantics, available_columns, available_values=available_values)
         share = _share_request(q, semantics, available_columns)
         if share and kpi_filters:
             # "What proportion of the book is below 75% LTV" is a ratio of two
@@ -3246,7 +3326,7 @@ def _deterministic_parse(question: str, semantics: dict,
         share = _share_request(q, semantics, available_columns)
         if share and not grouping_requested:
             share_filters, share_unavail = _grouped_value_filters(
-                q, semantics, available_columns)
+                q, semantics, available_columns, available_values=available_values)
             if share_filters:
                 return (MIQuerySpec(
                     intent="summary", chart_type="none",
@@ -3273,7 +3353,7 @@ def _deterministic_parse(question: str, semantics: dict,
     # LTV above 50%") is applied to the mask before grouping — attach it so it is
     # never silently dropped. The grouping dimension itself is excluded.
     g_filters, g_unavail = _grouped_value_filters(
-        q, semantics, available_columns, exclude_dims=[dimension] if dimension else [])
+        q, semantics, available_columns, exclude_dims=[dimension] if dimension else [], available_values=available_values)
     return (MIQuerySpec(
         intent="chart", chart_type="bar", metric=metric, dimension=dimension,
         aggregation=agg, weight_field=weight, top_n=top_n, title=title,
@@ -4280,6 +4360,7 @@ def parse_with_repair(
     semantics,
     available_columns=None,
     *,
+    available_values=None,
     llm_enabled: bool = False,
     model: Optional[str] = None,
     max_attempts: int = 1,
@@ -4323,7 +4404,8 @@ def parse_with_repair(
 
     # ---- deterministic parse (always computed; free) ----------------------
     det_spec, det_meta = _deterministic_parse(user_question, semantics,
-                                              available_columns=cols)
+                                              available_columns=cols,
+                                              available_values=available_values)
     det_seasoning = resolve_seasoning_role(det_spec, user_question, cols)
     # P1M: before validation, so an ungoverned statistic is REFUSED here rather
     # than silently replaced by the field default further down.

@@ -426,6 +426,20 @@ def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
         logger.info("routed scope stamping skipped: %s", exc)
 
 
+def _book_values(frame, semantics):
+    """The book's governed category values, or ``None`` if they cannot be read.
+
+    Never fatal: a catalogue that cannot be built leaves the parser exactly as
+    it was before it existed.
+    """
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+        return receipt_mod.book_values(frame, semantics)
+    except Exception:  # noqa: BLE001 - a missing catalogue is not an error
+        logger.info("book value catalogue unavailable", exc_info=True)
+        return None
+
+
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     """Map an engine-reported failure onto a stable code.
 
@@ -984,6 +998,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             parsed = ParsedQuestion.parse(
                 req.question, semantics,
                 available_columns=set(df.columns) if df is not None else None,
+                # THE BOOK'S OWN CATEGORY VALUES. Without them the parser has
+                # no way to tell which governed field a named category belongs
+                # to, and bound every one to geography.
+                available_values=(_book_values(df, semantics)
+                                  if df is not None else None),
                 llm_enabled=llm_cfg.enabled, model=llm_cfg.model,
                 # Extension point: supply a Business Semantics Registry resolver
                 # here to attach governed business-term metadata to every parse.

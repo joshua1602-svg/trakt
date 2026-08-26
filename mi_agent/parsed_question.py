@@ -96,6 +96,7 @@ class ParsedQuestion:
     @classmethod
     def parse(cls, question: str, semantics: Mapping[str, Any], *,
               available_columns: Optional[Set[str]] = None,
+              available_values: Optional[Mapping[str, Any]] = None,
               llm_enabled: bool = False,
               model: Optional[str] = None,
               max_attempts: int = 1,
@@ -114,6 +115,7 @@ class ParsedQuestion:
 
         spec, meta = parse_with_repair(
             question, semantics, available_columns=available_columns,
+            available_values=available_values,
             llm_enabled=llm_enabled, model=model, max_attempts=max_attempts,
             llm_callable=llm_callable, provider=provider,
             catalog_mode=catalog_mode, zero_cost_first=zero_cost_first)

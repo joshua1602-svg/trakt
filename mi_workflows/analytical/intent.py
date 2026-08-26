@@ -44,6 +44,8 @@ the question to the governed route or capability that already owns it.
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -250,6 +252,41 @@ _COMPLETION_TERMS: Tuple[str, ...] = (
     " converting ", " conversion ", " conversions ", " drawdown ",
     " drawdowns ", " draw down ", " drawn down ", " fund out ", " funding out ",
 )
+
+#: Population nouns. A completion term standing immediately before one of these
+#: is describing WHICH LOANS, not an event.
+#:
+#: "drawdown" is a pipeline→funded transition AND, in equity release, a governed
+#: LOAN TYPE. Read only as the event, "how many drawdown loans do we have?" —
+#: a plain count of 244 loans on the funded book — was declined as a pipeline
+#: question the funded executor structurally cannot answer.
+#:
+#: The rule is generic and names no term: a governed category used as an
+#: adjective in front of a population noun is a qualifier. "How many loans are
+#: we drawing down at the moment?" has no population noun after the term and
+#: stays the flow question it is.
+_POPULATION_NOUNS: Tuple[str, ...] = (
+    "loan", "loans", "case", "cases", "mortgage", "mortgages",
+    "account", "accounts", "book", "balance", "balances",
+)
+
+_QUALIFIER_RE = re.compile(
+    r"\b(" + "|".join(t.strip() for t in (
+        " complete ", " completes ", " completing ", " completed ",
+        " completion ", " completions ", " convert ", " converts ",
+        " converting ", " conversion ", " conversions ", " drawdown ",
+        " drawdowns ", " draw down ", " drawn down ")) + r")\s+(?:"
+    + "|".join(_POPULATION_NOUNS) + r")\b", re.I)
+
+
+def _is_population_qualifier(text: str) -> bool:
+    """True when every completion term in the text qualifies a population."""
+    hits = [t.strip() for t in _COMPLETION_TERMS if t in text]
+    if not hits:
+        return False
+    qualified = {m.group(1).lower() for m in _QUALIFIER_RE.finditer(text)}
+    return all(h.lower() in qualified for h in hits)
+
 
 _VINTAGE_TERMS: Tuple[str, ...] = (
     " vintage ", " vintages ", " cohort ", " cohorts ", " seasoning ",
@@ -634,7 +671,8 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     windows = tuple(_seasoning.lending_windows_named(question))
 
     profiling = _any(text, _PROFILE_TERMS) or _any(text, _RISK_PROFILE_TERMS)
-    completing = _any(text, _COMPLETION_TERMS)
+    completing = (_any(text, _COMPLETION_TERMS)
+                  and not _is_population_qualifier(text))
     pipelining = _any(text, _PIPELINE_TERMS) or completing
     vintaging = _any(text, _VINTAGE_TERMS) or bool(windows)
 

@@ -364,6 +364,47 @@ def geographic_values(frame, semantics: dict, *, max_cardinality: int = 60
     return out
 
 
+def book_values(frame, semantics: Mapping[str, Any],
+                max_values: int = 200) -> Dict[str, Dict[str, str]]:
+    """The governed categorical DIMENSION values this book actually carries.
+
+    ``{field_key: {value, ...}}``, lower-cased.
+
+    THE VALUES COME FROM THE BOOK, NOT FROM A LIST. A parser that has to know
+    what "lump sum" means needs a catalogue, and every catalogue written in code
+    is a vocabulary that drifts from the data it claims to describe. The book
+    already holds its own values; this hands them over so a named category can
+    be resolved to the field that actually holds it — the same shape
+    `book_columns` established for the schema question.
+
+    Only fields the registry marks as dimensions are offered, and only where the
+    column's cardinality is small enough to be a category rather than an
+    identifier — a loan reference is not a population a reader names.
+    """
+    out: Dict[str, Dict[str, str]] = {}
+    columns = getattr(frame, "columns", None)
+    if columns is None:
+        return out
+    present = set(columns)
+    for key, entry in ((semantics or {}).get("fields") or {}).items():
+        if (entry or {}).get("role") != "dimension":
+            continue
+        column = (entry or {}).get("canonical_field", key)
+        if column not in present:
+            continue
+        try:
+            values = frame[column].dropna().unique().tolist()
+        except Exception:  # noqa: BLE001 - a column that cannot be read has no values
+            continue
+        if not values or len(values) > max_values:
+            continue
+        # lower-cased key -> the book's OWN spelling, so a resolved value is
+        # rendered as the book writes it rather than as the reader typed it.
+        out[key] = {str(v).strip().lower(): str(v).strip()
+                    for v in values if str(v).strip()}
+    return out
+
+
 def book_columns(frame) -> Set[str]:
     """The columns of the BOOK this frame reports on. THE schema answer, once.
 
