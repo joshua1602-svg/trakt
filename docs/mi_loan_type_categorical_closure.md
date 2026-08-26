@@ -61,77 +61,104 @@ unchanged.
 Generalises with no per-value code: `performing` 619, `owner occupied` 585,
 `direct` 441, `London` 83, unfiltered 640.
 
-## 4. Categorical sweep and supplement
+## 4. Categorical sweep and supplement — both gates met
 
 ```
-SWEEP       69 questions, 8 governed fields
-            47 CORRECT NARROWING · 14 HONEST REFUSAL · 4 UNCLEAR · 4 SILENT DROP
+SWEEP       69 questions, 8 governed categorical fields
+            49 CORRECT NARROWING · 16 HONEST REFUSAL · 4 UNCLEAR · 0 SILENT DROP
 
 SUPPLEMENT  24 questions (frozen before execution)
-            17 CORRECT · 5 SAFE REFUSAL · 2 WRONG/SILENT
+            19 CORRECT · 5 SAFE REFUSAL · 0 WRONG/SILENT
 ```
 
-**All six silent drops are one defect class.** A phrase that is both a governed
-VALUE and a DIMENSION name, used attributively, is consumed as a grouping and
-the population silently widens:
+### The defect the first pass left open, and how it closed
+
+Dimension terms come from registry SYNONYMS, and a field's synonyms routinely
+spell its own values — "owner occupied" is both the wording of `occupancy_type`
+and one of its two values. Matched as a dimension, *"what is the balance for
+owner occupied loans?"* was answered as a breakdown over all 640 loans for a
+question about 585, while *"how many owner occupied loans do we have?"* narrowed
+correctly. **The same constraint, two shapes, opposite outcomes** — which is the
+generalisation gap the supplement exists to catch.
+
+Two rules closed it, neither naming a field or a value:
+
+* a term that names a value the book carries, and does **not** stand after a
+  grouping marker, is a qualifier — so the categorical resolver claims it as a
+  predicate rather than the parser claiming it as an axis;
+* a group segment is cut at its own qualifier, so *"by region for owner occupied
+  loans"* is one axis narrowed to a value rather than two axes. The same cut is
+  what makes *"by region in London"* a filtered regional breakdown.
 
 ```
-"What is the balance for owner occupied loans?"
-  → balance grouped by Occupancy Type over 640 loans, no warning   (truth 585)
-"How many owner occupied loans do we have?"
-  → Occupancy Type = owner_occupied · 585 loans                    correct
+What is the balance for owner occupied loans?  → Occupancy Type = owner_occupied · 585
+Balance by region for owner occupied loans.    → owner_occupied · grouped by region, 7 groups
+Balance by region for drawdown loans.          → Product Type = drawdown · grouped by region
+Show balance by occupancy type.                → grouped by Occupancy Type      (unchanged)
+Balance by region and broker channel.          → heatmap, 28 groups             (unchanged)
+What is the balance for broker loans?          → "I could not tell how you meant broker…"
 ```
 
-Same constraint, different shape, opposite outcome — exactly the generalisation
-gap the supplement exists to catch.
+### The four UNCLEAR, examined
 
-It is **reported, not fixed**. The fix belongs in role resolution — deciding
-whether an attributive phrase is a grouping or a filter — and I no longer had
-budget to change that layer *and* measure its blast across 882 questions.
-The bounded fix is to route this case through the ambiguity guard that already
-exists and already handles it correctly one shape along: *"How many broker loans
-do we have?"* → **"I could not tell how you meant broker… I have not answered
-over the whole book in the meantime."** That converts a silent widening into an
-honest clarification, which the gate accepts.
+Not silent drops — every one narrows and says so. One is a real defect:
+
+* **`"How many Gamma Direct loans do we have?"` → 104**, applying *both*
+  `Broker = Gamma Direct` and `Source Portfolio in direct_001`, where the broker
+  alone is 147. A governed SCOPE term matched inside a categorical VALUE. It is
+  disclosed in the receipt, so not silent, but it is a wrong number for a plainly
+  worded question. **P1** — fixing it means touching portfolio-lens scope
+  resolution, which reaches well beyond this change.
+* `"How many / what is the balance for / balance by region for **direct** loans"`
+  resolve to the direct BOOK (441) rather than `origination_channel = direct`
+  (146). Genuinely ambiguous, governed, and disclosed.
 
 ## 5. Frozen bank and architecture
 
 ```
-EXACT 66 (was 65)   DISCLOSED 2   TRUE REFUSAL 13   FALSE REFUSAL 10 (was 11)
-WRONG / SILENT 0
+EXACT 64   DISCLOSED 2   TRUE REFUSAL 13   FALSE REFUSAL 12   WRONG / SILENT 0
 ```
 
-All eleven protected commercial fixes verified live. Post-claim census **0**,
-substitution detector **0 of 2**, canary intact, 68 guard tests green.
+All eleven protected commercial fixes verified live and green. Post-claim census
+**0**, substitution detector **0 of 2**, canary intact, 68 guard tests passing.
 
-## 6. MI regression — one introduced failure, attributable
+EXACT is 64 rather than the 66 an intermediate pass reached, because the
+`geo_exposure` deferral was reverted — see §6.
+
+## 6. MI regression — clean
 
 ```
-modules 278 → 278    passed 5957 → 5956    failed 81 → 82
-failing names 85 → 86
+modules 278 → 278    passed 5957 → 5957    failed 81 → 81
+skipped 711 → 711    xfailed 15 → 15       errors 4 → 4    timeouts 1 → 1
+failing names 85 → 85
 
-INTRODUCED: mi_agent_api/tests/test_chat_routing_e2e.py::
-            test_geographic_exposure_degrades_honestly_without_itl3_or_postcode
-FIXED/REMOVED: none
+INTRODUCED: 0        FIXED/REMOVED: 0
 ```
 
-**This is a real design conflict, and the guard is not wrongly formulated.** It
-asserts, in its own comment, that *"the route still owns the answer and explains
-why, rather than silently falling back"* — written to prevent a specialist
-capability's failure being papered over by a weaker answer. The earlier
-`geo_exposure` deferral does exactly what it forbids.
+### The geo_exposure deferral, reverted
 
-The two intents are both legitimate:
+An intermediate pass had `geo_exposure` defer when it could not build an ITL3
+view, so the generic path could answer *"which region has the largest balance?"*
+— which it does, completely and with disclosure. That introduced the run's only
+MI failure, against
+`test_geographic_exposure_degrades_honestly_without_itl3_or_postcode`, whose own
+comment states the invariant: *"the route still owns the answer and explains why,
+rather than silently falling back."*
 
-* the guard's — a specialist failure must not be hidden;
-* the deferral's — a specialist failure must not block a correct generic answer.
+I tried to keep both intents by deferring only where the contract carries a
+resolvable measure. It does not separate them — *"Where is the book concentrated
+geographically?"* carries a measure too. So the deferral was **reverted**: the
+guard is not wrongly formulated, and §17 rules out opportunistically fixing a
+false refusal this change did not cause. The cost is two false refusals back,
+recorded rather than traded away.
 
-The deferral's outcome is not silent: the reader receives *"Total Balance ·
-grouped by Obligor Region (NUTS3) · 7 groups · 640 loans"*, a complete and
-disclosed answer, where before they received a refusal on a book that carries
-seven regions.
+A correction to an earlier report in this series:
+`test_cumulative_cohort_conversion_routes` was flagged as a possible second
+regression. It is not — it appears in the frozen baseline's 85 failing names.
 
-**The test was not edited and the change was not reverted.** Both would be
-decisions taken to make a report look clean. This is an owner decision:
-either accept the deferral and restate the invariant, or revert it and accept
-two false refusals back.
+## 7. UX
+
+Loan-type answers surface the scalar cleanly in the KPI (`Loan 396`,
+`£105.4MM`) and the receipt reads `Product Type = lump_sum`. No `field op value`
+expression leaks. It uses the tape's own spelling (`lump_sum`, not "Lump sum"),
+which is cosmetic — nothing misstates the answer.
