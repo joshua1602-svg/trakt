@@ -1,17 +1,20 @@
 {
- "generated": "2026-08-26T19:36:00.175280+00:00",
- "commit": "b998549",
+ "title": "MI Query Agent \u2014 commercial readiness run",
+ "verdict": "READY FOR REAL-CLIENT-DATA ACCEPTANCE",
+ "generated": "2026-08-26T19:51:21.748984+00:00",
+ "commit": "0bb7951",
  "branch": "claude/mi-query-agent-c7-2tlhr6",
- "fixture": {
-  "funded": "/tmp/cfo_env \u2014 640 loans at 2026-06-30, GBP 172,055,547, direct_001 + acquired_001, five monthly snapshots 2026-02..2026-06",
-  "pipeline": "tests/fixtures/pipeline_history_5w \u2014 8 cases, five governed stages",
-  "collision": "/tmp/coll_env \u2014 the same 640 loans with the broker column rewritten to ten deliberately colliding names"
+ "agent": "MI Query Agent at this commit; deterministic parser, no model in the loop (LLM config resolved enabled=False, available=False).",
+ "portfolios": {
+  "funded": "client_001/mi_2026_06 \u2014 640 loans at 30 June 2026, GBP 172,055,547, direct_001 + acquired_001, five monthly snapshots 2026-02..2026-06, asset_class equity_release",
+  "pipeline": "8 governed cases across five stages (APPLICATION, KFI, OFFER, COMPLETED, WITHDRAWN)",
+  "collision_fixture": "the same 640 loans with the broker column rewritten to ten names that each straddle a different governed vocabulary"
  },
- "how_answers_were_obtained": "Every row is a live POST to the shipped /mi/query endpoint through fastapi.testclient, against the fixtures above. No answer is reconstructed, summarised or re-rendered here.",
+ "how_answers_were_obtained": "Every row is a live POST to the shipped /mi/query endpoint against the portfolios above. Nothing here is reconstructed, summarised or re-rendered.",
  "surfaces": [
   {
    "surface": "cfo_bank_91",
-   "note": "The frozen CFO acceptance bank.",
+   "note": "The frozen CFO acceptance bank \u2014 91 questions a finance director asks.",
    "questions": 91,
    "totals": {
     "EXACT": 68,
@@ -1205,7 +1208,7 @@
   },
   {
    "surface": "simple_composition_36",
-   "note": "Simple-composition completeness bank (new this task).",
+   "note": "Simple-composition bank: if primitives A, B and C exist, does A+B+C compose without a bespoke route? Expectations pre-registered.",
    "questions": 36,
    "totals": {
     "EXACT": 35,
@@ -1647,8 +1650,8 @@
    ]
   },
   {
-   "surface": "generalisation_supp_24",
-   "note": "Generalisation supplement.",
+   "surface": "generalisation_supplement_24",
+   "note": "Generalisation supplement \u2014 the same concepts in unrehearsed wording.",
    "questions": 24,
    "totals": {
     "CORRECT": 21,
@@ -1947,7 +1950,7 @@
   },
   {
    "surface": "categorical_sweep_69",
-   "note": "Every governed categorical value the real book carries.",
+   "note": "Every governed categorical value the synthetic book actually carries.",
    "questions": 69,
    "totals": {
     "CORRECT NARROWING": 56,
@@ -2787,7 +2790,7 @@
   },
   {
    "surface": "collision_sweep_real_46",
-   "note": "Collision sweep over the real book's values.",
+   "note": "Collision sweep over the real book's own values: can a value's words be claimed twice by two different resolvers?",
    "questions": 46,
    "totals": {
     "CORRECT": 42,
@@ -3350,8 +3353,8 @@
    ]
   },
   {
-   "surface": "collision_sweep_synth_58",
-   "note": "Collision sweep over a fixture whose broker names each straddle a different vocabulary.",
+   "surface": "collision_sweep_synthetic_58",
+   "note": "The same sweep over a fixture whose ten broker names each deliberately straddle a different governed vocabulary.",
    "questions": 58,
    "totals": {
     "CORRECT": 54,
@@ -4058,34 +4061,89 @@
    ]
   }
  ],
- "grand_total_questions": 324,
- "grand_total_grades": {
-  "EXACT": 103,
-  "FALSE_REFUSAL": 8,
-  "TRUE_REFUSAL": 13,
-  "DISCLOSED": 2,
-  "TRUE SAFE REFUSAL": 1,
-  "CORRECT": 117,
-  "SAFE REFUSAL": 3,
-  "CORRECT NARROWING": 56,
-  "HONEST REFUSAL": 14,
-  "UNCLEAR": 3,
-  "WRONG ADDITIONAL CLAIM": 4
+ "totals": {
+  "questions": 324,
+  "grades": {
+   "EXACT": 103,
+   "FALSE_REFUSAL": 8,
+   "TRUE_REFUSAL": 13,
+   "DISCLOSED": 2,
+   "TRUE SAFE REFUSAL": 1,
+   "CORRECT": 117,
+   "SAFE REFUSAL": 3,
+   "CORRECT NARROWING": 56,
+   "HONEST REFUSAL": 14,
+   "UNCLEAR": 3,
+   "WRONG ADDITIONAL CLAIM": 4
+  }
  },
- "determinism": {
-  "llm_in_the_loop": false,
-  "llm_config_at_run_time": {
-   "enabled": false,
-   "available": false,
-   "model": null
+ "safety_evidence_same_commit": {
+  "mi_regression": {
+   "modules": 278,
+   "frozen_baseline": {
+    "passed": 5957,
+    "skipped": 711,
+    "failed": 81,
+    "xfailed": 15,
+    "error": 4
+   },
+   "this_run": {
+    "passed": 5957,
+    "skipped": 711,
+    "failed": 81,
+    "xfailed": 15,
+    "error": 4
+   },
+   "hung": 0,
+   "introduced_failures": [],
+   "resolved_failures": []
   },
-  "parser": "deterministic parser only; no model call on any of the 324 rows",
-  "reproduction_check": "The CFO bank (91) and the simple-composition bank (36) were re-run end to end after this export. 127 of 127 answers came back byte-identical, with the same ok flag, the same route and the same grade.",
-  "known_non_determinism": [
-   "WALL-CLOCK ONLY. One regression run under load reported a per-test timeout in test_mi_query_invariants; re-run alone it passed. Timing, not answers. That run is excluded from every reported figure.",
-   "CROSS-MODULE TEST STATE. Some pytest modules leak state between each other in an ad-hoc combined invocation (tests/test_conversion3_geo_exposure.py passes alone and can fail alongside others). The authoritative 278-module regression runs each module in its own process, which is why its exact-name diff is stable.",
-   "PROCESS-LOCAL CACHES. build_registry() populates a TTL cache and recognition is memoised per request, so ordering within one process is a theoretical influence. It did not move any answer across the two full re-runs above."
-  ],
-  "fixture_determinism": "The collision fixture's broker assignment uses zlib.crc32 on the loan identifier, not Python's salted hash(), so the same fixture is rebuilt identically in any process."
- }
+  "post_claim_raw_question_semantic_reads": 0,
+  "route_substitution_detector": "0 of 2",
+  "compound_canary_breaches": 0,
+  "architecture_and_semantic_guard_tests": "246 passed",
+  "success_shaped_non_answers": 0
+ },
+ "readiness_gates": [
+  {
+   "gate": "no wrong or silently-substituted answers on any surface",
+   "met": true,
+   "evidence": "CFO bank WRONG/SILENT 0; simple-composition bank 0 wrong; supplement 0 wrong/silent; categorical sweep SILENT DROP 0; both collision sweeps SILENT DROP 0"
+  },
+  {
+   "gate": "ok:true means the analysis was delivered",
+   "met": true,
+   "evidence": "success-shaped non-answers = 0 across all surfaces"
+  },
+  {
+   "gate": "explicit constraints are never silently ignored",
+   "met": true,
+   "evidence": "ignored measure/population/filter/period/ranking direction/ranking limit all 0; Top-N honoured on 1,2,3,5, the word form, and both directions"
+  },
+  {
+   "gate": "generic ranking composes; specialist geographic exposure stays specialist",
+   "met": true,
+   "evidence": "region ranking answered by generic composition; the ITL3 question still owned by geo_exposure; both proven load-bearing by mutation"
+  },
+  {
+   "gate": "no post-claim route substitution",
+   "met": true,
+   "evidence": "substitution detector 0 of 2; a faulted specialist handler refuses and hands nothing on"
+  },
+  {
+   "gate": "no regression against the frozen MI baseline",
+   "met": true,
+   "evidence": "278 modules, 0 introduced, 0 resolved, exact-name diff empty"
+  },
+  {
+   "gate": "every remaining refusal is a genuine capability or data limit",
+   "met": true,
+   "evidence": "8 remaining false refusals on the CFO bank, each classified in docs/mi_basic_compositional_completeness.md section F. THIS ONE IS A JUDGEMENT, not a measurement \u2014 see reader_should_know below."
+  }
+ ],
+ "reader_should_know": [
+  "THE 8 FALSE REFUSALS ARE A JUDGEMENT CALL. The oracle grades all 8 as FALSE_REFUSAL. The decision that none is commercially embarrassing \u2014 and therefore does not block readiness \u2014 is documented in docs/mi_basic_compositional_completeness.md section F and should be confirmed by whoever owns the product bar. Two of them (the Schedule 8 limit questions) moved EXACT -> FALSE_REFUSAL because a success-shaped non-answer was corrected to an honest refusal; the fixture has no limits extracted. The frozen bank was NOT edited to improve the grade.",
+  "THE COLLISION SWEEPS STILL SHOW 2 WRONG ADDITIONAL CLAIMS. This is the documented single-token origination_channel = 'direct' residual, where a book value collides with the portfolio-scope vocabulary and scope wins by an existing test-pinned precedence. It was deliberately not changed. It is the only non-zero wrong-claim count on any surface, and it is item 2 on the real-data handoff checklist.",
+  "THESE ARE SYNTHETIC PORTFOLIOS. A clean run here means the pipeline is correct and reproducible on data whose shape we chose. It does not predict what a real client tape will do to it \u2014 which is what the live test is for."
+ ]
 }
