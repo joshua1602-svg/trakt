@@ -2195,9 +2195,24 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
         # Returning None is the estate's own pre-claim deferral: this route
         # cannot answer, so the next candidate may. A book that genuinely has
         # no region at all still refuses, one route further on, on its terms.
+        # REVERTED, DELIBERATELY. An earlier pass had this defer so the generic
+        # path could answer "which region has the largest balance?" — which it
+        # does, completely and with disclosure. But that is exactly what
+        # `test_geographic_exposure_degrades_honestly_without_itl3_or_postcode`
+        # forbids: a specialist capability's failure handed to a different
+        # answer. The guard is not wrongly formulated, no contract field
+        # separates "where is the book concentrated" from "which region has the
+        # largest balance" (both carry a measure), and this task's scope rules
+        # out fixing a false refusal that its own change did not cause.
+        #
+        # So the route keeps the question and explains what it could not build.
+        # The cost is two false refusals, documented rather than traded away.
         reason = result.get("reason", "no ITL3 area or property postcode on the tape")
-        _logger.info("geo_exposure deferring: %s", reason)
-        return None
+        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
+                         answer=(f"I can't build a geographic exposure view for this book: "
+                                 f"{reason}."),
+                         route="geo_exposure", lens_applied=True,
+                         warnings=lens_warnings + [f"insufficient-data: {reason}"])
 
     areas = result.get("areas", [])
     top = areas[0]

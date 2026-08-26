@@ -2923,6 +2923,38 @@ def _deterministic_parse(question: str, semantics: dict,
             return spec, _det_meta("high", True, sorted(d_filters), note="drill_filtered")
 
     dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
+    # A GOVERNED VALUE IS NOT A GROUPING.
+    #
+    # Dimension terms come from the registry's SYNONYMS, and a field's synonyms
+    # frequently spell its own values — "owner occupied" is both the wording of
+    # `occupancy_type` and one of its two values. Matched as a dimension, "what
+    # is the balance for owner occupied loans?" was answered as a BREAKDOWN by
+    # occupancy type over all 640 loans, with no warning, for a question about
+    # 585. Its sibling "how many owner occupied loans do we have?" narrowed
+    # correctly, because a count sets no dimension — the same constraint, two
+    # shapes, opposite outcomes.
+    #
+    # A term that names a value the book carries and does NOT stand after a
+    # grouping marker is a qualifier. Dropping it here lets the categorical
+    # resolver claim it as a predicate, which is where a narrowing belongs. A
+    # term after "by" is untouched, so "balance by occupancy type" still groups.
+    if dim_keys and available_values:
+        # A GROUP SEGMENT ENDS AT ITS OWN QUALIFIER. "by region for owner
+        # occupied loans" is one grouping axis narrowed to a value, not two
+        # axes: without the cut the value became a second heatmap dimension and
+        # the population widened again, one shape further along. The same cut is
+        # what makes "by region in London" a filtered regional breakdown.
+        _after_by = " ".join(
+            re.split(r"\s+(?:for|in|within|among|amongst)\s+", seg, 1)[0]
+            for seg in _grouping_segments(q)[1]).lower()
+        _kept_keys, _kept_terms = [], []
+        for _key, _term in zip(dim_keys, dim_terms):
+            _is_value = _categorical_value_field(_term, available_values) is not None
+            if _is_value and str(_term).lower() not in _after_by:
+                continue
+            _kept_keys.append(_key)
+            _kept_terms.append(_term)
+        dim_keys, dim_terms = _kept_keys, _kept_terms
     explicit = bool(dim_keys)
 
     # ---- heatmap (two dimensions + metric) --------------------------------
