@@ -38,8 +38,13 @@ questions:
   # ambiguous value — clarification is the correct outcome
   - {q: "How many broker loans do we have?", shape: "ambiguous value", expect: REFUSE}
   - {q: "How many direct loans do we have?", shape: "ambiguous value", expect: EITHER}
-  # value that no governed field carries — must not bind to anything
-  - {q: "How many platinum loans do we have?", shape: "unknown value", expect: EITHER}
+  # value that no governed field carries — must not bind to anything.
+  # The ATTRIBUTIVE form of this shape ("how many <unknown> loans do we have?")
+  # is a KNOWN OPEN RESIDUAL and has moved to ROBUSTNESS_RESIDUALS.yaml, where
+  # it is expected to fail rather than scored as though it passed. It is not
+  # removed from measurement and it is not marked acceptable — it is measured
+  # somewhere that does not contribute a passing grade to a readiness run.
+  # See docs/mi_zero_blast_closure.md, "unknown attributive qualifier".
   - {q: "What is the balance for offshore loans?", shape: "unknown value", expect: EITHER}
   # asset class + loan type
   - {q: "Show balance by loan type.", shape: "loan type dimension", expect: DELIVER}

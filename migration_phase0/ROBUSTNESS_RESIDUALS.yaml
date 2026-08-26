@@ -1,0 +1,39 @@
+# ROBUSTNESS RESIDUALS — known-open defects, measured and expected to FAIL.
+#
+# This bank exists so a known defect stays measured without contributing a
+# passing grade to a readiness run. Every entry states the defect, what the
+# system does today, and what it must do once closed. An entry that starts
+# PASSING is a closure to be promoted into the commercial banks — not a result
+# to leave sitting here.
+#
+# Nothing in this file may be "fixed" by adding vocabulary to the registry. The
+# defects here are recognition defects; a per-word patch would hide them.
+version: 1
+questions:
+  - q: "How many platinum loans do we have?"
+    shape: "unknown attributive qualifier"
+    expect: REFUSE
+    status: OPEN
+    today: >-
+      Answers 640 — the whole book — with ok=true and no mention that
+      "platinum" was not applied. The qualifier is silently dropped.
+    required: >-
+      A refusal naming the unresolved qualifier, as the PREPOSITIONAL form of
+      the same question already gives: "what is the balance for platinum
+      loans?" refuses with "No loans in this book match that filter
+      ('platinum')". The two shapes of one question must not disagree.
+    why_open: >-
+      Measured, not assumed. Reporting the attributive residue generically —
+      the words before the head noun, minus request framing, aggregation words
+      and analytical framing — was implemented and MEASURED to break three
+      questions that work today: "How many direct loans do we have?" (residue
+      "direct", a governed portfolio scope) refused; "What is the balance of
+      offer stage cases?" (residue "balance offer stage") refused; "Show
+      balance by loan type." (residue "balance by") refused. Closing it safely
+      needs the residue to be checked against the scope owner, the dimension
+      owner and the grouping markers — a recognition change wider than this
+      sprint authorises, and one whose failure mode is refusing questions that
+      work. The change was reverted rather than narrowed to pass.
+    must_not: >-
+      "platinum" must never be added to the registry, and no synonym for it.
+      The defect is the shape, not the word: "offshore" behaves identically.
