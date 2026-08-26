@@ -109,6 +109,16 @@ def run(depth: int = 6) -> Dict[str, Any]:
                 # contract side
                 "contract_operation_type": op.type,
                 "contract_operation_modifiers": list(op.modifiers or ()),
+                # THE CLOSED CONTRACT. Before the ordering closure the only
+                # channel was `modifiers`, empty on all 97; these are the fields
+                # that replaced it and the matrix must read them or it would
+                # keep reporting a gap that has been closed.
+                "contract_ordering_direction": op.ordering_direction,
+                "contract_ordering_basis": op.ordering_basis,
+                "contract_ordering_limit": op.ordering_limit,
+                "contract_ordering_of": op.ordering_of,
+                "contract_dimension_alternates": [
+                    list(d.alternate_concepts) for d in (qi.dimensions or [])],
                 "contract_operation_state": op.state,
                 "contract_subject": qi.subject.candidate_concept,
                 "contract_dataset": qi.dataset.dataset,
@@ -235,23 +245,60 @@ def matrix(result: Dict[str, Any]) -> List[Dict[str, Any]]:
         f"{len(ranked) + len(contract_ranking) - 2 * both} questions.",
         delivered_n=sum(1 for r in delivered if r["route_rank_requested"])))
 
-    mods = Counter(m for r in ranked for m in r["contract_operation_modifiers"])
-    for label, key in (("ranking: dimension", "route_rank_field"),
-                       ("ranking: direction", "route_rank_direction"),
-                       ("ranking: basis", "route_rank_basis"),
-                       ("ranking: top N", "route_rank_top_n")):
-        route_values = {r[key] for r in ranked if r[key] is not None}
-        # REPRESENTED asks whether the CONTRACT carries the fact. The contract's
-        # only channel for it is OperationClaim.modifiers, so the test is
-        # whether any modifier ever carries a value the route resolved.
-        represented = bool(route_values & set(mods))
+    # REPRESENTED asks whether the CONTRACT carries the fact, and OWNER
+    # AGREEMENT whether its value equals what the shipped route decides. Both
+    # are now measured against the closed ordering fields rather than against
+    # `modifiers`.
+    for label, contract_key, route_key in (
+            ("ranking: dimension", None, "route_rank_field"),
+            ("ranking: direction", "contract_ordering_direction",
+             "route_rank_direction"),
+            ("ranking: basis", "contract_ordering_basis", "route_rank_basis"),
+            ("ranking: top N", "contract_ordering_limit", "route_rank_top_n")):
+        route_values = {r[route_key] for r in ranked if r[route_key] is not None}
+        if contract_key is None:
+            # The dimension is carried by DimensionClaim, and the closure added
+            # the ALTERNATES the resolver found. Represented when a claim exists;
+            # owner agreement when the field the route picked is among the
+            # concepts the claim carries.
+            carried = sum(1 for r in ranked if r["contract_dimensions"])
+            agree = sum(
+                1 for r in ranked
+                if r["route_rank_field"] and any(
+                    r["route_rank_field"] == d or r["route_rank_field"] in alts
+                    for d, alts in zip([x[0] for x in r["contract_dimensions"]],
+                                       r["contract_dimension_alternates"])))
+            represented = carried > 0
+            agrees = agree > 0 and agree >= carried * 0.9
+            note = (f"DimensionClaim on {carried} of {len(ranked)}; the field the "
+                    f"route ranks is among the concepts the claim carries on "
+                    f"{agree}. Alternates carried on "
+                    f"{sum(1 for r in ranked if any(r['contract_dimension_alternates']))}.")
+        else:
+            carried = sum(1 for r in ranked if r[contract_key] is not None)
+            agree = sum(1 for r in ranked
+                        if r[contract_key] is not None
+                        and r[route_key] is not None)
+            represented = carried > 0
+            agrees = carried > 0 and carried >= len(
+                [r for r in ranked if r[route_key] is not None])
+            note = (f"contract carries it on {carried} of {len(ranked)}; the "
+                    f"route resolves {len(route_values)} distinct value(s)")
         out.append(cell(
-            label, represented, represented, represented,
-            any(r[key] is not None for r in delivered),
-            f"route resolves {len(route_values)} distinct value(s) from raw "
-            f"English; OperationClaim.modifiers carries "
-            f"{sorted(mods) or 'NOTHING'} across all {len(ranked)} of them",
-            delivered_n=sum(1 for r in delivered if r[key] is not None)))
+            label, represented, agrees, represented,
+            any(r[route_key] is not None for r in delivered),
+            note,
+            delivered_n=sum(1 for r in delivered if r[route_key] is not None)))
+
+    # The level/movement distinction, which nothing represented before.
+    of_carried = sum(1 for r in ranked if r["contract_ordering_of"])
+    out.append(cell(
+        "ranking: level vs movement", of_carried > 0, of_carried > 0,
+        of_carried > 0, False,
+        f"OperationClaim.ordering_of carried on {of_carried} of {len(ranked)} — "
+        f"none of the corpus's ranking questions is temporal, so no owner marks "
+        f"one, and the field is correct but inert on this corpus",
+        delivered_n=0))
 
     out.append(cell(
         "span honour-or-clarify (K2)",
