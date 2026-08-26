@@ -1,0 +1,727 @@
+{
+  "L": [
+    {
+      "question": "Which region has the largest balance?",
+      "contract": {
+        "operation": "ranking",
+        "ordering_of": "level",
+        "ordering_direction": "increase",
+        "ordering_basis": "absolute",
+        "ordering_limit": null,
+        "dimensions": [
+          [
+            "collateral_geography",
+            [
+              "geographic_region_obligor"
+            ]
+          ]
+        ],
+        "comparison_periods": [],
+        "window_periods": null
+      },
+      "plan": [
+        {
+          "primitive": "stack_periods",
+          "inputs": {
+            "dataset": "funded",
+            "take": "latest"
+          },
+          "because": "a level is measured at one reporting date",
+          "blocked": null
+        },
+        {
+          "primitive": "select_population",
+          "inputs": {
+            "state": "filled",
+            "portfolio_ids": [],
+            "row_predicates": []
+          },
+          "because": "the governed population the contract states",
+          "blocked": null
+        },
+        {
+          "primitive": "resolve_measure",
+          "inputs": {
+            "metric": "current_outstanding_balance",
+            "aggregation": "sum"
+          },
+          "because": "the contract's subject concept, expanded for the resolver",
+          "blocked": null
+        },
+        {
+          "primitive": "group",
+          "inputs": {
+            "by": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "role": "grouping"
+          },
+          "because": "every governed field the named term resolves to, best first; the executor binds the first the book carries",
+          "blocked": null
+        },
+        {
+          "primitive": "rank",
+          "inputs": {
+            "of": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "basis": "absolute",
+            "over": "level",
+            "direction": "increase",
+            "limit": null
+          },
+          "because": "the ordering the contract states, over the movement or the level",
+          "blocked": null
+        }
+      ],
+      "execution": {
+        "blocked": [],
+        "periods": [
+          "2026-06-30"
+        ],
+        "measure": "current_outstanding_balance",
+        "grouping_candidates": [
+          "collateral_geography",
+          "geographic_region_obligor"
+        ],
+        "grouping_bound": "geographic_region_obligor",
+        "levels": [
+          {
+            "London": 6943256.79,
+            "Scotland": 6490175.47,
+            "South East": 7669070.9399999995
+          }
+        ],
+        "ranked": [
+          [
+            "South East",
+            7669070.9399999995
+          ],
+          [
+            "London",
+            6943256.79
+          ],
+          [
+            "Scotland",
+            6490175.47
+          ]
+        ]
+      }
+    },
+    {
+      "question": "which Broker has the largest balance",
+      "contract": {
+        "operation": "ranking",
+        "ordering_of": "level",
+        "ordering_direction": "increase",
+        "ordering_basis": "absolute",
+        "ordering_limit": null,
+        "dimensions": [
+          [
+            "broker_channel",
+            []
+          ]
+        ],
+        "comparison_periods": [],
+        "window_periods": null
+      },
+      "plan": [
+        {
+          "primitive": "stack_periods",
+          "inputs": {
+            "dataset": "funded",
+            "take": "latest"
+          },
+          "because": "a level is measured at one reporting date",
+          "blocked": null
+        },
+        {
+          "primitive": "select_population",
+          "inputs": {
+            "state": "filled",
+            "portfolio_ids": [],
+            "row_predicates": []
+          },
+          "because": "the governed population the contract states",
+          "blocked": null
+        },
+        {
+          "primitive": "resolve_measure",
+          "inputs": {
+            "metric": "current_outstanding_balance",
+            "aggregation": "sum"
+          },
+          "because": "the contract's subject concept, expanded for the resolver",
+          "blocked": null
+        },
+        {
+          "primitive": "group",
+          "inputs": {
+            "by": [
+              "broker_channel"
+            ],
+            "role": "grouping"
+          },
+          "because": "every governed field the named term resolves to, best first; the executor binds the first the book carries",
+          "blocked": null
+        },
+        {
+          "primitive": "rank",
+          "inputs": {
+            "of": [
+              "broker_channel"
+            ],
+            "basis": "absolute",
+            "over": "level",
+            "direction": "increase",
+            "limit": null
+          },
+          "because": "the ordering the contract states, over the movement or the level",
+          "blocked": null
+        }
+      ],
+      "execution": {
+        "blocked": [],
+        "periods": [
+          "2026-06-30"
+        ],
+        "measure": "current_outstanding_balance",
+        "grouping_candidates": [
+          "broker_channel"
+        ],
+        "grouping_bound": "broker_channel",
+        "levels": [
+          {
+            "Alpha": 6305213.35,
+            "Beta": 4224858.17,
+            "Delta": 5335267.82,
+            "Gamma": 5237163.86
+          }
+        ],
+        "ranked": [
+          [
+            "Alpha",
+            6305213.35
+          ],
+          [
+            "Delta",
+            5335267.82
+          ],
+          [
+            "Gamma",
+            5237163.86
+          ],
+          [
+            "Beta",
+            4224858.17
+          ]
+        ]
+      }
+    }
+  ],
+  "M": [
+    {
+      "question": "How did the balance change since last month?",
+      "contract": {
+        "operation": "movement",
+        "ordering_of": null,
+        "ordering_direction": null,
+        "ordering_basis": null,
+        "ordering_limit": null,
+        "dimensions": [],
+        "comparison_periods": [
+          "last month",
+          "latest"
+        ],
+        "window_periods": 1
+      },
+      "plan": [
+        {
+          "primitive": "stack_periods",
+          "inputs": {
+            "dataset": "funded",
+            "take": "named_pair",
+            "periods": [
+              "last month",
+              "latest"
+            ]
+          },
+          "because": "a movement opens at the first named period and closes at the second",
+          "blocked": null
+        },
+        {
+          "primitive": "select_population",
+          "inputs": {
+            "state": "filled",
+            "portfolio_ids": [],
+            "row_predicates": []
+          },
+          "because": "the governed population the contract states",
+          "blocked": null
+        },
+        {
+          "primitive": "resolve_measure",
+          "inputs": {
+            "metric": "current_outstanding_balance",
+            "aggregation": "sum"
+          },
+          "because": "the contract's subject concept, expanded for the resolver",
+          "blocked": null
+        },
+        {
+          "primitive": "compare",
+          "inputs": {
+            "of": "current_outstanding_balance",
+            "as": "absolute and percentage delta",
+            "direction": "b relative to a"
+          },
+          "because": "the movement from the opening period to the closing one",
+          "blocked": null
+        }
+      ],
+      "execution": {
+        "blocked": [],
+        "periods": [
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "measure": "current_outstanding_balance",
+        "grouping_candidates": [],
+        "grouping_bound": null,
+        "levels": [
+          {
+            "__all__": 18872801.630000003
+          },
+          {
+            "__all__": 21102503.2
+          }
+        ],
+        "movement": {
+          "__all__": 2229701.57
+        },
+        "percent_movement": {
+          "__all__": 11.81
+        }
+      }
+    },
+    {
+      "question": "How did the book change since last month?",
+      "contract": {
+        "operation": "movement",
+        "ordering_of": null,
+        "ordering_direction": null,
+        "ordering_basis": null,
+        "ordering_limit": null,
+        "dimensions": [],
+        "comparison_periods": [
+          "last month",
+          "latest"
+        ],
+        "window_periods": 1
+      },
+      "plan": [
+        {
+          "primitive": "stack_periods",
+          "inputs": {
+            "dataset": "funded",
+            "take": "named_pair",
+            "periods": [
+              "last month",
+              "latest"
+            ]
+          },
+          "because": "a movement opens at the first named period and closes at the second",
+          "blocked": null
+        },
+        {
+          "primitive": "select_population",
+          "inputs": {
+            "state": "filled",
+            "portfolio_ids": [],
+            "row_predicates": []
+          },
+          "because": "the governed population the contract states",
+          "blocked": null
+        },
+        {
+          "primitive": "resolve_measure",
+          "inputs": {
+            "metric": null,
+            "aggregation": "sum"
+          },
+          "because": "the contract's subject concept, expanded for the resolver",
+          "blocked": null
+        },
+        {
+          "primitive": "compare",
+          "inputs": {
+            "of": null,
+            "as": "absolute and percentage delta",
+            "direction": "b relative to a"
+          },
+          "because": "the movement from the opening period to the closing one",
+          "blocked": null
+        }
+      ],
+      "execution": {
+        "blocked": [],
+        "periods": [
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "error": "contract carries no measure: resolve_measure gives neither a metric nor a count aggregation"
+      }
+    }
+  ],
+  "RM": [
+    {
+      "question": "Which region added the most balance since last month?",
+      "contract": {
+        "operation": "ranking",
+        "ordering_of": "movement",
+        "ordering_direction": "increase",
+        "ordering_basis": "absolute",
+        "ordering_limit": null,
+        "dimensions": [
+          [
+            "collateral_geography",
+            [
+              "geographic_region_obligor"
+            ]
+          ]
+        ],
+        "comparison_periods": [
+          "last month",
+          "latest"
+        ],
+        "window_periods": 1
+      },
+      "plan": [
+        {
+          "primitive": "stack_periods",
+          "inputs": {
+            "dataset": "funded",
+            "take": "named_pair",
+            "periods": [
+              "last month",
+              "latest"
+            ]
+          },
+          "because": "a movement opens at the first named period and closes at the second",
+          "blocked": null
+        },
+        {
+          "primitive": "select_population",
+          "inputs": {
+            "state": "filled",
+            "portfolio_ids": [],
+            "row_predicates": []
+          },
+          "because": "the governed population the contract states",
+          "blocked": null
+        },
+        {
+          "primitive": "resolve_measure",
+          "inputs": {
+            "metric": "current_outstanding_balance",
+            "aggregation": "sum"
+          },
+          "because": "the contract's subject concept, expanded for the resolver",
+          "blocked": null
+        },
+        {
+          "primitive": "group",
+          "inputs": {
+            "by": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "role": "unresolved"
+          },
+          "because": "every governed field the named term resolves to, best first; the executor binds the first the book carries",
+          "blocked": null
+        },
+        {
+          "primitive": "compare",
+          "inputs": {
+            "of": "current_outstanding_balance",
+            "as": "absolute and percentage delta",
+            "direction": "b relative to a"
+          },
+          "because": "the movement from the opening period to the closing one",
+          "blocked": null
+        },
+        {
+          "primitive": "rank",
+          "inputs": {
+            "of": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "basis": "absolute",
+            "over": "movement",
+            "direction": "increase",
+            "limit": null
+          },
+          "because": "the ordering the contract states, over the movement or the level",
+          "blocked": null
+        }
+      ],
+      "execution": {
+        "blocked": [],
+        "periods": [
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "measure": "current_outstanding_balance",
+        "grouping_candidates": [
+          "collateral_geography",
+          "geographic_region_obligor"
+        ],
+        "grouping_bound": "geographic_region_obligor",
+        "levels": [
+          {
+            "London": 4961388.37,
+            "Scotland": 8057644.83,
+            "South East": 5853768.43
+          },
+          {
+            "London": 6943256.79,
+            "Scotland": 6490175.47,
+            "South East": 7669070.9399999995
+          }
+        ],
+        "movement": {
+          "London": 1981868.42,
+          "Scotland": -1567469.36,
+          "South East": 1815302.51
+        },
+        "percent_movement": {
+          "London": 39.95,
+          "Scotland": -19.45,
+          "South East": 31.01
+        },
+        "ranked": [
+          [
+            "London",
+            1981868.42
+          ],
+          [
+            "South East",
+            1815302.51
+          ]
+        ]
+      }
+    },
+    {
+      "question": "Which region declined the most since last month?",
+      "contract": {
+        "operation": "ranking",
+        "ordering_of": "movement",
+        "ordering_direction": "decrease",
+        "ordering_basis": "absolute",
+        "ordering_limit": null,
+        "dimensions": [
+          [
+            "collateral_geography",
+            [
+              "geographic_region_obligor"
+            ]
+          ],
+          [
+            "pipeline_stage",
+            []
+          ]
+        ],
+        "comparison_periods": [
+          "last month",
+          "latest"
+        ],
+        "window_periods": 1
+      },
+      "plan": [
+        {
+          "primitive": "stack_periods",
+          "inputs": {
+            "dataset": "funded",
+            "take": "named_pair",
+            "periods": [
+              "last month",
+              "latest"
+            ]
+          },
+          "because": "a movement opens at the first named period and closes at the second",
+          "blocked": null
+        },
+        {
+          "primitive": "select_population",
+          "inputs": {
+            "state": "filled",
+            "portfolio_ids": [],
+            "row_predicates": []
+          },
+          "because": "the governed population the contract states",
+          "blocked": null
+        },
+        {
+          "primitive": "resolve_measure",
+          "inputs": {
+            "metric": null,
+            "aggregation": "sum"
+          },
+          "because": "the contract's subject concept, expanded for the resolver",
+          "blocked": null
+        },
+        {
+          "primitive": "group",
+          "inputs": {
+            "by": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "role": "unresolved"
+          },
+          "because": "every governed field the named term resolves to, best first; the executor binds the first the book carries",
+          "blocked": null
+        },
+        {
+          "primitive": "compare",
+          "inputs": {
+            "of": null,
+            "as": "absolute and percentage delta",
+            "direction": "b relative to a"
+          },
+          "because": "the movement from the opening period to the closing one",
+          "blocked": null
+        },
+        {
+          "primitive": "rank",
+          "inputs": {
+            "of": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "basis": "absolute",
+            "over": "movement",
+            "direction": "decrease",
+            "limit": null
+          },
+          "because": "the ordering the contract states, over the movement or the level",
+          "blocked": null
+        }
+      ],
+      "execution": {
+        "blocked": [],
+        "periods": [
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "error": "contract carries no measure: resolve_measure gives neither a metric nor a count aggregation"
+      }
+    },
+    {
+      "question": "Which two regions grew the most since last month?",
+      "contract": {
+        "operation": "ranking",
+        "ordering_of": "movement",
+        "ordering_direction": "increase",
+        "ordering_basis": "absolute",
+        "ordering_limit": null,
+        "dimensions": [
+          [
+            "collateral_geography",
+            [
+              "geographic_region_obligor"
+            ]
+          ]
+        ],
+        "comparison_periods": [
+          "last month",
+          "latest"
+        ],
+        "window_periods": 1
+      },
+      "plan": [
+        {
+          "primitive": "stack_periods",
+          "inputs": {
+            "dataset": "funded",
+            "take": "named_pair",
+            "periods": [
+              "last month",
+              "latest"
+            ]
+          },
+          "because": "a movement opens at the first named period and closes at the second",
+          "blocked": null
+        },
+        {
+          "primitive": "select_population",
+          "inputs": {
+            "state": "filled",
+            "portfolio_ids": [],
+            "row_predicates": []
+          },
+          "because": "the governed population the contract states",
+          "blocked": null
+        },
+        {
+          "primitive": "resolve_measure",
+          "inputs": {
+            "metric": null,
+            "aggregation": "sum"
+          },
+          "because": "the contract's subject concept, expanded for the resolver",
+          "blocked": null
+        },
+        {
+          "primitive": "group",
+          "inputs": {
+            "by": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "role": "unresolved"
+          },
+          "because": "every governed field the named term resolves to, best first; the executor binds the first the book carries",
+          "blocked": null
+        },
+        {
+          "primitive": "compare",
+          "inputs": {
+            "of": null,
+            "as": "absolute and percentage delta",
+            "direction": "b relative to a"
+          },
+          "because": "the movement from the opening period to the closing one",
+          "blocked": null
+        },
+        {
+          "primitive": "rank",
+          "inputs": {
+            "of": [
+              "collateral_geography",
+              "geographic_region_obligor"
+            ],
+            "basis": "absolute",
+            "over": "movement",
+            "direction": "increase",
+            "limit": null
+          },
+          "because": "the ordering the contract states, over the movement or the level",
+          "blocked": null
+        }
+      ],
+      "execution": {
+        "blocked": [],
+        "periods": [
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "error": "contract carries no measure: resolve_measure gives neither a metric nor a count aggregation"
+      }
+    }
+  ]
+}
