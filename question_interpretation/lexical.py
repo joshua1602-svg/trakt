@@ -75,6 +75,42 @@ def condition_cut(text: str) -> Optional[int]:
     return None
 
 
+def condition_span(text: str) -> Optional[Tuple[int, int]]:
+    """(start, end) of the first CONDITION clause, or None.
+
+    `condition_cut` gives only the START, which is all a caller needs when the
+    condition is stated LAST — everything before it is the subject. Stated
+    FIRST it is not enough: truncating at the start throws away the subject,
+    because the subject is what follows the condition.
+
+    The end is the next clause boundary, or the end of the text. Punctuation is
+    a boundary (see `_CLAUSE_PUNCTUATION`), which is what gives a leading
+    condition an end at all.
+    """
+    body = text or ""
+    match = _CONDITION_RE.search(body)
+    while match:
+        if _DIGIT_RE.search(body[match.end():]):
+            break
+        match = _CONDITION_RE.search(body, match.end())
+    if match is None:
+        return None
+    # THE CLAUSE ENDS AFTER ITS BOUND, not at the next connective.
+    #
+    # An opener is followed by the connective that introduces its own body —
+    # "for loans" then "with" — so searching for a boundary from the end of the
+    # opener finds one INSIDE the condition and reports a two-word clause.
+    # Measured: (0, 10), "for loans ", for a question whose condition runs to
+    # the comma. A condition only counts when a numeric bound follows it
+    # (`condition_cut`'s own rule), so the bound is where the clause's content
+    # ends and the search for its boundary begins.
+    bound = _DIGIT_RE.search(body, match.end())
+    if bound is None:
+        return None
+    boundary = _CLAUSE_SPLIT_RE.search(body, bound.end())
+    return (match.start(), boundary.start() if boundary else len(body))
+
+
 def grouping_cut(text: str) -> Optional[int]:
     """Offset where the first GROUPING clause begins, or None.
 
@@ -291,10 +327,22 @@ def metric_slot(text: str) -> str:
     compositions, and a single fused function could serve only one of them.
     """
     head = text or ""
-    cut = condition_cut(head)
-    if cut is not None and head[:cut].strip():
-        return head[:cut].strip()
-    return head.strip()
+    span = condition_span(head)
+    if span is None:
+        return head.strip()
+    start, end = span
+    if head[:start].strip():
+        # CONDITION STATED LAST — everything before it is the subject, which is
+        # what this has always returned.
+        return head[:start].strip()
+    # CONDITION STATED FIRST. Truncating at its start leaves nothing, and the
+    # old code then handed the WHOLE question to the detector — so "for loans
+    # with LTV above 50%, balance by region" resolved its measure to LTV, the
+    # field named inside the condition, while the same question with the
+    # condition last resolved correctly to balance. The clause is REMOVED
+    # instead, leaving the subject on the other side of it.
+    remainder = (head[:start] + " " + head[end:]).strip()
+    return remainder or head.strip()
 
 
 # --------------------------------------------------------------------------- #
@@ -516,9 +564,28 @@ CLAUSE_CONNECTIVES: Tuple[str, ...] = ("and", "with", "where", "whose", "having"
 CLAUSE_AND_EXCEPTIONS: Tuple[str, ...] = (
     "over", "above", "older", "under", "below", "younger", "more", "less")
 
+#: PUNCTUATION IS A CLAUSE BOUNDARY, and its absence was a defect.
+#:
+#: The connectives alone could not end a clause, so a filter stated FIRST ran to
+#: the end of the sentence: "for loans with LTV above 50%, balance by region"
+#: split at "with" and produced one clause — " ltv above 50%, balance by region"
+#: — which swallowed the measure and the dimension. The field was then resolved
+#: from the swallowed words, so the predicate landed on `balance` instead of
+#: `ltv`, and "borrower age above 70, balance by region" produced a threshold of
+#: seventy BILLION. Stated last, the same filter parsed correctly, because there
+#: the clause genuinely does run to the end.
+#:
+#: A comma with digits on BOTH sides is a thousands separator, not a boundary,
+#: so "over 1,500,000" stays one number. Guarding on either side alone was
+#: wrong and measured wrong: "above 70, balance by region" has a digit before
+#: the comma, so a lookbehind-only guard refused to split exactly the clause
+#: this fix exists to end.
+_CLAUSE_PUNCTUATION = r"(?:(?<![0-9])[,;]|[,;](?![0-9]))"
+
 _CLAUSE_SPLIT_RE = re.compile(
     r"\band\b(?!\s+(?:" + "|".join(CLAUSE_AND_EXCEPTIONS) + r")\b)"
-    r"|" + "|".join(r"\b%s\b" % c for c in CLAUSE_CONNECTIVES if c != "and"))
+    r"|" + "|".join(r"\b%s\b" % c for c in CLAUSE_CONNECTIVES if c != "and")
+    + r"|" + _CLAUSE_PUNCTUATION)
 
 
 def _overlaps_any(start: int, end: int,
