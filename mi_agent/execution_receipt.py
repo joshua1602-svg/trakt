@@ -185,6 +185,21 @@ class RequestedFacet:
     #: None wherever the facet was not produced by matching the question text.
     #: ADDITIVE and read by nothing today.
     span: Optional[Tuple[int, int]] = None
+    #: THE READER'S WORDING, where it differs from `label`.
+    #:
+    #: `label` is machine-shaped on purpose for a population facet: it is built
+    #: from `Predicate.describe()` and therefore leads with the FIELD KEY and
+    #: carries the OPERATOR CODE — "the population current_loan_to_value gt
+    #: 50.0" — and `question_interpretation.b5_reachability` proves a guard
+    #: unreachable precisely BECAUSE the label leads with the field name. So the
+    #: label may not become prose. This carries the prose beside it, and only
+    #: user-facing text reads it.
+    spoken: Optional[str] = None
+
+    @property
+    def speech(self) -> str:
+        """What to put in a sentence a customer reads."""
+        return self.spoken or self.label
 
     def satisfied_by(self) -> Tuple[str, ...]:
         """Every field key that counts as honouring this facet."""
@@ -209,7 +224,8 @@ class RequestedFacet:
         which field their book would need to carry to get an answer. A refusal
         that cannot be acted on is only half a refusal.
         """
-        label = self.label
+        # The READER'S wording where one was carried; see `spoken`.
+        label = self.speech
         if self.field_key and semantics:
             name = _business_name(self.field_key, semantics)
             if name and name.strip().lower() != str(label).strip().lower():
@@ -810,12 +826,25 @@ _PROJECTION_RE = re.compile(
     r"\bforecast\b|\bextrapolat", re.I)
 
 #: A comparison between two named cohorts rather than across time.
+#: A COHORT comparison NAMES A BOOK. Both arms below require one.
+#:
+#: A third arm used to match bare ``how does the … compare with …``, with no
+#: book anywhere in it, and it claimed *"How does the current month compare with
+#: the previous month?"* — a PERIOD comparison — as a comparison between two
+#: books, then refused it for not having compared them. The refusal named a
+#: concept the reader had not mentioned.
+#:
+#: Removing it loses no cohort guard, and that is measured rather than argued:
+#: `_COHORT_COMPARISON_FRAMING_RE` already contains a SUPERSET of that arm
+#: (``how does … compare``), and the caller raises the facet on that regex
+#: whenever `cohort_concepts_named` finds a cohort. Over the estate's 848
+#: corpus questions, exactly ONE question reached the facet through the third
+#: arm and through nothing else — the month-on-month question above.
 _COHORT_COMPARISON_RE = re.compile(
     r"\b(?:direct|acquired|new|back)\s+book\b[^?]{0,60}\b(?:vs\.?|versus|compared with|"
     r"compared to|against|better or worse than)\b|"
     r"\b(?:vs\.?|versus|compared with|compared to|better or worse than)\b[^?]{0,60}"
-    r"\b(?:direct|acquired|back)\s+book\b|"
-    r"\bhow does the\b[^?]{0,40}\bcompare with\b", re.I)
+    r"\b(?:direct|acquired|back)\s+book\b", re.I)
 
 #: Grouping keys that split the platform into its constituent books. Grouping by
 #: one of these IS a cohort comparison, even on the point-in-time path.
@@ -1159,11 +1188,47 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
             _p = Predicate(_field, "eq", _condition)
         seasoning_population.append(RequestedFacet(
             kind=KIND_POPULATION, label="the population %s" % _p.describe(),
+            spoken="loans where %s" % _p.spoken(semantics),
             field_key=_field))
+    # GOVERNED SPAN OWNERSHIP. A span already claimed as a governed categorical
+    # VALUE may not create a SECOND semantic claim from the tokens inside it.
+    # Measured: a broker called "London Bridge Loans" made every question about
+    # it refuse citing a geographic scope of *London* — the place resolver read
+    # one word out of the middle of somebody's name. `geo_owned` excludes the
+    # geography owner's OWN fields, because a value of one of those IS the
+    # geographic reading rather than a competing claim. Masking preserves
+    # offsets, so every facet span below still points at the right characters.
+    _values_for_ownership = None
+    if frame is not None:
+        try:
+            _values_for_ownership = book_values(frame, semantics)
+        except Exception:  # noqa: BLE001 - no catalogue leaves the old reading
+            _values_for_ownership = None
+
+    def _owned(text: str, exclude_fields=()) -> str:
+        if not _values_for_ownership:
+            return text
+        try:
+            from .categorical_spans import mask_value_spans
+        except Exception:  # noqa: BLE001
+            return text
+        return mask_value_spans(text, _values_for_ownership,
+                                exclude_fields=exclude_fields)
+
+    _geo_map = geographic_values(frame, semantics)
+    _geo_q = _owned(q, set(_geo_map.values()))
+    #: For the detectors whose vocabulary belongs to NO governed field — a
+    #: comparison period, a ranking, a stress, a threshold, a relationship. None
+    #: of them owns a book value, so every one of their words found inside a
+    #: claimed span belongs to the value, not to them. Measured: a broker called
+    #: "Growth Partners" raised a comparison-period facet on every question
+    #: about it, and the answer refused for not having compared two periods.
+    _foreign_q = _owned(q)
+
     facets: List[RequestedFacet] = []
-    facets.extend(_detect_stress(q))
-    facets.extend(_detect_thresholds(q))
-    facets.extend(_detect_geographic_scope(q, geographic_values(frame, semantics)))
+    facets.extend(_detect_stress(_foreign_q))
+    facets.extend(_detect_thresholds(_foreign_q))
+    facets.extend(_detect_geographic_scope(_geo_q, _geo_map))
     # B16a. The same idea on every OTHER dimension, and it needs the sentence's
     # mark where geography does not: geography values do not collide with
     # dimension words and general dimension values do — `Broker` is a value of
@@ -1206,12 +1271,12 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     facets.extend(_detect_lost_narrowing(
         q, dimension_values(frame, semantics),
         taken=set(_predicate or ()) | set(resolved_filters or ()) | {
-            f.field_key for f in _detect_geographic_scope(
-                q, geographic_values(frame, semantics)) if f.field_key}))
-    facets.extend(_detect_comparison_period(q))
-    facets.extend(_detect_ranking(q, list(requested_dimensions or [])))
-    facets.extend(_detect_contribution(q))
-    if _RELATIONSHIP_RE.search(q):
+            f.field_key for f in _detect_geographic_scope(_geo_q, _geo_map)
+            if f.field_key}))
+    facets.extend(_detect_comparison_period(_foreign_q))
+    facets.extend(_detect_ranking(_foreign_q, list(requested_dimensions or [])))
+    facets.extend(_detect_contribution(_foreign_q))
+    if _RELATIONSHIP_RE.search(_foreign_q):
         facets.append(RequestedFacet(
             kind=KIND_RELATIONSHIP,
             label="one measure relative to another"))
@@ -2133,6 +2198,7 @@ def _split_named_dimension_roles(facets: Sequence[RequestedFacet], spec,
         out.append(RequestedFacet(
             kind=KIND_POPULATION,
             label="the population %s" % predicate.describe(),
+            spoken="loans where %s" % predicate.spoken(semantics),
             field_key=filter_key, alt_keys=facet.alt_keys,
             concepts=facet.concepts, status=facet.status, reason=facet.reason,
             span=facet.span))
@@ -2638,7 +2704,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     if blocking:
         detail = "; ".join(f.disclosure(semantics) for f in blocking)
         return VERDICT_REFUSE, (
-            f"I understood that you asked for {_join([f.label for f in blocking])}, "
+            f"I understood that you asked for {_join([f.speech for f in blocking])}, "
             f"but that could not be applied to the calculation ({detail}). "
             "I have not substituted a broader figure.")
 
@@ -2661,7 +2727,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     if unresolved:
         return VERDICT_CLARIFY, (
             "I could not tell how you meant "
-            f"{_join([f.label for f in unresolved])}. Did you want the book "
+            f"{_join([f.speech for f in unresolved])}. Did you want the book "
             "split by it, or narrowed to one value of it? I have not answered "
             "over the whole book in the meantime.")
 
@@ -2979,6 +3045,7 @@ def population_facets(spec: Optional[Dict[str, Any]],
     for predicate in material_predicates((spec or {}).get("filters"), semantics):
         facet = RequestedFacet(kind=KIND_POPULATION,
                                label=f"the population {predicate.describe()}",
+                               spoken=f"loans where {predicate.spoken(semantics)}",
                                field_key=predicate.field)
         out.append(facet)
     return out
@@ -3102,6 +3169,7 @@ def drill_population_facets(extra_filters: Optional[Mapping[str, Any]],
         out.append(RequestedFacet(
             kind=KIND_POPULATION,
             label=f"the population {predicate.describe()}",
+            spoken=f"loans where {predicate.spoken(semantics)}",
             field_key=predicate.field))
     return out
 

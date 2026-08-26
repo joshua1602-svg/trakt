@@ -69,7 +69,7 @@ _SHARED_DIMS = [
 ]
 
 
-def view_named_by_question(question: str) -> Optional[str]:
+def view_named_by_question(question: str, *, available_values=None) -> Optional[str]:
     """The view the QUESTION itself names, or ``None`` if it names none.
 
     The VIEW-NAME half of :func:`resolve_dataset`, which is the owner. Exposed
@@ -84,14 +84,38 @@ def view_named_by_question(question: str) -> Optional[str]:
     default AND a thing a question can name outright, and collapsing those two
     is how an explicit "the funded book" becomes indistinguishable from silence.
     """
-    q = (question or "").lower()
+    q = _owned(question, available_values).lower()
     for view in ("forecast", "pipeline", "funded"):
         if lens_mod.undisclaimed_mention(q, view):
             return view
     return None
 
 
-def resolve_dataset(question: Optional[str]) -> str:
+def _owned(question: Optional[str], available_values) -> str:
+    """``question`` with spans a governed categorical VALUE has claimed blanked.
+
+    GOVERNED SPAN OWNERSHIP, delegated to `mi_agent.categorical_spans`. This
+    module's vocabulary — forecast / pipeline / funded, and the pre-funding
+    artefacts — belongs to no book field, so any of those words found INSIDE a
+    span the book has already claimed as one value of one field belongs to the
+    value. Measured: a broker called "Pipeline Mortgage Club" served every
+    question about it from the pipeline extract — 8 cases in place of its 63
+    funded loans, with the broker narrowing gone and nothing said.
+
+    With no catalogue the sentence comes back unchanged, which is every caller
+    that cannot see the book.
+    """
+    if not question or not available_values:
+        return question or ""
+    try:
+        from mi_agent.categorical_spans import mask_value_spans
+
+        return mask_value_spans(question, available_values)
+    except Exception:  # noqa: BLE001 - the owner missing must not change a reading
+        return question
+
+
+def resolve_dataset(question: Optional[str], *, available_values=None) -> str:
     """**THE** dataset a natural-language MI question is about.
 
     ``FUNDED`` | ``PIPELINE`` | ``FORECAST``, decided by the QUESTION and by
@@ -145,10 +169,10 @@ def resolve_dataset(question: Optional[str]) -> str:
     including "top brokers by expected funded amount" to forecast. The rule
     below moves **5 (0.6%)**, and all five name a pre-funding artefact.
     """
-    named = view_named_by_question(question)
+    named = view_named_by_question(question, available_values=available_values)
     if named is not None:
         return named
-    low = (question or "").lower()
+    low = _owned(question, available_values).lower()
     if any(lens_mod.undisclaimed_mention(low, w) for w in PIPELINE_ARTEFACTS):
         return "pipeline"
     return DEFAULT_VIEW

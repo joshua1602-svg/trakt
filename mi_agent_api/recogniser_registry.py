@@ -69,7 +69,7 @@ a change to it.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from trakt_core.portfolio import REASON_NO_PORTFOLIOS_IN_SCOPE
@@ -168,6 +168,37 @@ class RouteRequest:
     #: any route or concept, so nothing here knows what a period change is.
     _recognition_memo: Dict[str, Any] = field(
         default_factory=dict, repr=False, compare=False)
+    #: GOVERNED SPAN OWNERSHIP. The book's own categorical values, in the shape
+    #: `mi_agent.execution_receipt.book_values` produces. Supplied, RECOGNITION
+    #: reads a question with those spans blanked — see :meth:`for_recognition`.
+    #: Handlers keep the raw sentence: the rule is about who may CLAIM a span,
+    #: not about what an answer may quote.
+    available_values: Optional[Mapping[str, Any]] = None
+
+    def for_recognition(self) -> "RouteRequest":
+        """This request as RECOGNITION should read it.
+
+        A recogniser matches its own vocabulary against the raw sentence, which
+        is what recognition IS — and which is why a broker called "London Bridge
+        Loans" was routed to the funded BRIDGE, and one called "Growth Partners"
+        to period-change analysis. Neither word was the reader's; both were
+        inside a span the book had already claimed as one value of one field.
+
+        Blanking preserves offsets, so a recogniser reading positions still sees
+        the sentence it expects. With no catalogue this returns ``self``, so
+        every existing caller is byte-for-byte unaffected.
+        """
+        if not self.available_values or not self.question:
+            return self
+        try:
+            from mi_agent.categorical_spans import mask_value_spans
+
+            owned = mask_value_spans(self.question, self.available_values)
+        except Exception:  # noqa: BLE001 - the owner missing must not change routing
+            return self
+        if owned == self.question:
+            return self
+        return replace(self, question=owned)
 
     def remember_recognition(self, key: str, value: Any) -> Any:
         """Keep a recogniser's own pre-claim reading for its handler to consume."""
@@ -336,9 +367,14 @@ class RecogniserRegistry:
         to take the whole chat path down.
         """
         scored: List[Tuple[float, int, int, Recogniser, Recognition]] = []
+        # THE CLAIM BOUNDARY, applied to the SENTENCE as well as to the reading.
+        # Recognition sees the question with spans the book has already claimed
+        # as categorical values blanked; the handler is given the original
+        # request, so nothing an answer quotes or re-reads changes.
+        recognition_request = request.for_recognition()
         for index, rec in sorted(self._items.values(), key=lambda e: (e[1].priority, e[0])):
             try:
-                verdict = _as_recognition(rec.recognise(request))
+                verdict = _as_recognition(rec.recognise(recognition_request))
             except Exception as exc:  # noqa: BLE001 - one bad recogniser must not break routing
                 logger.warning("recogniser %s raised during recognition: %s", rec.name, exc)
                 continue

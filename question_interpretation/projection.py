@@ -86,7 +86,8 @@ def _span_of(question: str, needle: Optional[str]) -> Optional[Span]:
 
 def from_parts(question: str, *, spec, facets, dim_terms,
                semantics: dict, registry=None,
-               caller_scope=None, caller_dataset=None) -> QuestionInterpretation:
+               caller_scope=None, caller_dataset=None,
+               available_values=None) -> QuestionInterpretation:
     """Assemble the object from interpreter output that ALREADY EXISTS.
 
     This is the Stage 2 entry point. It re-interprets nothing: the spec and the
@@ -113,7 +114,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     _target(qi, spec, facets)
     _population(qi, spec, facets)
     _row_predicates(qi, spec, semantics)
-    _source_scope(qi, registry, caller_scope)
+    _source_scope(qi, registry, caller_scope, available_values)
     _dataset(qi, caller_dataset)
     _note_join_state(qi)
     return qi
@@ -141,7 +142,7 @@ def _note_join_state(qi: QuestionInterpretation) -> None:
 
 def project(question: str, *, semantics: dict, frame=None,
             registry=None, caller_scope=None,
-            caller_dataset=None) -> QuestionInterpretation:
+            caller_dataset=None, available_values=None) -> QuestionInterpretation:
     """Build a QuestionInterpretation by asking the existing interpreters.
 
     The read-only Stage 1 path: runs the interpreters itself, then assembles.
@@ -155,9 +156,15 @@ def project(question: str, *, semantics: dict, frame=None,
     dim_terms = R.requested_dimension_terms(question, semantics, cols)
     facets = R.detect_requested_facets(question, semantics, frame=frame,
                                        requested_dimensions=dim_terms)
+    if available_values is None and frame is not None:
+        try:
+            available_values = R.book_values(frame, semantics)
+        except Exception:  # noqa: BLE001 - no catalogue leaves the old reading
+            available_values = None
     return from_parts(question, spec=spec, facets=facets, dim_terms=dim_terms,
                       semantics=semantics, registry=registry,
-                      caller_scope=caller_scope, caller_dataset=caller_dataset)
+                      caller_scope=caller_scope, caller_dataset=caller_dataset,
+                      available_values=available_values)
 
 
 # --------------------------------------------------------------------------- #
@@ -506,7 +513,8 @@ _BASE_FOR_SCOPE = {SCOPE_TOTAL: BASE_FUNDED, SCOPE_DIRECT: BASE_DIRECT,
                    SCOPE_ACQUIRED: BASE_ACQUIRED, SCOPE_COHORT: BASE_FUNDED}
 
 
-def _source_scope(qi, registry=None, caller_scope=None) -> None:
+def _source_scope(qi, registry=None, caller_scope=None,
+                  available_values=None) -> None:
     """Carry `mi_agent.portfolio_lens`'s reading. It stays the single owner.
 
     One call, to the resolver that already decides this for every route today.
@@ -542,10 +550,27 @@ def _source_scope(qi, registry=None, caller_scope=None) -> None:
         # at all. The second is the fact Phase 1F stopped for, and asking the
         # owner for it is what keeps this module free of a second reader of the
         # question — no phrase list is introduced here and none may be.
-        stated = bool(_lens_owner.mentions_portfolio(qi.question)
-                      or _lens_owner.names_governed_portfolio(qi.question, registry))
-        lens = (_lens_owner.resolve_lens(qi.question, registry=registry)
-                if registry is not None else _lens_owner.resolve_lens(qi.question))
+        # PHASE — GOVERNED SPAN OWNERSHIP. The book's own category values are
+        # handed to the owner so a span already claimed as a categorical VALUE
+        # is not read a second time as a scope. The rule and its vocabulary live
+        # in `mi_agent.categorical_spans`; this module still matches nothing.
+        # `available_values=None` — every pre-existing caller — is the reading
+        # this had before, unchanged.
+        try:
+            stated = bool(
+                _lens_owner.mentions_portfolio(qi.question,
+                                               available_values=available_values)
+                or _lens_owner.names_governed_portfolio(qi.question, registry))
+        except TypeError:                       # pre-ownership signature
+            stated = bool(_lens_owner.mentions_portfolio(qi.question)
+                          or _lens_owner.names_governed_portfolio(qi.question,
+                                                                  registry))
+        try:
+            lens = _lens_owner.resolve_lens(qi.question, registry=registry,
+                                            available_values=available_values)
+        except TypeError:                       # pre-ownership signature
+            lens = (_lens_owner.resolve_lens(qi.question, registry=registry)
+                    if registry is not None else _lens_owner.resolve_lens(qi.question))
     except Exception as exc:  # noqa: BLE001
         qi.source_scope = SourceScopeClaim(
             state=UNRESOLVABLE, source="mi_agent.portfolio_lens",

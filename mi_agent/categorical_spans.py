@@ -1,0 +1,188 @@
+"""THE single owner of what a governed categorical VALUE has claimed.
+
+A question is read by several independent resolvers — the categorical filter
+parser, the portfolio-lens resolver, the seasoning segmenter, the place
+resolver. Each of them scans the RAW question for its own vocabulary, so the
+same characters can be claimed twice, by two resolvers that never meet.
+
+Measured: with a broker called **Gamma Direct** on the book,
+
+    "How many Gamma Direct loans do we have?"
+
+answered **104**. The categorical parser correctly claimed ``Gamma Direct`` as a
+value of ``broker_channel``; the portfolio-lens resolver, reading the same raw
+string, independently matched ``Direct loans`` against its qualifier/noun
+grammar and narrowed the population to the ``direct_001`` book as well. The
+broker alone is 147. Nothing was wrong with either resolver in isolation, and
+neither could see that the other had already spoken for those characters.
+
+The invariant this module owns:
+
+    Once a contiguous span has been claimed as a governed categorical value,
+    the tokens INSIDE that span must not independently create another semantic
+    claim, unless the grammar explicitly establishes a second meaning.
+
+"Unless the grammar establishes a second meaning" is why this masks spans
+rather than deleting concepts: in
+
+    "How many Gamma Direct loans are in the Direct book?"
+
+the second ``Direct`` sits in its own span, outside the value's, and the
+question genuinely carries BOTH claims. Masking preserves offsets, so the lens
+resolver still sees ``in the Direct book`` exactly where it is.
+
+Two deliberate limits keep the ownership claim honest:
+
+* Only a value that resolves to EXACTLY ONE governed field is claimed. An
+  ambiguous value has not been claimed by anything, so it may not silence
+  anything either.
+* Only a MULTI-WORD value claims a span. A single-token span has no "inside":
+  a book whose ``source_portfolio_type`` carries the value ``direct`` would
+  otherwise let that value mask the very phrase — "the direct book" — that the
+  lens resolver exists to read. Where the value IS the competing word, the two
+  readings are ambiguous rather than colliding, and this module stays silent.
+  "Word" is counted on WHITESPACE, never on underscores: ``direct_002`` is one
+  token spelled with a separator, and counting it as two let a book value mask
+  an explicit cohort id — measured, and caught by
+  `test_mi_query_lens_matrix::test_an_exact_cohort_id_in_the_question_wins`.
+* ``exclude_fields`` lets a resolver drop ITS OWN fields from the catalogue.
+  The rule governs a collision between two DIFFERENT semantic owners; a value
+  of ``source_portfolio_label`` naming a book is the scope owner's own reading,
+  not a competing claim, so masking it would blind the owner to itself. A
+  fixture whose label is literally "Direct Book" proved it.
+
+The value->field resolution itself lives here so there is ONE resolver:
+``llm_query_parser._categorical_value_field`` is now a thin alias for
+:func:`value_field`, not a second implementation.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any, Dict, Iterable, Optional, Tuple
+
+__all__ = ["value_field", "value_spans", "mask_value_spans"]
+
+
+def _normalise(text: Any) -> str:
+    """Whitespace/underscore-normalised, lower-cased comparison form."""
+    return re.sub(r"[\s_]+", " ", str(text or "").strip().lower())
+
+
+def value_field(value: str, available_values: Any) -> Optional[Tuple[str, str]]:
+    """The governed field whose values include ``value`` — ``(field, value)``.
+
+    THE FIELD COMES FROM THE VALUE, not from a fixed choice. The categorical
+    filter parser resolved every categorical phrase to the REGION field whatever
+    had been named, which is why "what is the balance for lump sum loans?"
+    refused citing ``geographic_region_obligor``: a product type was bound to
+    geography, matched nothing, and the refusal named a field the reader never
+    mentioned.
+
+    Matching is against the values THE BOOK ACTUALLY CARRIES (see
+    ``execution_receipt.book_values``), so nothing here holds a vocabulary of
+    its own and an asset class the tape does not carry offers no values to
+    match.
+
+    A value two governed fields both claim returns ``None``: an ambiguous
+    narrowing must be disclosed, never resolved by preference.
+    """
+    if not available_values:
+        return None
+    probe = _normalise(value)
+    if not probe:
+        return None
+    hits = []
+    for field, values in available_values.items():
+        for known, spelled in (values.items() if hasattr(values, "items")
+                               else ((v, v) for v in values)):
+            if _normalise(known) == probe:
+                hits.append((field, spelled))
+                break
+    if len(hits) != 1:
+        return None
+    return hits[0]
+
+
+def _claimable(available_values: Any, exclude_fields=()) -> Dict[str, str]:
+    """``{normalised value: value}`` for every MULTI-WORD unambiguous value.
+
+    Built once per call rather than per candidate span: the book's dimension
+    values are already in memory and the alternative is a scan per token.
+    """
+    if not available_values:
+        return {}
+    skip = {str(f).strip().lower() for f in (exclude_fields or ())}
+    counts: Dict[str, int] = {}
+    for field, values in available_values.items():
+        if str(field).strip().lower() in skip:
+            continue
+        seen = set()
+        for known in (values.keys() if hasattr(values, "keys") else values):
+            # WHITESPACE decides how many words a value is. `_normalise`
+            # collapses underscores too, because a book spelling "lump_sum" must
+            # match "lump sum" in the question — but an identifier like
+            # `direct_002` is ONE word, and treating it as two let it mask the
+            # cohort id the reader typed.
+            if not re.search(r"\s", str(known or "").strip()):
+                continue
+            norm = _normalise(known)
+            if not norm:
+                continue
+            seen.add(norm)
+        for norm in seen:
+            counts[norm] = counts.get(norm, 0) + 1
+    return {norm: norm for norm, n in counts.items() if n == 1}
+
+
+def _span_pattern(claimable: Iterable[str]) -> Optional["re.Pattern"]:
+    """One alternation over the claimable values, longest first.
+
+    Longest-first is what makes a value that CONTAINS another value win: with
+    both "Gamma Direct" and "Gamma" on the book, the longer claim is the one the
+    reader wrote.
+    """
+    terms = sorted(claimable, key=len, reverse=True)
+    if not terms:
+        return None
+    # The normalised form collapses runs of whitespace and underscores, so the
+    # pattern has to match the RAW text the same way: each internal gap becomes
+    # "one or more whitespace/underscore characters".
+    alts = [r"[\s_]+".join(re.escape(part) for part in term.split(" "))
+            for term in terms]
+    return re.compile(r"\b(?:" + "|".join(alts) + r")\b", re.IGNORECASE)
+
+
+def value_spans(text: Optional[str], available_values: Any, exclude_fields=()):
+    """``((start, end), ...)`` for every governed categorical VALUE in ``text``.
+
+    THE single source of truth for what a categorical value has claimed.
+    Resolvers looking for a scope, a place or a grouping axis mask these spans
+    first, so a value's own words cannot be consumed as something else.
+    """
+    if not text or not available_values:
+        return ()
+    pattern = _span_pattern(_claimable(available_values, exclude_fields))
+    if pattern is None:
+        return ()
+    return tuple((m.start(), m.end()) for m in pattern.finditer(str(text)))
+
+
+def mask_value_spans(text: Optional[str], available_values: Any,
+                     exclude_fields=()) -> str:
+    """``text`` with governed categorical-value spans blanked, offsets preserved.
+
+    Blanking rather than deleting keeps every other offset valid, so a resolver
+    reading the remainder sees the sentence it expects — the same discipline
+    ``portfolio_lens.mask_scope_phrases`` already uses in the other direction.
+    """
+    if not text:
+        return text or ""
+    spans = value_spans(text, available_values, exclude_fields)
+    if not spans:
+        return str(text)
+    out = list(str(text))
+    for start, end in spans:
+        for i in range(start, end):
+            out[i] = " "
+    return "".join(out)

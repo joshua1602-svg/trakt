@@ -3344,8 +3344,49 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     # executor answered it with weighted average LTV by region. The family is the
     # same; only the phrasing differed. See
     # ``mi_workflows/analytical/intent.py`` for the six families.
+    # GOVERNED SPAN OWNERSHIP, resolved ONCE for everything on this path that
+    # reads the sentence for a vocabulary of its own. The book's categorical
+    # values are the same catalogue the parser was handed; a span already
+    # claimed as one of them may not create a second semantic claim from the
+    # tokens inside it. Measured on brokers named "Growth Partners" and "London
+    # Bridge Loans": one was read as a movement question, the other as a funded
+    # bridge, and both refused. `mi_agent.categorical_spans` owns the rule.
+    def _values_for_recognition() -> Any:
+        if "value" not in _ownership_memo:
+            from mi_agent import execution_receipt as _receipt
+
+            value = None
+            try:
+                frame = None
+                if base_frame_resolver is not None:
+                    frame = base_frame_resolver(view, portfolio_id)
+                elif frame_resolver is not None:
+                    frame = frame_resolver(view, portfolio_id)
+                if frame is not None:
+                    value = _receipt.book_values(frame, semantics)
+            except Exception as exc:  # noqa: BLE001 - no catalogue, old routing
+                _logger.info("book value catalogue unavailable: %s", exc)
+            _ownership_memo["value"] = value
+        return _ownership_memo["value"]
+
+    _ownership_memo: Dict[str, Any] = {}
+
+    def _owned_question() -> str:
+        values = _values_for_recognition()
+        if not values:
+            return question
+        try:
+            from mi_agent.categorical_spans import mask_value_spans
+
+            return mask_value_spans(question, values)
+        except Exception:  # noqa: BLE001
+            return question
+
     try:
-        analytical_reading, analytical_flags = analytical_intent.settle(question, spec)
+        # The INTENT boundary owns no book field: every family word it matches
+        # that lies inside a claimed value span belongs to the value.
+        analytical_reading, analytical_flags = analytical_intent.settle(
+            _owned_question(), spec)
     except Exception as exc:  # noqa: BLE001 - the boundary must never break routing
         _logger.warning("analytical intent boundary failed: %s", exc)
         analytical_reading, analytical_flags = None, {}
@@ -3395,12 +3436,23 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
             registry_for_scope = _ctx.build_registry(frame)
         except Exception as exc:  # noqa: BLE001 - identity never breaks routing
             _logger.info("governed registry unavailable for interpretation: %s", exc)
+        # GOVERNED SPAN OWNERSHIP — the book's own category values, so the
+        # contract's SourceScopeClaim cannot re-read a span already claimed as a
+        # categorical value. Same catalogue the parser was handed; the rule is
+        # `mi_agent.categorical_spans`'s, not this site's.
+        try:
+            values_for_scope = _receipt.book_values(frame, semantics)
+        except Exception as exc:  # noqa: BLE001 - no catalogue, old reading
+            _logger.info("book value catalogue unavailable for scope: %s", exc)
+            values_for_scope = None
         return _qi_build(question, spec=spec, facets=list(facets),
                          dim_terms=dim_terms, semantics=semantics,
-                         registry=registry_for_scope, caller_scope=source_lens)
+                         registry=registry_for_scope, caller_scope=source_lens,
+                         available_values=values_for_scope)
 
     request = RouteRequest(
         question=question, spec=spec, spec_dict=spec.to_dict(),
+        available_values=_values_for_recognition(),
         semantics=semantics, view=view, client_id=client_id, run_id=run_id,
         portfolio_id=portfolio_id, output_root=output_root,
         pipeline_root=pipeline_root, history_model=history_model,

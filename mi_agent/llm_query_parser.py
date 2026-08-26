@@ -1970,8 +1970,12 @@ def _grouped_metric(metric_part: str, q: str, semantics: dict) -> Tuple[Optional
 #: "<value> loans / cases / mortgages / book" — a category used as an adjective.
 #: Resolved ONLY against values the book carries, so it cannot manufacture a
 #: filter from an ordinary adjective.
+#: Group 2 is the HEAD NOUN, captured rather than discarded: a governed value
+#: may END in it. A broker called "London Bridge Loans" produced "…London Bridge
+#: Loans loans…", where only the words BEFORE the noun were ever offered as a
+#: candidate, so the value could not resolve and the narrowing vanished.
 _ATTRIBUTIVE_CATEGORICAL_RE = re.compile(
-    r"((?:[a-z][a-z_]*\s+){1,4}?)(?:loans?|cases?|mortgages?|accounts?|book)\b",
+    r"((?:[a-z][a-z_]*\s+){1,4}?)(loans?|cases?|mortgages?|accounts?|book)\b",
     re.I)
 
 _CATEGORICAL_FILTER_RE = re.compile(
@@ -2128,34 +2132,75 @@ def _contribution_request(q: str, semantics: dict, available_columns=None
 def _categorical_value_field(value: str, available_values) -> Optional[Tuple[str, str]]:
     """The governed field whose values include ``value`` — ``(field, value)``.
 
-    THE FIELD COMES FROM THE VALUE, not from a fixed choice. `_parse_categorical
-    _filter` resolved every categorical phrase to the REGION field whatever had
-    been named, which is why "what is the balance for lump sum loans?" refused
-    citing `geographic_region_obligor`: a product type was bound to geography,
-    matched nothing, and the refusal named a field the reader never mentioned.
+    THE RESOLVER LIVES IN ONE PLACE. `mi_agent.categorical_spans` owns both the
+    value->field resolution and the SPAN a resolved value has claimed, because
+    the two are the same fact asked twice: the portfolio-lens resolver needed to
+    know which characters a categorical value had already spoken for, and the
+    only honest way to tell it was to share this function rather than write a
+    second copy of it there. This name is kept as the parser's entry point; the
+    implementation is the owner's.
+    """
+    from .categorical_spans import value_field
 
-    Matching is against the values THE BOOK ACTUALLY CARRIES (see
-    `execution_receipt.book_values`), so nothing here holds a vocabulary of its
-    own and an asset class the tape does not carry offers no values to match.
+    return value_field(value, available_values)
 
-    A value two governed fields both claim returns ``None``: an ambiguous
-    narrowing must be disclosed, never resolved by preference.
+
+def _attributive_categorical(masked: str, available_values
+                             ) -> Optional[Tuple[str, str]]:
+    """THE ATTRIBUTIVE FORM — "<value> loans" with no preposition in front.
+
+    "how many lump sum loans do we have?" names a category with no preposition,
+    so the prepositional pattern never matched and the narrowing vanished
+    silently — the whole book came back as the answer to a question about 396
+    loans.
+
+    Safe only because the value must be one the BOOK CARRIES: a phrase no
+    governed field claims resolves to nothing, so this cannot invent a filter
+    out of an adjective.
+
+    One function, two callers: it is reached when the prepositional pattern does
+    not match AND when it matches a phrase the book does not claim as written.
     """
     if not available_values:
         return None
-    probe = re.sub(r"[\s_]+", " ", str(value or "").strip().lower())
-    if not probe:
-        return None
-    hits = []
-    for field, values in available_values.items():
-        for known, spelled in (values.items() if hasattr(values, "items")
-                               else ((v, v) for v in values)):
-            if re.sub(r"[\s_]+", " ", known) == probe:
-                hits.append((field, spelled))
-                break
-    if len(hits) != 1:
-        return None
-    return hits[0]
+    # THE SPAN OWNER FIRST. `categorical_spans` resolves the LONGEST governed
+    # multi-word value anywhere in the text, which is the same question this scan
+    # asks and a stricter answer than it can give: the scan splits on a head noun
+    # and cannot see a value that CONTAINS one. Measured on a broker called
+    # "Pipeline Mortgage Club" — the scan matched "mortgage" as the noun, offered
+    # "pipeline" and "club" as candidates, and the narrowing vanished.
+    #
+    # The safety argument is unchanged and stronger: the owner claims only values
+    # the BOOK CARRIES, only where exactly one governed field claims them, and
+    # only where the value is more than one word.
+    try:
+        from .categorical_spans import value_field, value_spans
+
+        for start, end in value_spans(masked, available_values):
+            owned = value_field((masked or "")[start:end], available_values)
+            if owned is not None:
+                return owned
+    except Exception:  # noqa: BLE001 - the owner missing leaves the scan below
+        pass
+    for attributive in _ATTRIBUTIVE_CATEGORICAL_RE.finditer(masked or ""):
+        words = attributive.group(1).split()
+        noun = attributive.group(2)
+        # LONGEST SUFFIX FIRST. The words before the noun are a mixture of
+        # question framing and the category — "how many lump sum loans" — so the
+        # candidate is the tail, tried from longest to shortest. Only a value the
+        # book carries resolves, so a wrong tail simply does not match.
+        #
+        # Each tail is tried WITH the head noun before without it, because a
+        # governed value may end in that noun ("London Bridge Loans"). Longest
+        # first throughout, so a value that does not include the noun is
+        # unaffected: "lump sum loans" does not resolve, "lump sum" does.
+        for start in range(len(words)):
+            tail = " ".join(words[start:])
+            for candidate in (f"{tail} {noun}", tail):
+                owned = _categorical_value_field(candidate, available_values)
+                if owned is not None:
+                    return owned
+    return None
 
 
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None,
@@ -2178,28 +2223,7 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     masked = mask_segment_phrases(mask_scope_phrases(clause)).strip()
     m = _CATEGORICAL_FILTER_RE.search(masked)
     if not m:
-        # THE ATTRIBUTIVE FORM. "how many lump sum loans do we have?" names a
-        # category with no preposition in front of it, so the prepositional
-        # pattern above never matched and the narrowing vanished silently — the
-        # whole book came back as the answer to a question about 396 loans.
-        #
-        # Safe only because the value must be one the BOOK CARRIES: a phrase no
-        # governed field claims resolves to nothing, so this cannot invent a
-        # filter out of an adjective.
-        if available_values:
-            for attributive in _ATTRIBUTIVE_CATEGORICAL_RE.finditer(masked):
-                words = attributive.group(1).split()
-                # LONGEST SUFFIX FIRST. The words before the noun are a mixture
-                # of question framing and the category — "how many lump sum
-                # loans" — so the candidate is the tail, tried from longest to
-                # shortest. Only a value the book carries resolves, so a wrong
-                # tail simply does not match.
-                for start in range(len(words)):
-                    owned = _categorical_value_field(" ".join(words[start:]),
-                                                     available_values)
-                    if owned is not None:
-                        return owned
-        return None
+        return _attributive_categorical(masked, available_values)
     value = m.group(1).strip()
     # "for loans in Wales" captures "loans in wales" — peel leading filler and
     # any nested preposition so the VALUE is the place, not the phrase.
@@ -2214,18 +2238,34 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         break
     if not value or value in _CATEGORICAL_STOPWORDS:
         return None
-    if any(word in _NON_PLACE_TERMS for word in value.split()):
-        return None
-    # THE BOOK'S OWN VALUES DECIDE THE FIELD, when the book is known.
+    # THE BOOK'S OWN VALUES DECIDE THE FIELD, and they decide it FIRST.
+    #
+    # `_NON_PLACE_TERMS` used to run before this. It is a WORD-level version of
+    # the ownership rule `mi_agent.categorical_spans` now owns per SPAN, and at
+    # word level it vetoes a value the book actually carries because ONE of its
+    # words belongs to another vocabulary. Measured: a broker called "Gamma
+    # Direct" resolved for "how many Gamma Direct loans" (the attributive path,
+    # which never consulted the list) and REFUSED for "what is the total balance
+    # for Gamma Direct loans" (this path), because "direct" is on the list. Two
+    # phrasings of one question, two different answers.
+    #
+    # The list keeps its job — it exists to stop an INVENTED geography, and it
+    # still runs below for a value nothing claims. What it may no longer do is
+    # overrule the book about the book's own values.
     owned = _categorical_value_field(value, available_values)
     if owned is not None:
         return owned[0], owned[1]
-    if available_values:
-        # The book is known and no governed field claims this value. Binding it
-        # to region anyway is how a product type became a geography; returning
-        # None lets the caller record it as an UNRESOLVED narrowing, which the
-        # fail-closed machinery discloses rather than dropping.
+    if any(word in _NON_PLACE_TERMS for word in value.split()):
         return None
+    if available_values:
+        # The book is known and no governed field claims this phrase AS WRITTEN.
+        # The attributive reading is tried before giving up: the prepositional
+        # pattern captures the whole phrase after "for", so "for Gamma Direct
+        # loans" arrives here as a candidate that only the tail-first scan can
+        # resolve. If that fails too, the narrowing is UNRESOLVED — binding it
+        # to region anyway is how a product type became a geography — and the
+        # fail-closed machinery discloses it rather than dropping it.
+        return _attributive_categorical(masked, available_values)
     field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"
     if field not in _fields(semantics):
         return None
@@ -2724,6 +2764,23 @@ def _qualitative_threshold(q: str) -> Optional[str]:
     return m.group(0) if m else None
 
 
+def _owned_question(q: str, available_values) -> str:
+    """``q`` with spans a governed categorical VALUE has claimed blanked.
+
+    Delegation only: `mi_agent.categorical_spans` owns which spans those are and
+    why. With no catalogue the sentence comes back unchanged, so a caller that
+    cannot see the book keeps exactly the reading it had.
+    """
+    if not q or not available_values:
+        return q
+    try:
+        from .categorical_spans import mask_value_spans
+
+        return mask_value_spans(q, available_values)
+    except Exception:  # noqa: BLE001 - the owner missing must not change a parse
+        return q
+
+
 def _deterministic_parse(question: str, semantics: dict,
                          available_columns=None,
                          available_values=None) -> Tuple[MIQuerySpec, dict]:
@@ -2736,6 +2793,17 @@ def _deterministic_parse(question: str, semantics: dict,
     q = question.lower().strip()
     title = question.strip()
     top_n = _detect_top_n(q)
+
+    # GOVERNED SPAN OWNERSHIP. The same sentence with spans the book has already
+    # claimed as categorical VALUES blanked, offsets preserved. Used ONLY by the
+    # governed analytical-intent recognisers below, whose vocabularies —
+    # waterfall/bridge, growth/movement, cohort, compare, limit, forecast — own
+    # no book field, so a match found INSIDE a claimed value span belongs to the
+    # value. Measured: brokers called "London Bridge Loans" and "Growth Partners"
+    # were parsed as a funded bridge and a movement question respectively, and
+    # both refused. Everything else on this path keeps the raw `q`, because the
+    # categorical resolution is the claim these spans come from.
+    q_owned = _owned_question(q, available_values)
 
     # "How much is missing?" is a data-quality question, and the estate has no
     # governed intent that answers it. Answering the adjacent question instead
@@ -2767,7 +2835,7 @@ def _deterministic_parse(question: str, semantics: dict,
     # A scale-up / run-rate forecast, a cross-period comparison, or a risk-limit
     # question must never fall through to a point-in-time KPI. Forecast is checked
     # before compare so "compare ... run-rate extrapolation" routes to forecast.
-    fc = _forecast_scale_recognizer(q, title)
+    fc = _forecast_scale_recognizer(q_owned, title)
     if fc is not None:
         return fc
     # An aggregate-contribution question is a DIFFERENT calculation from both
@@ -2781,16 +2849,16 @@ def _deterministic_parse(question: str, semantics: dict,
                                        available_columns=available_columns)
     if contrib is not None:
         return contrib
-    br = _bridge_recognizer(q, title, semantics, available_columns=available_columns)
+    br = _bridge_recognizer(q_owned, title, semantics, available_columns=available_columns)
     if br is not None:
         return br
-    cp = _cohort_progression_recognizer(q, title, semantics)
+    cp = _cohort_progression_recognizer(q_owned, title, semantics)
     if cp is not None:
         return cp
-    cmp_spec = _compare_recognizer(q, title, semantics)
+    cmp_spec = _compare_recognizer(q_owned, title, semantics)
     if cmp_spec is not None:
         return cmp_spec
-    rl = _risk_limit_recognizer(q, title)
+    rl = _risk_limit_recognizer(q_owned, title)
     if rl is not None:
         return rl
     # A question naming several governed measures is ONE request over one

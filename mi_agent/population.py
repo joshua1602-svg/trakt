@@ -55,6 +55,13 @@ NON_POPULATION_KEYS = (
 )
 
 
+def _plain(value: Any) -> str:
+    """A number a reader would write: 50, not 50.0."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
 @dataclass(frozen=True)
 class Predicate:
     """One material row-population predicate, as requested."""
@@ -64,12 +71,45 @@ class Predicate:
     value: Any
 
     def describe(self) -> str:
+        """The MACHINE form: field key, operator code, value.
+
+        Read by the population ledger, the reachability proof in
+        `question_interpretation.b5_reachability` (which depends on this leading
+        with the FIELD NAME), and every facet label built from a predicate. It is
+        deliberately not prose — see :meth:`spoken` for that.
+        """
         if self.op == "eq":
             return f"{self.field} = {self.value}"
         if self.op == "in":
             vals = self.value if isinstance(self.value, (list, tuple, set)) else [self.value]
             return f"{self.field} in {sorted(str(v) for v in vals)}"
         return f"{self.field} {self.op} {self.value}"
+
+    #: Operator codes as a reader says them. `describe` keeps the codes.
+    _SPOKEN_OPS = {"eq": "is", "ne": "is not", "in": "is one of",
+                   "gt": "over", "ge": "at least", "lt": "under",
+                   "le": "at most", "between": "between"}
+
+    def spoken(self, semantics: Optional[Mapping[str, Any]] = None) -> str:
+        """The READER'S form: business name, operator in words, value.
+
+        "current_loan_to_value gt 50.0" appeared verbatim in a customer-facing
+        refusal. The field key and the operator code are internal identifiers;
+        the reader asked about LTV over 50.
+
+        A SECOND rendering, not a replacement: `describe` is still what the
+        ledger records and what every facet label is built from, because the B5
+        reachability proof holds only while those labels lead with the field
+        name. Only prose reads this.
+        """
+        entry = ((semantics or {}).get("fields") or {}).get(self.field) or {}
+        name = (entry.get("business_name") or entry.get("display_name")
+                or str(self.field).replace("_", " "))
+        word = self._SPOKEN_OPS.get(self.op, self.op)
+        if self.op == "in":
+            vals = self.value if isinstance(self.value, (list, tuple, set)) else [self.value]
+            return f"{name} {word} {', '.join(sorted(str(v) for v in vals))}"
+        return f"{name} {word} {_plain(self.value)}"
 
 
 @dataclass

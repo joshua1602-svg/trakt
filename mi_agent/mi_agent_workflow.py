@@ -75,16 +75,17 @@ def _validation_refusal(errors: List[str], semantics: dict) -> str:
     if named:
         if len(named) == 1:
             label, canonical = named[0]
-            return (f"'{label}' is not available in this dataset. The MI book for "
-                    f"this client does not include {canonical}. This field is not "
-                    "reported, so the question cannot be answered from the current "
-                    "data (no value was fabricated).")
+            # THE READER'S NAME FOR THE FIELD, not the column's. The canonical
+            # identifier told the reader nothing they could act on and read as
+            # an internal leak in a customer-facing refusal.
+            del canonical
+            return (f"'{label}' is not available in this dataset. This book does "
+                    "not report it, so the question cannot be answered from the "
+                    "current data (no value was fabricated).")
         labels = ", ".join(f"'{l}'" for l, _ in named)
-        columns = ", ".join(c for _, c in named)
-        return (f"{labels} are not available in this dataset. The MI book for this "
-                f"client does not include {columns}. These fields are not reported, "
-                "so the question cannot be answered from the current data (no value "
-                "was fabricated).")
+        return (f"{labels} are not available in this dataset. This book does not "
+                "report them, so the question cannot be answered from the current "
+                "data (no value was fabricated).")
     refusal = _statistic_refusal(errors, semantics)
     if refusal:
         return refusal
@@ -259,9 +260,10 @@ def _detect_unsupported_concept(question, semantics, available_columns):
         return {
             "concept": concept,
             "missing_fields": candidate_fields,
-            "message": (f"'{concept}' is not available in this dataset. The MI book "
-                        f"for this client does not include {', '.join(candidate_fields)}. "
-                        "This field is not reported, so the question cannot be answered "
+            # `missing_fields` above keeps the canonical keys for machines; the
+            # MESSAGE names the concept the reader used and nothing else.
+            "message": (f"'{concept}' is not available in this dataset. This book "
+                        "does not report it, so the question cannot be answered "
                         "from the current data (no value was fabricated)."),
         }
     return None
@@ -540,6 +542,21 @@ def run_mi_agent_query(
 
     available_columns = _receipt_schema.book_columns(df)
 
+    # THE BOOK'S OWN CATEGORY VALUES, resolved ONCE per request and shared by
+    # both readers of them. The categorical parser uses them to resolve a named
+    # value to the field that holds it; the portfolio lens uses them to know
+    # which spans that resolution has already claimed (GOVERNED SPAN OWNERSHIP,
+    # `mi_agent.categorical_spans`). Computing them twice, or for one reader and
+    # not the other, is how the two halves of one rule read different books: the
+    # lens would stand down from a span the parser never claimed, and the
+    # narrowing would vanish from BOTH — a silent widening in place of a wrong
+    # narrowing. The API path already passed this catalogue to its parse; this
+    # is the same catalogue, for callers that parse here.
+    try:
+        available_values = _receipt_schema.book_values(df, semantics)
+    except Exception:  # noqa: BLE001 - no catalogue leaves the old reading
+        available_values = None
+
     # ---- controlled-unsupported guard -------------------------------------
     # If the question asks for a governed concept whose field is NOT in this
     # dataset (e.g. arrears / default / NNEG / credit score on an ERE pack that
@@ -563,6 +580,7 @@ def run_mi_agent_query(
         if parsed is None:
             parsed = ParsedQuestion.parse(
                 question, semantics, available_columns=available_columns,
+                available_values=available_values,
                 llm_enabled=effective_llm, model=model,
                 max_attempts=max_repair_attempts, llm_callable=llm_callable,
                 provider=provider, catalog_mode=catalog_mode,
@@ -666,7 +684,14 @@ def run_mi_agent_query(
     if "source_portfolio_id" in available_columns or "source_portfolio_type" in available_columns:
         _default_lens = (_portfolio_lens.lens_from_selection(source_portfolio_lens)
                          if source_portfolio_lens is not None else None)
-        _lens = _portfolio_lens.resolve_lens_with_default(question, _default_lens)
+        # GOVERNED SPAN OWNERSHIP. The book's own category values go in, so a
+        # span already claimed as one of them cannot ALSO be read as a portfolio
+        # scope. Measured without it, a broker called "Gamma Direct" answered
+        # 104 of its 147 loans, because "Direct loans" was read a second time as
+        # the direct book. `mi_agent.categorical_spans` owns the rule; the
+        # catalogue is the one the parse above was handed, not a second reading.
+        _lens = _portfolio_lens.resolve_lens_with_default(
+            question, _default_lens, available_values=available_values)
         # The lens names the scope; the GOVERNED REGISTRY resolves what that
         # scope means. "direct" is every portfolio currently typed direct, so
         # onboarding direct_002 widens the answer with no code change — and the
@@ -911,6 +936,9 @@ def run_mi_agent_query(
     _recon = (qres.metadata or {}).get("reconciliation") or {}
     if spec.filters and _recon.get("records_after_filters") == 0:
         applied = ", ".join(str(k) for k in (spec.filters or {}))
+        # The PROSE names the fields as the registry names them for a reader;
+        # `validation.errors` below keeps the canonical keys for machines.
+        spoken = ", ".join(str(_bn(semantics, k) or k) for k in (spec.filters or {}))
         val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
                                             "resolved_fields": {}}
         val["ok"] = False
@@ -920,7 +948,7 @@ def run_mi_agent_query(
         if isinstance(result.get("interpreted"), dict):
             result["interpreted"]["Validation"] = "Failed"
         result["error"] = (
-            f"No loans in this book match that filter ({applied}), so there is "
+            f"No loans in this book match that filter ({spoken}), so there is "
             "nothing to calculate. I have not returned a whole-book figure in "
             "its place.")
         result["answer"] = result["error"]

@@ -241,6 +241,33 @@ def _qualified_span_re(qualifiers, nouns):
 _LENS_PHRASE_RE = _qualified_span_re(_LENS_QUALIFIERS, _LENS_NOUNS)
 
 
+#: THIS module's own fields. A value of one of them naming a book is the scope
+#: reading itself, not a competing categorical claim, so it may not mask the
+#: phrase this module exists to read: a fixture whose `source_portfolio_label`
+#: is literally "Direct Book" turned "show direct book balance" into Total.
+_SCOPE_OWNED_FIELDS = (SOURCE_TYPE_FIELD, SOURCE_ID_FIELD,
+                       "source_portfolio_label", "portfolio_cohort")
+
+
+def mask_claimed_value_spans(text: Optional[str], available_values=None) -> str:
+    """``text`` with spans a governed CATEGORICAL VALUE has claimed blanked.
+
+    The delegation, once, for every gate in this module. `categorical_spans`
+    owns which spans those are and why; this only asks, and names its own fields
+    so the rule stays a rule about TWO owners. With no values supplied — the
+    default everywhere — the text is returned unchanged, so a caller that cannot
+    see the book keeps exactly the reading it had.
+    """
+    if not text or not available_values:
+        return text or ""
+    try:
+        from .categorical_spans import mask_value_spans
+    except Exception:  # noqa: BLE001 - the owner missing must not change a reading
+        return str(text)
+    return mask_value_spans(text, available_values,
+                            exclude_fields=_SCOPE_OWNED_FIELDS)
+
+
 def lens_phrase_spans(text: Optional[str]):
     """``((start, end), ...)`` for every governed PROVENANCE phrase in ``text``.
 
@@ -722,7 +749,8 @@ def lens_from_term(term: Optional[str]) -> PortfolioLens:
     return _lens_from_text(" " + str(term).strip().lower() + " ")
 
 
-def resolve_lens(text: Optional[str], *, registry=None) -> PortfolioLens:
+def resolve_lens(text: Optional[str], *, registry=None,
+                 available_values=None) -> PortfolioLens:
     """Resolve a single portfolio lens from a QUESTION. Defaults to *total*.
 
     PHASE 1E — ``registry``. When a governed :class:`PortfolioRegistry` is
@@ -750,6 +778,18 @@ def resolve_lens(text: Optional[str], *, registry=None) -> PortfolioLens:
     the filter and dimension parsers to protect them FROM this vocabulary, and
     never by the decision that owns it. One helper, two callers; duplicating the
     test would create a second owner of the decision this fix consolidates.
+
+    ``available_values`` — GOVERNED SPAN OWNERSHIP. Handed the book's own
+    categorical values, a span already claimed as one of them is blanked before
+    the qualified-mention gate reads the sentence, so "how many Gamma Direct
+    loans do we have?" no longer ALSO narrows to the direct book. See
+    `mi_agent.categorical_spans`, which owns that decision; nothing is decided
+    here. Omitted, every reading below is exactly what it was.
+
+    The three NAMED-PORTFOLIO branches above run on the RAW text on purpose: a
+    governed portfolio named outright is the most specific thing the sentence
+    can say and already wins over everything below, so a categorical value may
+    not silence it.
 
     A term caller wants `lens_from_term`.
     """
@@ -779,10 +819,12 @@ def resolve_lens(text: Optional[str], *, registry=None) -> PortfolioLens:
     unknown = _unknown_family_member(text, registry)
     if unknown is not None:
         return unknown
-    if not lens_phrase_spans(text) and not _COHORT_ID_RE.search(low):
+    owned = mask_claimed_value_spans(text, available_values)
+    low_owned = " " + str(owned).strip().lower() + " "
+    if not lens_phrase_spans(owned) and not _COHORT_ID_RE.search(low_owned):
         return total_lens()
 
-    return _lens_from_text(low, registry=registry)
+    return _lens_from_text(low_owned, registry=registry)
 
 
 def _lens_from_text(low: str, *, registry=None) -> PortfolioLens:
@@ -945,9 +987,19 @@ def resolve_and_apply(spec, text: Optional[str]):
     return apply_lens(spec, resolve_lens(text))
 
 
-def mentions_portfolio(text: Optional[str]) -> bool:
-    """True if the text refers to a source-portfolio scope (any lens family)."""
+def mentions_portfolio(text: Optional[str], *, available_values=None) -> bool:
+    """True if the text refers to a source-portfolio scope (any lens family).
+
+    ``available_values`` applies the same GOVERNED SPAN OWNERSHIP rule as
+    :func:`resolve_lens`. It matters here independently: this is the PRECEDENCE
+    gate, so a broker value read as a scope mention would hand the question to
+    `resolve_lens` in place of the caller's selection even when `resolve_lens`
+    itself has stopped reading it that way.
+    """
     if not text:
+        return False
+    text = mask_claimed_value_spans(text, available_values)
+    if not text.strip():
         return False
     low = " " + str(text).strip().lower() + " "
     if _COHORT_ID_RE.search(low):
@@ -1010,7 +1062,8 @@ def lens_from_selection(value: Any, *, registry=None) -> PortfolioLens:
 
 
 def resolve_lens_with_default(
-    text: Optional[str], default: Optional[PortfolioLens] = None, *, registry=None
+    text: Optional[str], default: Optional[PortfolioLens] = None, *, registry=None,
+    available_values=None
 ) -> PortfolioLens:
     """Resolve the effective lens: a portfolio scope named in ``text`` wins
     (natural-language override); otherwise the ``default`` (e.g. the dropdown
@@ -1020,8 +1073,10 @@ def resolve_lens_with_default(
     The PRECEDENCE rule is unchanged: a registry lets the question resolve MORE
     scopes, it does not change which side wins.
     """
-    if mentions_portfolio(text) or names_governed_portfolio(text, registry):
-        return resolve_lens(text, registry=registry)
+    if (mentions_portfolio(text, available_values=available_values)
+            or names_governed_portfolio(text, registry)):
+        return resolve_lens(text, registry=registry,
+                            available_values=available_values)
     return default or total_lens()
 
 

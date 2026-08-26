@@ -440,6 +440,22 @@ def _book_values(frame, semantics):
         return None
 
 
+def _owned_question(question: Optional[str], available_values) -> str:
+    """``question`` with spans a governed categorical VALUE has claimed blanked.
+
+    Delegation only — `mi_agent.categorical_spans` owns the rule. With no
+    catalogue the sentence comes back unchanged.
+    """
+    if not question or not available_values:
+        return question or ""
+    try:
+        from mi_agent.categorical_spans import mask_value_spans
+
+        return mask_value_spans(question, available_values)
+    except Exception:  # noqa: BLE001 - the owner missing must not change a reading
+        return question
+
+
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     """Map an engine-reported failure onto a stable code.
 
@@ -725,7 +741,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
 
 
 def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
-                            view: str) -> Dict[str, Any]:
+                            view: str, available_values=None) -> Dict[str, Any]:
     """§7 THE FAIL-CLOSED SAFETY RULE.
 
     A materially analytical question that no governed route claimed has reached
@@ -759,7 +775,12 @@ def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
     try:
         from mi_workflows.analytical import intent as intent_mod
 
-        reading = intent_mod.classify(question)
+        # GOVERNED SPAN OWNERSHIP. The intent vocabulary owns no book field, so
+        # a family word found inside a span the book has already claimed as a
+        # categorical VALUE belongs to the value. Measured: brokers called
+        # "Growth Partners" and "Completion Network" made every question about
+        # them refuse — one as a movement question, one as a pipeline question.
+        reading = intent_mod.classify(_owned_question(question, available_values))
         if not reading.materially_analytical:
             return result
         spec = result.get("spec") if isinstance(result.get("spec"), dict) else {}
@@ -992,6 +1013,31 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         logger.info("request currency resolution skipped: %s", exc)
     with _perf.stage("mi_query.resolve_frame"):
         df, frame_error = _resolve_frame(ds, view, portfolio_id)
+        # GOVERNED SPAN OWNERSHIP for the DATASET, once the book can be read.
+        #
+        # The dataset is decided at the top of this request, before any
+        # authorisation and therefore before any tape can be opened, so the owner
+        # answers there without the one piece of evidence this rule needs: the
+        # book's own categorical values. Measured, a broker called "Pipeline
+        # Mortgage Club" served every question about it from the pipeline
+        # extract — 8 cases in place of its 63 funded loans.
+        #
+        # This is the SAME owner asked once more, with the evidence it lacked;
+        # it is not a second decision. It runs only where the first answer was
+        # NOT the default dataset, and it can only ever return to the default —
+        # a question that names a dataset outside every claimed span keeps its
+        # answer. The funded frame is loaded to read the catalogue and then used
+        # as the request's frame, so nothing is loaded twice.
+        if view != workspace_mod.DEFAULT_VIEW:
+            base_df, base_error = _resolve_frame(
+                ds, workspace_mod.DEFAULT_VIEW, portfolio_id)
+            owned_view = workspace_mod.resolve_dataset(
+                req.question, available_values=_book_values(base_df, semantics)
+                if base_df is not None else None)
+            if owned_view != view:
+                logger.info("dataset %r re-read as %r under span ownership",
+                            view, owned_view)
+                view, df, frame_error = owned_view, base_df, base_error
 
     try:
         with _perf.stage("mi_query.parse"):
@@ -1168,7 +1214,9 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         result.setdefault("warnings", []).extend(llm_cfg.warnings)
     # §7 — a materially analytical question must never leave here with a
     # confident current-position figure that answers something else.
-    result = _fail_closed_analytical(result, question=req.question, view=view)
+    result = _fail_closed_analytical(result, question=req.question, view=view,
+                                     available_values=_book_values(df, semantics)
+                                     if df is not None else None)
     # P0 SITE 2 OF 2 — temporal honouring, on the rendered point-in-time result.
     result = _guard_temporal_honouring(result, question=req.question,
                                        semantics=semantics, frame=df)
