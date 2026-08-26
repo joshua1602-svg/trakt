@@ -3233,6 +3233,12 @@ def _deterministic_parse(question: str, semantics: dict,
                 explanation="Filtered loan-level drill-through.")
             return spec, _det_meta("high", True, sorted(d_filters), note="drill_filtered")
 
+    #: Dimension terms this parse DISCARDED because they also name a value the
+    #: book carries. The discard is right — a value standing outside a grouping
+    #: position is a qualifier — but it leaves the question with one fewer axis
+    #: than the reader wrote, and a later branch must not fill that hole with a
+    #: dimension of its own choosing. See the concentration default below.
+    _dropped_dimension_terms: List[str] = []
     dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
     # A GOVERNED VALUE IS NOT A GROUPING.
     #
@@ -3262,6 +3268,7 @@ def _deterministic_parse(question: str, semantics: dict,
         for _key, _term in zip(dim_keys, dim_terms):
             _is_value = _categorical_value_field(_term, available_values) is not None
             if _is_value and str(_term).lower() not in _after_by:
+                _dropped_dimension_terms.append(str(_term))
                 continue
             _kept_keys.append(_key)
             _kept_terms.append(_term)
@@ -3499,7 +3506,23 @@ def _deterministic_parse(question: str, semantics: dict,
     #
     # The pre-existing trend-shape words keep their old behaviour unchanged,
     # default and all: this narrows nothing that worked before.
-    is_line = _legacy_line_words or (_axis_named and metric is not None)
+    #
+    # `metric is not None` WAS THE PROXY FOR THE GUARD ABOVE, and it is now the
+    # guard itself that holds the line. The proxy asked "did the reader name a
+    # measure?" and answered it with the parser's own default already applied,
+    # so it could only be conservative: it refused "how has the pipeline
+    # evolved?" — a question whose measure is not defaulted at all but
+    # DETERMINED, by the governed dataset it names, exactly as the working
+    # wording "show pipeline evolution" is — while "how is the loan book
+    # tracking month to month" refused for the right reason.
+    #
+    # Both are now decided downstream by the one governed rule: the spec
+    # records that the metric was defaulted, and the route refuses the BARE
+    # case — no dataset, no analytic, no dimension, no measure. A question
+    # naming the pipeline is not bare, so it answers on the governed pipeline
+    # amount; a question naming nothing still refuses, and now says which
+    # metric it is missing rather than "I couldn't map this question".
+    is_line = _legacy_line_words or _axis_named
     if is_line:
         x = ("origination_date" if "origination_date" in _fields(semantics)
              else None)
@@ -3569,8 +3592,22 @@ def _deterministic_parse(question: str, semantics: dict,
         metric, agg, _ = _detect_metric(_metric_slot(remaining), semantics)
 
     # Generic concentration questions may pick a sensible default dimension.
+    #
+    # GENERIC MEANS THE READER NAMED NO AXIS — not that we discarded the one
+    # they named. "Show broker concentration" resolves `broker` to the governed
+    # broker_channel dimension, then loses it to the qualifier rule above
+    # (`broker` is also a value of origination_channel), then arrived here with
+    # no dimension and was given the region default. The answer measured
+    # GEOGRAPHIC concentration for a question about brokers; only the receipt's
+    # substitution guard stopped it reaching the reader, and it could report
+    # nothing better than "broker could not be applied".
+    #
+    # A default is legitimate where the question supplies no axis at all
+    # ("show concentration"). Where a term was read as an axis and discarded,
+    # the honest state is no dimension — the ambiguity owner then asks whether
+    # the term meant a breakdown or a narrowing, which is the actual question.
     generic = False
-    if dimension is None and not explicit and any(
+    if dimension is None and not explicit and not _dropped_dimension_terms and any(
             w in q for w in ("concentrat", "most ", "where are", "split", "breakdown")):
         for cand in (_preferred_region(semantics, available_columns) or "geographic_region_obligor",
                      "broker_channel", "erm_product_type", "account_status"):
