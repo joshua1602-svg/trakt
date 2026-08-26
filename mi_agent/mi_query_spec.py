@@ -284,6 +284,15 @@ class MIQuerySpec:
 
     # Semantic field keys (all optional; which are required depends on chart_type)
     metric: Optional[str] = None
+    #: True when ``metric`` was NOT named in the question and a governed default
+    #: was substituted. The value is still the default, so nothing downstream
+    #: changes by reading this; what changes is that a consumer can now tell a
+    #: measure the reader chose from one chosen for them. A series has to plot
+    #: SOMETHING, so the branch that supplies the default is legitimate — the
+    #: defect it caused was that the substitution left no trace, and "show me
+    #: the trend" was answered as a funded-balance trend with the assumption
+    #: neither stated nor recoverable.
+    metric_defaulted: bool = False
     dimension: Optional[str] = None
     x: Optional[str] = None
     y: Optional[str] = None

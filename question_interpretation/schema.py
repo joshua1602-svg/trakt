@@ -378,10 +378,28 @@ class SubjectClaim(Slot):
     #: belongs to ResolvedConcept, and a candidate may turn out to resolve to
     #: nothing in this portfolio.
     candidate_concept: Optional[str] = None
+    #: Where the candidate came from. `SCOPE_PROVENANCES` is reused rather than
+    #: a second vocabulary invented, exactly as `DatasetClaim` reuses it: the
+    #: question "did the reader choose this, or did we?" is the same question
+    #: for a measure as for a scope, and it deserves the same answer set.
+    #:
+    #: A `PROV_DEFAULT` subject is a real claim carrying a real value — the
+    #: series still plots the governed balance. What it adds is that a consumer
+    #: can tell the two apart, which nothing could before: "show me the trend"
+    #: and "show me the balance trend" produced identical contracts.
+    provenance: Optional[str] = None
+
+    def __post_init__(self) -> None:  # noqa: D105
+        parent = getattr(super(), "__post_init__", None)
+        if parent is not None:
+            parent()
+        if self.provenance is not None and self.provenance not in SCOPE_PROVENANCES:
+            raise ValueError("unknown subject provenance %r" % (self.provenance,))
 
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
         d["candidate_concept"] = self.candidate_concept
+        d["provenance"] = self.provenance
         return d
 
 

@@ -1043,6 +1043,39 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     funnel_stage, stage_axis = _plan.governed_stage(interpretation)
     is_count = spec.aggregation == "count"
 
+    # NO IMPLICIT MEASURE. A series has to plot something, so the parser
+    # supplies the governed balance when the question names no measure — and
+    # for "show me the trend" that substitution WAS the answer: a funded
+    # balance series, chosen entirely by us, presented as though it had been
+    # asked for. The frozen acceptance bank has expected this to be refused
+    # since it was written.
+    #
+    # The test is the BARE case and nothing wider, read from the contract
+    # alone. A question that supplies any governed element the measure can be
+    # determined FROM is not bare and is untouched: an explicit dataset
+    # ("show pipeline evolution by stage" — the governed pipeline amount), a
+    # named analytic ("show regional concentration evolution over time"), or a
+    # dimension to break the series down by. Only a question that supplies
+    # none of them leaves the measure with no owner but us.
+    from question_interpretation.schema import PROV_DEFAULT as _PROV_DEFAULT
+
+    _subject = getattr(interpretation, "subject", None)
+    if (getattr(_subject, "provenance", None) == _PROV_DEFAULT
+            and not is_count
+            and not stage_axis
+            and getattr(getattr(interpretation, "operation", None),
+                        "analytic", None) is None
+            and not _plan.grouping_concepts(interpretation)
+            and getattr(getattr(interpretation, "dataset", None),
+                        "provenance", None) == _PROV_DEFAULT):
+        message = (
+            "I can show a trend, but you have not said which metric. "
+            "For example: funded balance, loan count or weighted-average LTV. "
+            "No metric has been chosen for you.")
+        return _undeliverable(question=question, spec=spec_dict, artifacts=[],
+                              answer=message, error=message, route="evolution",
+                              warnings=[message])
+
     # THE POPULATION, PLANNED FROM THE CONTRACT. `spec.filters` still answers
     # "did the reader ask to narrow at all" — a gate, not a meaning — and every
     # question of WHICH rows is answered by the plan step.

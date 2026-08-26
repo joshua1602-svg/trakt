@@ -456,14 +456,24 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # The governed ruling is that a missing element is CLARIFIED, not invented.
     # The contract says whether a period was named — `comparison_periods` for an
     # explicit pair, `window_periods` for a span — and neither is guessed here.
-    if rank_intent.requested and interpretation is not None:
+    #
+    # THE RULE IS THE ROUTE'S, NOT THE RANKED SUB-CASE'S. It was gated on
+    # `rank_intent.requested`, which left the NARRATIVE half of the same route
+    # inventing the same default: "What changed?" names no period, and the
+    # recogniser's latest-versus-previous silently became the reader's window.
+    # Every answer this route gives is a comparison between two dates, so the
+    # question of which two dates is never optional here. Nothing about the
+    # rule changes — only the false premise that it applied to ranking alone.
+    if interpretation is not None:
         _time = getattr(interpretation, "time", None)
         _named = bool(getattr(_time, "comparison_periods", None)
                       or getattr(_time, "window_periods", None))
         if not _named:
             message = (
-                f"I can rank {rank_intent.term} by movement, but this question "
-                f"names no period to compare over, and I have not chosen one "
+                (f"I can rank {rank_intent.term} by movement, but this question "
+                 if rank_intent.requested else
+                 "I can report what changed, but this question ")
+                + f"names no period to compare over, and I have not chosen one "
                 f"for you. Tell me the window — for example “since last month”, "
                 f"“over the last 3 months”, or two named months.")
             return chat_routing._envelope(

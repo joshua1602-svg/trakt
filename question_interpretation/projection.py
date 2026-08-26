@@ -314,9 +314,14 @@ def _subject(qi, spec) -> None:
 
     metric = getattr(spec, "metric", None)
     if metric:
-        qi.subject = SubjectClaim(state=FILLED, candidate_concept=metric,
-                                  raw_text=raw, span=span,
-                                  source="parser.metric")
+        # THE PARSER SAYS WHETHER IT CHOSE THE MEASURE OR THE READER DID. The
+        # contract carries that answer rather than re-deriving it, so nothing
+        # downstream has to look at the sentence to find out.
+        qi.subject = SubjectClaim(
+            state=FILLED, candidate_concept=metric, raw_text=raw, span=span,
+            source="parser.metric",
+            provenance=(PROV_DEFAULT if getattr(spec, "metric_defaulted", False)
+                        else PROV_EXPLICIT_USER))
         return
     if getattr(spec, "aggregation", None) in ("count", "count_distinct"):
         qi.subject = SubjectClaim(state=FILLED, candidate_concept="loan_count",

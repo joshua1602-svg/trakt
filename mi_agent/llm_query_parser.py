@@ -3520,12 +3520,22 @@ def _deterministic_parse(question: str, semantics: dict,
         # Loan/case COUNT evolutions stay a COUNT metric (not balance/sum): "loan
         # count evolution", "number of loans by reporting month", "case count by
         # week" all resolve to a governed count time-series.
+        _defaulted = False
         if _wants_count(q) or agg == "count":
             metric, agg = None, "count"
         elif metric is None:
+            # THE DEFAULT IS KEPT AND RECORDED. A time series must plot some
+            # measure, so substituting the governed balance is how this branch
+            # has always produced a chart for "show me the trend". What was
+            # missing is the record that nobody asked for it: the spec came out
+            # indistinguishable from one where the reader wrote "balance", so
+            # every consumer downstream — the contract, the route, the receipt
+            # and the answer — believed the measure had been named.
             metric, agg = _balance_metric(semantics), "sum"
+            _defaulted = True
         return (MIQuerySpec(
             intent="chart", chart_type="line", x=x, metric=metric,
+            metric_defaulted=_defaulted,
             aggregation=agg, filters=line_filters, unavailable_filters=line_unavail,
             title=title, explanation="Line chart of a metric over time.",
             output_format="chart"),
