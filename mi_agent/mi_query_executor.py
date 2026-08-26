@@ -1303,7 +1303,22 @@ def _execute_grouped(spec, work, semantics, warnings, balance_col,
     if sort_for_date and date_group:
         out = out.sort_values(group_cols, kind="mergesort").reset_index(drop=True)
     else:
-        out = out.sort_values(metric_col, ascending=False,
+        # THE DIRECTION THE QUESTION ASKED FOR, when it asked for one.
+        #
+        # This was hard-coded descending, so a grouped ranking that had already
+        # resolved `sort_direction='asc'` was served largest-first: "which region
+        # has the SMALLEST balance?" returned the same seven rows as "which
+        # region has the largest balance?", led by the largest. The loan-level
+        # ranking path and `_apply_top_n` both honour the field; only this one
+        # did not.
+        #
+        # `sort_direction` defaults to "desc", so this is a no-op for every spec
+        # that did not explicitly ask to ascend — a plain "balance by region"
+        # breakdown is presented exactly as before. `concentration_pct` below is
+        # a per-row share of the total and does not depend on row order.
+        ascending = str(getattr(spec, "sort_direction", None)
+                        or "desc").strip().lower() == "asc"
+        out = out.sort_values(metric_col, ascending=ascending,
                               kind="mergesort").reset_index(drop=True)
 
     out = _maybe_concentration(out, metric_col, work, group_cols, agg,

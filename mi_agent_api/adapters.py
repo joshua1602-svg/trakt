@@ -531,11 +531,65 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
                             spec)
         if line:
             return line
+    ranked = _ranked_lead(rows, (qr or {}).get("resolved_fields") or {}, hints, spec)
+    if ranked:
+        return ranked
     noun = "result" if chart_type in (None, "none") else chart_type
     if n is not None:
         groups = "1 group" if n == 1 else f"{n:,} groups"
         return f"Here is the {noun} for your query, covering {groups}."
     return "Here is the result for your query."
+
+
+def _ranked_lead(rows, resolved: Mapping[str, Any],
+                 hints: Optional[Dict[str, Any]],
+                 spec: Optional[Mapping[str, Any]]) -> str:
+    """"Scotland has the highest Total Balance: £28.9MM (7 groups)."
+
+    A RANKING QUESTION IS ANSWERED BY NAMING THE GROUP. "Which region has the
+    largest balance?" led with *"Here is the bar for your query, covering 7
+    groups"* — true, and not the answer to the question asked. The reader has to
+    read the chart to find out which region, and the same sentence appeared
+    whether they asked for the largest or the smallest.
+
+    Reads the FIRST row of the executed result and nothing else: the executor
+    has already ordered it in the direction the spec asked for, so this states
+    the ordering rather than deciding it. No new calculation, and the value goes
+    through the same formatter the KPI and table artifacts use.
+    """
+    if not rows or not isinstance(spec, Mapping):
+        return ""
+    if not (spec.get("sort_by") or spec.get("ranking_mode") == "grouped"):
+        return ""                       # a plain breakdown is not a ranking
+    dimension = spec.get("dimension")
+    if not dimension:
+        return ""
+    row = rows[0]
+    if dimension not in row:
+        return ""
+    label = str(row.get(dimension) or "").strip()
+    if not label:
+        return ""
+    # The ranked measure as the row spells it: "<metric>_<agg>", else the first
+    # numeric column that is not the loan count.
+    metric = spec.get("sort_by") or spec.get("metric") or ""
+    keys = [k for k in row
+            if k != dimension and isinstance(row.get(k), (int, float))
+            and not isinstance(row.get(k), bool)]
+    ranked_key = next((k for k in keys if metric and str(k).startswith(str(metric))),
+                      next((k for k in keys if not str(k).endswith(("_count", "_pct"))),
+                           None))
+    if ranked_key is None:
+        return ""
+    h = _hint(hints, ranked_key)
+    shown = _format_kpi_value(row.get(ranked_key),
+                              h.get("format") or _infer_col_format(ranked_key, resolved),
+                              h.get("scale"))
+    superlative = ("lowest" if str(spec.get("sort_direction") or "desc").lower() == "asc"
+                   else "highest")
+    measure = _kpi_label(ranked_key, resolved)
+    groups = "1 group" if len(rows) == 1 else f"{len(rows):,} groups"
+    return f"{label} has the {superlative} {measure}: {shown} ({groups})."
 
 
 def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
