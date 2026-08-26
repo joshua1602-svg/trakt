@@ -124,10 +124,65 @@ tests assert that `build_rank_answer`, `_rank_rows` and `_render` do not take a
 ranking outcome, that the two ranked renderers name neither the question nor the
 result, and that every value in `rankedMovement` is read off `receipt`.
 
-## 5. Preservation
+## 5. Blast — the whole corpus, and what it does not cover
 
-Reported in §7 below once the module-by-module before/after run completes.
-Canary and audit, already measured on this tree:
+All **882** Stage 1 + Stage 2 corpus questions executed through the live
+`/mi/query` path in a worktree at `1c49e61` and in the working tree, against one
+shared fixture, comparing route, `ok`, answer, warnings and every artifact
+(title, description, rows) field by field:
+
+```
+QUESTIONS SWEPT   882      EXCEPTIONS 0
+QUESTIONS CHANGED 0        ROUTES CHANGED 0
+KEYS REMOVED      0        KEYS ADDED 0
+ok=True  before/after  381 / 381
+```
+
+**This denominator does not exercise the changed path, and saying so is the
+point.** `ranking applied` is **0 of 882 in both trees** — the corpus carries
+ranking language on 97 questions but none of them reaches a delivered ranked
+movement, which the C7 ranking census already established. The sweep is
+therefore evidence of *no collateral movement across the estate's live
+surface*, not evidence that ranked movement still works.
+
+The changed path is exercised by, and only by:
+
+* the targeted live trace — **4 delivered ranked-movement responses** (absolute,
+  percent-basis, top-N, and the `region` alternate-term binding), 0 values
+  changed, additive key only;
+* the executed compound canary — **6 delivered ranked cases** (F9.c, F11.a–e),
+  grades unmoved;
+* `tests/test_live_movement_receipt_evidence.py` — 20 tests over a delivered
+  case, including the six mutation controls.
+
+## 6. Preservation
+
+19 modules run **module by module in both trees**, serially, working tree
+against a worktree at `1c49e61`:
+
+```
+failing test names:  before 9   after 9
+INTRODUCED:      (none)
+FIXED/REMOVED:   (none)
+summary lines:   identical, module by module
+```
+
+The 9 pre-existing failures (`test_conversion2_period_movement` 5,
+`test_p0_execution_receipt` 3, `test_mi_predicate_extraction` 1) stay in the
+denominator. `tests/test_live_movement_receipt_evidence.py` — 20 passed —
+exists only in the working tree and is not in the baseline denominator.
+
+### A method caveat, found the hard way
+
+The previous commit's whole-repository run reported one test as "fixed", and it
+was not. `test_registry_governance.py::test_checked_in_registry_matches_generator`
+compares the **absolute path** recorded in the checked-in registry against the
+path of the tree regenerating it, so it fails in any worktree and passes only at
+`/home/user/trakt`. Reproduced serially in both trees. Any worktree-baseline
+diff needs its survivors checked rather than trusted; only this one test was
+affected, but the class of error is not specific to it.
+
+Canary and audit, measured on this tree:
 
 * executed compound canary — **0 invariant breaches**, nothing `DROPPED`;
   21 UNEVIDENCED elements across 9 cases and 5 unexercised families, all
@@ -137,3 +192,23 @@ Canary and audit, already measured on this tree:
 * `c7_independent_audit` — **10 of 10**.
 * `c7_target_plan_proof` — 10 cases still build and execute; the seven
   registered RM3 mutation controls still discriminate 7/7 and restore.
+
+
+## 7. Verdict
+
+**LIVE RANKED-MOVEMENT EVIDENCE PATH CLOSED.**
+
+Every one of the six facts is read from the receipt, and the renderers have no
+second source to read because `_render` no longer receives one. The remaining
+honest gaps, stated rather than closed:
+
+* the compound canary reads `metadata.rankedMovement` only. It was deliberately
+  not taught the new channel, so its 21 UNEVIDENCED elements are unchanged;
+* `period_change` selects a population by scope and not by row predicate, so the
+  receipt's predicate tuple is empty **as a published fact**. The C7 filter
+  composition fixed in `1c49e61` reaches the contract, not this route;
+* a hazard found while debugging and NOT changed here: when the receipt builder
+  raised, `chat_routing` logged `route period_change_analysis failed` at WARNING
+  and silently fell through to `temporal_compare`, which answered with a
+  plausible refusal. A faulting route is answered by a different route rather
+  than by an error. Out of scope for this task; worth its own look.
