@@ -940,6 +940,42 @@ def _is_controlled_non_delivery(envelope: Dict[str, Any]) -> bool:
     return bool(meta.get("controlledUnsupported")) and not meta.get("executionFailure")
 
 
+def _guard_unknown_category(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """A category the question NAMED and no governed field carries.
+
+    The point-in-time workflow has refused this since it was written. A ROUTED
+    answer did not: the comparison recogniser collected the unresolved note and
+    published nothing, so "which region added the most balance last month for
+    Atlantis loans?" returned the UNFILTERED whole-book ranking with ok=true and
+    the dropped qualifier unmentioned. Which route happens to claim a question
+    is not a fact about whether its qualifier resolved — the same reasoning
+    `_guard_unresolved_scope` records for portfolio scope.
+
+    THE SENTENCE IS NOT WRITTEN HERE. `llm_query_parser.unknown_category_refusal`
+    owns it and the workflow calls the same function, so one obstacle cannot be
+    described two ways.
+    """
+    if not isinstance(envelope, dict) or not envelope.get("ok"):
+        return envelope
+    from mi_agent import llm_query_parser as _parser
+
+    notes = ((envelope.get("spec") or {}).get("unavailable_filters")) or []
+    message = _parser.unknown_category_refusal(notes)
+    if not message:
+        return envelope
+    envelope["ok"] = False
+    envelope["error"] = message
+    envelope["answer"] = message
+    envelope["artifacts"] = []
+    envelope["controlledRefusal"] = True
+    envelope.setdefault("warnings", []).append(message)
+    meta = envelope.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        meta["controlledRefusal"] = True
+        meta["controlledUnsupported"] = True
+    return envelope
+
+
 def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
                             semantics: Dict[str, Any], frame) -> Dict[str, Any]:
     """PHASE 1E. A portfolio the question NAMED and the registry does not hold.
@@ -1194,6 +1230,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # PHASE 1E SITE 1 OF 2 — an unresolved portfolio scope, on the same terms.
         routed = _guard_unresolved_scope(routed, question=req.question,
                                          semantics=semantics, frame=df)
+        # SITE 1 OF 2 — a named category this book does not carry.
+        routed = _guard_unknown_category(routed)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  view=view, run_required=_route_requires_run(route))
 
@@ -1264,6 +1302,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     result = _guard_temporal_honouring(result, question=req.question,
                                        semantics=semantics, frame=df)
     # PHASE 1E SITE 2 OF 2 — an unresolved portfolio scope, on the same terms.
+    result = _guard_unknown_category(result)
     result = _guard_unresolved_scope(result, question=req.question,
                                      semantics=semantics, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.

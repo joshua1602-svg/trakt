@@ -409,13 +409,36 @@ def _dimension_decision(entry: SemanticEntry, *, declared_asset: Optional[str],
     if multi_portfolio_scope and entry.portfolio_comparability != COMPARABLE:
         # The registry's comparability CODE stays out of the sentence: it is an
         # internal flag, and a reader told "requires_scale_alignment" learns
-        # nothing they can act on. The reason itself is unchanged.
+        # nothing they can act on.
+        #
+        # WHAT THE LIMITATION IS ABOUT. This said "combining them would compare
+        # unlike categories", which reads as "these categories cannot be added
+        # up" — and that is not what the platform does. Measured on this book:
+        # "which product type has the largest share of the book?" and "what
+        # share of the book is drawdown?" both aggregate this very dimension
+        # across both portfolios and answer. `portfolio_comparability` is
+        # declared in `metadata.taxonomy` and read by exactly two consumers,
+        # both cross-portfolio: this workflow and `portfolio_risk_comparison`,
+        # whose own wording is "no COMPARISON is made".
+        #
+        # So the limit is THIS METHODOLOGY's, not arithmetic's: a concentration
+        # figure is published as a governed exposure share per category, and a
+        # book-level one over an originator-specific vocabulary would present
+        # unaligned categories as a single exposure. Ordinary reporting by the
+        # same dimension is unaffected, and the sentence now says so instead of
+        # leaving the reader with a false general statement and no next step.
         return DimensionDecision(entry, False,
-                                 "each originator spells this dimension's "
-                                 "categories in its own vocabulary, and this "
-                                 "scope spans several portfolios — combining "
-                                 "them would compare unlike categories, and no "
-                                 "mapping between them is invented")
+                                 "the concentration methodology publishes each "
+                                 "category as a governed exposure share, and "
+                                 "the registry declares this dimension's "
+                                 "categories originator-specific — so a "
+                                 "book-level concentration over it would "
+                                 "present unaligned categories as one exposure, "
+                                 "and no mapping between them is invented. "
+                                 "Ordinary reporting by this dimension is "
+                                 "unaffected: ask for balance or loan count by "
+                                 "it, or for its concentration within a single "
+                                 "portfolio")
     if entry.source_field not in columns:
         return DimensionDecision(entry, False, "field not present on the tape")
     return DimensionDecision(entry, True, "governed concentration dimension")
@@ -765,6 +788,28 @@ def run_concentration_analysis(
     dimension_results: List[Dict[str, Any]] = []
     evidence: List[Dict[str, Any]] = []
     selected = [d for d in decisions if d.selected]
+    # A GOVERNED DIMENSION THIS BOOK CARRIES AND THIS METHODOLOGY WILL NOT
+    # MEASURE IS SAID SO, in every mode.
+    #
+    # `requested_dimension` mode already recorded it. Overview and concept mode
+    # did not, so "show broker concentration" — which loses its axis to the
+    # qualifier rule upstream and arrives here as an overview — refused with
+    # nothing but "not broken down by broker" and the reader never learnt that
+    # the registry declares broker categories originator-specific. Four
+    # governed concentration dimensions are excluded this way on this registry,
+    # so this is a bounded disclosure, not a running commentary.
+    for decision in decisions:
+        if decision.selected:
+            continue
+        entry = decision.entry
+        if not (multi_portfolio and entry.portfolio_comparability != COMPARABLE):
+            continue
+        if entry.source_field not in columns:
+            continue
+        note = (f"'{entry.source_field}' cannot be analysed here: "
+                f"{decision.reason}")
+        if note not in limitations:
+            limitations.append(note)
     for decision in selected:
         result = _dimension_result(decision.entry, frame, basis=basis,
                                    exposure_field=exposure_field,

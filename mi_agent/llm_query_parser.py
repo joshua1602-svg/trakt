@@ -1457,6 +1457,14 @@ def _compare_recognizer(q: str, title: str, semantics: dict,
         execution_mode="temporal", temporal_mode="compare",
         compare_periods=periods[:2], output_format="table", title=title,
         filters=filters,
+        # THE UNRESOLVED NOTES TRAVEL WITH THE SPEC. They were collected three
+        # lines above and then dropped on the floor, so a comparison naming a
+        # category the book does not carry — "which region added the most
+        # balance last month for Atlantis loans?" — lost the note and was
+        # answered with the UNFILTERED whole-book ranking. Every other
+        # `_parse_filters` caller publishes them; this one collected them and
+        # published nothing.
+        unavailable_filters=list(unresolved_filters),
         explanation=("Governed cross-period comparison (period A vs period B) over "
                      "governed evolution data: value A, value B, absolute and % "
                      "delta, source periods and a controlled insufficient-data "
@@ -2126,8 +2134,15 @@ def _grouped_metric(metric_part: str, q: str, semantics: dict) -> Tuple[Optional
 #: may END in it. A broker called "London Bridge Loans" produced "…London Bridge
 #: Loans loans…", where only the words BEFORE the noun were ever offered as a
 #: candidate, so the value could not resolve and the narrowing vanished.
+#: Digits are admitted INSIDE the qualifier span. "how many tier 1 loans do we
+#: have?" is a product-tier question whose qualifier ends in a numeral, and a
+#: letters-only span could not match it at all — so the phrase reached no
+#: reader, bound to nothing and was answered over the whole book. Measured over
+#: the 150 questions of the three standing banks with the production gate
+#: applied: what BINDS is unchanged (0 differences) and the residue rule fires
+#: on the same two questions, both of which already refuse.
 _ATTRIBUTIVE_CATEGORICAL_RE = re.compile(
-    r"((?:[a-z][a-z_]*\s+){1,4}?)(loans?|cases?|mortgages?|accounts?|book)\b",
+    r"((?:[a-z0-9][a-z0-9_]*\s+){1,4}?)(loans?|cases?|mortgages?|accounts?|book)\b",
     re.I)
 
 _CATEGORICAL_FILTER_RE = re.compile(
@@ -2321,6 +2336,83 @@ def _copular_categorical(masked: str, available_values
     return None
 
 
+#: Grouping markers. A token in the attributive slot that is one of these is
+#: not a qualifier at all — "show balance by loan type" is `by <dimension>`, and
+#: reading "by" as an unrecognised qualifier is how the first attempt at the
+#: rule below refused a question that works.
+_GROUPING_MARKERS = frozenset({"by", "per", "across", "between", "split",
+                               "versus", "vs", "against"})
+
+
+def _unclaimed_attributive_slot(masked: str, semantics: dict, available_columns,
+                                available_values) -> Optional[str]:
+    """The attributive qualifier that NO governed owner claims, if there is one.
+
+    "how many platinum loans do we have?" narrows to something. No governed
+    field claims "platinum", so the narrowing vanished and 640 loans — the whole
+    book — came back as the answer to a question about a subset. The
+    PREPOSITIONAL form of the same question ("what is the balance for platinum
+    loans?") already records `unknown category: 'platinum'` and refuses; the two
+    shapes of one question must not disagree.
+
+    NOTHING HERE KNOWS WHAT ANY WORD MEANS, and no vocabulary is added. The
+    candidate is the single token standing in the attributive slot — immediately
+    before the head noun — and it is reported only if EVERY existing owner
+    declines it:
+
+      * the book's own value catalogue (a governed value binds upstream, and
+        this function is only reached when it did not);
+      * the dimension owner (`_explicit_dimensions`), so "offer stage cases"
+        keeps its stage;
+      * the measure owner (`_detect_metric`), so "balance" is never residue;
+      * the scope owner (`portfolio_lens`), so "direct loans" stays the Direct
+        book;
+      * request framing, aggregation and chart words, and grouping markers.
+
+    ONE TOKEN, not the whole span. The first attempt reported every word between
+    the framing and the head noun, which produced residues like "balance offer
+    stage" and "balance by" and refused three questions that work. Measured over
+    the 150 questions of the three standing banks, this rule fires on two — both
+    already refusing, for the same reason, by another owner.
+    """
+    for match in _ATTRIBUTIVE_CATEGORICAL_RE.finditer(masked or ""):
+        words = match.group(1).split()
+        if not words:
+            continue
+        # A NUMERAL IS NOT THE QUALIFIER, but it does not end the search: in
+        # "how many tier 1 loans do we have?" the qualifier is the word the
+        # numeral qualifies. Step back over trailing numerals rather than
+        # giving up on the slot, or the one shape that reads as a product tier
+        # stays fail-open.
+        cursor = list(words)
+        while cursor and cursor[-1].strip().lower().isdigit():
+            cursor.pop()
+        if not cursor:
+            continue
+        token = cursor[-1].strip().lower()
+        if not token:
+            continue
+        if token in _GROUPING_MARKERS:
+            continue
+        if token in _METRIC_SIDE_STOPWORDS or token in _ANALYTICAL_FRAMING_WORDS:
+            continue
+        if _categorical_value_field(token, available_values):
+            continue
+        if _explicit_dimensions(token, semantics,
+                                available_columns=available_columns)[0]:
+            continue
+        if _detect_metric(token, semantics)[2]:
+            continue
+        try:
+            from .portfolio_lens import mentions_portfolio
+            if mentions_portfolio(token):
+                continue
+        except Exception:  # noqa: BLE001 - no owner, no claim
+            pass
+        return token
+    return None
+
+
 def _attributive_categorical(masked: str, available_values
                              ) -> Optional[Tuple[str, str]]:
     """THE ATTRIBUTIVE FORM — "<value> loans" with no preposition in front.
@@ -2386,6 +2478,28 @@ def _attributive_categorical(masked: str, available_values
 UNKNOWN_CATEGORY_PREFIX = "unknown category: "
 
 
+def unknown_category_names(notes) -> List[str]:
+    """The category names in a spec's ``unavailable_filters``, unprefixed."""
+    return [str(n)[len(UNKNOWN_CATEGORY_PREFIX):] for n in (notes or ())
+            if str(n).startswith(UNKNOWN_CATEGORY_PREFIX)]
+
+
+def unknown_category_refusal(notes) -> Optional[str]:
+    """THE sentence for "the reader named a category this book does not carry".
+
+    One author. The point-in-time workflow and the routed guard both call this,
+    so a reader who asks the same question two ways cannot be told two different
+    things about the same obstacle — which is what happened while the routed
+    path said nothing at all and answered over the whole book.
+    """
+    named = unknown_category_names(notes)
+    if not named:
+        return None
+    return (f"No loans in this book match that filter ({', '.join(named)}), so "
+            "there is nothing to calculate. I have not returned a whole-book "
+            "figure in its place.")
+
+
 def _names_a_book(text: str) -> bool:
     """Delegation: `portfolio_lens` owns what counts as naming a book."""
     try:
@@ -2429,7 +2543,23 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         attributive = _attributive_categorical(masked, available_values)
         if attributive is not None:
             return attributive
-        return _copular_categorical(masked, available_values)
+        copular = _copular_categorical(masked, available_values)
+        if copular is not None:
+            return copular
+        # RECORDED, NOT DROPPED — the attributive form of the rule the
+        # prepositional branch below already applies. The `_names_a_book`
+        # deference is the same one, for the same reason: "the Highgate
+        # Mortgages book" is an unheld PORTFOLIO and `portfolio_lens` has a
+        # better refusal for it, naming the book and saying it is not in the
+        # governed registry.
+        if available_values and unresolved is not None and not _names_a_book(clause):
+            token = _unclaimed_attributive_slot(masked, semantics,
+                                                available_columns, available_values)
+            if token:
+                note = f"{UNKNOWN_CATEGORY_PREFIX}'{token}'"
+                if note not in unresolved:
+                    unresolved.append(note)
+        return None
     value = m.group(1).strip()
     # "for loans in Wales" captures "loans in wales" — peel leading filler and
     # any nested preposition so the VALUE is the place, not the phrase.

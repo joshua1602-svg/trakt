@@ -647,8 +647,20 @@ def run_mi_agent_query(
             "measure was used."]
         return result
 
+    # AN UNRESOLVED CATEGORY IS NOT AN UNMAPPED QUESTION. Where the reader
+    # named a qualifier no governed field claims, the question mapped perfectly
+    # well — a count of a subset — and the only thing missing is the subset.
+    # Told through this guard it reads "I couldn't map this question to a
+    # governed analytic"; through the unknown-category refusal below it reads
+    # "No loans in this book match that filter ('platinum')", which is the
+    # actual obstacle and the same sentence the PREPOSITIONAL phrasing of the
+    # same question already gets.
+    _unknown_category = any(
+        str(n).startswith(_parser_mod.UNKNOWN_CATEGORY_PREFIX)
+        for n in (getattr(spec, "unavailable_filters", None) or []))
     if (result["parser_mode"] == "deterministic"
             and parse_meta.get("note") == "unmapped"
+            and not _unknown_category
             and not _portfolio_lens.mentions_portfolio(question)):
         # Sprint 2.5E wired the capability explanation only into the
         # `unresolved_metric` branch. Tracing the real path in the close-out
@@ -786,12 +798,9 @@ def run_mi_agent_query(
         # Atlantis" reporting the platform average. This is the same refusal a
         # narrowing that selected no rows gets, for the same reason: there is
         # nothing to calculate and no broader figure is substituted.
-        named = ", ".join(
-            n[len(_parser_mod.UNKNOWN_CATEGORY_PREFIX):] for n in unknown_categories)
-        message = (
-            f"No loans in this book match that filter ({named}), so there is "
-            "nothing to calculate. I have not returned a whole-book figure in "
-            "its place.")
+        # THE SENTENCE COMES FROM ITS OWNER, so the routed guard and this path
+        # cannot drift into describing one obstacle two ways.
+        message = _parser_mod.unknown_category_refusal(unknown_categories)
         result["error"] = message
         result["answer"] = message
         result["controlled_refusal"] = True
@@ -799,7 +808,9 @@ def run_mi_agent_query(
         result["spec_obj"] = spec
         result["spec"] = spec.to_dict()
         result["validation"] = {"ok": False,
-                                "errors": [f"unknown_category: {named}"],
+                                "errors": ["unknown_category: "
+                       + ", ".join(_parser_mod.unknown_category_names(
+                           unknown_categories))],
                                 "warnings": [], "resolved_fields": {}}
         result["warnings"] = _dedupe(warnings + [message])
         return result
