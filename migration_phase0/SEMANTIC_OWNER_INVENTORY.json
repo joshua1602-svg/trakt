@@ -507,25 +507,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 302,
-    "callee": "recognise",
-    "bucket": "B_SEMANTIC",
-    "concept": "route shape"
-  },
-  {
-    "route": "period_change_analysis",
-    "kind": "generic",
-    "handler": "route_period_change",
-    "line": 372,
-    "callee": "requested_span",
-    "bucket": "B_SEMANTIC",
-    "concept": "time window"
-  },
-  {
-    "route": "period_change_analysis",
-    "kind": "generic",
-    "handler": "route_period_change",
-    "line": 398,
+    "line": 475,
     "callee": "PeriodChangeRequest",
     "bucket": "A_EXECUTION",
     "concept": "route delegation; audited"
@@ -534,7 +516,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 437,
+    "line": 514,
     "callee": "_render",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -543,16 +525,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 307,
-    "callee": "_resolve_lens",
-    "bucket": "B_SEMANTIC",
-    "concept": "source scope + caller precedence"
-  },
-  {
-    "route": "period_change_analysis",
-    "kind": "generic",
-    "handler": "route_period_change",
-    "line": 325,
+    "line": 396,
     "callee": "_rank_refusal_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -561,7 +534,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 429,
+    "line": 506,
     "callee": "_rank_refusal_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -570,7 +543,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 348,
+    "line": 419,
     "callee": "_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -579,7 +552,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 423,
+    "line": 500,
     "callee": "_failure_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -588,7 +561,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 393,
+    "line": 470,
     "callee": "_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
@@ -597,7 +570,7 @@
     "route": "period_change_analysis",
     "kind": "generic",
     "handler": "route_period_change",
-    "line": 414,
+    "line": 491,
     "callee": "_rank_refusal_envelope",
     "bucket": "C_PRESENTATION",
     "concept": "wording shown to the reader"
