@@ -183,56 +183,31 @@ _RANK_DIRECTION_TO_CONTRACT = {
 
 
 def _ordering_values(question, spec, dim_terms) -> dict:
-    """The four ordering facts, from the EXISTING owner. No new reading.
+    """The four ordering facts, from the SINGLE OWNER. No new reading.
 
-    `rank_request.detect_rank_request` already resolves direction, basis and
-    limit, and `period_change.recognition` already decides whether a question is
-    about a change. Both are called here so their answers are CARRIED rather
-    than re-derived: this function invents nothing, and if either owner changes
-    its mind the contract changes with it.
+    `lexical.ordering_request` owns direction, basis and limit for the whole
+    estate; `lexical.is_movement_question` owns level versus movement. This
+    carries their answers and decides nothing.
 
-    `ordering_of` is the only fact neither owner states outright, and it is
-    derived from a fact they do state — whether the question is about a period
-    change. It is left None when that cannot be told, because a consumer must
-    distinguish "ranks a level" from "does not say".
+    It no longer needs a resolved dimension term. The reader it replaced
+    (`rank_request.detect_rank_request`) returned None without one, so a
+    question that named an ordering but whose dimension did not resolve carried
+    NO ordering at all — 15 of 97 ranking questions could not be planned for
+    that reason, and losing two facts to explain a third is not a contract.
     """
-    from mi_agent.period_change import rank_request as _rank
     from question_interpretation import lexical as _lex
 
     out = {}
-    # THE TERM THE RESOLVER ALREADY FOUND. `detect_rank_request` returns None
-    # without one — ranking with nothing to rank is not a ranking — so the
-    # contract must hand it the same term the dimension claim will carry, not a
-    # placeholder. Passing "" here silently produced four None fields on every
-    # question, which looked exactly like "the question named no ordering".
-    term = next((t for _k, t, _a in (dim_terms or ()) if t), None)
-    try:
-        request = _rank.detect_rank_request(question, term)
-    except Exception:  # noqa: BLE001 - the contract must not fail on a reader
-        request = None
-    if request is not None:
-        direction = _RANK_DIRECTION_TO_CONTRACT.get(
-            getattr(request, "direction", None))
-        if direction in ORDER_DIRECTIONS:
-            out["ordering_direction"] = direction
-        out["ordering_basis"] = _RANK_BASIS_TO_CONTRACT.get(
-            getattr(request, "basis", None))
-        limit = getattr(request, "top_n", None)
-        if isinstance(limit, int) and limit > 0:
-            out["ordering_limit"] = limit
-    # LEVEL or MOVEMENT, from the SINGLE OWNER.
-    #
-    # This used to read the parser's `compare_periods` / `temporal_mode` /
-    # `bridge_query`, which meant the contract could only call a ranking a
-    # movement when the compare recogniser happened to fire. "Which region grew
-    # the most balance since last month?" is a ranked movement to any reader and
-    # the contract said nothing, because the recogniser's trigger vocabulary did
-    # not cover "grew ... since". `lexical.temporal_aspect` now owns the
-    # distinction for the whole estate and this reads its verdict.
-    #
-    # The parser's own facts are kept as a SECOND path to MOVEMENT rather than
-    # dropped: a question the parser has already resolved into a period pair is
-    # a movement whatever its wording, and losing that would narrow the claim.
+    order = _lex.ordering_request(question)
+    if order.requested:
+        if order.direction in ORDER_DIRECTIONS:
+            out["ordering_direction"] = order.direction
+        out["ordering_basis"] = order.basis
+        if isinstance(order.limit, int) and order.limit > 0:
+            out["ordering_limit"] = order.limit
+    # LEVEL or MOVEMENT, from the same owner. The parser's own facts are kept
+    # as a SECOND path to MOVEMENT: a question the parser has already resolved
+    # into a period pair is a movement whatever its wording.
     out["ordering_of"] = (
         ORDER_OF_MOVEMENT
         if (_lex.is_movement_question(question)

@@ -294,7 +294,8 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                         source_lens: Any = None,
                         semantics_context: Optional[Dict[str, Any]] = None,
                         view: str = "funded",
-                        lens: Any = None) -> Optional[Dict[str, Any]]:
+                        lens: Any = None,
+                        interpretation: Any = None) -> Optional[Dict[str, Any]]:
     """The governed period-change answer, or ``None`` to defer to the next route."""
     from . import chat_routing
 
@@ -319,17 +320,46 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # decides what the analysis must cover: asking "which region grew the most?"
     # and receiving an analysis that never looked at geography cannot produce a
     # ranked answer, and re-running afterwards would compute the book twice.
-    columns = set(snapshots[-1].frame.columns) if snapshots else None
-    rank_intent = resolve_rank_intent(question, columns=columns)
+    rank_intent = resolve_rank_intent(interpretation)
     if rank_intent.refusal is not None:
         return _rank_refusal_envelope(question, spec_dict, rank_intent)
+
+    # NO IMPLICIT COMPARISON PERIOD.
+    #
+    # A ranked MOVEMENT needs two dates. The recogniser will happily supply
+    # "latest versus previous" when the question names none, and while that
+    # default was masked by a false dimension refusal it never surfaced; with
+    # the refusal fixed it would have started answering "which region grew the
+    # most?" over a window the reader never asked for.
+    #
+    # The governed ruling is that a missing element is CLARIFIED, not invented.
+    # The contract says whether a period was named — `comparison_periods` for an
+    # explicit pair, `window_periods` for a span — and neither is guessed here.
+    if rank_intent.requested and interpretation is not None:
+        _time = getattr(interpretation, "time", None)
+        _named = bool(getattr(_time, "comparison_periods", None)
+                      or getattr(_time, "window_periods", None))
+        if not _named:
+            message = (
+                f"I can rank {rank_intent.term} by movement, but this question "
+                f"names no period to compare over, and I have not chosen one "
+                f"for you. Tell me the window — for example “since last month”, "
+                f"“over the last 3 months”, or two named months.")
+            return chat_routing._envelope(
+                ok=False, question=question, spec=spec_dict, artifacts=[],
+                answer=message, error=message, route="period_change",
+                warnings=[message])
 
     mode, requested_fields = intent.mode, intent.requested_fields
     if rank_intent.requested:
         # Requested-metric mode is the governed way to say "analyse THIS field".
         # The ranked dimension is exactly that: a field the reader named.
         mode = MODE_REQUESTED_METRIC
-        requested_fields = (rank_intent.field,)
+        # EVERY governed field the term could bind to, not the primary alone.
+        # Passing only the primary is what made a book carrying the ALTERNATE
+        # answer "region is not a governed period-change dimension for this
+        # book" — a false statement, and canary defect D1.
+        requested_fields = (rank_intent.field,) + tuple(rank_intent.alt_fields)
 
     # HONOUR THE STATED PERIOD, OR CLARIFY. A question naming "this year" that
     # is answered over the latest month has had a declared element replaced.
@@ -386,8 +416,10 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                 refusal_reason="dimension_not_governed",
                 refusal=(f"I could not rank movement by {rank_intent.term}: it "
                          f"is not a governed period-change dimension for this "
-                         f"book. I have not ranked a different dimension "
-                         f"instead.")))
+                         f"book — none of "
+                         f"{', '.join((rank_intent.field,) + tuple(rank_intent.alt_fields))}"
+                         f" is eligible here. I have not ranked a different "
+                         f"dimension instead.")))
         return _failure_envelope(question, spec_dict, failure)
 
     # A ranked question is answered by RANKING the governed period-change
@@ -414,29 +446,20 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
 # reader who asked "which region grew the most" and received a portfolio summary
 # has been answered a different question.
 
-#: Nouns that are the narrative itself rather than a dimension to rank.
-#: "What were the largest movements since last month?" already has a governed
-#: answer (the top movements per unit, across metrics); a question that names no
-#: dimension must keep it rather than be refused for lacking one.
-_NARRATIVE_RANK_SUBJECTS = frozenset({
-    "movement", "movements", "change", "changes", "driver", "drivers",
-    "shift", "shifts", "metric", "metrics", "mover", "movers", "factor",
-    "factors", "contributor", "contributors", "component", "components",
-    "increase", "increases", "decrease", "decreases", "growth", "decline",
-    "declines", "rise", "rises", "fall", "falls", "gain", "gains", "loss",
-    "losses",
-})
-
-#: The interrogative that introduces the thing to rank.
-_RANK_SUBJECT_LEAD_RE = re.compile(r"\b(?:which|what|rank|order)\b", re.I)
-#: Words between the interrogative and the noun: auxiliaries, articles, and the
-#: Top-N wording itself.
-_RANK_SUBJECT_SKIP = frozenset({
-    "were", "was", "are", "is", "has", "have", "had", "did", "do", "does",
-    "the", "a", "an", "me", "us", "of", "my", "our", "by",
-    "top", "first", "best", "three", "four", "five", "ten",
-    "largest", "biggest", "greatest", "smallest", "lowest", "highest", "most",
-})
+# THE ROUTE-LOCAL RANKING VOCABULARY IS DELETED.
+#
+# `_NARRATIVE_RANK_SUBJECTS` (36 nouns), `_RANK_SUBJECT_LEAD_RE` and
+# `_RANK_SUBJECT_SKIP` (30 words) lived here, and `_rank_subject` read the raw
+# question against them. `question_interpretation.lexical` now owns direction,
+# basis and limit for the whole estate and the contract carries its answers, so
+# this route reads a claim instead of a sentence.
+#
+# The narrative test went with them. It asked whether the noun after "which"
+# was one of 36 words; the contract answers the same question structurally —
+# a ranking with no dimension claim is the governed narrative, and one with a
+# dimension claim is a ranking of that dimension. That reading does not depend
+# on which interrogative opened the sentence, which is why
+# "show me the drivers that grew the most" used to miss the guard entirely.
 
 
 @dataclass(frozen=True)
@@ -470,24 +493,6 @@ class RankingOutcome:
         return bool(self.movement is not None and getattr(self.movement, "ok", False))
 
 
-def _rank_subject(question: str) -> Optional[str]:
-    """The noun the question asks to rank — "which five SEGMENTS grew the most".
-
-    Used for two decisions only: whether the question is about the governed
-    narrative rather than a dimension, and what to quote back when no governed
-    dimension resolves. It never selects the dimension — that is
-    ``requested_dimension_terms``' job, and having one resolver is the point.
-    """
-    lead = _RANK_SUBJECT_LEAD_RE.search(question or "")
-    if not lead:
-        return None
-    for word in re.findall(r"[a-z][a-z-]*", question[lead.end():].lower()):
-        if word in _RANK_SUBJECT_SKIP:
-            continue
-        return word
-    return None
-
-
 def _distribution_for(result: PeriodChangeResult, keys: Sequence[str]) -> Any:
     """The governed distribution whose field is one of ``keys``, or None."""
     wanted = [str(k) for k in keys if k]
@@ -498,50 +503,65 @@ def _distribution_for(result: PeriodChangeResult, keys: Sequence[str]) -> Any:
     return None
 
 
-def resolve_rank_intent(question: str, *, columns: Optional[Any] = None
-                        ) -> RankingOutcome:
-    """What the question asks to rank, resolved BEFORE the analysis runs.
+def resolve_rank_intent(interpretation: Any) -> RankingOutcome:
+    """What the question asks to rank, READ FROM THE CONTRACT.
 
-    Dimension resolution reuses ``execution_receipt.requested_dimension_terms``
-    — the SAME resolver the P0 guard uses to decide what the question asked for.
-    Sharing it is deliberate: if the route and the guard resolved "region"
-    differently, the guard would refuse every ranked answer, and a second
-    dimension vocabulary would be a second thing to keep in step.
+    The question is no longer a parameter, and that absence is the reduction's
+    real result: there is nothing left for this route to read from a sentence.
+    Direction, basis and limit arrive on `operation.ordering_*`; the dimension
+    and every governed field it could bind to arrive on the dimension claim.
 
-    Returns a ``RankingOutcome`` in one of three states: not requested, a
-    refusal, or a resolved ``field`` / ``term`` / ``request`` to rank on.
+    THE ALTERNATES ARE CARRIED THROUGH. The old reader resolved a primary plus
+    alternates and this route passed only the primary into the analysis, so a
+    book carrying the alternate was told it carried neither — canary defect D1.
+    `candidate_concepts` is the primary followed by every alternate, and all of
+    them go to the workflow.
     """
-    from mi_agent import execution_receipt as receipt_mod
-    from mi_agent.mi_query_validator import load_mi_semantics
+    op = getattr(interpretation, "operation", None)
+    if op is None or op.type != "ranking":
+        return RankingOutcome(requested=False)
+    if not (op.ordering_direction and op.ordering_basis):
+        # A ranking the contract cannot describe is not ranked here on a guess.
+        return RankingOutcome(requested=False)
+
+    dims = [d for d in (getattr(interpretation, "dimensions", None) or [])
+            if d.candidate_concept]
+    if not dims:
+        # No dimension claim: the governed narrative, which is the answer this
+        # route already gives for "what were the largest movements".
+        return RankingOutcome(requested=False)
+
+    claim = dims[0]
+    concepts = list(claim.candidate_concepts)
+    request = _rank_request_from_contract(op, claim.raw_text or concepts[0])
+    return RankingOutcome(requested=True, request=request, field=concepts[0],
+                          term=(claim.raw_text or concepts[0]),
+                          alt_fields=tuple(concepts[1:]))
+
+
+def _rank_request_from_contract(op: Any, term: str) -> Any:
+    """The engine's `RankRequest`, built from contract values only.
+
+    A mapping, not a decision: the contract's basis vocabulary is the governed
+    one and the engine's is its own, and translating between them in one place
+    is what stops a second basis vocabulary appearing here.
+    """
     from mi_agent.period_change import rank_request as rank_mod
-    from .data_source import semantics_path
+    from mi_agent.period_change import ranking as rk
+    from question_interpretation.schema import (
+        ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT, ORDER_BASIS_SHARE,
+        ORDER_DECREASE, ORDER_EITHER)
 
-    if not rank_mod.has_rank_language(question):
-        return RankingOutcome(requested=False)
-
-    subject = _rank_subject(question)
-    if subject and subject in _NARRATIVE_RANK_SUBJECTS:
-        # "the largest movements" is the governed narrative, not a ranking of a
-        # dimension. Keep the answer this route already gives.
-        return RankingOutcome(requested=False)
-
-    semantics = load_mi_semantics(semantics_path())
-    terms = receipt_mod.requested_dimension_terms(
-        question, semantics, available_columns=columns)
-    if not terms:
-        return RankingOutcome(
-            requested=True, refusal_reason="dimension_not_resolved",
-            refusal=("I can rank movement between two reporting dates, but I "
-                     "could not identify a governed dimension to rank"
-                     + (f" from “{subject}”" if subject else "")
-                     + ". I have not ranked something else instead."))
-
-    key, term, alts = terms[0]
-    request = rank_mod.detect_rank_request(question, term)
-    if request is None:
-        return RankingOutcome(requested=False)
-    return RankingOutcome(requested=True, request=request, field=key, term=term,
-                          alt_fields=tuple(alts or ()))
+    basis = {ORDER_BASIS_SHARE: rk.BASIS_BALANCE_SHARE,
+             ORDER_BASIS_PERCENT: rk.BASIS_BALANCE_PERCENT,
+             ORDER_BASIS_COUNT: rk.BASIS_COUNT_ABSOLUTE}.get(
+                 op.ordering_basis, rk.BASIS_BALANCE_ABSOLUTE)
+    direction = {ORDER_DECREASE: rk.DIRECTION_DECREASE,
+                 ORDER_EITHER: rk.DIRECTION_ANY}.get(
+                     op.ordering_direction, rk.DIRECTION_INCREASE)
+    return rank_mod.RankRequest(basis=basis, direction=direction,
+                                top_n=op.ordering_limit,
+                                dimension_term=str(term).lower())
 
 
 def apply_ranking(intent: RankingOutcome, result: PeriodChangeResult

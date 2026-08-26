@@ -143,7 +143,7 @@
     {
       "name": "route_period_change",
       "kind": "DELEGATES",
-      "lines": 111,
+      "lines": 143,
       "delegates": [
         "PeriodChangeRequest",
         "_failure_envelope",
@@ -152,38 +152,13 @@
         "_render",
         "chat_routing._envelope",
         "chat_routing._resolve_lens",
-        "recognise",
-        "resolve_rank_intent"
+        "recognise"
       ]
-    },
-    {
-      "name": "_NARRATIVE_RANK_SUBJECTS",
-      "kind": "VOCABULARY",
-      "lines": 8,
-      "delegates": []
-    },
-    {
-      "name": "_RANK_SUBJECT_LEAD_RE",
-      "kind": "VOCABULARY",
-      "lines": 1,
-      "delegates": []
-    },
-    {
-      "name": "_RANK_SUBJECT_SKIP",
-      "kind": "VOCABULARY",
-      "lines": 6,
-      "delegates": []
     },
     {
       "name": "RankingOutcome",
       "kind": "STRUCTURE",
       "lines": 28,
-      "delegates": []
-    },
-    {
-      "name": "_rank_subject",
-      "kind": "INTERPRETS",
-      "lines": 16,
       "delegates": []
     },
     {
@@ -194,14 +169,15 @@
     },
     {
       "name": "resolve_rank_intent",
-      "kind": "DELEGATES",
-      "lines": 44,
-      "delegates": [
-        "_rank_subject",
-        "rank_mod.detect_rank_request",
-        "rank_mod.has_rank_language",
-        "receipt_mod.requested_dimension_terms"
-      ]
+      "kind": "ADAPTS",
+      "lines": 34,
+      "delegates": []
+    },
+    {
+      "name": "_rank_request_from_contract",
+      "kind": "ADAPTS",
+      "lines": 23,
+      "delegates": []
     },
     {
       "name": "apply_ranking",
@@ -362,7 +338,7 @@
     {
       "id": "K3",
       "name": "ranking is resolved BEFORE the analysis",
-      "anchor": "rank_intent = resolve_rank_intent(question, columns=columns)",
+      "anchor": "rank_intent = resolve_rank_intent(interpretation)",
       "decides": "ordering: a rank refusal returns before the span guard runs",
       "generic": false,
       "note": "so a question with BOTH an unrankable dimension and an unhonourable span is told only about the dimension."
@@ -397,7 +373,7 @@
       "anchor": "refusal_reason=\"dimension_not_governed\"",
       "decides": "replaces the workflow's FAIL_NO_ELIGIBLE_FIELDS with a statement about the dimension",
       "generic": false,
-      "note": "the statement it substitutes is the FALSE one recorded as canary defect D1: it asserts the book does not carry a dimension the book does carry."
+      "note": "CLOSED at the reduction \u2014 the message now names every candidate field considered, so the refusal is checkable instead of a bare false assertion. Still route-local."
     }
   ]
 }

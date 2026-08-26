@@ -30,6 +30,13 @@ import re
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+# The contract's controlled ordering vocabulary. Imported rather than restated:
+# a second copy of `increase`/`decrease`/`absolute` here would be exactly the
+# duplication this module exists to end.
+from question_interpretation.schema import (  # noqa: E402
+    ORDER_BASIS_ABSOLUTE, ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT,
+    ORDER_BASIS_SHARE, ORDER_DECREASE, ORDER_EITHER, ORDER_INCREASE)
+
 #: Clause openers that introduce a CONDITION.
 #:
 #: A measure word inside a condition names the field being filtered ON, not the
@@ -934,6 +941,11 @@ TEMPORAL_ASPECTS = (LEVEL, MOVEMENT)
 #: bare conjugations `change`, `changing`, `declined`, `dropped` and `growing`
 #: were missing from the widest of them.
 CHANGE_WORDS: Tuple[str, ...] = (
+    # "added"/"gained"/"lost" were MISSING, and the omission was not cosmetic:
+    # "which region added the most balance?" read as a LEVEL, so a question
+    # about a movement was answered with a position. That is defect D2
+    # reoccurring through the owner that exists to prevent it.
+    "added", "add", "adds", "adding", "gained", "gain", "gains", "lost",
     "change", "changed", "changes", "changing",
     "movement", "movements", "moved", "moves", "move",
     "increase", "increased", "increasing", "decrease", "decreased", "decreasing",
@@ -1062,3 +1074,146 @@ def temporal_aspect(question: str) -> TemporalAspect:
 def is_movement_question(question: str) -> bool:
     """The boolean form, for a caller that does not need the evidence."""
     return temporal_aspect(question).is_movement
+
+
+# --------------------------------------------------------------------------- #
+# ORDERING — the single owner of direction, basis and limit
+# --------------------------------------------------------------------------- #
+# The same argument as LEVEL versus MOVEMENT above, and the same remedy. The
+# vocabulary lived in `mi_agent.period_change.rank_request`, inside a ROUTE
+# package, and the contract had to import a route to learn what the reader
+# asked to order by. It also required a resolved dimension term before it would
+# answer at all, so a question that named an ordering but no dimension carried
+# no ordering on the contract — 15 of 97 ranking questions could not be planned
+# for that reason alone.
+#
+# Direction, basis and limit are properties of the QUESTION, not of the
+# dimension, so they are read here and the dimension is bound separately.
+
+ORDER_LIMIT_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twenty": 20,
+}
+#: The rank words that can govern a count. `bottom`/`worst`/`smallest` carry a
+#: DIRECTION as well, which is why they appear in both maps.
+_TOP_WORDS = r"top|first|best|largest|biggest|greatest|highest|leading"
+#: `last` is NOT here. It matched "since last month" and made every
+#: month-relative question read as a bottom-N ranking with a decreasing
+#: direction — the ordering owner inventing an ordering out of a period.
+_BOTTOM_WORDS = r"bottom|worst|smallest|lowest|least"
+_ORDER_WORDS = f"{_TOP_WORDS}|{_BOTTOM_WORDS}"
+_WORDNUM = "|".join(ORDER_LIMIT_WORDS)
+
+#: How many results the reader asked for. Deliberately bounded shapes, so a
+#: number meaning something else — "the 3 months to June", "over 85", "LTV above
+#: 50%" — is never read as a limit.
+#:
+#:     "top 3", "bottom five"       a rank word immediately before a number
+#:     "three largest"              a number immediately before a rank word
+#:     "which two regions"          "which" + a number opening the question
+_ORDER_LIMIT_RE = re.compile(
+    rf"\b(?:{_ORDER_WORDS})\s+(?P<a_digits>\d+)\b|"
+    rf"\b(?:{_ORDER_WORDS})\s+(?P<a_word>{_WORDNUM})\b|"
+    rf"\b(?P<b_word>{_WORDNUM})\s+(?:{_ORDER_WORDS})\b|"
+    rf"\bwhich\s+(?P<c_word>{_WORDNUM})\b|"
+    rf"\bwhich\s+(?P<c_digits>\d+)\b", re.I)
+
+#: DIRECTION COMES FROM THE VERB, NOT FROM THE SUPERLATIVE.
+#:
+#: `most`, `largest`, `top` are RANK words: they say an ordering was asked for,
+#: and say nothing about which way. Putting them in the increase set made
+#: "which region saw the LARGEST FALL" read as increase-and-decrease-at-once,
+#: which resolves to `either` — an ordering by magnitude that would have ranked
+#: a riser top of a question about falls.
+_ORDER_DECREASE_RE = re.compile(
+    rf"\b(?:{_BOTTOM_WORDS})\b|\b(?:declin\w*|f[ae]ll\w*|drop\w*|decreas\w*|"
+    rf"shr(?:ank|unk|ink\w*)|reduc\w*|lost|los(?:e|ing)|down)\b", re.I)
+_ORDER_INCREASE_RE = re.compile(
+    r"\b(?:grew|grow|grown|growth|increas\w*|ris(?:e|en|ing)|gain\w*|"
+    r"expand\w*|added|add|up)\b", re.I)
+_ORDER_ANY_RE = re.compile(r"\bmovement\b|\bmoved\b|\bchang(?:e|ed|es)\b", re.I)
+
+_ORDER_SHARE_RE = re.compile(
+    r"\bshare\b|\bproportion\b|\bcomposition\b|\bmix\b", re.I)
+_ORDER_PERCENT_RE = re.compile(
+    r"\bfastest\b|\bin percentage terms\b|\bpercentage\b|\bpercent\b|\b%\b|"
+    r"\brelative growth\b", re.I)
+_ORDER_COUNT_RE = re.compile(
+    r"\b(?:loan|loans|case|cases|account|accounts|number of)\b", re.I)
+_ORDER_AMOUNT_RE = re.compile(
+    r"\bbalance\b|\bexposure\b|\bbook\b|\bvalue\b|£", re.I)
+
+#: A superlative or explicit rank instruction. Without one, no ordering.
+_ORDER_REQUESTED_RE = re.compile(
+    rf"\b(?:most|least|{_ORDER_WORDS}|fastest|rank|order)\b", re.I)
+
+
+@dataclass(frozen=True)
+class OrderingRequest:
+    """What the question asked to order by, if anything."""
+
+    requested: bool
+    direction: Optional[str] = None
+    basis: Optional[str] = None
+    limit: Optional[int] = None
+
+
+def ordering_limit(question: str) -> Optional[int]:
+    """How many results the question asked for, or None.
+
+    "which TWO regions", "top 3", "bottom five". The word map used to stop at
+    three|four|five|ten, so "which two regions grew the most" carried no limit
+    and the planner ranked every riser — silently wrong rather than refused.
+    """
+    match = _ORDER_LIMIT_RE.search(f" {str(question or '').strip().lower()} ")
+    if not match:
+        return None
+    digits = match.group("a_digits") or match.group("c_digits")
+    if digits:
+        try:
+            value = int(digits)
+        except ValueError:
+            return None
+        return value if value > 0 else None
+    word = (match.group("a_word") or match.group("b_word")
+            or match.group("c_word") or "")
+    return ORDER_LIMIT_WORDS.get(word.lower())
+
+
+def ordering_request(question: str) -> OrderingRequest:
+    """Direction, basis and limit — WITHOUT needing a resolved dimension.
+
+    Requiring one was the old reader's mistake: a question orders by a
+    direction and a basis whether or not the dimension it names resolves, and
+    withholding the ordering because the dimension did not resolve loses two
+    facts to explain one.
+    """
+    text = f" {str(question or '').strip().lower()} "
+    if not _ORDER_REQUESTED_RE.search(text):
+        return OrderingRequest(requested=False)
+
+    down = bool(_ORDER_DECREASE_RE.search(text))
+    up = bool(_ORDER_INCREASE_RE.search(text))
+    if down and not up:
+        direction = ORDER_DECREASE
+    elif up and not down:
+        direction = ORDER_INCREASE
+    elif _ORDER_ANY_RE.search(text) or (up and down):
+        # Both named, or the question says "movement" — order by magnitude
+        # rather than guess which the reader meant.
+        direction = ORDER_EITHER
+    else:
+        # A bare rank instruction with no verb is a descending ranking.
+        direction = ORDER_INCREASE
+
+    if _ORDER_SHARE_RE.search(text):
+        basis = ORDER_BASIS_SHARE
+    elif _ORDER_PERCENT_RE.search(text):
+        basis = ORDER_BASIS_PERCENT
+    elif _ORDER_COUNT_RE.search(text) and not _ORDER_AMOUNT_RE.search(text):
+        basis = ORDER_BASIS_COUNT
+    else:
+        basis = ORDER_BASIS_ABSOLUTE
+
+    return OrderingRequest(requested=True, direction=direction, basis=basis,
+                           limit=ordering_limit(question))

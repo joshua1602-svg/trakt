@@ -3111,7 +3111,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 source_lens=r.source_lens,
                 semantics_context=dict(r.semantics_context or {}),
-                view=r.view)),
+                view=r.view,
+                interpretation=r.resolve_interpretation())),
 
         # 9. Cross-period comparison.
         Recogniser(

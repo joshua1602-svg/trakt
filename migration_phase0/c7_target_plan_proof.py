@@ -45,19 +45,27 @@ if str(_REPO) not in sys.path:
 FIXTURE_DEPTH = 6
 
 CLASSES = {
+    # Legacy-comparable classes.
     "L": ["Which region has the largest balance?",
           "which Broker has the largest balance"],
-    "M": ["How did the balance change since last month?",
-          "How did the book change since last month?"],
-    # PRE-REGISTERED NEW-CAPABILITY CASES. The corpus contains ZERO genuine
-    # ranked historical movements, and none is invented here to look like one:
-    # these are labelled NEW-CAPABILITY EXECUTION PROOF and are never counted as
-    # legacy equivalence. They are deliberately few, and each exercises a
-    # DIFFERENT part of the plan — direction, basis and limit — rather than
-    # three paraphrases of one path.
+    "M": ["How did the balance change since last month?"],
+    # PRE-REGISTERED NEW-CAPABILITY CASES. The 882-question corpus contains ZERO
+    # genuine ranked historical movements and none is invented here to look like
+    # one. Each case exercises a DIFFERENT part of the plan — positive movement,
+    # decline, population, limit, percentage — rather than paraphrasing one path.
+    # Every one states its measure and its period, because under the product
+    # ruling a question that states neither is a governed refusal, not a case.
     "RM": ["Which region added the most balance since last month?",
-           "Which region declined the most since last month?",
-           "Which two regions grew the most since last month?"],
+           "Which region saw the largest fall in balance since last month?",
+           "Which region added the most balance since last month for loans "
+           "with LTV above 50%?",
+           "Which two regions added the most balance since last month?",
+           "Which region grew fastest in balance since last month?"],
+    # PHASE 8 — refusal preservation. These MUST NOT be answered: the first
+    # names no measure, the second no period. A guessed answer here is the
+    # STOP condition, and a governed clarification is correct product behaviour.
+    "REFUSE": ["Which region grew the most?",
+               "Which region added the most balance?"],
 }
 
 
@@ -267,9 +275,40 @@ def execute_target_plan(steps: List[TargetStep], output_root: str,
         out["error"] = f"none of {group} is carried by the book"
         return out
 
-    levels = []
+    # SELECT_POPULATION, applied. The row predicates the contract carries are
+    # governed field/operator/value triples; applying them here is what makes
+    # the Population cell provable rather than merely represented.
+    predicates = tuple(tuple(p) for p in
+                       (by["select_population"].get("row_predicates") or ()))
+    unfiltered_counts, filtered = [], []
     for f in chosen:
         df = f["df"]
+        unfiltered_counts.append(int(len(df)))
+        for field_key, operator, value in predicates:
+            if field_key not in df.columns:
+                out["error"] = f"predicate field {field_key!r} is not on the tape"
+                return out
+            col = df[field_key]
+            if operator in (">", "gt", "greater_than"):
+                df = df[col > float(value)]
+            elif operator in (">=", "gte"):
+                df = df[col >= float(value)]
+            elif operator in ("<", "lt", "less_than"):
+                df = df[col < float(value)]
+            elif operator in ("<=", "lte"):
+                df = df[col <= float(value)]
+            elif operator in ("=", "==", "eq", "equals"):
+                df = df[col == value]
+            else:
+                out["error"] = f"unsupported predicate operator {operator!r}"
+                return out
+        filtered.append(df)
+    out["row_counts"] = [int(len(d)) for d in filtered]
+    out["unfiltered_row_counts"] = unfiltered_counts
+    out["predicates"] = [list(p) for p in predicates]
+
+    levels = []
+    for df in filtered:
         if aggregation == "count" and not metric:
             if bound:
                 levels.append(df.groupby(bound).size().astype(float).to_dict())
@@ -289,10 +328,21 @@ def execute_target_plan(steps: List[TargetStep], output_root: str,
                    if levels[0].get(k) else None) for k in keys}
         out["movement"], out["percent_movement"] = movement, pct
 
+    out["measure_aggregation"] = aggregation
     rank = by.get("rank")
     if rank and rank.get("direction"):
-        source = (out.get("movement") if rank.get("over") == "movement"
-                  else levels[-1])
+        # THE BASIS DECIDES WHAT IS ORDERED. Ranking a percentage question by
+        # absolute movement puts the biggest book first rather than the fastest
+        # grower, which is a different answer to a different question.
+        basis = rank.get("basis")
+        if rank.get("over") == "movement":
+            if basis == "percent":
+                source = out.get("percent_movement") or {}
+                source = {k: v for k, v in source.items() if v is not None}
+            else:
+                source = out.get("movement")
+        else:
+            source = levels[-1]
         if source:
             desc = rank["direction"] != "decrease"
             ordered = sorted(source.items(), key=lambda kv: kv[1], reverse=desc)
@@ -305,6 +355,31 @@ def execute_target_plan(steps: List[TargetStep], output_root: str,
             if rank.get("limit"):
                 ordered = ordered[: int(rank["limit"])]
             out["ranked"] = ordered
+
+    # THE RECEIPT, from the execution facts and before any prose exists.
+    if out.get("movement") is not None:
+        from mi_agent_api.movement_receipt import (PopulationEvidence,
+                                                   build_movement_receipt)
+        receipt = build_movement_receipt(
+            measure=metric, aggregation=aggregation,
+            grouping_dimension=bound,
+            grouping_candidates=group,
+            periods=out["periods"], levels=levels,
+            ranked=out.get("ranked") or sorted(out["movement"].items(),
+                                               key=lambda kv: -kv[1]),
+            basis=(rank or {}).get("basis"),
+            direction=(rank or {}).get("direction"),
+            limit=(rank or {}).get("limit"),
+            population=PopulationEvidence(
+                dataset=by["stack_periods"].get("dataset"),
+                portfolio_ids=tuple(by["select_population"].get("portfolio_ids") or ()),
+                predicates=predicates,
+                row_counts=tuple(out["row_counts"]),
+                unfiltered_row_counts=tuple(unfiltered_counts)))
+        out["receipt"] = receipt.to_dict()
+        out["receipt_complete"] = receipt.complete
+        out["receipt_missing"] = receipt.missing_facts()
+        out["receipt_chronological"] = receipt.chronological
     return out
 
 

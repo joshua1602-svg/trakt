@@ -213,7 +213,7 @@ COMPOSITION_DECISIONS = [
     },
     {
         "id": "K3", "name": "ranking is resolved BEFORE the analysis",
-        "anchor": "rank_intent = resolve_rank_intent(question, columns=columns)",
+        "anchor": "rank_intent = resolve_rank_intent(interpretation)",
         "decides": "ordering: a rank refusal returns before the span guard runs",
         "generic": False,
         "note": "so a question with BOTH an unrankable dimension and an "
@@ -243,9 +243,9 @@ COMPOSITION_DECISIONS = [
         "decides": "replaces the workflow's FAIL_NO_ELIGIBLE_FIELDS with a "
                    "statement about the dimension",
         "generic": False,
-        "note": "the statement it substitutes is the FALSE one recorded as "
-                "canary defect D1: it asserts the book does not carry a "
-                "dimension the book does carry.",
+        "note": "CLOSED at the reduction — the message now names every "
+                "candidate field considered, so the refusal is checkable "
+                "instead of a bare false assertion. Still route-local.",
     },
 ]
 

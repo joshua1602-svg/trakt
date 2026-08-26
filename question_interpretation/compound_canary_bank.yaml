@@ -328,6 +328,37 @@ families:
         question: "How did the book change between April and May?"
         declares: [SPAN, MOVEMENT]
 
+  # -------------------------------------------------------------------------
+  - id: F11
+    name: ranked_movement_with_a_stated_period
+    hazard: >
+      ADDED, not edited. The governed ruling is that a movement question naming
+      no period is CLARIFIED rather than answered over an invented window. That
+      ruling is right, and it made most of this bank's ranked cases refuse —
+      F3, F5, F6 and F7 became unexercised, so the bank's zero breaches became
+      a zero measured over refusals, which is the vacuity I6 exists to catch.
+      These cases carry a period, so ranking is exercised again. Every existing
+      case is untouched: the bank may grow, it may not shrink.
+    cases:
+      - id: F11.a
+        question: "Which geographic region obligor grew the most since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, SPAN, MOVEMENT]
+      - id: F11.b
+        question: "Which geographic region obligor declined the most since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, SPAN, MOVEMENT]
+      - id: F11.c
+        question: "Which two geographic region obligors added the most balance since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, TOP_N, SPAN, MEASURE, MOVEMENT]
+      - id: F11.d
+        question: "Which geographic region obligor grew fastest in balance since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, SPAN, MEASURE, MOVEMENT]
+      - id: F11.e
+        question: "Which region grew the most since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, SPAN, MOVEMENT]
+        note: "the natural term — D1's alternate must bind"
+    paraphrase_sets:
+      - [F11.a, F11.e]
+
 # ---------------------------------------------------------------------------
 # COMPOSITION LATTICES — the direct test of I3.
 #
@@ -477,3 +508,37 @@ authorised_movements:
       verb no longer selects the route through five different vocabularies,
       though route PRECEDENCE still decides which of two eligible routes
       answers, and that is not closed.
+  - id: M3
+    date: "2026-08-26"
+    defect: D1
+    kind: authorised defect correction and governed-refusal activation
+    breaches_before: 7
+    breaches_after: 0
+    cleared:
+      - "I1_honour_or_disclose · F3.b · MOVEMENT"
+      - "I1_honour_or_disclose · F5.d · MOVEMENT"
+      - "I3_composition_preserves_parts · F3.a -> F5.d · MOVEMENT"
+      - "I4_phrasing_is_not_meaning · F1.a / F1.b"
+      - "I4_phrasing_is_not_meaning · F1.c / F1.d"
+      - "I4_phrasing_is_not_meaning · F2.a / F2.b / F2.c"
+      - "I4_phrasing_is_not_meaning · F3.a / F3.b / F3.c"
+    new_breaches: 0
+    grade_movements: 70
+    statement: >
+      C7 reduction. The route's ranking vocabulary — _rank_subject and three
+      word lists — was deleted and the route now reads the contract's
+      ordering_direction, ordering_basis, ordering_limit and the dimension
+      claim's candidate_concepts. D1 is closed at the route: "which region grew
+      the most" binds geographic_region_obligor instead of falsely reporting
+      that the book carries no such dimension. A governed no-implicit-period
+      guard was added: a ranked movement naming no window is now CLARIFIED, not
+      answered over an invented latest-versus-previous pair.
+    scope: >
+      THE ZERO IS NOT A CLEAN BILL. Clearing all seven breaches came with 70
+      grade movements, and most of this bank's ranked cases name no period, so
+      under the new ruling they refuse: F3, F5, F6 and F7 joined F4 as
+      UNEXERCISED. Zero breaches measured over refusals is the vacuity I6
+      exists to catch, and it is reported as such rather than as success.
+      Family F11 was ADDED — never edited — with five period-carrying ranked
+      movement cases, all of which honour every element they declare, so
+      ranking is exercised again on evidence that did not exist before.
