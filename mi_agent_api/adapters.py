@@ -560,13 +560,25 @@ def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
 
     def _rank(key: str) -> int:
         key = str(key)
-        if wanted == "_count":
-            return 0 if key.endswith("_count") else 1
-        if wanted and key.startswith(wanted):
+        # A SHARE answers a share question with the share. The share row also
+        # carries its numerator, its denominator and the population total, and
+        # a lead sentence that opens with "Current Outstanding Balance
+        # Numerator: 5,835,756" buries the 3.4% the reader asked for. All four
+        # stay in the KPI artifact and on the receipt; the sentence leads with
+        # the figure and keeps the coverage.
+        if key.endswith("_share_pct") or key.endswith("_pct"):
             return 0
-        return 1 if not key.endswith("_count") else 2
+        if key.endswith(("_numerator", "_denominator")) or key == "population_total":
+            return 4
+        if wanted == "_count":
+            return 1 if key.endswith("_count") else 2
+        if wanted and key.startswith(wanted):
+            return 1
+        return 2 if not key.endswith("_count") else 3
 
-    items = sorted((row or {}).items(), key=lambda kv: _rank(kv[0]))
+    # THREE FIGURES IS A SENTENCE; five is a dump. Ranked first, so what is kept
+    # is what the question asked for.
+    items = sorted((row or {}).items(), key=lambda kv: _rank(kv[0]))[:3]
     parts = []
     for key, value in items:
         h = _hint(hints, key)

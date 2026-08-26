@@ -1031,9 +1031,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         if view != workspace_mod.DEFAULT_VIEW:
             base_df, base_error = _resolve_frame(
                 ds, workspace_mod.DEFAULT_VIEW, portfolio_id)
-            owned_view = workspace_mod.resolve_dataset(
-                req.question, available_values=_book_values(base_df, semantics)
-                if base_df is not None else None)
+            # The masking is applied to the QUESTION, not handed to the owner:
+            # `resolve_dataset` takes one argument and a guard exists to keep it
+            # that way. Same owner, same signature, a sentence it is entitled to
+            # read.
+            owned_view = workspace_mod.resolve_dataset(_owned_question(
+                req.question,
+                _book_values(base_df, semantics) if base_df is not None else None))
             if owned_view != view:
                 logger.info("dataset %r re-read as %r under span ownership",
                             view, owned_view)

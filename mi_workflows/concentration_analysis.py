@@ -353,12 +353,15 @@ def _dimension_decision(entry: SemanticEntry, *, declared_asset: Optional[str],
                                      f"not applicable to asset class "
                                      f"'{declared_asset}'")
     if multi_portfolio_scope and entry.portfolio_comparability != COMPARABLE:
+        # The registry's comparability CODE stays out of the sentence: it is an
+        # internal flag, and a reader told "requires_scale_alignment" learns
+        # nothing they can act on. The reason itself is unchanged.
         return DimensionDecision(entry, False,
-                                 "originator-specific vocabulary "
-                                 f"({entry.portfolio_comparability}) and the "
-                                 "scope spans several portfolios — categories "
-                                 "would mix vocabularies (no heuristic mapping "
-                                 "is created)")
+                                 "each originator spells this dimension's "
+                                 "categories in its own vocabulary, and this "
+                                 "scope spans several portfolios — combining "
+                                 "them would compare unlike categories, and no "
+                                 "mapping between them is invented")
     if entry.source_field not in columns:
         return DimensionDecision(entry, False, "field not present on the tape")
     return DimensionDecision(entry, True, "governed concentration dimension")
@@ -424,11 +427,34 @@ def resolve_single_reporting_date(frame: pd.DataFrame, as_of: Optional[str]
     return (dates[0] if dates else as_of), None, warnings
 
 
-def _declared_asset_class(frame: pd.DataFrame) -> Optional[str]:
-    if ASSET_CLASS_FIELD not in frame.columns:
+def _declared_asset_class(frame: pd.DataFrame, *, registry=None,
+                          portfolio_ids: Optional[Sequence[str]] = None
+                          ) -> Optional[str]:
+    """The single asset class this scope is, or ``None`` if it is not one.
+
+    THE TAPE FIRST, then THE REGISTRY. A tape that carries the column states
+    what is actually in the frame and keeps exactly the reading it had. A tape
+    that does not carry it used to leave the scope UNDECLARED, so every
+    asset-specific concentration dimension was excluded and "show product
+    concentration" refused — on a book whose governed registry declares
+    ``asset_class: equity_release`` for every portfolio in scope, and whose
+    product-type breakdown the same request already renders elsewhere.
+
+    `PortfolioRegistry.asset_classes` is asked rather than the config read here,
+    because it already carries the rule that matters: it returns nothing at all
+    when ANY selected book has not declared one, so a partially-declared scope
+    still reads as undeclared.
+    """
+    if ASSET_CLASS_FIELD in frame.columns:
+        classes = tuple(v.lower() for v in _distinct(frame[ASSET_CLASS_FIELD]))
+        return classes[0] if len(classes) == 1 else None
+    if registry is None:
         return None
-    classes = tuple(v.lower() for v in _distinct(frame[ASSET_CLASS_FIELD]))
-    return classes[0] if len(classes) == 1 else None
+    try:
+        declared = registry.asset_classes(portfolio_ids)
+    except Exception:  # noqa: BLE001 - an unreadable registry declares nothing
+        return None
+    return declared[0].lower() if len(declared) == 1 else None
 
 
 def _portfolio_count(frame: pd.DataFrame) -> int:
@@ -621,7 +647,8 @@ def run_concentration_analysis(
     exposure_field = EXPOSURE_FIELD if exposure_ok else None
 
     # ---- dimension selection: registry-governed --------------------------- #
-    declared_asset = _declared_asset_class(frame)
+    declared_asset = _declared_asset_class(
+        frame, registry=reg, portfolio_ids=getattr(scope, "portfolio_ids", None))
     multi_portfolio = _portfolio_count(frame) > 1
     columns = tuple(df.columns)
     top_n = getattr(spec, "top_n", None) if spec is not None else None

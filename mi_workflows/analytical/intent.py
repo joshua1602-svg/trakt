@@ -279,12 +279,30 @@ _QUALIFIER_RE = re.compile(
     + "|".join(_POPULATION_NOUNS) + r")\b", re.I)
 
 
+#: The same rule in the COPULAR form. A completion term PREDICATED OF a
+#: population — "what share of the book IS DRAWDOWN?" — is describing which
+#: loans just as surely as the attributive form is, and it carries no population
+#: noun after the term for `_QUALIFIER_RE` to anchor on.
+#:
+#: Still generic and still names no term. The verb must be followed IMMEDIATELY
+#: by the term, so "how many loans are we drawing down at the moment?" — verb,
+#: then a subject — stays the flow question it is.
+_COMPLEMENT_RE = re.compile(
+    r"\b(?:" + "|".join(_POPULATION_NOUNS) + r")\b[^?.!]{0,24}?"
+    r"\b(?:is|are|was|were)\s+(" + "|".join(t.strip() for t in (
+        " complete ", " completes ", " completing ", " completed ",
+        " completion ", " completions ", " convert ", " converts ",
+        " converting ", " conversion ", " conversions ", " drawdown ",
+        " drawdowns ", " draw down ", " drawn down ")) + r")\b", re.I)
+
+
 def _is_population_qualifier(text: str) -> bool:
     """True when every completion term in the text qualifies a population."""
     hits = [t.strip() for t in _COMPLETION_TERMS if t in text]
     if not hits:
         return False
     qualified = {m.group(1).lower() for m in _QUALIFIER_RE.finditer(text)}
+    qualified |= {m.group(1).lower() for m in _COMPLEMENT_RE.finditer(text)}
     return all(h.lower() in qualified for h in hits)
 
 

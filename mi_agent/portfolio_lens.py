@@ -427,6 +427,19 @@ def _named_portfolio_lens(low: str, registry) -> Optional[PortfolioLens]:
 #: the words BEFORE it that carries the "this is a proper name" signal.
 _BOOK_NOUN_RE = re.compile(r"\b(book|portfolio)\b", re.IGNORECASE)
 
+
+def names_a_book_noun(text: Optional[str]) -> bool:
+    """True when ``text`` calls something a BOOK or a PORTFOLIO.
+
+    THE HEAD NOUN, exposed. It is what turns a proper name into a book name —
+    "the Highgate Mortgages Book" — and a resolver that has failed to resolve a
+    phrase needs to know whether the phrase was a book before it refuses in its
+    own words: an unheld portfolio has a refusal of its own, from this module,
+    and a categorical resolver announcing "no loans match 'highgate mortgages'"
+    speaks over it with a worse explanation of the same fact.
+    """
+    return bool(text) and bool(_BOOK_NOUN_RE.search(str(text)))
+
 #: A token that is capitalised in the ORIGINAL text (so `Highgate`, `ALP`,
 #: `NBS`, but not `the`, `of`, `by`).
 _PROPER_TOKEN_RE = re.compile(r"^[A-Z][A-Za-z0-9&'\u2019-]*$")

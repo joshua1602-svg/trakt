@@ -2145,6 +2145,30 @@ def _categorical_value_field(value: str, available_values) -> Optional[Tuple[str
     return value_field(value, available_values)
 
 
+#: "... is drawdown", "... are second home". Bounded to four words so the
+#: complement is a category rather than the rest of the sentence.
+_COPULAR_CATEGORICAL_RE = re.compile(
+    r"\b(?:is|are|was|were)\s+((?:[a-z][a-z_&'-]*)(?:\s+[a-z][a-z_&'-]*){0,3})"
+    r"\s*[?.!,]*\s*$", re.I)
+
+
+def _copular_categorical(masked: str, available_values
+                         ) -> Optional[Tuple[str, str]]:
+    """A category named as the COMPLEMENT of the verb, at the end of a clause."""
+    if not available_values:
+        return None
+    m = _COPULAR_CATEGORICAL_RE.search(masked or "")
+    if not m:
+        return None
+    words = m.group(1).split()
+    # LONGEST FIRST, as everywhere else: only a value the book carries resolves.
+    for start in range(len(words)):
+        owned = _categorical_value_field(" ".join(words[start:]), available_values)
+        if owned is not None:
+            return owned
+    return None
+
+
 def _attributive_categorical(masked: str, available_values
                              ) -> Optional[Tuple[str, str]]:
     """THE ATTRIBUTIVE FORM — "<value> loans" with no preposition in front.
@@ -2203,8 +2227,25 @@ def _attributive_categorical(masked: str, available_values
     return None
 
 
+#: How an UNRESOLVED category is spelled in `spec.unavailable_filters`. The
+#: prefix is the marker: a caller has to be able to tell "the reader named a
+#: category this book does not carry" from "the field for this filter is absent",
+#: because the first must refuse and the second may warn.
+UNKNOWN_CATEGORY_PREFIX = "unknown category: "
+
+
+def _names_a_book(text: str) -> bool:
+    """Delegation: `portfolio_lens` owns what counts as naming a book."""
+    try:
+        from .portfolio_lens import names_a_book_noun
+
+        return names_a_book_noun(text)
+    except Exception:  # noqa: BLE001 - the owner missing claims nothing
+        return False
+
+
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None,
-                              available_values=None
+                              available_values=None, unresolved=None
                               ) -> Optional[Tuple[str, str]]:
     """Detect a categorical region filter in a clause -> (field_key, value).
 
@@ -2221,9 +2262,22 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     # both claimed before the place-resolver runs. Either one read as a place
     # invents a region that does not exist — "Entire", "Current", "Front".
     masked = mask_segment_phrases(mask_scope_phrases(clause)).strip()
+    # THE COPULAR FORM — "what share of the book IS DRAWDOWN?". The value is the
+    # complement of the verb, so it is followed by no noun for the attributive
+    # scan to anchor on and preceded by no preposition for the pattern below.
+    # Measured: the share capability answered "what proportion of the book is
+    # above 60% LTV" and "what share of the balance is in Scotland", and refused
+    # the plainest phrasing of the same question about a product type.
+    #
+    # Safe on the same terms as the attributive form and no wider: only a value
+    # the BOOK CARRIES resolves, so this cannot make a filter out of an
+    # adjective, and a clause the pattern below can read is read there first.
     m = _CATEGORICAL_FILTER_RE.search(masked)
     if not m:
-        return _attributive_categorical(masked, available_values)
+        attributive = _attributive_categorical(masked, available_values)
+        if attributive is not None:
+            return attributive
+        return _copular_categorical(masked, available_values)
     value = m.group(1).strip()
     # "for loans in Wales" captures "loans in wales" — peel leading filler and
     # any nested preposition so the VALUE is the place, not the phrase.
@@ -2265,7 +2319,26 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         # resolve. If that fails too, the narrowing is UNRESOLVED — binding it
         # to region anyway is how a product type became a geography — and the
         # fail-closed machinery discloses it rather than dropping it.
-        return _attributive_categorical(masked, available_values)
+        owned = _attributive_categorical(masked, available_values)
+        if owned is not None:
+            return owned
+        # RECORDED, NOT DROPPED. "what is the average LTV in Atlantis" names a
+        # place the book has no exposure to. Before the book's own values were
+        # available this bound to the geography field, selected nothing and
+        # refused — right answer, wrong reason. With the values available it
+        # correctly declines to invent the binding, and declining SILENTLY would
+        # answer over the whole book instead: a confident figure about a place
+        # the reader was asking about and the book does not hold.
+        # ... unless the SCOPE OWNER is the one who should be speaking. "the
+        # Highgate Mortgages Book" is an unheld PORTFOLIO, and `portfolio_lens`
+        # has a refusal of its own for exactly that, naming the book and saying
+        # it is not in the governed registry. Announcing "no loans match
+        # 'highgate mortgages'" over the top of it is the same fact explained
+        # worse — and it is the very collision this whole rule is about, in the
+        # other direction.
+        if unresolved is not None and not _names_a_book(clause):
+            unresolved.append(f"{UNKNOWN_CATEGORY_PREFIX}'{value}'")
+        return None
     field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"
     if field not in _fields(semantics):
         return None
@@ -2439,7 +2512,7 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
                     spans[age_field] = (clause_start, clause_end)
                 continue
         cat = _parse_categorical_filter(clause, semantics, available_columns,
-                                        available_values)
+                                        available_values, unresolved=unresolved)
         if cat:
             filters[cat[0]] = cat[1]
             if spans is not None:
@@ -2532,7 +2605,8 @@ def _build_multi_dim_table_spec(metric: Optional[str], dims: List[str], semantic
 
 
 def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[int],
-                        top_n: Optional[int], semantics: dict, available_columns=None
+                        top_n: Optional[int], semantics: dict, available_columns=None,
+                        available_values=None
                         ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Build a ranked spec: grouped ranking bar (a categorical dimension is
     present) or a loan-level 'top loans' ranking table."""
@@ -2579,8 +2653,14 @@ def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[
         # A value filter on the ranked population ("top 5 regions by balance where
         # LTV above 50%") is applied before ranking — attach it (excluding the
         # ranking dimension itself) so it is never silently dropped.
+        # THE BOOK'S OWN VALUES. Without them this branch resolved a category
+        # against nothing and fell back to GEOGRAPHY, so "which broker channel
+        # has the largest balance for LUMP SUM loans?" filtered
+        # `geographic_region_obligor = Lump Sum`, matched no rows, and refused
+        # naming a field the reader never mentioned.
         g_filters, g_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=[dim])
+            q, semantics, available_columns, exclude_dims=[dim],
+            available_values=available_values)
         spec = MIQuerySpec(
             intent="chart", chart_type="bar", metric=rmetric, dimension=dim,
             aggregation=ragg, weight_field=weight, top_n=(rank_limit or top_n),
@@ -2650,7 +2730,7 @@ def _contribution_recognizer(q: str, title: str, semantics: dict,
 
 
 def _measure_set_recognizer(q: str, title: str, semantics: dict,
-                            available_columns=None):
+                            available_columns=None, available_values=None):
     """A governed MULTI-MEASURE plan, or None.
 
     One population, one optional filter set, one optional governed grouping,
@@ -2681,8 +2761,15 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
     remainder = _mask_spans(q, spans)
     dims, _terms, _rest = _explicit_dimensions(
         remainder, semantics, grouping=True, available_columns=available_columns)
-    filters = _parse_filters(remainder, semantics, available_columns)
-    region = _parse_categorical_filter(remainder, semantics, available_columns)
+    # THE BOOK'S OWN VALUES, here too. This was the last governed branch that
+    # resolved a category without them, so "which broker channel has the largest
+    # balance for LUMP SUM loans?" bound a product type to the GEOGRAPHY field,
+    # selected nothing, and refused naming a field the reader never mentioned —
+    # the exact substitution the catalogue exists to prevent.
+    filters = _parse_filters(remainder, semantics, available_columns,
+                             available_values=available_values)
+    region = _parse_categorical_filter(remainder, semantics, available_columns,
+                                       available_values)
     if region is None:
         # A CFO usually states the scope FIRST — "For the London book, give me
         # …". The existing categorical resolver reads a trailing scope clause,
@@ -2690,7 +2777,8 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
         # second pattern being invented for it.
         lead = remainder.split(",", 1)[0].strip()
         if lead and lead != remainder.strip():
-            region = _parse_categorical_filter(lead, semantics, available_columns)
+            region = _parse_categorical_filter(lead, semantics, available_columns,
+                                               available_values)
     if region and region[0] not in filters:
         filters[region[0]] = region[1]
 
@@ -2865,7 +2953,8 @@ def _deterministic_parse(question: str, semantics: dict,
     # population. Recognised before the generic single-metric paths, which would
     # otherwise keep whichever measure they matched first and drop the rest.
     ms = _measure_set_recognizer(q, title, semantics,
-                                 available_columns=available_columns)
+                                 available_columns=available_columns,
+                                 available_values=available_values)
     if ms is not None:
         return ms
 
@@ -3118,7 +3207,8 @@ def _deterministic_parse(question: str, semantics: dict,
     # ---- ranked / "largest" queries ---------------------------------------
     if is_ranking and "treemap" not in q and "heatmap" not in q:
         ranked = _build_ranking_spec(q, title, rank_dir, rank_limit, top_n,
-                                     semantics, available_columns)
+                                     semantics, available_columns,
+                                     available_values=available_values)
         if ranked is not None:
             return ranked
 

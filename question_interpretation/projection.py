@@ -115,7 +115,7 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     _population(qi, spec, facets)
     _row_predicates(qi, spec, semantics)
     _source_scope(qi, registry, caller_scope, available_values)
-    _dataset(qi, caller_dataset)
+    _dataset(qi, caller_dataset, available_values)
     _note_join_state(qi)
     return qi
 
@@ -657,7 +657,7 @@ def _source_scope(qi, registry=None, caller_scope=None,
         source="mi_agent.portfolio_lens")
 
 
-def _dataset(qi, caller_dataset=None) -> None:
+def _dataset(qi, caller_dataset=None, available_values=None) -> None:
     """Carry the ONE governed dataset decision onto the contract.
 
     `mi_agent_api.workspace.resolve_dataset` is the single semantic owner and
@@ -685,8 +685,19 @@ def _dataset(qi, caller_dataset=None) -> None:
             reason="the dataset owner is unavailable: %s" % exc)
         return
     try:
-        dataset = resolve_dataset(qi.question)
-        named = view_named_by_question(qi.question)
+        # GOVERNED SPAN OWNERSHIP, applied to the SENTENCE before the owner
+        # reads it — the owner takes one argument and a guard keeps it that way.
+        # `mi_agent.categorical_spans` owns the rule; nothing is decided here.
+        question = qi.question
+        if available_values:
+            try:
+                from mi_agent.categorical_spans import mask_value_spans
+
+                question = mask_value_spans(qi.question, available_values)
+            except Exception:  # noqa: BLE001 - no owner, the old reading
+                question = qi.question
+        dataset = resolve_dataset(question)
+        named = view_named_by_question(question)
     except Exception as exc:  # noqa: BLE001
         qi.dataset = DatasetClaim(
             state=UNRESOLVABLE, source="mi_agent_api.workspace",

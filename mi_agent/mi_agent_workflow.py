@@ -30,6 +30,7 @@ from .mi_query_executor import (
     execute_mi_query,
 )
 from .mi_query_spec import MIQuerySpec
+from . import llm_query_parser as _parser_mod
 from .mi_query_validator import load_mi_semantics, recover_chart_spec, validate_mi_query
 from . import portfolio_lens as _portfolio_lens
 from . import portfolio_scope as _portfolio_registry
@@ -737,8 +738,39 @@ def run_mi_agent_query(
     # Predicates the user asked for that could not be applied (e.g. a joint-borrower
     # filter when no borrower-structure field exists) are surfaced as warnings —
     # never silently dropped. They also flow into the API query-audit panel.
+    unknown_categories = [
+        n for n in (getattr(spec, "unavailable_filters", None) or [])
+        if str(n).startswith(_parser_mod.UNKNOWN_CATEGORY_PREFIX)]
     for note in getattr(spec, "unavailable_filters", None) or []:
+        if note in unknown_categories:
+            continue
         warnings.append(f"Filter not applied (field unavailable): {note}")
+    if unknown_categories:
+        # THE READER NAMED A CATEGORY THIS BOOK DOES NOT CARRY.
+        #
+        # A warning is not enough here. The question narrowed to something, no
+        # governed field claims it, and answering anyway returns the WHOLE BOOK
+        # under a question about a subset of it — "what is the average LTV in
+        # Atlantis" reporting the platform average. This is the same refusal a
+        # narrowing that selected no rows gets, for the same reason: there is
+        # nothing to calculate and no broader figure is substituted.
+        named = ", ".join(
+            n[len(_parser_mod.UNKNOWN_CATEGORY_PREFIX):] for n in unknown_categories)
+        message = (
+            f"No loans in this book match that filter ({named}), so there is "
+            "nothing to calculate. I have not returned a whole-book figure in "
+            "its place.")
+        result["error"] = message
+        result["answer"] = message
+        result["controlled_refusal"] = True
+        result["ok"] = False
+        result["spec_obj"] = spec
+        result["spec"] = spec.to_dict()
+        result["validation"] = {"ok": False,
+                                "errors": [f"unknown_category: {named}"],
+                                "warnings": [], "resolved_fields": {}}
+        result["warnings"] = _dedupe(warnings + [message])
+        return result
 
     # ---- validate (with recovery) -----------------------------------------
     # The validator is also a RECOVERY/control layer: when a spec fails only
