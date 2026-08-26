@@ -91,14 +91,25 @@ def test_compare_wa_ltv(semantics):
 
 
 def test_compare_latest_prior_pipeline(semantics):
+    """D4. This assertion used to read ``["latest", "prior pipeline"]``.
+
+    That was a PINNED RECORD OF A DEFECT. The pair's order IS its meaning — the
+    plan compares "b relative to a" and the executor computes ``vb - va`` — so
+    opening at ``latest`` inverted the sign of every movement and divided the
+    percentage by the closing value. The C6 ruling applies: an estate must not
+    assert behaviour the product has fixed. The historical statement lives in
+    the canary bank's freeze observations and in git history.
+    """
     s = _parse("Compare latest pipeline with prior pipeline.", semantics)
     assert s.temporal_mode == "compare"
-    assert s.compare_periods == ["latest", "prior pipeline"]
+    assert s.compare_periods == ["prior pipeline", "latest"]
 
 
 @pytest.mark.parametrize("q,periods", [
     ("How did funded balance change from October to November?", ["October", "November"]),
-    ("How did pipeline amount change from last week?", ["latest", "last week"]),
+    # D4: chronological. Was ["latest", "last week"] — see
+    # test_compare_latest_prior_pipeline for why that assertion was retired.
+    ("How did pipeline amount change from last week?", ["last week", "latest"]),
 ])
 def test_compare_change_phrasing(q, periods, semantics):
     s = _parse(q, semantics)

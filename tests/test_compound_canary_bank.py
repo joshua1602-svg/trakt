@@ -107,6 +107,42 @@ def test_known_defects_are_recorded_as_defects_not_as_expectations(bank):
         assert defect["canaries"], f"{defect['id']} names no canary"
 
 
+def test_the_frozen_defects_are_never_edited_out_of_history(bank):
+    """A fixed defect stays in the record.
+
+    `COMPOUND_CANARY_FREEZE.json` advances — it must, or the movement detector
+    fails forever on an already-attributed movement and can never catch the
+    next one. What must NOT advance is the history: D1-D4 stand as the record
+    of what was true at freeze. This pins that, and pins the rule that the JSON
+    only advances alongside a ledger entry explaining what moved.
+    """
+    frozen = {d["id"] for d in
+              bank["freeze_observations"]["known_defects_at_freeze"]}
+    assert {"D1", "D2", "D3", "D4"} <= frozen, (
+        "a defect was edited out of the freeze observations")
+    for move in bank.get("authorised_movements") or []:
+        assert move["defect"] in frozen, (
+            f"{move['id']} attributes a movement to {move['defect']}, which the "
+            f"freeze observations do not record")
+        assert move["breaches_after"] == move["breaches_before"] - len(
+            move["cleared"]) + move["new_breaches"], (
+            f"{move['id']}'s arithmetic does not close")
+
+
+def test_a_baseline_that_moved_carries_a_ledger_entry(bank):
+    """The JSON may only sit ahead of the freeze if something explains why."""
+    current = len(json.loads(BASELINE.read_text())["breaches"])
+    moves = bank.get("authorised_movements") or []
+    at_freeze = (moves[0]["breaches_before"] if moves else current)
+    if current != at_freeze:
+        assert moves, (
+            f"the baseline carries {current} breaches but the bank froze at "
+            f"{at_freeze} and no authorised movement explains the difference")
+        assert moves[-1]["breaches_after"] == current, (
+            f"the last ledger entry ends at {moves[-1]['breaches_after']} "
+            f"breaches; the baseline carries {current}")
+
+
 # --------------------------------------------------------------------------- #
 # Executed
 # --------------------------------------------------------------------------- #

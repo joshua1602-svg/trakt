@@ -184,3 +184,62 @@ The fix as scoped is one expression in one recogniser. If it turns out that
 ordering `latest` against a relative term requires resolving both to real
 reporting dates — i.e. a calendar service the parser does not have — that is a
 different and larger piece of work and this task stops and reports.
+
+---
+
+## 9. Correction, recorded after measurement — the registered blast was WRONG
+
+§6 registered the blast as **"exactly these two assertions, and nothing else."**
+Measured, it was **three**, across **three** modules:
+
+```
+mi_agent/tests/test_mi_analytical_intents.py   2 assertions   (registered)
+tests/test_comparison_periods_structural.py    1 data row     (MISSED)
+                                               -> 2 failing test ids, because the
+                                                  row feeds two test functions
+```
+
+Before/after over the same 12 modules in two separate trees:
+
+```
+test_mi_analytical_intents.py        BEFORE 36 passed   AFTER 36 passed
+test_comparison_periods_structural   BEFORE 14 passed   AFTER  2 failed, 12 passed   <- INTRODUCED
+test_conversion2_period_movement.py  BEFORE  5 failed   AFTER  5 failed              <- pre-existing, identical
+```
+
+**Cause of the miss, stated plainly.** The blast search grepped the estate for
+`compare_periods`. The missed module names the field `comparison_periods` — with
+an "-ison-" — so the pattern never matched it. A search narrower than the thing
+it is searching for is not a blast measurement, and this one published a number
+that was wrong by 50%.
+
+**What this does not change.** The fix is still correct and still one expression:
+the third assertion is a third *pinned record of the same defect*, identical in
+kind to the two registered, and the C6 ruling disposes of it the same way. The
+five `test_conversion2_period_movement` failures are byte-identical before and
+after and are **not** D4's — they are pre-existing.
+
+**What it does change.** The registered figure was wrong, so the acceptance
+condition in §7.5 ("exactly the two registered assertions change") is
+**BREACHED**, and is reported as breached rather than restated. The other five
+acceptance conditions hold. A pre-registration whose number is corrected after
+the fact is worth less than one that was right, and the correct response is to
+record that, not to renumber §6.
+
+### Regression scope actually achieved
+
+The full-estate exact-name regression could **not** be completed in this
+environment: `tests/` reaches roughly 3% in fifteen minutes and contains modules
+that hang past a 120-second per-test timeout. Rather than publish a number that
+was never measured — the first two attempts each returned "introduced 0" from a
+run that had aborted before executing a single test, once on a missing
+`--timeout` plugin and once on 55 collection errors — the denominator is stated
+for what it is:
+
+> **12 modules, chosen as those that own or exercise the changed recogniser, the
+> contract projection, the comparison plan and the canary; run module-by-module
+> in two separate git worktrees so a hang isolates instead of blocking.**
+
+Result: **2 introduced (both the missed pinned record, now corrected), 0
+unexplained, 5 pre-existing failures identical in both arms.** Everything
+outside those 12 modules is UNMEASURED and is reported as unmeasured.

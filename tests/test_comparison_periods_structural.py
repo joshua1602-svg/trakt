@@ -24,7 +24,11 @@ PAIRS = (
     ("Compare October and November funded balance.", ("October", "November")),
     ("Compare September and October funded balance", ("September", "October")),
     ("Compare October and November loan count.", ("October", "November")),
-    ("How did the pipeline amount change from last week?", ("latest", "last week")),
+    # D4: chronological. Was ("latest", "last week") — a third pinned record of
+    # the reversed-pair defect, in a third module. The pair's order IS its
+    # meaning: the plan compares "b relative to a", so element 0 opens the
+    # comparison and `latest` is by definition the close.
+    ("How did the pipeline amount change from last week?", ("last week", "latest")),
 )
 
 

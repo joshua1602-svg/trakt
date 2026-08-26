@@ -1221,7 +1221,20 @@ def _compare_recognizer(q: str, title: str, semantics: dict
     if len(periods) < 2:
         rel = next((rp for rp in _RELATIVE_PERIOD_TERMS if rp in q), None)
         if rel:
-            periods = ([periods[0], rel] if periods else ["latest", rel])
+            # CHRONOLOGICAL, and this order is the whole meaning of the pair.
+            # The plan compares "b relative to a" and the executor computes
+            # `vb - va`, so element 0 is the OPENING period. `latest` is by
+            # definition the closing one; building `["latest", rel]` opened the
+            # comparison at the close, which inverted the sign of every
+            # movement AND divided the percentage by the closing value instead
+            # of the opening one. "Since last month" then reported a book that
+            # grew £18.9m -> £21.1m as a 10.57% fall.
+            #
+            # Only this branch invents an order. Where the reader NAMES both
+            # periods the stated order is honoured unchanged — "compare
+            # November and October" asks for exactly that, and reordering it
+            # would substitute our chronology for their question.
+            periods = ([periods[0], rel] if periods else [rel, "latest"])
         else:
             return None
     metric, agg, matched = _detect_metric(q, semantics)
