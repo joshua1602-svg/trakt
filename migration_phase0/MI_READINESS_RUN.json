@@ -1,8 +1,8 @@
 {
  "title": "MI Query Agent \u2014 commercial readiness run",
  "verdict": "READY FOR REAL-CLIENT-DATA ACCEPTANCE",
- "generated": "2026-08-26T19:51:21.748984+00:00",
- "commit": "0bb7951",
+ "generated": "2026-08-26T20:47:20.383203+00:00",
+ "commit": "7cadf04",
  "branch": "claude/mi-query-agent-c7-2tlhr6",
  "agent": "MI Query Agent at this commit; deterministic parser, no model in the loop (LLM config resolved enabled=False, available=False).",
  "portfolios": {
@@ -10,15 +10,19 @@
   "pipeline": "8 governed cases across five stages (APPLICATION, KFI, OFFER, COMPLETED, WITHDRAWN)",
   "collision_fixture": "the same 640 loans with the broker column rewritten to ten names that each straddle a different governed vocabulary"
  },
- "how_answers_were_obtained": "Every row is a live POST to the shipped /mi/query endpoint against the portfolios above. Nothing here is reconstructed, summarised or re-rendered.",
+ "how_answers_were_obtained": "Every row is a live POST to the shipped /mi/query endpoint against the portfolios above. Nothing here is reconstructed, summarised or re-rendered. The answer field is the COMPLETE rendered answer the endpoint returned, byte for byte and to its full length: no row is truncated, elided or clipped. (An earlier issue of this file capped five of the six surfaces at 150-220 characters at capture time. That cap is gone and every surface has been re-run at this commit to produce the answers below.)",
+ "working_directory": {
+  "cwd": "/home/user/trakt (the repository root)",
+  "why_it_is_recorded": "mi_agent_api/risk_limits.py:145 resolves its committed-config limits fallback through a RELATIVE path, Path('config')/'clients'/<id>/'risk_limits_extracted.yaml'. The route's answer therefore depends on the process working directory. Every row below was produced from the repository root, which is what a service started from the repo root sees. See findings_from_this_run below."
+ },
  "surfaces": [
   {
    "surface": "cfo_bank_91",
    "note": "The frozen CFO acceptance bank \u2014 91 questions a finance director asks.",
    "questions": 91,
    "totals": {
-    "EXACT": 68,
-    "FALSE_REFUSAL": 8,
+    "EXACT": 70,
+    "FALSE_REFUSAL": 6,
     "TRUE_REFUSAL": 13,
     "DISCLOSED": 2
    },
@@ -937,28 +941,30 @@
      "id": null,
      "question": "Are any of our concentration limits at risk?",
      "expected": "DELIVER",
-     "grade": "FALSE_REFUSAL",
-     "grader_note": "capability exists for this question",
-     "ok": false,
+     "grade": "EXACT",
+     "grader_note": "",
+     "ok": true,
      "route": "risk_limits",
-     "rows_returned": 0,
-     "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available \u2014 extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document.",
+     "rows_returned": 15,
+     "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
      "warnings": [
-      "limits unavailable / needs review."
+      "3 test(s) unavailable (missing fields).",
+      "1 limit(s) need manual review."
      ]
     },
     {
      "id": null,
      "question": "Which of our limits are currently most at risk?",
      "expected": "DELIVER",
-     "grade": "FALSE_REFUSAL",
-     "grader_note": "capability exists for this question",
-     "ok": false,
+     "grade": "EXACT",
+     "grader_note": "",
+     "ok": true,
      "route": "risk_limits",
-     "rows_returned": 0,
-     "answer": "Contractual risk limits are unavailable for this portfolio (No Schedule 8 limits available \u2014 extraction required.). I can show observed concentrations once limits are provided.\n\nCalculated: Concentration limits vs the governing document.",
+     "rows_returned": 15,
+     "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
      "warnings": [
-      "limits unavailable / needs review."
+      "3 test(s) unavailable (missing fields).",
+      "1 limit(s) need manual review."
      ]
     },
     {
@@ -1103,7 +1109,7 @@
      "ok": false,
      "route": null,
      "rows_returned": 0,
-     "answer": "'cure' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a governed measure \u2014 e.g. balance, LTV, interest rate, borrower age or property value \u2014 optionally by a dimension.",
+     "answer": "Cure rate is measured ACROSS governed snapshots and MI Query answers from a single dataset, so it cannot be computed on this path. It is an owned Trakt metric (OBSERVED_CURE_RATE@v1) served by analytics_lib.history.cure_rate; request it through the governed history tools, where the snapshot window is resolved. No value has been computed and no other measure has been substituted for the one you asked about.",
      "warnings": [
       "requested measure is not available in this dataset; no substitute measure was used."
      ]
@@ -1131,7 +1137,7 @@
      "ok": false,
      "route": null,
      "rows_returned": 0,
-     "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'.",
+     "answer": "Arrears transition / roll analysis is measured ACROSS governed snapshots and MI Query answers from a single dataset, so it cannot be computed on this path. It is an owned Trakt metric (versioned methodology) served by mi_agent.risk_monitor.migration.migration_matrix; request it through the governed history tools, where the snapshot window is resolved. No value has been computed and no other measure has been substituted for the one you asked about.",
      "warnings": [
       "question not understood: no governed metric, dimension or intent was recognised."
      ]
@@ -1512,7 +1518,7 @@
      "ok": true,
      "route": null,
      "rows_returned": 0,
-     "answer": "Current Outstanding Balance Share Pct: 38.7% \u00b7 244 loans \u00b7 Population Total: 640.\n\nCalculated: Share of Balance \u00b7 Product Type = drawdown \u00b7 244 qualifying loans of 640 \u00b7 as at 30 June 2026. Interpreta",
+     "answer": "Current Outstanding Balance Share Pct: 38.7% \u00b7 244 loans \u00b7 Population Total: 640.\n\nCalculated: Share of Balance \u00b7 Product Type = drawdown \u00b7 244 qualifying loans of 640 \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -1524,7 +1530,7 @@
      "ok": true,
      "route": null,
      "rows_returned": 0,
-     "answer": "Current Outstanding Balance Share Pct: 16.8% \u00b7 105 loans \u00b7 Population Total: 640.\n\nCalculated: Share of Balance \u00b7 Scotland \u00b7 105 qualifying loans of 640 \u00b7 as at 30 June 2026. Interpretation confidence",
+     "answer": "Current Outstanding Balance Share Pct: 16.8% \u00b7 105 loans \u00b7 Population Total: 640.\n\nCalculated: Share of Balance \u00b7 Scotland \u00b7 105 qualifying loans of 640 \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -1536,7 +1542,7 @@
      "ok": true,
      "route": "concentration_analysis",
      "rows_returned": 7,
-     "answer": "Largest occupancy type exposure is owner_occupied (92.0% of exposure). Largest exposure currency denomination exposure is GBP (100.0% of exposure). Largest geographic region obligor exposure is Scotla",
+     "answer": "Largest occupancy type exposure is owner_occupied (92.0% of exposure). Largest exposure currency denomination exposure is GBP (100.0% of exposure). Largest geographic region obligor exposure is Scotland (16.8% of exposure). Largest origination channel exposure is broker (77.8% of exposure). Largest product type exposure is lump_sum (61.4% of exposure).\n\nCalculated: Exposure concentration.",
      "warnings": []
     },
     {
@@ -1548,7 +1554,7 @@
      "ok": false,
      "route": "concentration_analysis",
      "rows_returned": 0,
-     "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by broker). I have",
+     "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by broker). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -1632,7 +1638,7 @@
      "ok": true,
      "route": "period_change_analysis",
      "rows_returned": 15,
-     "answer": "Between 31 May 2026 and 30 June 2026, 4 of 4 governed metrics could be compared across both snapshots. Largest observed movements measured in counts: Youngest Borrower Age \u22120 (74 \u2192 74). Largest observ",
+     "answer": "Between 31 May 2026 and 30 June 2026, 4 of 4 governed metrics could be compared across both snapshots. Largest observed movements measured in counts: Youngest Borrower Age \u22120 (74 \u2192 74). Largest observed movements measured in currency: Current Outstanding Balance +\u00a322.6m (\u00a3149.5m \u2192 \u00a3172.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22121.32 pp (37.58% \u2192 36.26%); Current Interest Rate \u22120.05 pp (6.31% \u2192 6.26%). Against the registry's directionality, 1 metric(s) moved in the improving direction and 0 in the deteriorating direction. The largest observed composition shifts were Broker Channel \u2014 Delta Advisers +6.22 pp of count share; Geographic Region Obligor \u2014 Scotland +4.91 pp of count share; ERM Product Type \u2014 lump_sum +4.38 pp of count share. The balance bridge reconciles: opening \u00a3149.5m +\u00a383.7m new lending, \u2212\u00a366.7m exits, +\u00a35.6m on continuing loans, closing \u00a3172.1m. No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk.\n\nCalculated: Governed period change.",
      "warnings": []
     },
     {
@@ -1644,7 +1650,7 @@
      "ok": true,
      "route": "period_change_analysis",
      "rows_returned": 7,
-     "answer": "Between 31 May 2026 and 30 June 2026, ranked by absolute balance movement across Geographic Region Obligor, Scotland increased the most: Scotland \u00a316.5m \u2192 \u00a328.9m (+\u00a312.4m, +75.0%). Then Wales \u00a315.5m \u2192",
+     "answer": "Between 31 May 2026 and 30 June 2026, ranked by absolute balance movement across Geographic Region Obligor, Scotland increased the most: Scotland \u00a316.5m \u2192 \u00a328.9m (+\u00a312.4m, +75.0%). Then Wales \u00a315.5m \u2192 \u00a324.3m (+\u00a38.8m, +56.6%); South East \u00a321.6m \u2192 \u00a324.0m (+\u00a32.5m, +11.4%); North \u00a325.0m \u2192 \u00a326.8m (+\u00a31.8m, +7.4%). The full ranking of all 5 ranked categories is in the table below. 2 further categories did not increase on this basis and are not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region Obligor \u00b7 absolute balance movement, largest increases first \u00b7 2026-05-31 \u2192 2026-06-30.",
      "warnings": []
     }
    ]
@@ -1751,7 +1757,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3158.2MM \u00b7 585 loans.\n\nCalculated: Total Balance \u00b7 Occupancy Type = owner_occupied \u00b7 585 loans \u00b7 as at 30 June 2026. Interpretation confidenc",
+     "answer": "Current Outstanding Balance: \u00a3158.2MM \u00b7 585 loans.\n\nCalculated: Total Balance \u00b7 Occupancy Type = owner_occupied \u00b7 585 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -1775,7 +1781,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = drawdown \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 244 loans \u00b7 as at",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = drawdown \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 244 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -1787,7 +1793,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 396 loans \u00b7 as at",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 396 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -1799,7 +1805,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Count of loans \u00b7 Occupancy Type = owner_occupied \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 585 loan",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Count of loans \u00b7 Occupancy Type = owner_occupied \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 585 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -1811,7 +1817,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 396 loans \u00b7 as at",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 396 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -1835,7 +1841,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "North has the highest Current Outstanding Balance: \u00a312.6MM (7 groups).\n\nCalculated: Total Balance \u00b7 Product Type = drawdown \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups",
+     "answer": "North has the highest Current Outstanding Balance: \u00a312.6MM (7 groups).\n\nCalculated: Total Balance \u00b7 Product Type = drawdown \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 244 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -1847,7 +1853,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Delta Advisers has the highest Current Outstanding Balance: \u00a330.5MM (4 groups).\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Broker \u00b7 4 groups \u00b7 396 ",
+     "answer": "Delta Advisers has the highest Current Outstanding Balance: \u00a330.5MM (4 groups).\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Broker \u00b7 4 groups \u00b7 396 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -1859,7 +1865,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for Drawdown, but that could not be applied to the calculation (Drawdown \u2014 this narrowing was not applied, so the figure covers the whole book",
+     "answer": "I understood that you asked for Drawdown, but that could not be applied to the calculation (Drawdown \u2014 this narrowing was not applied, so the figure covers the whole book rather than only Drawdown). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -1871,7 +1877,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Between 31 May 2026 and 30 June 2026, ranked by absolute balance movement across Geographic Region Obligor, Scotland increased the most: Scotland \u00a316.5m \u2192 \u00a328.9m (+\u00a312.4m",
+     "answer": "Between 31 May 2026 and 30 June 2026, ranked by absolute balance movement across Geographic Region Obligor, Scotland increased the most: Scotland \u00a316.5m \u2192 \u00a328.9m (+\u00a312.4m, +75.0%). Then Wales \u00a315.5m \u2192 \u00a324.3m (+\u00a38.8m, +56.6%); South East \u00a321.6m \u2192 \u00a324.0m (+\u00a32.5m, +11.4%); North \u00a325.0m \u2192 \u00a326.8m (+\u00a31.8m, +7.4%). The full ranking of all 5 ranked categories is in the table below. 2 further categories did not increase on this basis and are not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region Obligor \u00b7 absolute balance movement, largest increases first \u00b7 2026-05-31 \u2192 2026-06-30.",
      "warnings": []
     },
     {
@@ -1943,7 +1949,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "lump_sum has the highest Current Outstanding Balance: \u00a3105.4MM (2 groups).\n\nCalculated: Total Balance \u00b7 grouped by Product Type \u00b7 2 groups \u00b7 640 loans \u00b7 as at 30 June 202",
+     "answer": "lump_sum has the highest Current Outstanding Balance: \u00a3105.4MM (2 groups).\n\nCalculated: Total Balance \u00b7 grouped by Product Type \u00b7 2 groups \u00b7 640 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     }
    ]
@@ -1991,7 +1997,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Account Status = performing \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 gr",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Account Status = performing \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 619 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2027,7 +2033,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 6 groups.\n\nCalculated: Total Balance \u00b7 Account Status = redeemed \u00b7 grouped by Obligor Region (NUTS3) \u00b7 6 grou",
+     "answer": "Here is the bar for your query, covering 6 groups.\n\nCalculated: Total Balance \u00b7 Account Status = redeemed \u00b7 grouped by Obligor Region (NUTS3) \u00b7 6 groups \u00b7 21 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2063,7 +2069,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Alpha Network \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups ",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Alpha Network \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 153 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2099,7 +2105,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Beta Partners \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups ",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Beta Partners \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 153 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2135,7 +2141,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Delta Advisers \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Delta Advisers \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 187 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2171,7 +2177,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Gamma Direct \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Broker = Gamma Direct \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 147 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2207,7 +2213,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = drawdown \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = drawdown \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 244 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2243,7 +2249,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Product Type = lump_sum \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 396 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2267,7 +2273,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a322.4MM \u00b7 83 loans.\n\nCalculated: Total Balance \u00b7 London \u00b7 83 loans \u00b7 as at 30 June 2026. Interpretation confidence: mediu",
+     "answer": "Current Outstanding Balance: \u00a322.4MM \u00b7 83 loans.\n\nCalculated: Total Balance \u00b7 London \u00b7 83 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2279,7 +2285,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for London, but that could not be applied to the calculation (London (Obligor Region (NUTS3)) \u2014 the geographic scope was n",
+     "answer": "I understood that you asked for London, but that could not be applied to the calculation (London (Obligor Region (NUTS3)) \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2303,7 +2309,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a325.1MM \u00b7 97 loans.\n\nCalculated: Total Balance \u00b7 Midlands \u00b7 97 loans \u00b7 as at 30 June 2026. Interpretation confidence: med",
+     "answer": "Current Outstanding Balance: \u00a325.1MM \u00b7 97 loans.\n\nCalculated: Total Balance \u00b7 Midlands \u00b7 97 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2315,7 +2321,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for Midlands, but that could not be applied to the calculation (Midlands (Obligor Region (NUTS3)) \u2014 the geographic scope w",
+     "answer": "I understood that you asked for Midlands, but that could not be applied to the calculation (Midlands (Obligor Region (NUTS3)) \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2339,7 +2345,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a326.8MM \u00b7 95 loans.\n\nCalculated: Total Balance \u00b7 North \u00b7 95 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium",
+     "answer": "Current Outstanding Balance: \u00a326.8MM \u00b7 95 loans.\n\nCalculated: Total Balance \u00b7 North \u00b7 95 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2351,7 +2357,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for North, but that could not be applied to the calculation (North (Obligor Region (NUTS3)) \u2014 the geographic scope was not",
+     "answer": "I understood that you asked for North, but that could not be applied to the calculation (North (Obligor Region (NUTS3)) \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2375,7 +2381,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a328.9MM \u00b7 105 loans.\n\nCalculated: Total Balance \u00b7 Scotland \u00b7 105 loans \u00b7 as at 30 June 2026. Interpretation confidence: m",
+     "answer": "Current Outstanding Balance: \u00a328.9MM \u00b7 105 loans.\n\nCalculated: Total Balance \u00b7 Scotland \u00b7 105 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2387,7 +2393,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for Scotland, but that could not be applied to the calculation (Scotland (Obligor Region (NUTS3)) \u2014 the geographic scope w",
+     "answer": "I understood that you asked for Scotland, but that could not be applied to the calculation (Scotland (Obligor Region (NUTS3)) \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2411,7 +2417,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a324.0MM \u00b7 94 loans.\n\nCalculated: Total Balance \u00b7 South East \u00b7 94 loans \u00b7 as at 30 June 2026. Interpretation confidence: m",
+     "answer": "Current Outstanding Balance: \u00a324.0MM \u00b7 94 loans.\n\nCalculated: Total Balance \u00b7 South East \u00b7 94 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2423,7 +2429,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for South East, but that could not be applied to the calculation (South East (Obligor Region (NUTS3)) \u2014 the geographic sco",
+     "answer": "I understood that you asked for South East, but that could not be applied to the calculation (South East (Obligor Region (NUTS3)) \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2447,7 +2453,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a320.5MM \u00b7 73 loans.\n\nCalculated: Total Balance \u00b7 South West \u00b7 73 loans \u00b7 as at 30 June 2026. Interpretation confidence: m",
+     "answer": "Current Outstanding Balance: \u00a320.5MM \u00b7 73 loans.\n\nCalculated: Total Balance \u00b7 South West \u00b7 73 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2459,7 +2465,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for South West, but that could not be applied to the calculation (South West (Obligor Region (NUTS3)) \u2014 the geographic sco",
+     "answer": "I understood that you asked for South West, but that could not be applied to the calculation (South West (Obligor Region (NUTS3)) \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2483,7 +2489,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a324.3MM \u00b7 93 loans.\n\nCalculated: Total Balance \u00b7 Wales \u00b7 93 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium",
+     "answer": "Current Outstanding Balance: \u00a324.3MM \u00b7 93 loans.\n\nCalculated: Total Balance \u00b7 Wales \u00b7 93 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2495,7 +2501,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for Wales, but that could not be applied to the calculation (Wales (Obligor Region (NUTS3)) \u2014 the geographic scope was not",
+     "answer": "I understood that you asked for Wales, but that could not be applied to the calculation (Wales (Obligor Region (NUTS3)) \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2519,7 +2525,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3158.2MM \u00b7 585 loans.\n\nCalculated: Total Balance \u00b7 Occupancy Type = owner_occupied \u00b7 585 loans \u00b7 as at 30 June 2026. Inte",
+     "answer": "Current Outstanding Balance: \u00a3158.2MM \u00b7 585 loans.\n\nCalculated: Total Balance \u00b7 Occupancy Type = owner_occupied \u00b7 585 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2531,7 +2537,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Occupancy Type = owner_occupied \u00b7 grouped by Obligor Region (NUTS3) \u00b7 ",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Occupancy Type = owner_occupied \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 585 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2567,7 +2573,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Occupancy Type = second_home \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 g",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Occupancy Type = second_home \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 55 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2579,7 +2585,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I could not tell how you meant broker. Did you want the book split by it, or narrowed to one value of it? I have not answered over the whole book in t",
+     "answer": "I could not tell how you meant broker. Did you want the book split by it, or narrowed to one value of it? I have not answered over the whole book in the meantime.",
      "warnings": []
     },
     {
@@ -2591,7 +2597,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I could not tell how you meant broker. Did you want the book split by it, or narrowed to one value of it? I have not answered over the whole book in t",
+     "answer": "I could not tell how you meant broker. Did you want the book split by it, or narrowed to one value of it? I have not answered over the whole book in the meantime.",
      "warnings": []
     },
     {
@@ -2603,7 +2609,7 @@
      "ok": false,
      "route": null,
      "rows_returned": null,
-     "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 the requested breakdown was not applied). I have no",
+     "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 the requested breakdown was not applied). I have not substituted a broader figure.",
      "warnings": []
     },
     {
@@ -2627,7 +2633,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Inter",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2639,7 +2645,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 441 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2663,7 +2669,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026. Inte",
+     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2675,7 +2681,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 199 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2699,7 +2705,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Inter",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2711,7 +2717,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 441 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2723,7 +2729,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "199 loans \u00b7 Current Outstanding Balance: \u00a354.7MM.\n\nCalculated: Count of loans \u00b7 Source Portfolio Type = acquired \u00b7 Source Portfolio in acquired_001 \u00b7 ",
+     "answer": "199 loans \u00b7 Current Outstanding Balance: \u00a354.7MM.\n\nCalculated: Count of loans \u00b7 Source Portfolio Type = acquired \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2735,7 +2741,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio Type = acquired \u00b7 Source Portfolio in acquired_001 \u00b7 1",
+     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio Type = acquired \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2747,7 +2753,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio Type = acquired \u00b7 Source Portfolio in acquired_001 \u00b7 ",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio Type = acquired \u00b7 Source Portfolio in acquired_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 199 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     },
     {
@@ -2771,7 +2777,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Inter",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -2783,7 +2789,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7",
+     "answer": "Here is the bar for your query, covering 7 groups.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 7 groups \u00b7 441 loans \u00b7 as at 30 June 2026.",
      "warnings": []
     }
    ]
@@ -3251,7 +3257,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questio",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -3275,7 +3281,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questi",
+     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -3299,7 +3305,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questio",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -3347,7 +3353,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questio",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     }
    ]
@@ -3959,7 +3965,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questio",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -3983,7 +3989,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questi",
+     "answer": "Current Outstanding Balance: \u00a354.7MM \u00b7 199 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in acquired_001 \u00b7 199 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -4007,7 +4013,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questio",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     },
     {
@@ -4055,7 +4061,7 @@
      "ok": true,
      "route": null,
      "rows_returned": null,
-     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your questio",
+     "answer": "Current Outstanding Balance: \u00a3117.4MM \u00b7 441 loans.\n\nCalculated: Total Balance \u00b7 Source Portfolio in direct_001 \u00b7 441 loans \u00b7 as at 30 June 2026. Interpretation confidence: low \u2014 check the scope above matches your question.",
      "warnings": []
     }
    ]
@@ -4064,8 +4070,8 @@
  "totals": {
   "questions": 324,
   "grades": {
-   "EXACT": 103,
-   "FALSE_REFUSAL": 8,
+   "EXACT": 105,
+   "FALSE_REFUSAL": 6,
    "TRUE_REFUSAL": 13,
    "DISCLOSED": 2,
    "TRUE SAFE REFUSAL": 1,
@@ -4138,11 +4144,21 @@
   {
    "gate": "every remaining refusal is a genuine capability or data limit",
    "met": true,
-   "evidence": "8 remaining false refusals on the CFO bank, each classified in docs/mi_basic_compositional_completeness.md section F. THIS ONE IS A JUDGEMENT, not a measurement \u2014 see reader_should_know below."
+   "evidence": "6 remaining false refusals on the CFO bank, each classified in docs/mi_basic_compositional_completeness.md section F (which describes 8; the two Schedule 8 limit questions are no longer among them \u2014 see findings_from_this_run). THIS ONE IS A JUDGEMENT, not a measurement \u2014 see reader_should_know below."
+  }
+ ],
+ "findings_from_this_run": [
+  {
+   "finding": "risk_limits reads its committed-config fallback through a relative path, so the answer depends on the working directory",
+   "where": "mi_agent_api/risk_limits.py:145",
+   "detail": "Path('config')/'clients'/<client_id>/'risk_limits_extracted.yaml' is relative. config/clients/client_001/risk_limits_extracted.yaml exists in the repository and carries 15 extracted limits. Run from the repository root, 'Are any of our concentration limits at risk?' is answered (5 passed, 6 breaches, nearest to limit Top 3 brokers, -31.5pp headroom). Run from any other directory the same question is refused with 'No Schedule 8 limits available \u2014 extraction required.' It is the same commit, the same portfolio and the same question: only the process working directory differs. This is the ONLY difference between this run and the one published on 26 Aug at 19:44 \u2014 that run was captured from a directory where the config file was invisible, so it recorded those two questions as FALSE_REFUSAL. All 324 questions were re-run for this file and, question for question, the other 322 grade identically.",
+   "effect_on_the_numbers": "CFO bank 68 EXACT / 8 FALSE_REFUSAL becomes 70 EXACT / 6 FALSE_REFUSAL. No other surface moves; no grade on any other surface changes.",
+   "was_it_fixed": "NO. This run was to reproduce the banks without truncation, not to change production. Nothing in the product was edited: the tree is clean at this commit and the safety evidence below still stands unmodified. The fix is one line (anchor the path to the package root, as the rest of the module does) and is proposed, not applied.",
+   "why_it_matters_for_live_data": "In production this fails SILENTLY and in the safe direction \u2014 a service whose working directory is not the repository root tells the client their limits have not been extracted when in fact they have. It should be closed before the live test, and the deployment's working directory should be pinned regardless."
   }
  ],
  "reader_should_know": [
-  "THE 8 FALSE REFUSALS ARE A JUDGEMENT CALL. The oracle grades all 8 as FALSE_REFUSAL. The decision that none is commercially embarrassing \u2014 and therefore does not block readiness \u2014 is documented in docs/mi_basic_compositional_completeness.md section F and should be confirmed by whoever owns the product bar. Two of them (the Schedule 8 limit questions) moved EXACT -> FALSE_REFUSAL because a success-shaped non-answer was corrected to an honest refusal; the fixture has no limits extracted. The frozen bank was NOT edited to improve the grade.",
+  "THE 6 FALSE REFUSALS ARE A JUDGEMENT CALL. The oracle grades all 6 as FALSE_REFUSAL. The decision that none is commercially embarrassing \u2014 and therefore does not block readiness \u2014 is documented in docs/mi_basic_compositional_completeness.md section F and should be confirmed by whoever owns the product bar. The frozen bank was NOT edited to improve the grade.",
   "THE COLLISION SWEEPS STILL SHOW 2 WRONG ADDITIONAL CLAIMS. This is the documented single-token origination_channel = 'direct' residual, where a book value collides with the portfolio-scope vocabulary and scope wins by an existing test-pinned precedence. It was deliberately not changed. It is the only non-zero wrong-claim count on any surface, and it is item 2 on the real-data handoff checklist.",
   "THESE ARE SYNTHETIC PORTFOLIOS. A clean run here means the pipeline is correct and reproducible on data whose shape we chose. It does not predict what a real client tape will do to it \u2014 which is what the live test is for."
  ]
