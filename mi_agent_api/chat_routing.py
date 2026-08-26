@@ -2919,6 +2919,37 @@ def _capability_unavailable_envelope(req: RouteRequest, recogniser,
     return envelope
 
 
+def _execution_failure_envelope(req: RouteRequest, recogniser) -> Dict[str, Any]:
+    """The governed 'this analysis failed' answer for a claimed route.
+
+    NO NEW PUBLIC TAXONOMY. An `ok:false` envelope that is neither
+    `controlledUnsupported` nor `unmappedQuestion` nor a no-rows case is already
+    classified `ErrorCode.CALCULATION_FAILED` by
+    `mi_service._classify_analytical_failure` — the existing governed code for
+    "the calculation broke", as distinct from "I will not answer that".
+
+    NOTHING INTERNAL REACHES THE READER. The exception class, its message and
+    its traceback are logged and never published; the caller is told which
+    analysis failed and that nothing was substituted for it. The claimed route
+    stays on `metadata.route`, so an answer produced by a different route after
+    this one failed is detectable rather than indistinguishable.
+    """
+    detail = ("I could not complete this analysis: it failed while running. I "
+              "have not answered your question with a different analysis "
+              "instead.")
+    envelope = _envelope(
+        ok=False, question=req.question, answer=detail, spec=req.spec_dict,
+        artifacts=[], route=recogniser.name, error=detail, lens_applied=True,
+        warnings=[f"execution failed in {recogniser.name}"])
+    meta = envelope["metadata"]
+    meta["executionFailure"] = True
+    meta["claimedRoute"] = recogniser.name
+    meta["claimBoundaryCrossed"] = True
+    if recogniser.capability:
+        meta["capability"] = recogniser.capability
+    return envelope
+
+
 def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserRegistry:
     """Declare the governed capability routes.
 
@@ -3313,9 +3344,30 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                     question, source_lens)
         try:
             envelope = recogniser.handle(request)
-        except Exception as exc:  # noqa: BLE001 - a broken route defers, never 500s
-            _logger.warning("route %s failed: %s", recogniser.name, exc)
-            continue
+        except Exception as exc:  # noqa: BLE001 - fails CLOSED, never 500s
+            # THE CLAIM BOUNDARY. This used to `continue`, so a route that broke
+            # partway through its own analysis handed the question to the next
+            # candidate, which answered it as a different analysis. Measured: a
+            # fault injected after `period_change_analysis` had already run the
+            # governed period-change produced a `temporal_compare` refusal about
+            # ranking, with no receipt and no trace that the claimed route had
+            # ever run.
+            #
+            # The distinction is the registry's own, not a list of route names.
+            # `recognise` is pre-claim and still fails open — a recogniser that
+            # raises is skipped inside `RecogniserRegistry.candidates`, and a
+            # route that does not apply says so by returning None from `handle`,
+            # which still falls through. Entering `handle` is the claim: the
+            # registry has selected this route to answer, so its failure is a
+            # failure of the answer, not an offer to let something else try.
+            #
+            # Measured before changing it: across all 882 corpus questions, zero
+            # handlers raise. Nothing on the normal path relies on this.
+            _logger.exception("route %s failed after claiming the question",
+                              recogniser.name)
+            return _disclose_lens_scope(
+                _execution_failure_envelope(request, recogniser), question,
+                source_lens)
         if envelope is not None:
             _stamp_analytical_intent(envelope, analytical_reading, analytical_flags)
             return _disclose_lens_scope(envelope, question, source_lens)
