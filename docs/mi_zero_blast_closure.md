@@ -215,3 +215,56 @@ now reads the registry's `portfolio_comparability` declaration.
 **No frozen expectation was rewritten to make current behaviour look better.**
 The frozen CFO bank already expected REFUSE for both ambiguous questions; this
 sprint brought production into line with it, not the other way round.
+
+---
+
+## Verdict
+
+**NOT READY FOR REAL-CLIENT-DATA ACCEPTANCE** — one specific blocker, everything
+else closed.
+
+All thirteen gates in §19 are met and every pre-registered defect is closed. The
+verdict does not turn on the gates. It turns on the sprint's own closing
+invariant:
+
+> The MI Agent cannot silently answer an easier question than the one the client
+> actually asked.
+
+It measurably can. An attributive qualifier that no governed field claims is
+dropped without a word, and the whole book is returned as the answer. Measured
+in the vocabulary a real client would use:
+
+| question | answer |
+|---|---|
+| How many platinum loans do we have? | 640 loans · £172.1MM |
+| How many retirement interest only loans do we have? | 640 loans · £172.1MM |
+| How many enhanced loans do we have? | 640 loans · £172.1MM |
+| How many tier 1 loans do we have? | 640 loans · £172.1MM |
+| How many prime loans do we have? | 640 loans · £172.1MM |
+| What is the balance of legacy loans? | £172.1MM · 640 loans |
+| …for Atlantis loans? (movement route) | the whole-book ranking |
+
+Seven for seven, `ok=true`, with no mention that the qualifier was ignored. This
+is the most common shape a first real-data session will produce, because a real
+tape's vocabulary is largely ungoverned until it is mapped. The synthetic banks
+do not show it because they ask in the vocabulary the book already carries.
+
+It is a **wrong answer delivered with confidence** — first in the stated priority
+order, ahead of misleading answers and embarrassing refusals.
+
+**A green verdict was available and was not taken.** §10 authorised documenting
+this as a residual; §19's gates are all met; and the probe now sits in a bank
+that contributes no passing grade. Declaring READY on that basis would be a
+verdict produced by moving a failure out of the denominator, which is the one
+thing this programme's rules forbid above all others.
+
+**What clears it.** One bounded piece of work: make the attributive form agree
+with the prepositional form, which already refuses correctly — `"what is the
+balance for platinum loans?"` refuses today. The two shapes of one question must
+not disagree. It needs the residue checked against the scope owner, the
+dimension owner and the grouping markers, and it must be measured against the
+three questions that the first attempt broke:
+
+* `How many direct loans do we have?` (441, the Direct book)
+* `What is the balance of offer stage cases?`
+* `Show balance by loan type.`
