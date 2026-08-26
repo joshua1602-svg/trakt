@@ -1315,7 +1315,8 @@ def _detect_periods(q: str) -> List[str]:
 # a second answer to the same question waiting to drift from the first.
 
 
-def _compare_recognizer(q: str, title: str, semantics: dict
+def _compare_recognizer(q: str, title: str, semantics: dict,
+                        available_columns=None, available_values=None
                         ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Cross-period comparison → governed ``temporal_mode='compare'`` plan.
 
@@ -1372,8 +1373,17 @@ def _compare_recognizer(q: str, title: str, semantics: dict
     # already uses — with the same two functions.
     filter_spans: Dict[str, Tuple[int, int]] = {}
     unresolved_filters: List[str] = []
-    filters = _parse_filters(q, semantics, unresolved=unresolved_filters,
-                             spans=filter_spans) or {}
+    # THE CATALOGUE TRAVELS WITH THE CALL, as it does at the other four
+    # `_parse_filters` sites. Without it `_parse_categorical_filter` has no
+    # book values to resolve against, so a GOVERNED CATEGORICAL predicate
+    # ("for lump sum loans") resolved to nothing and the comparison ran over
+    # the whole book. The numeric half of the pass worked, which is why the
+    # LTV case above was fixed here and the categorical one was not: the two
+    # halves of one filter pass were reading different inputs.
+    filters = _parse_filters(q, semantics, available_columns,
+                             unresolved=unresolved_filters,
+                             spans=filter_spans,
+                             available_values=available_values) or {}
 
     # A CLAUSE THAT IS THE PERIOD EXPRESSION IS NOT A PREDICATE.
     #
@@ -1386,6 +1396,21 @@ def _compare_recognizer(q: str, title: str, semantics: dict
     #
     # The rule is generic and names no field: where a filter was resolved from
     # text the period detection already claimed, the period detection wins.
+    #
+    # THE TEST IS THE VALUE'S OWN TEXT, NOT THE CLAUSE IT CAME FROM. A clause
+    # span is as wide as the sentence the clause splitter did not split, so
+    # testing it asks "does this question mention a period anywhere?" — which
+    # is true of every comparison question by construction. On "which region
+    # added the most balance since last month for lump sum loans?" the whole
+    # question is one clause, its span (0, 72) overlaps "last month", and a
+    # governed Product Type predicate the reader stated was dropped, leaving a
+    # whole-book movement rendered as though it were the filtered one.
+    #
+    # The guard's own sentence says what it means to catch: a filter "resolved
+    # FROM text the period detection already claimed". That is a fact about
+    # where the VALUE was read, so the value's own span is what decides it.
+    # "October To November" is spelled out of the period phrase and still
+    # drops; "lump sum" is not and survives.
     _period_spans = []
     for _token in periods:
         _needle = str(_token).lower()
@@ -1393,7 +1418,26 @@ def _compare_recognizer(q: str, title: str, semantics: dict
         while _at != -1:
             _period_spans.append((_at, _at + len(_needle)))
             _at = q.find(_needle, _at + 1)
-    for _field, (_s, _e) in list(filter_spans.items()):
+
+    def _value_span(field: str, clause_span: Tuple[int, int]) -> Tuple[int, int]:
+        """Where the filter's VALUE is written, falling back to its clause."""
+        raw = filters.get(field)
+        if not isinstance(raw, str):
+            # A numeric predicate carries no text to have been read out of a
+            # period phrase; its clause span is the only locator there is.
+            return clause_span
+        spelled = str(raw).replace("_", " ").strip().lower()
+        if not spelled:
+            return clause_span
+        at = q.find(spelled)
+        if at == -1:
+            # Governed spelling differs from the reader's; keep the old test
+            # rather than guess, so this can only ever drop what it dropped.
+            return clause_span
+        return (at, at + len(spelled))
+
+    for _field, _clause in list(filter_spans.items()):
+        _s, _e = _value_span(_field, _clause)
         if any(_s < pe and ps < _e for ps, pe in _period_spans):
             filter_spans.pop(_field, None)
             filters.pop(_field, None)
@@ -3051,7 +3095,9 @@ def _deterministic_parse(question: str, semantics: dict,
     cp = _cohort_progression_recognizer(q_owned, title, semantics)
     if cp is not None:
         return cp
-    cmp_spec = _compare_recognizer(q_owned, title, semantics)
+    cmp_spec = _compare_recognizer(q_owned, title, semantics,
+                                   available_columns=available_columns,
+                                   available_values=available_values)
     if cmp_spec is not None:
         return cmp_spec
     rl = _risk_limit_recognizer(q_owned, title)

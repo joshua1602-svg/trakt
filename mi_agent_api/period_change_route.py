@@ -84,9 +84,28 @@ FAILURE_ERROR_CODES: Dict[str, str] = {
 # --------------------------------------------------------------------------- #
 # Snapshot supply — the EXISTING governed per-period frame service
 # --------------------------------------------------------------------------- #
+class PopulationNotApplied(Exception):
+    """A governed row predicate could not be applied to every snapshot.
+
+    Raised, never returned, and never swallowed into an unnarrowed frame: a
+    comparison whose population failed on one of its two dates is not a
+    comparison with a missing filter, it is no comparison at all. The same
+    fail-closed shape `_filtered_funded_evo` already raises for the funded
+    series, for the same reason.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(detail)
+        self.detail = detail
+
+
 def build_snapshots(output_root: Optional[str], client_id: str, *,
                     to_run_id: Optional[str] = None,
-                    lens: Any = None) -> Tuple[SnapshotFrame, ...]:
+                    lens: Any = None,
+                    population: Sequence[Any] = (),
+                    semantics: Optional[Dict[str, Any]] = None,
+                    evidence_out: Optional[List[Any]] = None,
+                    ) -> Tuple[SnapshotFrame, ...]:
     """Governed portfolio snapshots, oldest → newest, for a client and lens.
 
     ``lens`` is a RESOLVED portfolio lens (``chat_routing._resolve_lens``), whose
@@ -94,6 +113,17 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
     same ``_apply_lens_filter`` the funded-bridge and movement routes use, so a
     period-change answer covers exactly the portfolios every other routed answer
     would cover for the same lens.
+
+    ``population`` are the governed `Predicate` objects the compositional plan
+    selected — `SELECT_POPULATION(kind=row_predicates)` from `RowPredicateClaim`,
+    the same objects `_filtered_funded_evo` receives. THE POPULATION IS APPLIED
+    HERE, in the one place every snapshot this route compares is built, so a
+    predicate cannot reach one date and miss the other. Applying it in the
+    caller, per date, is how a filtered comparison comes to open on one
+    population and close on another.
+
+    Execution goes through `population.apply_population` — the single governed
+    meaning of a predicate — and FAILS CLOSED on any snapshot it cannot narrow.
     """
     from . import chat_routing
     from . import contract_scope as _scope
@@ -108,6 +138,20 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
             continue
         df = (chat_routing._apply_lens_filter(source_df, lens)
               if lens is not None else source_df)
+        if population:
+            from mi_agent import population as _population
+
+            df, evidence = _population.apply_population(df, population, semantics)
+            if df is None or not evidence.is_usable:
+                raise PopulationNotApplied(
+                    "; ".join(evidence.unavailable
+                              or [evidence.blocked_reason or "unknown reason"]))
+            if evidence_out is not None:
+                # KEYED BY SNAPSHOT, because the receipt publishes counts for
+                # the TWO snapshots the comparison resolved to, not for every
+                # snapshot the book has. An unkeyed list would pair a filtered
+                # count for two dates with unfiltered counts for five.
+                evidence_out.append((str(frame.get("run_id")), evidence))
         source = frame.get("source")
         snapshots.append(SnapshotFrame(
             snapshot_id=str(frame.get("run_id")),
@@ -309,6 +353,7 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                         portfolio_id: Optional[str], as_of: Optional[str],
                         source_lens: Any = None,
                         semantics_context: Optional[Dict[str, Any]] = None,
+                        semantics: Optional[Dict[str, Any]] = None,
                         view: str = "funded",
                         lens: Any = None,
                         interpretation: Any = None,
@@ -346,8 +391,44 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
         # for its reason: keeping the resolver here as a fallback would leave a
         # second population owner reachable exactly when the first one failed.
         return None
-    snapshots = build_snapshots(output_root, client_id, to_run_id=run_id,
-                                lens=resolved_lens)
+    # THE POPULATION THE READER STATED, PLANNED FROM THE CONTRACT.
+    #
+    # Same chain the funded evolution route uses and the same objects:
+    # `RowPredicateClaim` -> `SELECT_POPULATION(kind=row_predicates)` ->
+    # `Predicate` -> `governed_predicate_mask`. This route reads no filter
+    # meaning of its own; it asks the plan what rows the question selected, and
+    # a route-local reading of `spec.filters` would be a second owner of the
+    # answer the contract already carries.
+    from . import analytical_plan as _plan
+
+    _population = _plan.row_predicates(_plan.row_predicate_step(interpretation))
+    _pop_evidence: List[Any] = []
+    try:
+        snapshots = build_snapshots(output_root, client_id, to_run_id=run_id,
+                                    lens=resolved_lens,
+                                    population=_population,
+                                    # THE MI SEMANTICS, not `semantics_context`.
+                                    # `governed_predicate_mask` resolves the
+                                    # field, its domain and its scale from this
+                                    # dict; handed the registry context (empty
+                                    # today) it compares a stored LTV RATIO
+                                    # against 50 and narrows every snapshot to
+                                    # nothing. Same object the funded evolution
+                                    # route passes to the same call.
+                                    semantics=semantics,
+                                    evidence_out=_pop_evidence)
+    except PopulationNotApplied as exc:
+        # THE REQUESTED POPULATION WAS NOT APPLIED, SO NOTHING IS ANSWERED.
+        # Naming it is the point: a reader who asked about one population must
+        # never be handed the whole book with the difference left unsaid.
+        message = (f"I understood the population you asked about, but it could "
+                   f"not be applied to both snapshots of this comparison "
+                   f"({exc.detail}). I have not compared the whole book "
+                   f"instead.")
+        return chat_routing._envelope(
+            ok=False, question=question, spec=spec_dict, artifacts=[],
+            answer=message, error=message, route="period_change",
+            warnings=[message])
     scope_ref = scope_ref_from_lens(
         resolved_lens, registry=_registry_for(snapshots, client_id))
 
@@ -478,10 +559,27 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # both the intent (which fields the term could have bound to) and the
     # outcome (which one it did) are in scope. Everything downstream — prose,
     # table, metadata — reads it. Nothing downstream re-derives it.
-    receipt = (movement_receipt_for(result, rank_intent, ranking)
+    receipt = (movement_receipt_for(result, rank_intent, ranking,
+                                    population=_population,
+                                    pop_evidence=_pop_evidence)
                if ranking.applied else None)
-    return _render(result, question, spec_dict, portfolio_id, as_of,
-                   receipt=receipt)
+    out = _render(result, question, spec_dict, portfolio_id, as_of,
+                  receipt=receipt)
+    if _population and _pop_evidence:
+        # THE ROUTE DECLARES WHAT IT APPLIED. The population ledger accepts
+        # execution evidence only and treats a silent route as having widened,
+        # so an answer that genuinely narrowed every snapshot says so — in the
+        # same ledger shape, and with the same per-period wording, the funded
+        # evolution route already publishes.
+        _last = _pop_evidence[-1][1]
+        out.setdefault("metadata", {})["populationApplied"] = {
+            "applied": [f"{p.field} (applied to every snapshot compared)"
+                        for p in _population],
+            "unavailable": [],
+            "rowsBefore": _last.rows_before,
+            "rowsAfter": _last.rows_after,
+        }
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -661,7 +759,9 @@ def apply_ranking(intent: RankingOutcome, result: PeriodChangeResult
 
 
 def movement_receipt_for(result: PeriodChangeResult, intent: RankingOutcome,
-                         ranking: RankingOutcome) -> Any:
+                         ranking: RankingOutcome,
+                         population: Sequence[Any] = (),
+                         pop_evidence: Sequence[Any] = ()) -> Any:
     """The governed `MovementReceipt` for a delivered ranked movement.
 
     EVERY FIGURE IS CARRIED, NONE IS RECOMPUTED. The ranking engine has already
@@ -681,16 +781,33 @@ def movement_receipt_for(result: PeriodChangeResult, intent: RankingOutcome,
     distribution, movement = ranking.distribution, ranking.movement
     provenance = list(payload.get("dataset_provenance") or [])
     scope = payload.get("portfolio_scope") or {}
-    # Per-period row counts, from the governed provenance. THE PREDICATE LIST IS
-    # EMPTY AND SAYS SO. This route selects a population by scope, not by row
-    # predicate; publishing an empty predicate tuple with equal filtered and
-    # unfiltered counts states that no narrowing happened, which is a fact. An
-    # absent population block would merely leave it unknown.
+    # Per-period row counts, from the governed provenance. WHERE THE ROUTE
+    # NARROWED BY ROW PREDICATE, THE RECEIPT SAYS SO AND SHOWS THE EFFECT.
+    #
+    # This block used to publish `predicates=()` unconditionally, on the stated
+    # ground that "this route selects a population by scope, not by row
+    # predicate". That was true of the route and is no longer: it now applies
+    # the contract's governed population to every snapshot it compares. An
+    # empty tuple would now assert that no narrowing happened while one did,
+    # which is the one thing a receipt must never do.
+    #
+    # Nothing is recomputed. The predicates are the SAME objects execution ran,
+    # and both row counts come from the evidence `population.apply_population`
+    # returned per snapshot: `rows_after` is what was measured, `rows_before`
+    # what it was measured out of. Where no predicate ran, the two are equal
+    # and the block states exactly what it always did.
     counts = tuple(int(ref.get("row_count") or 0) for ref in provenance)
+    before_by_snapshot = {sid: e.rows_before for sid, e in (pop_evidence or ())
+                          if getattr(e, "rows_before", None) is not None}
+    unfiltered = tuple(int(before_by_snapshot[sid])
+                       for sid in (str(ref.get("snapshot_id")) for ref in provenance)
+                       if sid in before_by_snapshot)
     population = PopulationEvidence(
         dataset=(payload.get("request_interpretation") or {}).get("mode"),
         portfolio_ids=tuple(str(p) for p in (scope.get("portfolio_ids") or ())),
-        predicates=(), row_counts=counts, unfiltered_row_counts=counts)
+        predicates=tuple((p.field, p.op, p.value) for p in (population or ())),
+        row_counts=counts,
+        unfiltered_row_counts=(unfiltered if population and unfiltered else counts))
     elements = tuple(
         RankedElement(rank=position, group_value=str(row.category),
                       start_value=row.start_value, end_value=row.end_value,

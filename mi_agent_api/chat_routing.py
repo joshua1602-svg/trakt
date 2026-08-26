@@ -3340,6 +3340,7 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 source_lens=r.source_lens,
                 semantics_context=dict(r.semantics_context or {}),
+                semantics=dict(r.semantics or {}),
                 view=r.view,
                 recognition=r.recalled_recognition(
                     _period_change.RECOGNITION_KEY),
