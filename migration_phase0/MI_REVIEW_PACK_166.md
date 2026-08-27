@@ -1,6 +1,8 @@
 # MI Query Agent — full review pack, 166 questions, both arms
 
-Every question in the 75-question acceptance bank and the frozen CFO 91, with the model off and with the concept merge wired and on. The merge column is a **byte-faithful replay** of repeat 1 of the measured Stage 4 run — 166 of 166 answers, ok flags and grades identical — because the supplied key exhausted its credit and a pack that re-derived its numbers from a second live call would be a review of a different run.
+Every question in the 75-question acceptance bank and the frozen CFO 91, with the model off and with the concept merge wired and on.
+
+**What the merge column is, exactly.** The supplied key exhausted its credit, so the model is not called: the arm REPLAYS the proposals the model made in the measured Stage 4 run, and the deterministic estate then binds, merges and executes them as it would have. The PROPOSALS are byte-faithful to that run. The ANSWERS are not, and must not be read as if they were — code has shipped since Stage 4, and where it changed an answer this pack shows the current one. That is the point of regenerating it.
 
 Whole book: **640 loans**. Sorted so the likely mis-grades come first.
 
@@ -8,20 +10,22 @@ Whole book: **640 loans**. Sorted so the likely mis-grades come first.
 
 | bucket | what it is | count |
 |---|---|---|
+| `0a_` | **WRONG** — a figure that is not the truth, with a receipt. Read these first | **6** |
+| `0b_` | The two arms DISAGREE on the grade — compare the pair | **5** |
 | `1a_` | CORRECT, answered over the WHOLE BOOK, and the question NARROWS | **0** |
-| `1b_` | CORRECT, answered over the whole book, and the question is a whole-book question | **28** |
-| `2_n` | The question NAMES a narrowing and NO filter was applied | **8** |
+| `1b_` | CORRECT, answered over the whole book, and the question is a whole-book question | **31** |
+| `2_n` | The question NAMES a narrowing and NO filter was applied | **5** |
 | `3_q` | The answer quotes a figure the truth calculation did not produce | **0** |
-| `4_k` | Known grader divergences | **4** |
-| `5_r` | The rest | **126** |
+| `4_k` | Known grader divergences | **3** |
+| `5_r` | The rest | **116** |
 
 ## Surface 1 — a CORRECT answer covering more rows than the narrowing implies
 
-**None.** No answer graded CORRECT covers more rows than its question's narrowing implies, on either arm. The 28 entries in bucket `1b_` are CORRECT answers over the whole book to questions that ask about the whole book — listed so they can be eyeballed, not because anything is wrong with them.
+**None.** No answer graded CORRECT covers more rows than its question's narrowing implies, on either arm. The 31 entries in bucket `1b_` are CORRECT answers over the whole book to questions that ask about the whole book — listed so they can be eyeballed, not because anything is wrong with them.
 
 ## Surface 2 — refusals whose stated reason is a claim about the client's data
 
-A refusal that says something about what the book CONTAINS, rather than about what the system CAN DO, has to be true. Ten refusals do this on each arm. They are not all the same thing, and only one class is a lie:
+A refusal that says something about what the book CONTAINS, rather than about what the system CAN DO, has to be true. 6 do this. They are not all the same thing, and only one class would be a lie:
 
 | id | class | the claim |
 |---|---|---|
@@ -29,31 +33,425 @@ A refusal that says something about what the book CONTAINS, rather than about wh
 | `CFO82` | TRUE_about_the_book | 'Risk Grade' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fa |
 | `CFO83` | TRUE_about_the_book | 'arrears' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabri |
 | `CFO85` | TRUE_about_the_book | 'NNEG' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricat |
-| `Q13A` | **FALSE** | 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no va |
-| `Q13B` | **FALSE** | 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no va |
-| `Q13C` | **FALSE** | 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no va |
 | `Q15B` | QUOTES_A_MANGLED_PHRASE | I understood that you asked for Break Direct- book, but that could not be applied to the calculation (Break Direct- book — 'Break Direct- book' is not |
-| `Q17C` | QUOTES_A_MANGLED_PHRASE | I understood that you asked for Break Direct portfolio, but that could not be applied to the calculation (Break Direct portfolio — 'Break Direct portf |
 | `Q21C` | TRUE_but_about_a_filter_the_reader_never_asked_for | No loans in this book match that filter ('among'), so there is nothing to calculate. I have not returned a whole-book figure in its place. |
 
-### `Q13A` — the claim is FALSE
 
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
 
-The tape carries `interest_rate_bucket`: **640 of 640 rows** have a value. Distinct: ['4-5%', '5-6%', '6-7%', '7-8%', '>=8%']
+---
 
-### `Q13B` — the claim is FALSE
+# **WRONG** — a figure that is not the truth, with a receipt. Read these first  (`0a_`)
 
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
 
-The tape carries `interest_rate_bucket`: **640 of 640 rows** have a value. Distinct: ['4-5%', '5-6%', '6-7%', '7-8%', '>=8%']
+## Q03A · BANK75
 
-### `Q13C` — the claim is FALSE
+**Question as typed:** How many drawdown loans have LTV above 50%?
 
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
+**Truth:** desc=count, drawdown AND ltv>50, count=45
 
-The tape carries `interest_rate_bucket`: **640 of 640 rows** have a value. Distinct: ['4-5%', '5-6%', '6-7%', '7-8%', '>=8%']
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
+population: **144** of 640 (whole book 640)
+measure `None` · aggregation `count` · narrowed `True`
+filters applied: `['Current LTV > 50']`
+spec filters: `{"current_loan_to_value": {"op": "gt", "value": 50.0}}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 50` → applied
 
+> 144 loans · Current Outstanding Balance: £37.1MM.
+> 
+> Calculated: Count of loans · Current LTV > 50 · 144 loans · as at 30 June 2026.
+
+grade reason: count 45 ABSENT
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **45** of 640 (whole book 640)
+measure `None` · aggregation `count` · narrowed `True`
+filters applied: `['Current LTV > 50', 'Product Type = drawdown']`
+spec filters: `{"current_loan_to_value": {"op": "gt", "value": 50.0}, "erm_product_type": "drawdown"}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 50` → applied
+concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'erm_product_type', 'operator': None, 'value': 'drawdown'}] · conflicts 0
+
+> 45 loans · Current Outstanding Balance: £11.3MM.
+> 
+> Calculated: Count of loans · Current LTV > 50 · Product Type = drawdown · 45 loans · as at 30 June 2026.
+
+grade reason: count 45 found
+
+
+## Q04C · BANK75
+
+**Question as typed:** Show total outstanding balance for London loans in the Direct book with borrower age above 75.
+
+**Truth:** desc=balance, Direct book AND London AND age>75, count=24, balance=7201378.77, direct_rows=441, london_rows_in_direct=60
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
+population: **24** of 640 (whole book 640)
+measure `Balance` · aggregation `loan_level` · narrowed `True`
+filters applied: `['London', 'Borrower Age > 75', 'Source Portfolio in direct_001']`
+spec filters: `{"geographic_region_obligor": "London", "youngest_borrower_age": {"op": "gt", "value": 75.0}, "source_portfolio_id": ["direct_001"]}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `borrower age over 75.` → applied; geographic_scope `London` → applied
+
+> Here is the result for your query, covering 24 groups.
+> 
+> Calculated: Loan-level Balance · London · Borrower Age > 75 · Source Portfolio in direct_001 · 24 groups · 24 loans · as at 30 June 2026.
+
+grade reason: count 24 found; balance 7201378.77 ABSENT
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
+population: **24** of 640 (whole book 640)
+measure `Balance` · aggregation `loan_level` · narrowed `True`
+filters applied: `['London', 'Borrower Age > 75', 'Source Portfolio in direct_001']`
+spec filters: `{"geographic_region_obligor": "London", "youngest_borrower_age": {"op": "gt", "value": 75.0}, "source_portfolio_id": ["direct_001"]}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `borrower age over 75.` → applied; geographic_scope `London` → applied
+concept merge: `no_change` (replayed) · applied [] · conflicts 1
+
+> Here is the result for your query, covering 24 groups.
+> 
+> Calculated: Loan-level Balance · London · Borrower Age > 75 · Source Portfolio in direct_001 · 24 groups · 24 loans · as at 30 June 2026.
+
+grade reason: count 24 found; balance 7201378.77 ABSENT
+
+
+## Q05C · BANK75
+
+**Question as typed:** Give me WA LTV for lump sum lending in the Direct portfolio.
+
+**Truth:** desc=WA LTV, Direct book AND lump_sum, count=278, wa_ltv=37.05, balance=73380747.04
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
+population: **441** of 640 (whole book 640)
+measure `Current LTV` · aggregation `weighted_avg` · narrowed `True`
+filters applied: `['Source Portfolio in direct_001']`
+spec filters: `{"source_portfolio_id": ["direct_001"]}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+
+> Weighted-average Current LTV: 36.2% · 441 loans.
+> 
+> Calculated: Weighted-average Current LTV · Source Portfolio in direct_001 · 441 loans · as at 30 June 2026.
+
+grade reason: count 278 ABSENT
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **278** of 640 (whole book 640)
+measure `Current LTV` · aggregation `weighted_avg` · narrowed `True`
+filters applied: `['Product Type = lump_sum', 'Source Portfolio in direct_001']`
+spec filters: `{"erm_product_type": "lump_sum", "source_portfolio_id": ["direct_001"]}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'erm_product_type', 'operator': None, 'value': 'lump_sum'}, {'kind': 'filter', 'field': 'source_portfolio_id', 'operator': None, 'value': 'direct_001'}] · conflicts 0
+
+> Weighted-average Current LTV: 37.0% · 278 loans.
+> 
+> Calculated: Weighted-average Current LTV · Product Type = lump_sum · Source Portfolio in direct_001 · 278 loans · as at 30 June 2026.
+
+grade reason: count 278 found; wa_ltv 37.05% found
+
+
+## Q16B · BANK75
+
+**Question as typed:** Break drawdown balance down by both geography and LTV band.
+
+**Truth:** axes=['geographic_region_obligor', 'ltv_bucket'], cells=39, levels={'geographic_region_obligor': 7, 'ltv_bucket': 6}, total=66671398.95
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `Balance` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `['Obligor Region (NUTS3)', 'LTV Bucket']` · spec dimensions: `['geographic_region_obligor', 'ltv_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `geography` → applied; grouping_dimension `ltv band` → applied
+
+> Here is the heatmap for your query, covering 42 groups.
+> 
+> Calculated: Total Balance · grouped by Obligor Region (NUTS3) and LTV Bucket · 42 groups · 640 loans · as at 30 June 2026.
+
+grade reason: cells 39 (artefact rows 42) ABSENT
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **244** of 640 (whole book 640)
+measure `Balance` · aggregation `sum` · narrowed `True`
+filters applied: `['Product Type = drawdown']`
+spec filters: `{"erm_product_type": "drawdown"}`
+dimensions applied: `['Obligor Region (NUTS3)', 'LTV Bucket']` · spec dimensions: `['geographic_region_obligor', 'ltv_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `geography` → applied; grouping_dimension `ltv band` → applied
+concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'erm_product_type', 'operator': None, 'value': 'drawdown'}] · conflicts 0
+
+> Here is the heatmap for your query, covering 39 groups.
+> 
+> Calculated: Total Balance · Product Type = drawdown · grouped by Obligor Region (NUTS3) and LTV Bucket · 39 groups · 244 loans · as at 30 June 2026.
+
+grade reason: cells 39 (artefact rows 39) found
+
+
+## Q17C · BANK75
+
+**Question as typed:** Break Direct portfolio balance down across LTV, ticket size and borrower age.
+
+**Truth:** axes=['ltv_bucket', 'ticket_bucket', 'age_bucket'], cells=143, levels={'ltv_bucket': 6, 'ticket_bucket': 5, 'age_bucket': 7}, total=117356785.33
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
+population: **441** of 640 (whole book 640)
+measure `Balance · Average Borrower Age` · aggregation `sum` · narrowed `True`
+filters applied: `['Source Portfolio in direct_001']`
+spec filters: `{"source_portfolio_id": ["direct_001"]}`
+dimensions applied: `['Ticket Size']` · spec dimensions: `['ticket_bucket']`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: multi_measure `more than one measure (balance and age)` → applied; grouping_dimension `ticket size` → applied
+
+> Here is the bar for your query, covering 5 groups.
+> 
+> Calculated: Balance · Average Borrower Age · Source Portfolio in direct_001 · grouped by Ticket Size · 441 loans · as at 30 June 2026.
+
+grade reason: cells 143 (artefact rows 5) ABSENT
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **441** of 640 (whole book 640)
+measure `Balance · Average Borrower Age` · aggregation `sum` · narrowed `True`
+filters applied: `['Source Portfolio in direct_001']`
+spec filters: `{"source_portfolio_id": ["direct_001"]}`
+dimensions applied: `['Age Bucket', 'LTV Bucket', 'Ticket Size']` · spec dimensions: `['age_bucket', 'ltv_bucket', 'ticket_bucket']`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: multi_measure `more than one measure (balance and age)` → applied; grouping_dimension `ticket size` → applied
+concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'age_bucket'}, {'kind': 'dimension', 'field': 'ltv_bucket'}] · conflicts 0
+
+> Here is the bar for your query, covering 143 groups.
+> 
+> Calculated: Balance · Average Borrower Age · Source Portfolio in direct_001 · grouped by Age Bucket, LTV Bucket and Ticket Size · 441 loans · as at 30 June 2026.
+
+grade reason: cells 143 (artefact rows 143) found
+
+
+## Q19A · BANK75
+
+**Question as typed:** How did the Direct book change last month?
+
+> **Known grader divergence:** the frozen human grade says SUBSTANTIVELY CORRECT; the numeric oracle says the £12.4m delta is absent from the answer
+
+**Truth:** open_rows=424, close_rows=441, open=104990413.93, close=117356785.33, delta=12366371.4
+
+**MODEL OFF** — route `cohort_progression` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Cohort progression` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: comparison_period `comparison period (last month)` → applied; granularity `month` → applied
+
+> Funded balance for Direct: tracked across 5 reporting period(s) (2026-02 → 2026-06) down.
+> 
+> Calculated: Cohort progression.
+
+grade reason: delta 12366371.40 ABSENT
+
+**MERGE ON** — route `cohort_progression` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Cohort progression` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: comparison_period `comparison period (last month)` → applied; granularity `month` → applied
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> Funded balance for Direct: tracked across 5 reporting period(s) (2026-02 → 2026-06) down.
+> 
+> Calculated: Cohort progression.
+
+grade reason: delta 12366371.40 ABSENT
+
+
+---
+
+# The two arms DISAGREE on the grade — compare the pair  (`0b_`)
+
+
+## Q01C · BANK75
+
+**Question as typed:** Count the loans where borrower age is above 55 and current LTV is over 50%.
+
+**Truth:** desc=count, age>55 AND ltv>50, count=144
+
+**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `None` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 55` → lost; threshold `LTV over 50` → lost
+
+> I understood that you asked for LTV over 55 and LTV over 50, but that could not be applied to the calculation (LTV over 55 — the threshold was not applied to the calculation; LTV over 50 — the threshold was not applied to the calculation). I have not substituted a broader figure.
+
+grade reason: expected an answer, got a refusal
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **144** of 640 (whole book 640)
+measure `None` · aggregation `count` · narrowed `True`
+filters applied: `['Current LTV > 50', 'Borrower Age > 55']`
+spec filters: `{"current_loan_to_value": {"op": "gt", "value": 50.0}, "youngest_borrower_age": {"op": "gt", "value": 55.0}}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 55` → applied; threshold `LTV over 50` → applied
+concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'current_loan_to_value', 'operator': 'gt', 'value': 50.0}, {'kind': 'filter', 'field': 'youngest_borrower_age', 'operator': 'gt', 'value': 55.0}] · conflicts 0
+
+> 144 loans · Current Outstanding Balance: £37.1MM.
+> 
+> Calculated: Count of loans · Current LTV > 50 · Borrower Age > 55 · 144 loans · as at 30 June 2026. Interpretation confidence: medium — check the scope above matches your question.
+
+grade reason: count 144 found
+
+
+## Q02B · BANK75
+
+**Question as typed:** How much outstanding balance do we have where borrower age exceeds 75 and LTV is over 40%?
+
+**Truth:** desc=balance, age>75 AND ltv>40, count=130, balance=35763779.92
+
+**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
+population: **272** of 640 (whole book 640)
+measure `Balance · Average Borrower Age` · aggregation `sum` · narrowed `True`
+filters applied: `['Current LTV > 40']`
+spec filters: `{"current_loan_to_value": {"op": "gt", "value": 40.0}}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 75` → applied; threshold `LTV over 40` → lost; multi_measure `more than one measure (balance and age)` → applied
+
+> I understood that you asked for LTV over 40, but that could not be applied to the calculation (LTV over 40 — the threshold was not applied to the calculation). I have not substituted a broader figure.
+
+grade reason: expected an answer, got a refusal
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **130** of 640 (whole book 640)
+measure `Balance · Average Borrower Age` · aggregation `sum` · narrowed `True`
+filters applied: `['Current LTV > 40', 'Borrower Age > 75']`
+spec filters: `{"current_loan_to_value": {"op": "gt", "value": 40.0}, "youngest_borrower_age": {"op": "gt", "value": 75.0}}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 75` → applied; threshold `LTV over 40` → applied; multi_measure `more than one measure (balance and age)` → applied
+concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'youngest_borrower_age', 'operator': 'gt', 'value': 75.0}] · conflicts 0
+
+> Balance: £35.76m · Average Borrower Age: 83.5
+> 
+> Calculated: Balance · Average Borrower Age · Current LTV > 40 · Borrower Age > 75 · 130 loans · as at 30 June 2026.
+
+grade reason: count 130 found; balance 35763779.92 found
+
+
+## Q03C · BANK75
+
+**Question as typed:** Count drawdown cases where current LTV exceeds 50%.
+
+**Truth:** desc=count, drawdown AND ltv>50, count=45
+
+**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
+population: **244** of 640 (whole book 640)
+measure `Loans · Weighted-average Current LTV` · aggregation `count` · narrowed `True`
+filters applied: `['Product Type = drawdown']`
+spec filters: `{"erm_product_type": "drawdown"}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 50` → lost
+
+> I understood that you asked for LTV over 50, but that could not be applied to the calculation (LTV over 50 — the threshold was not applied to the calculation). I have not substituted a broader figure.
+
+grade reason: expected an answer, got a refusal
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **45** of 640 (whole book 640)
+measure `Loans · Weighted-average Current LTV` · aggregation `count` · narrowed `True`
+filters applied: `['Product Type = drawdown', 'Current LTV > 50']`
+spec filters: `{"erm_product_type": "drawdown", "current_loan_to_value": {"op": "gt", "value": 50.0}}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: threshold `LTV over 50` → applied
+concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'current_loan_to_value', 'operator': 'gt', 'value': 50.0}] · conflicts 1
+
+> Loans: 45 · Weighted-average Current LTV: 0.56%
+> 
+> Calculated: Loans · Weighted-average Current LTV · Product Type = drawdown · Current LTV > 50 · 45 loans · as at 30 June 2026.
+
+grade reason: count 45 found
+
+
+## Q07B · BANK75
+
+**Question as typed:** How do the Direct and Acquired portfolios differ?
+
+**Truth:** — no independently computed truth for this case
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `None` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+
+> 640 loans · Current Outstanding Balance: £172.1MM.
+> 
+> Calculated: Count of loans · 640 loans · as at 30 June 2026.
+
+grade reason: no independent truth was computed for this case
+
+**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
+population: not published by this route
+measure `None` · aggregation `count` · narrowed `None`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `['source_portfolio_type', 'source_portfolio_type']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
+concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'source_portfolio_type'}] · conflicts 2
+
+> parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.
+
+grade reason: expected an answer, got a refusal
+
+
+## Q23A · BANK75
+
+**Question as typed:** When will we reach £100m of funded loans?
+
+**Truth:** — no independently computed truth for this case
+
+**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+population: not published by this route
+measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `forecast`
+facets: projection `a forward projection` → applied
+
+> The book has already reached £100.0m (current funded balance £172.1m).
+> 
+> Calculated: Run-rate extrapolation.
+
+grade reason: no independent truth was computed for this case
+
+**MERGE ON** — route `forecast_extrapolation` · verdict `refused` · **grade `FALSE_REFUSAL`**
+population: not published by this route
+measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{"current_outstanding_balance": {"op": "eq", "value": 100000000.0}}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `forecast`
+facets: projection `a forward projection` → applied; row_population `the population current_outstanding_balance = 100000000.0` → lost
+concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'current_outstanding_balance', 'operator': 'eq', 'value': 100000000.0}] · conflicts 0
+
+> I understood that you asked for loans where Balance is 100000000, but that could not be applied to the calculation (loans where Balance is 100000000 — this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure.
+
+grade reason: expected an answer, got a refusal
 
 
 ---
@@ -1047,6 +1445,120 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 grade reason: cells 42 (artefact rows 42) found
 
 
+## Q13A · BANK75
+
+**Question as typed:** Show a table of balance by LTV bucket and interest-rate bucket.
+
+**Truth:** axes=['ltv_bucket', 'interest_rate_bucket'], cells=30, levels={'ltv_bucket': 6, 'interest_rate_bucket': 5}, total=172055547.39
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `Balance` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `['LTV Bucket', 'Interest Rate Bucket']` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `ltv bucket` → applied; grouping_dimension `rate bucket` → applied
+
+> Here is the heatmap for your query, covering 30 groups.
+> 
+> Calculated: Total Balance · grouped by LTV Bucket and Interest Rate Bucket · 30 groups · 640 loans · as at 30 June 2026.
+
+grade reason: cells 30 (artefact rows 30) found
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `Balance` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `['LTV Bucket', 'Interest Rate Bucket']` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `ltv bucket` → applied; grouping_dimension `rate bucket` → applied
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> Here is the heatmap for your query, covering 30 groups.
+> 
+> Calculated: Total Balance · grouped by LTV Bucket and Interest Rate Bucket · 30 groups · 640 loans · as at 30 June 2026.
+
+grade reason: cells 30 (artefact rows 30) found
+
+
+## Q13B · BANK75
+
+**Question as typed:** Cross-tab balance by LTV band and interest-rate band.
+
+**Truth:** axes=['ltv_bucket', 'interest_rate_bucket'], cells=30, levels={'ltv_bucket': 6, 'interest_rate_bucket': 5}, total=172055547.39
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `Balance` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `['LTV Bucket', 'Interest Rate Bucket']` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `ltv band` → applied; grouping_dimension `rate band` → applied
+
+> Here is the heatmap for your query, covering 30 groups.
+> 
+> Calculated: Total Balance · grouped by LTV Bucket and Interest Rate Bucket · 30 groups · 640 loans · as at 30 June 2026.
+
+grade reason: cells 30 (artefact rows 30) found
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `Balance` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `['LTV Bucket', 'Interest Rate Bucket']` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `ltv band` → applied; grouping_dimension `rate band` → applied
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> Here is the heatmap for your query, covering 30 groups.
+> 
+> Calculated: Total Balance · grouped by LTV Bucket and Interest Rate Bucket · 30 groups · 640 loans · as at 30 June 2026.
+
+grade reason: cells 30 (artefact rows 30) found
+
+
+## Q13C · BANK75
+
+**Question as typed:** Break down outstanding balance by both LTV bucket and rate bucket.
+
+**Truth:** axes=['ltv_bucket', 'interest_rate_bucket'], cells=30, levels={'ltv_bucket': 6, 'interest_rate_bucket': 5}, total=172055547.39
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `Balance` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `['LTV Bucket', 'Interest Rate Bucket']` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `ltv bucket` → applied; grouping_dimension `rate bucket` → applied
+
+> Here is the heatmap for your query, covering 30 groups.
+> 
+> Calculated: Total Balance · grouped by LTV Bucket and Interest Rate Bucket · 30 groups · 640 loans · as at 30 June 2026.
+
+grade reason: cells 30 (artefact rows 30) found
+
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `Balance` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `['LTV Bucket', 'Interest Rate Bucket']` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+facets: grouping_dimension `ltv bucket` → applied; grouping_dimension `rate bucket` → applied
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> Here is the heatmap for your query, covering 30 groups.
+> 
+> Calculated: Total Balance · grouped by LTV Bucket and Interest Rate Bucket · 30 groups · 640 loans · as at 30 June 2026.
+
+grade reason: cells 30 (artefact rows 30) found
+
+
 ## Q14A · BANK75
 
 **Question as typed:** Show loan count by region and product type.
@@ -1234,114 +1746,6 @@ concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': '
 grade reason: refused, as the bank expects
 
 
-## Q01C · BANK75
-
-**Question as typed:** Count the loans where borrower age is above 55 and current LTV is over 50%.
-
-**Truth:** desc=count, age>55 AND ltv>50, count=144
-
-**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
-measure `None` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 55` → lost; threshold `LTV over 50` → lost
-
-> I understood that you asked for LTV over 55 and LTV over 50, but that could not be applied to the calculation (LTV over 55 — the threshold was not applied to the calculation; LTV over 50 — the threshold was not applied to the calculation). I have not substituted a broader figure.
-
-grade reason: expected an answer, got a refusal
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
-population: **144** of 640 (whole book 640)
-measure `None` · aggregation `count` · narrowed `True`
-filters applied: `['Current LTV > 50', 'Borrower Age > 55']`
-spec filters: `{"current_loan_to_value": {"op": "gt", "value": 50.0}, "youngest_borrower_age": {"op": "gt", "value": 55.0}}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 55` → applied; threshold `LTV over 50` → applied
-concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'current_loan_to_value', 'operator': 'gt', 'value': 50.0}, {'kind': 'filter', 'field': 'youngest_borrower_age', 'operator': 'gt', 'value': 55.0}] · conflicts 0
-
-> 144 loans · Current Outstanding Balance: £37.1MM.
-> 
-> Calculated: Count of loans · Current LTV > 50 · Borrower Age > 55 · 144 loans · as at 30 June 2026. Interpretation confidence: medium — check the scope above matches your question.
-
-grade reason: count 144 found
-
-
-## Q07B · BANK75
-
-**Question as typed:** How do the Direct and Acquired portfolios differ?
-
-**Truth:** — no independently computed truth for this case
-
-**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
-measure `None` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-
-> 640 loans · Current Outstanding Balance: £172.1MM.
-> 
-> Calculated: Count of loans · 640 loans · as at 30 June 2026.
-
-grade reason: no independent truth was computed for this case
-
-**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `None` · aggregation `count` · narrowed `None`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['source_portfolio_type', 'source_portfolio_type']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'source_portfolio_type'}] · conflicts 2
-
-> parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.
-
-grade reason: expected an answer, got a refusal
-
-
-## Q16B · BANK75
-
-**Question as typed:** Break drawdown balance down by both geography and LTV band.
-
-**Truth:** axes=['geographic_region_obligor', 'ltv_bucket'], cells=39, levels={'geographic_region_obligor': 7, 'ltv_bucket': 6}, total=66671398.95
-
-**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
-population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
-measure `Balance` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `['Obligor Region (NUTS3)', 'LTV Bucket']` · spec dimensions: `['geographic_region_obligor', 'ltv_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: grouping_dimension `geography` → applied; grouping_dimension `ltv band` → applied
-
-> Here is the heatmap for your query, covering 42 groups.
-> 
-> Calculated: Total Balance · grouped by Obligor Region (NUTS3) and LTV Bucket · 42 groups · 640 loans · as at 30 June 2026.
-
-grade reason: cells 39 (artefact rows 42) ABSENT
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
-population: **244** of 640 (whole book 640)
-measure `Balance` · aggregation `sum` · narrowed `True`
-filters applied: `['Product Type = drawdown']`
-spec filters: `{"erm_product_type": "drawdown"}`
-dimensions applied: `['Obligor Region (NUTS3)', 'LTV Bucket']` · spec dimensions: `['geographic_region_obligor', 'ltv_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: grouping_dimension `geography` → applied; grouping_dimension `ltv band` → applied
-concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'erm_product_type', 'operator': None, 'value': 'drawdown'}] · conflicts 0
-
-> Here is the heatmap for your query, covering 39 groups.
-> 
-> Calculated: Total Balance · Product Type = drawdown · grouped by Obligor Region (NUTS3) and LTV Bucket · 39 groups · 244 loans · as at 30 June 2026.
-
-grade reason: cells 39 (artefact rows 39) found
-
-
 ## Q17B · BANK75
 
 **Question as typed:** Give me a table of Direct-book balance split by LTV band, ticket-size band and age band.
@@ -1357,7 +1761,7 @@ dimensions applied: `['LTV Bucket', 'Ticket Size', 'Age Bucket']` · spec dimens
 scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
 facets: lost_narrowing `Direct` → lost; grouping_dimension `ltv band` → applied; grouping_dimension `ticket` → applied; grouping_dimension `age band` → applied
 
-> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Origination Channel) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
+> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Source Portfolio Type) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
 
 grade reason: expected an answer, got a refusal
 
@@ -1371,7 +1775,7 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 facets: lost_narrowing `Direct` → lost; grouping_dimension `ltv band` → applied; grouping_dimension `ticket` → applied; grouping_dimension `age band` → applied
 concept merge: `no_change` (replayed) · applied [] · conflicts 0
 
-> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Origination Channel) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
+> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Source Portfolio Type) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
 
 grade reason: expected an answer, got a refusal
 
@@ -1559,46 +1963,6 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 'value' could mean more than one governed measure in this dataset (Balance or Valuation). Say which one and I will answer; no measure was substituted. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a governed measure — e.g. balance, LTV, interest rate, borrower age or property value — optionally by a dimension.
 
 grade reason: the bank expects an answer
-
-
-## Q19A · BANK75
-
-**Question as typed:** How did the Direct book change last month?
-
-> **Known grader divergence:** the frozen human grade says SUBSTANTIVELY CORRECT; the numeric oracle says the £12.4m delta is absent from the answer
-
-**Truth:** open_rows=424, close_rows=441, open=104990413.93, close=117356785.33, delta=12366371.4
-
-**MODEL OFF** — route `cohort_progression` · verdict `answered` · **grade `WRONG`**
-population: not published by this route
-measure `Cohort progression` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: comparison_period `comparison period (last month)` → applied; granularity `month` → applied
-
-> Funded balance for Direct: tracked across 5 reporting period(s) (2026-02 → 2026-06) down.
-> 
-> Calculated: Cohort progression.
-
-grade reason: delta 12366371.40 ABSENT
-
-**MERGE ON** — route `cohort_progression` · verdict `answered` · **grade `WRONG`**
-population: not published by this route
-measure `Cohort progression` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: comparison_period `comparison period (last month)` → applied; granularity `month` → applied
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> Funded balance for Direct: tracked across 5 reporting period(s) (2026-02 → 2026-06) down.
-> 
-> Calculated: Cohort progression.
-
-grade reason: delta 12366371.40 ABSENT
 
 
 ---
@@ -4256,42 +4620,6 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 grade reason: count 130 found; balance 35763779.92 found
 
 
-## Q02B · BANK75
-
-**Question as typed:** How much outstanding balance do we have where borrower age exceeds 75 and LTV is over 40%?
-
-**Truth:** desc=balance, age>75 AND ltv>40, count=130, balance=35763779.92
-
-**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: **272** of 640 (whole book 640)
-measure `Balance · Average Borrower Age` · aggregation `sum` · narrowed `True`
-filters applied: `['Current LTV > 40']`
-spec filters: `{"current_loan_to_value": {"op": "gt", "value": 40.0}}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 75` → applied; threshold `LTV over 40` → lost; multi_measure `more than one measure (balance and age)` → applied
-
-> I understood that you asked for LTV over 40, but that could not be applied to the calculation (LTV over 40 — the threshold was not applied to the calculation). I have not substituted a broader figure.
-
-grade reason: expected an answer, got a refusal
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
-population: **130** of 640 (whole book 640)
-measure `Balance · Average Borrower Age` · aggregation `sum` · narrowed `True`
-filters applied: `['Current LTV > 40', 'Borrower Age > 75']`
-spec filters: `{"current_loan_to_value": {"op": "gt", "value": 40.0}, "youngest_borrower_age": {"op": "gt", "value": 75.0}}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 75` → applied; threshold `LTV over 40` → applied; multi_measure `more than one measure (balance and age)` → applied
-concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'youngest_borrower_age', 'operator': 'gt', 'value': 75.0}] · conflicts 0
-
-> Balance: £35.76m · Average Borrower Age: 83.5
-> 
-> Calculated: Balance · Average Borrower Age · Current LTV > 40 · Borrower Age > 75 · 130 loans · as at 30 June 2026.
-
-grade reason: count 130 found; balance 35763779.92 found
-
-
 ## Q02C · BANK75
 
 **Question as typed:** Show the total balance for loans with borrowers older than 75 and current LTV greater than 40%.
@@ -4328,44 +4656,6 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > Calculated: Total Balance · Borrower Age > 75 · Current LTV > 40 · 130 loans · as at 30 June 2026.
 
 grade reason: count 130 found; balance 35763779.92 found
-
-
-## Q03A · BANK75
-
-**Question as typed:** How many drawdown loans have LTV above 50%?
-
-**Truth:** desc=count, drawdown AND ltv>50, count=45
-
-**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
-population: **144** of 640 (whole book 640)
-measure `None` · aggregation `count` · narrowed `True`
-filters applied: `['Current LTV > 50']`
-spec filters: `{"current_loan_to_value": {"op": "gt", "value": 50.0}}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 50` → applied
-
-> 144 loans · Current Outstanding Balance: £37.1MM.
-> 
-> Calculated: Count of loans · Current LTV > 50 · 144 loans · as at 30 June 2026.
-
-grade reason: count 45 ABSENT
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
-population: **45** of 640 (whole book 640)
-measure `None` · aggregation `count` · narrowed `True`
-filters applied: `['Current LTV > 50', 'Product Type = drawdown']`
-spec filters: `{"current_loan_to_value": {"op": "gt", "value": 50.0}, "erm_product_type": "drawdown"}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 50` → applied
-concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'erm_product_type', 'operator': None, 'value': 'drawdown'}] · conflicts 0
-
-> 45 loans · Current Outstanding Balance: £11.3MM.
-> 
-> Calculated: Count of loans · Current LTV > 50 · Product Type = drawdown · 45 loans · as at 30 June 2026.
-
-grade reason: count 45 found
 
 
 ## Q03B · BANK75
@@ -4406,42 +4696,6 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 1
 grade reason: count 45 found
 
 
-## Q03C · BANK75
-
-**Question as typed:** Count drawdown cases where current LTV exceeds 50%.
-
-**Truth:** desc=count, drawdown AND ltv>50, count=45
-
-**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: **244** of 640 (whole book 640)
-measure `Loans · Weighted-average Current LTV` · aggregation `count` · narrowed `True`
-filters applied: `['Product Type = drawdown']`
-spec filters: `{"erm_product_type": "drawdown"}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 50` → lost
-
-> I understood that you asked for LTV over 50, but that could not be applied to the calculation (LTV over 50 — the threshold was not applied to the calculation). I have not substituted a broader figure.
-
-grade reason: expected an answer, got a refusal
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
-population: **45** of 640 (whole book 640)
-measure `Loans · Weighted-average Current LTV` · aggregation `count` · narrowed `True`
-filters applied: `['Product Type = drawdown', 'Current LTV > 50']`
-spec filters: `{"erm_product_type": "drawdown", "current_loan_to_value": {"op": "gt", "value": 50.0}}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `LTV over 50` → applied
-concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'current_loan_to_value', 'operator': 'gt', 'value': 50.0}] · conflicts 1
-
-> Loans: 45 · Weighted-average Current LTV: 0.56%
-> 
-> Calculated: Loans · Weighted-average Current LTV · Product Type = drawdown · Current LTV > 50 · 45 loans · as at 30 June 2026.
-
-grade reason: count 45 found
-
-
 ## Q04A · BANK75
 
 **Question as typed:** What is the balance of Direct-book loans in London to borrowers over 75?
@@ -4457,7 +4711,7 @@ dimensions applied: `none` · spec dimensions: `none`
 scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
 facets: threshold `borrower age over 75` → applied; geographic_scope `London` → lost; lost_narrowing `Direct` → lost
 
-> I understood that you asked for London and Direct, but that could not be applied to the calculation (London (Obligor Region (NUTS3)) — the geographic scope was not applied to the calculation; Direct (Origination Channel) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
+> I understood that you asked for London and Direct, but that could not be applied to the calculation (London (Obligor Region (NUTS3)) — the geographic scope was not applied to the calculation; Direct (Source Portfolio Type) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
 
 grade reason: expected an answer, got a refusal
 
@@ -4471,7 +4725,7 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 facets: threshold `borrower age over 75` → applied; geographic_scope `London` → applied; lost_narrowing `Direct` → lost
 concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'geographic_region_obligor', 'operator': None, 'value': 'London'}] · conflicts 0
 
-> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Origination Channel) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
+> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Source Portfolio Type) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
 
 grade reason: expected an answer, got a refusal
 
@@ -4512,44 +4766,6 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 1
 > Calculated: Total Balance · London · Borrower Age > 75 · Source Portfolio in direct_001 · 24 loans · as at 30 June 2026.
 
 grade reason: count 24 found; balance 7201378.77 found
-
-
-## Q04C · BANK75
-
-**Question as typed:** Show total outstanding balance for London loans in the Direct book with borrower age above 75.
-
-**Truth:** desc=balance, Direct book AND London AND age>75, count=24, balance=7201378.77, direct_rows=441, london_rows_in_direct=60
-
-**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
-population: **24** of 640 (whole book 640)
-measure `Balance` · aggregation `loan_level` · narrowed `True`
-filters applied: `['London', 'Borrower Age > 75', 'Source Portfolio in direct_001']`
-spec filters: `{"geographic_region_obligor": "London", "youngest_borrower_age": {"op": "gt", "value": 75.0}, "source_portfolio_id": ["direct_001"]}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `borrower age over 75.` → applied; geographic_scope `London` → applied
-
-> Here is the result for your query, covering 24 groups.
-> 
-> Calculated: Loan-level Balance · London · Borrower Age > 75 · Source Portfolio in direct_001 · 24 groups · 24 loans · as at 30 June 2026.
-
-grade reason: count 24 found; balance 7201378.77 ABSENT
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
-population: **24** of 640 (whole book 640)
-measure `Balance` · aggregation `loan_level` · narrowed `True`
-filters applied: `['London', 'Borrower Age > 75', 'Source Portfolio in direct_001']`
-spec filters: `{"geographic_region_obligor": "London", "youngest_borrower_age": {"op": "gt", "value": 75.0}, "source_portfolio_id": ["direct_001"]}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-facets: threshold `borrower age over 75.` → applied; geographic_scope `London` → applied
-concept merge: `no_change` (replayed) · applied [] · conflicts 1
-
-> Here is the result for your query, covering 24 groups.
-> 
-> Calculated: Loan-level Balance · London · Borrower Age > 75 · Source Portfolio in direct_001 · 24 groups · 24 loans · as at 30 June 2026.
-
-grade reason: count 24 found; balance 7201378.77 ABSENT
 
 
 ## Q05A · BANK75
@@ -4605,7 +4821,7 @@ dimensions applied: `none` · spec dimensions: `none`
 scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
 facets: lost_narrowing `Direct` → lost; requested_statistic `the weighted average` → applied
 
-> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Origination Channel) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
+> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Source Portfolio Type) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
 
 grade reason: expected an answer, got a refusal
 
@@ -4619,45 +4835,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 facets: lost_narrowing `Direct` → lost; requested_statistic `the weighted average` → applied
 concept merge: `no_change` (replayed) · applied [] · conflicts 1
 
-> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Origination Channel) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
+> I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Source Portfolio Type) — this narrowing was not applied, so the figure covers the whole book rather than only Direct). I have not substituted a broader figure.
 
 grade reason: expected an answer, got a refusal
-
-
-## Q05C · BANK75
-
-**Question as typed:** Give me WA LTV for lump sum lending in the Direct portfolio.
-
-**Truth:** desc=WA LTV, Direct book AND lump_sum, count=278, wa_ltv=37.05, balance=73380747.04
-
-**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
-population: **441** of 640 (whole book 640)
-measure `Current LTV` · aggregation `weighted_avg` · narrowed `True`
-filters applied: `['Source Portfolio in direct_001']`
-spec filters: `{"source_portfolio_id": ["direct_001"]}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-
-> Weighted-average Current LTV: 36.2% · 441 loans.
-> 
-> Calculated: Weighted-average Current LTV · Source Portfolio in direct_001 · 441 loans · as at 30 June 2026.
-
-grade reason: count 278 ABSENT
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
-population: **278** of 640 (whole book 640)
-measure `Current LTV` · aggregation `weighted_avg` · narrowed `True`
-filters applied: `['Product Type = lump_sum', 'Source Portfolio in direct_001']`
-spec filters: `{"erm_product_type": "lump_sum", "source_portfolio_id": ["direct_001"]}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'erm_product_type', 'operator': None, 'value': 'lump_sum'}, {'kind': 'filter', 'field': 'source_portfolio_id', 'operator': None, 'value': 'direct_001'}] · conflicts 0
-
-> Weighted-average Current LTV: 37.0% · 278 loans.
-> 
-> Calculated: Weighted-average Current LTV · Product Type = lump_sum · Source Portfolio in direct_001 · 278 loans · as at 30 June 2026.
-
-grade reason: count 278 found; wa_ltv 37.05% found
 
 
 ## Q06A · BANK75
@@ -5206,102 +5386,6 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 grade reason: expected an answer, got a refusal
 
 
-## Q13A · BANK75
-
-**Question as typed:** Show a table of balance by LTV bucket and interest-rate bucket.
-
-**Truth:** axes=['ltv_bucket', 'interest_rate_bucket'], cells=30, levels={'ltv_bucket': 6, 'interest_rate_bucket': 5}, total=172055547.39
-
-**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
-
-grade reason: expected an answer, got a refusal
-
-**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
-
-grade reason: expected an answer, got a refusal
-
-
-## Q13B · BANK75
-
-**Question as typed:** Cross-tab balance by LTV band and interest-rate band.
-
-**Truth:** axes=['ltv_bucket', 'interest_rate_bucket'], cells=30, levels={'ltv_bucket': 6, 'interest_rate_bucket': 5}, total=172055547.39
-
-**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
-
-grade reason: expected an answer, got a refusal
-
-**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
-
-grade reason: expected an answer, got a refusal
-
-
-## Q13C · BANK75
-
-**Question as typed:** Break down outstanding balance by both LTV bucket and rate bucket.
-
-**Truth:** axes=['ltv_bucket', 'interest_rate_bucket'], cells=30, levels={'ltv_bucket': 6, 'interest_rate_bucket': 5}, total=172055547.39
-
-**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
-
-grade reason: expected an answer, got a refusal
-
-**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['ltv_bucket', 'interest_rate_bucket']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> 'interest rate bucket' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
-
-grade reason: expected an answer, got a refusal
-
-
 ## Q15A · BANK75
 
 **Question as typed:** For the Direct book, show balance by broker and product type.
@@ -5518,38 +5602,6 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > Calculated: Total Balance · Source Portfolio in direct_001 · grouped by LTV Bucket, Ticket Size and Age Bucket · 143 groups · 441 loans · as at 30 June 2026.
 
 grade reason: cells 143 (artefact rows 143) found
-
-
-## Q17C · BANK75
-
-**Question as typed:** Break Direct portfolio balance down across LTV, ticket size and borrower age.
-
-**Truth:** axes=['ltv_bucket', 'ticket_bucket', 'age_bucket'], cells=143, levels={'ltv_bucket': 6, 'ticket_bucket': 5, 'age_bucket': 7}, total=117356785.33
-
-**MODEL OFF** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{"source_portfolio_id": ["direct_001"]}`
-dimensions applied: `none` · spec dimensions: `['ticket_bucket']`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-
-> I understood that you asked for Break Direct portfolio, but that could not be applied to the calculation (Break Direct portfolio — 'Break Direct portfolio' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure.
-
-grade reason: expected an answer, got a refusal
-
-**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `current_outstanding_balance` · aggregation `sum` · narrowed `None`
-filters applied: `none`
-spec filters: `{"source_portfolio_id": ["direct_001"]}`
-dimensions applied: `none` · spec dimensions: `['age_bucket', 'ltv_bucket', 'ticket_bucket']`
-scope `direct` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'age_bucket'}, {'kind': 'dimension', 'field': 'ltv_bucket'}] · conflicts 0
-
-> I understood that you asked for Break Direct portfolio, but that could not be applied to the calculation (Break Direct portfolio — 'Break Direct portfolio' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure.
-
-grade reason: expected an answer, got a refusal
 
 
 ## Q18A · BANK75
@@ -5992,42 +6044,6 @@ facets: comparison_period `comparison period (last month)` → applied; grouping
 concept merge: `no_change` (replayed) · applied [] · conflicts 0
 
 > I understood that you asked for direct or acquired, but that could not be applied to the calculation (direct or acquired — this answer covers the whole population; it is neither narrowed to nor broken down by direct or acquired). I have not substituted a broader figure.
-
-grade reason: expected an answer, got a refusal
-
-
-## Q23A · BANK75
-
-**Question as typed:** When will we reach £100m of funded loans?
-
-**Truth:** — no independently computed truth for this case
-
-**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `forecast`
-facets: projection `a forward projection` → applied
-
-> The book has already reached £100.0m (current funded balance £172.1m).
-> 
-> Calculated: Run-rate extrapolation.
-
-grade reason: no independent truth was computed for this case
-
-**MERGE ON** — route `forecast_extrapolation` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{"current_outstanding_balance": {"op": "eq", "value": 100000000.0}}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `forecast`
-facets: projection `a forward projection` → applied; row_population `the population current_outstanding_balance = 100000000.0` → lost
-concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'current_outstanding_balance', 'operator': 'eq', 'value': 100000000.0}] · conflicts 0
-
-> I understood that you asked for loans where Balance is 100000000, but that could not be applied to the calculation (loans where Balance is 100000000 — this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure.
 
 grade reason: expected an answer, got a refusal
 
