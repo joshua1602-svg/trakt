@@ -1826,6 +1826,36 @@ def _route_concentration_tests(question, spec, spec_dict, *, client_id,
     return envelope_out
 
 
+def _names_another_dataset(question) -> bool:
+    """Does the question name a governed dataset this route cannot read?
+
+    A route that answers from `output_root` reads the FUNDED book and nothing
+    else. It has no pipeline or forecast frame, takes no parameter that could
+    carry one, and must not stand in for a route that does.
+
+    Measured before this gate: "Summarise the current pipeline." resolved
+    `pipeline`, loaded the 8-row pipeline frame, passed `view='pipeline'` to
+    `try_route` — and was answered *"the portfolio holds 640 loans with a funded
+    balance of £172.1m"*, from the funded book. The frozen readiness bank records
+    that as WRONG / SILENT on Q10A: *"answered from the FUNDED book; the question
+    named the pipeline dataset."*
+
+    Asks `workspace.resolve_dataset`, which is the single governed owner of what
+    dataset a question names — not a second reading of the sentence here, and not
+    a word test.
+
+    Fails OPEN: if the owner cannot be reached the route keeps its pre-existing
+    behaviour rather than declining a question it has always answered.
+    """
+    try:
+        from . import workspace as _ws
+
+        return _ws.resolve_dataset(question) != _ws.DEFAULT_VIEW
+    except Exception as exc:  # noqa: BLE001 - eligibility must never break a query
+        _logger.info("dataset-intent read unavailable for %r: %s", question, exc)
+        return False
+
+
 def _projects_forward(question, spec=None) -> bool:
     """Does the GOVERNED INTENT OWNER read this sentence as forward-looking?
 
@@ -3483,8 +3513,13 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 interpretation=r.resolve_interpretation())),
         Recogniser(
             name="portfolio_summary", priority=80, lens_aware=True,
-            description="Current governed headline position.",
-            recognise=lambda r: _is_portfolio_summary(r.question, r.spec),
+            # THE FUNDED BOOK'S headline position. This route answers from
+            # `output_root` and has no pipeline or forecast frame, so a question
+            # naming another governed dataset is declined rather than answered
+            # from the one dataset it has. See `_names_another_dataset`.
+            description="Current governed headline position of the funded book.",
+            recognise=lambda r: (_is_portfolio_summary(r.question, r.spec)
+                                 and not _names_another_dataset(r.question)),
             handle=lambda r: _route_portfolio_summary(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
