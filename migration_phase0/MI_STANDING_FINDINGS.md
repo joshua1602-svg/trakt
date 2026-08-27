@@ -211,6 +211,32 @@ Scoped in `migration_phase0/MI_COMPOSITE_BOUNDARY_SCOPE.md`.
 
 ---
 
+## OPEN · The parser emits `intent='chart'` with `chart_type='none'`
+
+Found while deciding the narrowing question, and independent of it.
+
+```
+_deterministic_parse("show funded vs pipeline contribution.")
+    intent='chart'   chart_type='none'   metric=None   dims=[]
+_deterministic_parse("what is the weighted expected pipeline contribution?")
+    intent='chart'   chart_type='none'   metric=None   dims=[]
+```
+
+Any question reaching the point-in-time path with that spec fails validation and
+the reader is shown *"I could not build a governed query for this question:
+chart_type 'none' is not valid for intent 'chart'."* — an internal message, not a
+governed refusal.
+
+It is invisible today because `funded_bridge` claims both questions before the
+spec is validated. **It becomes visible the moment that route's eligibility is
+narrowed**, which is why the narrowing decision puts this first for those two
+cases: narrowing without it trades a wrong answer for an error message.
+
+**Owner: separate work.** Measured in
+`migration_phase0/MI_NARROWING_DECISION.md` §4.
+
+---
+
 ## OPEN · The separator evasion in `_unknown_named_book`
 
 Deliberately NOT closed by the sentence-position property that shipped in
@@ -481,8 +507,43 @@ did the reading, so a route that later consumes `pipeline_root` says so without
 anyone remembering to edit a string — and the class cannot silently regrow, which
 is why all five were converted rather than the three that had been reached.
 
-**Still open: whether these routes should narrow, refuse, or disclose.** Not
-bundled, so a regression can be attributed to one half or the other.
+### The narrowing decision, resolved on evidence
+
+Diagnosed in `MI_NARROWING_DECISION.md` from live call paths — reads intercepted
+inside `try_route`, one fresh process per question, caches off.
+
+**Nine of nineteen live routes genuinely support the pipeline. None of the three
+substituting routes is among them,** and none takes a `pipeline_root` parameter.
+`risk_limits`' apparent pipeline read is `portfolio_context.
+discovered_pipeline_portfolios` — **portfolio discovery, computing nothing.**
+Counting an enumeration read as a capability would have credited a route with
+semantics it does not have; reads are classified by call stack into *answer* and
+*discovery*, and only *answer* reads count.
+
+Simulating the three declining a non-funded question decides each case:
+
+| case | outcome if the route declines | decision |
+|---|---|---|
+| Summarise the current pipeline. | `(point-in-time)` · `pipeline` · **8 loans · £3.6MM** — the constructible truth | **(a) route elsewhere** |
+| …concentration tests at risk? | `(point-in-time)` · `pipeline` · a **governed refusal** naming the capability boundary | **(b) refuse** |
+| Show funded vs pipeline contribution. | ✗ *"chart_type 'none' is not valid for intent 'chart'"* | **(b), BLOCKED** |
+| Weighted expected pipeline contribution? | ✗ same | **(b), BLOCKED** |
+
+**Cases 3 and 4 are blocked by a defect that has nothing to do with datasets.**
+`_deterministic_parse` emits `intent='chart'` with `chart_type='none'` for both,
+with no routing involved — an internally inconsistent spec, pre-existing and
+currently MASKED because `funded_bridge` claims the questions before the spec is
+validated. Narrowing first would trade a wrong answer for an internal error
+message, which is a different failure rather than a better one.
+
+**No capability is broadened.** `portfolio_summary` computes funded balance and
+WA LTV, which the pipeline frame does not carry (its measure is
+`weighted_expected_funded_amount`); `funded_bridge` attributes movement in funded
+balance, which a pipeline case has none of. Adding `pipeline_root` would invent a
+capability, not honour a request.
+
+**Order: narrow `portfolio_summary`, then `risk_limits`, then fix the spec
+inconsistency, then narrow `funded_bridge`.** Nothing built yet.
 
 **Owner: separate work.** Measured in
 `migration_phase0/MI_DATASET_CLASS_SCOPE.md` and
