@@ -1,0 +1,443 @@
+{
+ "title": "MI Query Agent — Stage 2: the model proposes a concept, the registry binds the field",
+ "stage": "2 of 4. Deterministic proof only — NO model call was made.",
+ "commit_at_start": "9e87e3d",
+ "branch": "claude/mi-query-agent-c7-2tlhr6",
+ "no_model_was_called": {
+  "why": "ANTHROPIC_API_KEY is not in this environment, and standing rule 12 forbids accepting a key by any other route.",
+  "what_that_costs": "the PROMPT has not been exercised against a live model. Everything else in this stage is a property of the binder, which holds whatever the model says — that is the point of putting the binding on the other side of it — and all of it is measured here.",
+  "what_stage_4_still_needs": "a key in the environment, and the invocation count taken from SUCCESSFUL RESPONSES, not attempts."
+ },
+ "part_a_the_model_list": {
+  "commit": "9e87e3d",
+  "the_defect": "_NO_SAMPLING_MODELS listed seven model-name fragments, and temperature=0.0 was sent to every model that did not match. claude-haiku-4-5-20251001 — THE REPOSITORY DEFAULT — is not on it, and neither is claude-opus-5.",
+  "demonstrated_before_the_fix": "with a fake client and no API credit: claude-haiku-4-5-20251001 and claude-opus-5 both raise TypeError before any HTTP request; claude-opus-4-8 succeeds.",
+  "why_the_list_was_the_wrong_shape": "it encoded a MODEL property when the binding constraint here is an SDK property. anthropic 1.1.0's messages.create has no temperature, top_p or top_k parameter at all — verified against the installed signature — so on that SDK no model accepts them whatever its name. A list keyed on the model could not have been right for any model.",
+  "the_mechanism": {
+   "fact_1": "does this SDK expose the parameter — asked of the signature, not assumed from a version string. An SDK taking arbitrary **kwargs reports them acceptable and defers, because it cannot know what the API allows.",
+   "fact_2": "does this model accept it — only the API can answer, learned from the rejection and remembered, so a model release costs one retry rather than a source edit.",
+   "and_the_failure_is_caught_where_it_happens": "the old code sent the sampling kwargs on BOTH the cached and the uncached attempt and caught neither on the path that mattered. A TypeError from the SDK and a 400 from the API are one fact told two ways; both downgrade once. 529, 401 and a missing argument still raise."
+  },
+  "measured_after": {
+   "installed SDK, no temperature parameter": "all four models reach the call with no sampling kwarg (two of them previously raised)",
+   "SDK exposing temperature, model accepts": "temperature=0.0 is sent",
+   "SDK exposing temperature, model rejects": "downgrades once, remembers, and the next call sends nothing"
+  },
+  "the_test_asserted_the_defect": "test_temperature_gated_for_models_that_reject_it read _supports_temperature('claude-haiku-4-5-20251001') is True and seven more like it, and all eight passed throughout the void run. A rater whose list overlaps the decision under change can only confirm that the list says what the list says. Replaced with seven tests of the MECHANISM."
+ },
+ "part_b_concept_proposal": {
+  "the_constraint": "the model proposes a concept in registered vocabulary. It never names a governed field, a spec, a route or a plan. The registry binds.",
+  "what_actually_protects_the_binding": {
+   "finding": "THE KIND DOES, NOT THE REGISTRY. This contradicts the brief's premise. `erm_sub_product_type` IS a registered dimension on this registry, and `_explicit_dimensions('erm sub product type', semantics, available_columns=<the tape's columns>)` binds to it TODAY — measured, with the availability filter passed. So 'the registry turns lump sum into erm_product_type' is not by itself sufficient: a registry handed that phrase would produce exactly the field the Opus run got wrong.",
+   "what_is_sufficient": "a proposal carries a KIND and each kind has ONE owner. A `category_value` proposal is asked of the book's value catalogue and of nothing else, so `lump sum` reaches `erm_product_type` and cannot reach any dimension field however it is spelled. Dataset availability closes the rest: the vocabulary is scoped to the BOOK, so `erm_sub_product_type` is never offered, and the binder asserts availability rather than trusting the owner."
+  },
+  "the_five_kinds_and_their_owners": {
+   "category_value": "categorical_spans.value_field — the BOOK's catalogue",
+   "measure": "llm_query_parser._detect_metric",
+   "dimension": "llm_query_parser._explicit_dimensions",
+   "source_book": "portfolio_lens.lens_from_term",
+   "dataset": "workspace"
+  },
+  "vocabulary_measured": {
+   "category_value": 39,
+   "measure": 53,
+   "dimension": 63,
+   "source_book": 3,
+   "dataset": 3,
+   "ambiguous_within_kind": 1,
+   "cross_kind_collisions": 5,
+   "raw_field_keys_offered": 0,
+   "off_tape_fields_offered": 0,
+   "opus_breaks_reachable": 0,
+   "withheld": 2
+  },
+  "the_opus_breaks": [
+   {
+    "term": "lump sum",
+    "kind": "category_value",
+    "bound_to": "erm_product_type",
+    "expected": "erm_product_type",
+    "note": "Opus bound this to erm_sub_product_type",
+    "reachable_wrong_field": false,
+    "rejected": []
+   },
+   {
+    "term": "drawdown",
+    "kind": "category_value",
+    "bound_to": "erm_product_type",
+    "expected": "erm_product_type",
+    "note": "Opus bound this to account_status",
+    "reachable_wrong_field": false,
+    "rejected": []
+   }
+  ],
+  "must_not_be_proposable": [
+   {
+    "term": "erm sub product type",
+    "why": "a registered dimension this tape does not carry",
+    "by_kind": [
+     {
+      "kind": "category_value",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "measure",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "dimension",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "source_book",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "dataset",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     }
+    ],
+    "bound_anywhere": false
+   },
+   {
+    "term": "lump summ",
+    "why": "one character from a governed value, and a different thing",
+    "by_kind": [
+     {
+      "kind": "category_value",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "measure",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "dimension",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "source_book",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "dataset",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     }
+    ],
+    "bound_anywhere": false
+   },
+   {
+    "term": "platinum",
+    "why": "no governed field claims it",
+    "by_kind": [
+     {
+      "kind": "category_value",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "measure",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "dimension",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "source_book",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     },
+     {
+      "kind": "dataset",
+      "bound_to": null,
+      "rejected": "not a registered concept"
+     }
+    ],
+    "bound_anywhere": false
+   }
+  ],
+  "ambiguity_report": {
+   "within_a_kind": {
+    "category_value": [
+     "direct"
+    ]
+   },
+   "note_within": "`direct` is a value of BOTH origination_channel and source_portfolio_type. Rejected as ambiguous, never resolved by preference — that is the registry's to fix and must not be handed back to the model. As a source_book, `direct` is one thing and binds.",
+   "across_kinds": {
+    "acquired": [
+     "category_value",
+     "source_book"
+    ],
+    "broker": [
+     "category_value",
+     "dimension"
+    ],
+    "loan size": [
+     "dimension",
+     "measure"
+    ],
+    "owner occupied": [
+     "category_value",
+     "dimension"
+    ],
+    "ticket size": [
+     "dimension",
+     "measure"
+    ]
+   },
+   "note_across": "five terms are claimed by two kinds. The kind separates them so binding is unambiguous, but a model proposing the wrong kind gets a wrong binding that looks entirely valid. Reported so the estate can count them."
+  },
+  "a_defect_the_census_found_in_this_stages_own_work": {
+   "what": "two terms were offered and did not bind: `interest rate buckets` (in the registry's synonym map, unrecognised by _explicit_dimensions) and `portfolio type (source)` (a registered business name whose parentheses the same owner does not match).",
+   "why_it_matters": "a term the model is invited to use and then rejected for using is a trap, and the rejection reads as the model's fault.",
+   "fixed_as_a_class": "candidates are run through the binder when the vocabulary is built. A term the owner will not bind is WITHHELD and recorded — never silently dropped, because the disagreement between the registry's synonym map and the question-shaped owner is a finding about the registry.",
+   "withheld_now": {
+    "dimension": [
+     "interest rate buckets",
+     "portfolio type (source)"
+    ]
+   }
+  },
+  "rejection_never_nearest_match": "an unregistered concept is rejected and named. `lump summ` is one character from a governed value and binds to nothing. Substituting the nearest member is invisible to every consumer downstream, which is the failure mode this programme exists to remove.",
+  "normalisation": "_detect_metric answers current_loan_to_value for 'ltv' and None for 'LTV'. Every serving-path caller lowercases first, so the trap has never fired there; a term-shaped binder walks straight into it. Case, spacing and underscores are normalised before any owner is asked."
+ },
+ "stop_conditions_checked": {
+  "the model must emit a governed field key for any stage to work": "NOT FIRED. 0 raw field keys are offered as proposable terms, and a proposal whose kind is not one of the five is rejected.",
+  "any stage exceeds 3x its registered line estimate": "not fired; concept_proposal.py is 380 lines including its docstrings."
+ },
+ "assurance": {
+  "mi_regression": "278 modules, 85 failing names — IDENTICAL to the frozen baseline, twice (after Part A and after Part B).",
+  "completeness_calibration": "CALIBRATION HOLDS",
+  "concept_vocabulary_census": "CENSUS HOLDS",
+  "unit_tests": "25 concept-proposal + 7 sampling-mechanism, all passing; 664 passed across question_interpretation with the single pre-existing frozen-baseline failure",
+  "mutation_controls": [
+   "offer the whole registry, not just the book -> 4 tests fail",
+   "accept a term the vocabulary does not offer -> 2 tests fail",
+   "resolve an ambiguous value by preference -> 1 test fails (GREEN until the second line of defence was tested on its own; the gap was closed, not reported)",
+   "stop normalising case and spacing -> 4 tests fail",
+   "swallow a malformed reply -> 1 test fails",
+   "offer the terms the owner refuses -> 2 tests fail AND CENSUS FAILED"
+  ]
+ },
+ "vocabulary_full": {
+  "kinds": {
+   "category_value": [
+    "100-150k",
+    "150-200k",
+    "20-30%",
+    "200-300k",
+    "30-40%",
+    "300-500k",
+    "40-50%",
+    "50-100k",
+    "50-60%",
+    "55-60",
+    "60-65",
+    "60-70%",
+    "65-70",
+    "70-75",
+    "75-80",
+    "80-85",
+    "85+",
+    "<20%",
+    "acquired",
+    "acquired 001",
+    "alpha network",
+    "beta partners",
+    "broker",
+    "delta advisers",
+    "direct 001",
+    "drawdown",
+    "gamma direct",
+    "london",
+    "lump sum",
+    "midlands",
+    "north",
+    "owner occupied",
+    "performing",
+    "redeemed",
+    "scotland",
+    "second home",
+    "south east",
+    "south west",
+    "wales"
+   ],
+   "measure": [
+    "age",
+    "applicant age",
+    "applicant ages",
+    "average size",
+    "balance",
+    "balances",
+    "book quality",
+    "book qualitys",
+    "borrower age",
+    "borrower ages",
+    "cltv",
+    "cltvs",
+    "coupon",
+    "coupons",
+    "credit quality",
+    "credit qualitys",
+    "current balance",
+    "current balances",
+    "current interest rate",
+    "current interest rates",
+    "current loan to value",
+    "current loan to values",
+    "current ltv",
+    "current ltvs",
+    "current outstanding",
+    "current outstanding balance",
+    "current outstanding balances",
+    "current outstandings",
+    "current rate",
+    "current rates",
+    "customer age",
+    "customer ages",
+    "deal size",
+    "exposure",
+    "exposures",
+    "interest rate",
+    "interest rates",
+    "loan balance",
+    "loan balances",
+    "loan size",
+    "loan to value",
+    "loan to values",
+    "ltv",
+    "outstanding balance",
+    "outstanding balances",
+    "quality of the book",
+    "quality of the books",
+    "ticket size",
+    "weighted average ltv",
+    "youngest age",
+    "youngest ages",
+    "youngest borrower age",
+    "youngest borrower ages"
+   ],
+   "dimension": [
+    "account status",
+    "age band",
+    "age bands",
+    "age bucket",
+    "age buckets",
+    "age range",
+    "balance band",
+    "balance bucket",
+    "book id",
+    "book type",
+    "borrower age band",
+    "borrower age bucket",
+    "borrower region",
+    "broker",
+    "broker channel",
+    "brokers",
+    "channel",
+    "cohort id",
+    "direct or acquired",
+    "distribution channel",
+    "erm product type",
+    "exposure band",
+    "geographic",
+    "geographic region",
+    "geographic region obligor",
+    "geography",
+    "intermediary",
+    "loan size",
+    "loan status",
+    "loan to value band",
+    "loan to value bucket",
+    "loan type",
+    "ltv band",
+    "ltv bands",
+    "ltv bucket",
+    "ltv buckets",
+    "ltv range",
+    "obligor geography",
+    "obligor nuts",
+    "obligor region",
+    "obligor region (nuts3)",
+    "occupancy",
+    "occupancy type",
+    "origination channel",
+    "origination type",
+    "owner occupied",
+    "portfolio cohort id",
+    "product",
+    "product type",
+    "products",
+    "region",
+    "regional",
+    "regions",
+    "sales channel",
+    "source cohort",
+    "source portfolio",
+    "source portfolio id",
+    "source portfolio type",
+    "status",
+    "ticket",
+    "ticket bucket",
+    "ticket buckets",
+    "ticket size"
+   ],
+   "source_book": [
+    "acquired",
+    "direct",
+    "total"
+   ],
+   "dataset": [
+    "forecast",
+    "funded",
+    "pipeline"
+   ]
+  },
+  "ambiguous": {
+   "category_value": [
+    "direct"
+   ]
+  },
+  "cross_kind": {
+   "acquired": [
+    "category_value",
+    "source_book"
+   ],
+   "broker": [
+    "category_value",
+    "dimension"
+   ],
+   "loan size": [
+    "dimension",
+    "measure"
+   ],
+   "owner occupied": [
+    "category_value",
+    "dimension"
+   ],
+   "ticket size": [
+    "dimension",
+    "measure"
+   ]
+  },
+  "withheld": {
+   "dimension": [
+    "interest rate buckets",
+    "portfolio type (source)"
+   ]
+  }
+ }
+}
