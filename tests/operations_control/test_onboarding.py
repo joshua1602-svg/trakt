@@ -935,30 +935,31 @@ class TestHome:
 # --------------------------------------------------------------------------- #
 
 class TestResolverSeam:
-    def test_a_client_without_configuration_uses_the_repository_file(self,
-                                                                     store,
-                                                                     tmp_path):
-        from operations_control.configuration.resolver import EffectiveConfigResolver
+    def test_a_client_without_configuration_resolves_to_nothing(self, store):
+        """There is no repository file to fall back to, and no other client's.
+
+        This replaces the behaviour where an unrecognised client silently
+        resolved to whichever client owned the repository default.
+        """
+        from operations_control.configuration.resolver import (
+            ClientConfigurationUnavailable,
+            EffectiveConfigResolver,
+        )
         from operations_control.rules import RuleStore
-        repo_file = tmp_path / "repo.yaml"
-        repo_file.write_text("client: {client_id: X}\n", encoding="utf-8")
-        resolver = EffectiveConfigResolver(store, RuleStore(store),
-                                           client_config_path=repo_file)
-        assert resolver.client_config_for("UNKNOWN") == repo_file
+        resolver = EffectiveConfigResolver(store, RuleStore(store))
+        with pytest.raises(ClientConfigurationUnavailable) as raised:
+            resolver.client_config_for("UNKNOWN")
+        assert raised.value.reason == "not_onboarded"
 
     def test_an_activated_client_resolves_with_its_generated_configuration(
-            self, service, store, tmp_path):
+            self, service, store):
         from operations_control.configuration.resolver import EffectiveConfigResolver
         from operations_control.rules import RuleStore
         case = complete(service)
         activate(service, case)
-        repo_file = tmp_path / "repo.yaml"
-        repo_file.write_text("client: {client_id: X}\n", encoding="utf-8")
-        resolver = EffectiveConfigResolver(store, RuleStore(store),
-                                           client_config_path=repo_file)
-        path = resolver.client_config_for("NORDIC")
-        assert path != repo_file
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        resolver = EffectiveConfigResolver(store, RuleStore(store))
+        doc = yaml.safe_load(resolver.client_config_for("NORDIC").read_text(
+            encoding="utf-8"))
         assert doc["client"]["client_id"] == "NORDIC"
 
     def test_the_generated_configuration_satisfies_the_regulatory_preflight(

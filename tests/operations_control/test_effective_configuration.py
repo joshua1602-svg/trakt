@@ -26,6 +26,7 @@ from operations_control.engine import OpsError
 from operations_control.rules import RuleRecord, RuleStore
 
 from .conftest import (
+    onboard_client,
     StubAnnex2Stages,
     make_client_config,
     make_engine,
@@ -45,11 +46,21 @@ def _setting_rule(scope: str, setting: str, value: str, *,
         approved_by="alice", reason="test")
 
 
+def make_resolver(store, tmp_path, *, valid=True, client="client_a"):
+    """A resolver, and a client whose onboarding activated ``make_client_config``.
+
+    The resolver has no configuration path of its own: it reads what a client's
+    own onboarding activated, so a test that wants a client configuration has
+    to give that client one.
+    """
+    rules = RuleStore(store)
+    onboard_client(store, client, make_client_config(tmp_path, valid=valid))
+    return EffectiveConfigResolver(store, rules), rules
+
+
 @pytest.fixture()
 def resolver(store, tmp_path):
-    rules = RuleStore(store)
-    cfg = make_client_config(tmp_path, valid=True)
-    return EffectiveConfigResolver(store, rules, client_config_path=cfg), rules
+    return make_resolver(store, tmp_path)
 
 
 class TestPrecedenceAndProvenance:
@@ -112,10 +123,7 @@ class TestPrecedenceAndProvenance:
 class TestOutcomesHashingPinning:
     def test_missing_client_value_blocks_annex2_with_safe_message(
             self, store, tmp_path):
-        rules = RuleStore(store)
-        res = EffectiveConfigResolver(
-            store, rules,
-            client_config_path=make_client_config(tmp_path, valid=False))
+        res, _ = make_resolver(store, tmp_path, valid=False)
         out = res.resolve(client_id="client_a", portfolio_id="pf1",
                           outcome="mi_annex2", workflow_id="wf_b",
                           reporting_period="2026-06-30")
@@ -172,12 +180,9 @@ class TestOutcomesHashingPinning:
 
     def test_tenant_isolation_of_rules_and_persistence(self, store, tmp_path,
                                                        ops_env):
-        rules = RuleStore(store)
+        res, rules = make_resolver(store, tmp_path)
         rules.approve(_setting_rule("client", "reporting_channel", "secret-b",
                                     client="client_b"))
-        res = EffectiveConfigResolver(
-            store, rules,
-            client_config_path=make_client_config(tmp_path, valid=True))
         out = res.resolve(client_id="client_a", portfolio_id="pf1",
                           workflow_id="wf_t", reporting_period="2026-06-30")
         assert out.effective.resolved_values.get("reporting_channel") != "secret-b"
@@ -321,10 +326,7 @@ class TestNarrowedAgent:
         return calls
 
     def _effective_and_snapshot(self, store, tmp_path):
-        rules = RuleStore(store)
-        res = EffectiveConfigResolver(
-            store, rules,
-            client_config_path=make_client_config(tmp_path, valid=True))
+        res, _ = make_resolver(store, tmp_path)
         out = res.resolve(client_id="client_a", portfolio_id="pf1",
                           workflow_id="", reporting_period="2026-06-30")
         snap = res.materialise_snapshot(out.effective, tmp_path / "snap")

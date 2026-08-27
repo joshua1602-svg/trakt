@@ -22,6 +22,7 @@ import yaml
 
 from ..annex2 import preflight as _preflight
 from ..contracts import now_iso
+from ..engine import OpsError
 from ..rules import RuleRecord, RuleStore
 from ..stores import OpsStore, _write_json, _read_json
 from . import contract as _contract
@@ -40,6 +41,29 @@ BLOCKED = "BLOCKED"
 REPO = Path(__file__).resolve().parents[2]
 
 
+class ClientConfigurationUnavailable(OpsError):
+    """No configuration may be used for this client, and none is substituted.
+
+    ``reason`` separates the cases a single fallback used to flatten, because
+    they need different answers from an operator:
+
+    ``client_required``  a production boundary was reached without a client;
+    ``not_onboarded``    the client has no activated onboarding yet;
+    ``unreadable``       the store could not be read — transient, not absent;
+    ``invalid``          the activated artefact does not parse.
+
+    Only ``not_onboarded`` is a statement about the client. The other three are
+    faults, and none of them may be answered with another client's file.
+    """
+
+    def __init__(self, reason: str, message: str, *, client_id: str = "",
+                 http_status: int = 409):
+        self.reason = reason
+        self.client_id = client_id
+        super().__init__(f"OPS_CLIENT_CONFIG_{reason.upper()}", message,
+                         http_status)
+
+
 @dataclass
 class ResolutionOutcome:
     status: str
@@ -52,39 +76,69 @@ class ResolutionOutcome:
 
 class EffectiveConfigResolver:
     def __init__(self, store: OpsStore, rules: RuleStore,
-                 packages: Optional[ConfigPackageStore] = None,
-                 client_config_path: Optional[Path] = None):
+                 packages: Optional[ConfigPackageStore] = None):
         self.store = store
         self.rules = rules
         self.packages = packages or ConfigPackageStore(store)
-        self.client_config_path = Path(client_config_path
-                                       or "config/client/config_client_ERM_UK.yaml")
         self._generated_cache: Dict[str, Path] = {}
 
     # ------------------------------------------------------------------ #
     def client_config_for(self, client_id: str) -> Path:
         """The client configuration in force for ``client_id``.
 
-        A client that has been through Client Onboarding is governed by the
-        configuration onboarding GENERATED for it — same format, same layer,
-        same readers, but versioned and attributable. A client that has not is
-        governed by the repository file exactly as before, so adopting a client
-        is a decision, never a side effect of this code shipping.
+        A client is governed by the configuration its own Client Onboarding
+        activated, and by nothing else. There is no repository default and no
+        fallback: a client Trakt cannot resolve is a client Trakt does not
+        deliver for, because the alternative — the behaviour this replaces —
+        was to deliver it under the identity, LEI and reporting date of
+        whichever client happened to own the repository file.
+
+        Raises :class:`ClientConfigurationUnavailable`, whose ``reason``
+        distinguishes a client that has not been onboarded from a store that
+        could not be read. Both stop the run; only one is about the client.
         """
         if not client_id:
-            return self.client_config_path
-        cached = self._generated_cache.get(client_id)
+            raise ClientConfigurationUnavailable(
+                "client_required",
+                "This step needs to know which client it is for.",
+                http_status=400)
+        from ..onboarding.artefacts import client_config_rel
+        from ..onboarding.store import OnboardingStore
         try:
-            from ..onboarding.artefacts import client_config_rel
-            from ..onboarding.store import OnboardingStore
             text = OnboardingStore(self.store).read_artefact(
                 client_id, client_config_rel(client_id))
-        except Exception:      # noqa: BLE001 — never break a delivery over this
-            return cached or self.client_config_path
+        except Exception as exc:      # noqa: BLE001 — reported, never absorbed
+            raise ClientConfigurationUnavailable(
+                "unreadable",
+                "This client's configuration could not be read. This is a "
+                "storage fault, not a missing client — nothing has been "
+                "delivered. Try again, and tell an administrator if it "
+                "persists.", client_id=client_id, http_status=503) from exc
         if not text:
-            return self.client_config_path
+            raise ClientConfigurationUnavailable(
+                "not_onboarded",
+                "This client has no active configuration. Complete and "
+                "activate its onboarding before running a delivery for it.",
+                client_id=client_id)
+        try:
+            parsed = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise ClientConfigurationUnavailable(
+                "invalid",
+                "This client's active configuration could not be read as "
+                "valid configuration. Nothing has been delivered. Ask an "
+                "administrator to review the client's onboarding.",
+                client_id=client_id) from exc
+        if not isinstance(parsed, dict) or not parsed:
+            raise ClientConfigurationUnavailable(
+                "invalid",
+                "This client's active configuration is empty. Nothing has "
+                "been delivered. Ask an administrator to review the client's "
+                "onboarding.", client_id=client_id)
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-        if cached is not None and cached.name.startswith(digest):
+        cached = self._generated_cache.get(client_id)
+        if cached is not None and cached.name.startswith(digest) \
+                and cached.exists():
             return cached
         import tempfile
         path = (Path(tempfile.mkdtemp(prefix="trakt-client-config-"))
@@ -102,9 +156,14 @@ class EffectiveConfigResolver:
         blockers: List[str] = []
         warnings: List[str] = []
         conflicts: List[Dict[str, Any]] = []
-        # The client layer: onboarding-generated where the client has been
-        # onboarded, the repository file otherwise.
-        client_config_path = self.client_config_for(client_id)
+        # The client layer: the configuration this client's own onboarding
+        # activated. A client that cannot be resolved is BLOCKED here rather
+        # than delivered under another client's configuration.
+        try:
+            client_config_path = self.client_config_for(client_id)
+        except ClientConfigurationUnavailable as unavailable:
+            return ResolutionOutcome(status=BLOCKED,
+                                     blockers=[unavailable.message])
 
         # 1-4. Identify asset + applicable regime(s) via the support model.
         asset = ASSET_MODEL.get(asset_type)
@@ -248,10 +307,7 @@ class EffectiveConfigResolver:
                 "system": f"config package v{pkg_system['version']}",
                 "regime": f"config package v{pkg_regime['version']}",
                 "asset": f"config package v{pkg_asset['version']}",
-                "client": ("Client Onboarding (generated client "
-                           "configuration)"
-                           if client_config_path != self.client_config_path
-                           else str(self.client_config_path)),
+                "client": "Client Onboarding (generated client configuration)",
                 "portfolio": "OCC rule store (portfolio scope)",
                 "run_decisions": "OCC rule store (run scope + approved "
                                  "workflow decisions)",
@@ -308,23 +364,36 @@ class EffectiveConfigResolver:
         return (_contract.EffectiveConfiguration.from_dict(doc)
                 if doc else None)
 
+    #: Inside a snapshot: the merged effective values, and the client layer
+    #: document exactly as its onboarding activated it. Both are pinned; they
+    #: answer different questions, so both are written.
+    EFFECTIVE_CONFIG_REL = "config/client/effective_client_config.yaml"
+    CLIENT_LAYER_REL = "config/client/client_layer_config.yaml"
+
     def materialise_snapshot(self, effective: _contract.EffectiveConfiguration,
                              dest: Path) -> Dict[str, str]:
-        """Write hash-verified snapshots of every pinned layer file + the
-        effective client configuration; returns the paths the narrowed agent
-        consumes (registry, aliases_dir, client_config, ...)."""
+        """Write hash-verified snapshots of every pinned layer file, the
+        effective client configuration and the client layer document; returns
+        the paths the narrowed agent and the Annex 2 chain consume.
+
+        Everything a run reads comes from here. A file edited in the working
+        tree after this point does not reach the run: the bytes below are the
+        ones the effective configuration pinned, and ``packages.materialise``
+        refuses any whose hash does not match what was pinned.
+        """
         dest.mkdir(parents=True, exist_ok=True)
         for layer, ver_key in ((LAYER_SYSTEM, "system_config_version"),
                                (LAYER_REGIME, "regime_config_version"),
                                (LAYER_ASSET, "asset_config_version")):
             version = int(getattr(effective, ver_key).lstrip("v"))
             self.packages.materialise(layer, version, dest)
-        client_cfg = dest / "config/client/effective_client_config.yaml"
+        client_cfg = dest / self.EFFECTIVE_CONFIG_REL
         client_cfg.parent.mkdir(parents=True, exist_ok=True)
         client_cfg.write_text(
             "# GENERATED effective client configuration (immutable snapshot)\n"
             + yaml.safe_dump(effective.resolved_values, sort_keys=False),
             encoding="utf-8")
+        layer_cfg = self.materialise_client_layer(effective, dest)
         return {
             "registry": str(dest / "config/system/fields_registry.yaml"),
             "aliases_dir": str(dest / "config/system"),
@@ -333,8 +402,50 @@ class EffectiveConfigResolver:
             "asset_config": str(dest /
                                 "config/asset/product_defaults_ERM.yaml"),
             "client_config": str(client_cfg),
+            "client_layer_config": str(layer_cfg),
             "snapshot_root": str(dest),
         }
+
+    def materialise_client_layer(self,
+                                 effective: _contract.EffectiveConfiguration,
+                                 dest: Path) -> Path:
+        """Pin the client layer document for this run, verified against the
+        hash the effective configuration recorded for it.
+
+        Written separately from the merged values because the Annex 2 chain
+        reads a CLIENT CONFIGURATION — the same document shape it has always
+        read — not a merge of every layer. Re-materialising is idempotent, so a
+        run resumed in another process reads the same bytes rather than
+        whatever the working tree holds by then.
+        """
+        target = dest / self.CLIENT_LAYER_REL
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = self.client_config_for(effective.client_id)
+        text = source.read_text(encoding="utf-8")
+        pinned = effective.client_config_version
+        actual = "sha256:" + hashlib.sha256(text.encode()).hexdigest()[:12]
+        if pinned and pinned != "absent" and actual != pinned:
+            raise ClientConfigurationUnavailable(
+                "invalid",
+                "This client's configuration has changed since this run "
+                "pinned it. Nothing has been delivered. Start the run again "
+                "so it pins the current configuration.",
+                client_id=effective.client_id)
+        target.write_text(text, encoding="utf-8")
+        return target
+
+    def load_effective(self, client_id: str, workflow_id: str,
+                       version: int) -> Optional[
+                           _contract.EffectiveConfiguration]:
+        """The effective configuration a run pinned, read back from the store."""
+        doc = _read_json(
+            self.store.storage,
+            f"blob://{self.store.layout.container}/{client_id}/"
+            f"workflow-runs/{workflow_id}/effective-config/{version:04d}.json")
+        if not doc:
+            return None
+        return _contract.EffectiveConfiguration.from_dict(
+            {k: v for k, v in doc.items() if k != "status"})
 
     # ------------------------------------------------------------------ #
     def _scoped(self, client_id: str, portfolio_id: str,
