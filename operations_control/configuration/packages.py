@@ -55,6 +55,13 @@ LAYER_FILES: Dict[str, List[str]] = {
         # onboarding) rather than delivery-specific. Governed here so a future
         # regime becomes available to onboarding as a configuration change.
         "config/regime/onboarding_standing_fields.yaml",
+        # Annex 12 — investor and significant-event reporting. Governed
+        # alongside Annex 2 because an asset that declares it must be able to
+        # point at the package that carries it; the two are complementary
+        # reporting products over the same book, not alternatives.
+        "config/regime/annex12_template.yaml",
+        "config/regime/annex12_rules.yaml",
+        "config/regime/annex12_field_constraints.yaml",
     ],
     LAYER_ASSET: [
         "config/asset/product_profiles.yaml",
@@ -75,10 +82,15 @@ LAYER_FILES: Dict[str, List[str]] = {
 #: Asset and regime are RELATED entities — an asset SUPPORTS regimes; it never
 #: "is" one. Seeded from repository reality; extensible without code change
 #: via the system package metadata in a later pass.
+#: Annex 2 and Annex 12 are COMPLEMENTARY reporting products, not alternatives:
+#: Annex 2 reports the underlying exposures, Annex 12 reports to investors and
+#: on significant events. An equity-release book supports both, and the client
+#: configuration has always declared both — this is where that was not said.
+#: Annex 2 stays first, because the order decides the default regime.
 ASSET_MODEL: Dict[str, Dict[str, Any]] = {
     "equity_release": {
         "label": "Equity Release",
-        "supports_regimes": ["ESMA_Annex2"],
+        "supports_regimes": ["ESMA_Annex2", "ESMA_Annex12"],
     },
 }
 

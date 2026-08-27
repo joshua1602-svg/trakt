@@ -1,3 +1,8 @@
+# The regulatory package this file belongs to. Declared for the same reason
+# the Annex 2 files declare theirs: an asset that reports under a regime must
+# be able to point at the package carrying it.
+regime: ESMA_Annex12
+
 annex12:
   meta:
     template: ESMA Annex 12 (Investor Report) - Deal-level template

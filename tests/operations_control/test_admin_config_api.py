@@ -114,8 +114,11 @@ class TestOverview:
         regimes = {r["id"]: r for r in body["regimes"]}
         assert "equity_release" in assets
         assert assets["equity_release"]["label"] == "Equity Release"
+        # Annex 2 reports the exposures, Annex 12 reports to investors; an
+        # equity-release book files both. Annex 2 stays first — the order is
+        # what decides a client's default regime.
         assert [r["id"] for r in assets["equity_release"]["supported_regimes"]] \
-            == ["ESMA_Annex2"]
+            == ["ESMA_Annex2", "ESMA_Annex12"]
         assert regimes["ESMA_Annex2"]["regulator"] == "ESMA"
         assert regimes["ESMA_Annex2"]["annex"] == "Annex 2"
         assert regimes["ESMA_Annex2"]["field_universe"]["count"] > 0

@@ -108,10 +108,16 @@ _TEXT_SUFFIXES = {".json", ".csv", ".txt", ".md", ".yaml", ".yml", ".ts", ".tsx"
 # --------------------------------------------------------------------------- #
 # Prohibited strings, including values read live from the production config
 # --------------------------------------------------------------------------- #
+# The documents whose identifying values the demonstration may never contain.
+# The live client configurations are generated per client into the operations
+# store, so they are not repository files to read here; the legacy documents
+# below still carry the identity the film must not show, and are read for
+# exactly that reason. This list is a source of PROHIBITED VALUES — it does not
+# make any of these files production configuration.
 _PRODUCTION_CONFIGS = (
-    Path("config") / "client" / "config_client_ERM_UK.yaml",
+    Path("tests") / "fixtures" / "legacy_client" / "config_client_ERM_UK.yaml",
     Path("config") / "client" / "config_client_ERM_UK_demo.yaml",
-    Path("config") / "client" / "config_client_annex12.yaml",
+    Path("tests") / "fixtures" / "legacy_client" / "config_client_annex12.yaml",
 )
 
 #: Config keys whose values identify a live client and must never be reused.
