@@ -132,3 +132,34 @@ why Q02B was classified as a threshold loss and is not one.
 **Owner: separate work.** Recorded in
 `migration_phase0/MI_THRESHOLD_KIND_RESULT.json` under
 `prediction_B.why_the_third_did_not_land`.
+
+---
+
+## OPEN · A registry gap the estate reports to the reader as a data gap
+
+**Found in Stage 4. Three questions, one registry entry.**
+
+*"Show a table of balance by LTV bucket and interest-rate bucket."* (Q13A, and
+its two siblings Q13B and Q13C) is answered with:
+
+> 'interest rate bucket' is not available in this dataset. This book does not
+> report it, so the question cannot be answered from the current data (no value
+> was fabricated).
+
+**The book reports it.** `interest_rate_bucket` is a fully populated column on
+the acceptance tape — 640 of 640 rows, five bands: `4-5%`, `5-6%`, `6-7%`,
+`7-8%`, `>=8%`. What is missing is the **registry declaration**: the field is
+not in `semantics["fields"]`, so `requested_dimension_terms` resolves nothing
+for any spelling of the term, no owner claims it, and the concept vocabulary
+cannot offer it either.
+
+The refusal is honest about having fabricated nothing and **false about the
+data**. A reader is told the book does not hold something it holds.
+
+This was classified as a capability gap in the frozen 75-bank grades. It is
+not. Every other bucket axis on this tape — `ltv_bucket`, `age_bucket`,
+`ticket_bucket` — is declared and works.
+
+**Owner: separate work, and the cheapest remedy measured in Stage 4** — three
+questions for one registry entry and no code, against the threshold kind's
+three questions for a new concept kind.
