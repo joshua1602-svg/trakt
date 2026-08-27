@@ -289,10 +289,18 @@ def _reporting_parties(case: OnboardingCase) -> Dict[str, Any]:
     """Entities whose role has no regime field but which reports name.
 
     Written under one clearly-labelled block rather than scattered, and only for
-    roles actually assigned.
+    roles actually assigned. Each entry carries that entity's OWN identifier:
+    a sponsor's LEI is the sponsor's, an SSPE's is the SSPE's, and neither is
+    the originator's. Nothing here is derived from another role.
+
+    ``reporting_entity`` is included even though the investor-report
+    configuration also names it, because the designation is standing client
+    information: a client can name the entity that reports on its behalf
+    without taking the investor-reporting product, and that designation would
+    otherwise exist only in the case answers.
     """
     wanted = ("trustee", "warehouse_lender", "servicer", "sponsor", "sspe",
-              "investment_manager", "calculation_agent")
+              "reporting_entity", "investment_manager", "calculation_agent")
     out: Dict[str, Any] = {}
     for role in wanted:
         entities = case.entities_with_role(role)

@@ -92,16 +92,21 @@ def run_preflight(*, client_config_path: Path,
             checks.append(CheckResult(key, label, "ok", False,
                                       found_value=val))
 
+    # These are the ORIGINATOR's details (Annex 2 RREL82/83/84), not the
+    # reporting entity's. The two are separate roles that a client may assign
+    # to separate legal entities, so naming the wrong one here would send an
+    # operator to enter the wrong company's identifier. Keys, validators and
+    # blocking behaviour are unchanged; only the wording names the right role.
     add("originator_legal_entity_identifier",
-        "Reporting entity identifier (LEI)", blocking=True,
+        "Originator identifier (LEI)", blocking=True,
         validator=lambda v: bool(LEI_RE.fullmatch(v)),
-        problem_missing="The reporting entity's LEI has not been configured.",
-        problem_invalid="The configured reporting entity identifier is not a "
+        problem_missing="The originator's LEI has not been configured.",
+        problem_invalid="The configured originator identifier is not a "
                         "valid 20-character LEI.")
     add("originator_establishment_country",
-        "Reporting entity country", blocking=False,
+        "Originator country", blocking=False,
         validator=lambda v: bool(COUNTRY_RE.fullmatch(v)),
-        problem_missing="The reporting entity's country has not been confirmed.")
+        problem_missing="The originator's country has not been confirmed.")
     add("country", "Portfolio jurisdiction", blocking=False,
         validator=lambda v: bool(COUNTRY_RE.fullmatch(v)),
         problem_missing="The portfolio's jurisdiction has not been confirmed.")
