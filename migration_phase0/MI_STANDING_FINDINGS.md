@@ -82,6 +82,56 @@ evasion held open on purpose rather than closed as a side effect.
 
 ---
 
+## OPEN · Five readers decide axis-vs-measure and give three answers
+
+**A consolidation, and it needs its own scope. It is not a precedence rule and
+must not be attempted as one.**
+
+On the single word `ltv`, in one module:
+
+| reader | says |
+|---|---|
+| `_explicit_dimensions` (`terms_map`: 251 registry + 56 curated) | not an axis |
+| `_explicit_dimensions(grouping=True)` extra map | not an axis |
+| `_classify_segment` | numeric axis → `ltv_bucket` |
+| `_NUMERIC_AXIS_BUCKET` | `ltv_bucket` |
+| `_detect_metric` | measure `current_loan_to_value` |
+
+Three answers, five readers. Two of the disagreements are not about the sentence
+at all — they are the same knowledge held twice, at different sizes:
+
+* **Two bare-to-banded maps, 1,100 lines apart.** `_NUMERIC_AXIS_BUCKET`
+  (llm_query_parser:1962) holds nine terms over four buckets. The
+  `grouping=True` extra map (llm_query_parser:521) holds **one**,
+  `{"age": "age_bucket"}`. So `grouping=True` resolves `borrower age` and not
+  `ltv`, while the nine-entry map resolves both.
+* **The registry declares the relation completely and no reader reads it.**
+  `derived_from` carries 20 relations. Nine hand-written terms and one
+  hand-written term stand in for it.
+* **One list is simultaneously the axis map and part of the measure
+  vocabulary.** `_metric_side_residue` (llm_query_parser:836) folds
+  `_NUMERIC_AXIS_BUCKET`'s nine strings into the terms that make a word a
+  measure. The same nine strings decide both roles, 1,100 lines apart.
+
+Downstream, `execution_receipt.requested_dimension_terms` and
+`concept_proposal.vocabulary` both delegate to `_explicit_dimensions` — the
+reader that agrees with the branch that gets Q17C wrong. That is why
+`notApplied` is empty on a question that lost two of three axes: the facet layer
+is consulting the reader that already agreed with the mistake.
+
+**Why this is a consolidation and not a rule.** Every one of the five readers is
+internally correct for its own view of the sentence, and a genuine multi-measure
+request — *"For the London book, give me balance, number of loans,
+weighted-average LTV and average borrower age"* — needs its bare terms to STAY
+measures. Any single precedence rule has to separate that sentence from Q17C,
+and both put bare measure words after a preposition. Choosing between the five
+without first deciding what each is FOR would pick a winner by branch order
+again, which is the defect.
+
+Measured in `migration_phase0/MI_COORDINATED_AXIS_SCOPE.md` §5.
+
+---
+
 ## F6 · A configuration path resolved against the process working directory
 
 `trakt_core.capability.load_registry` resolves
@@ -280,35 +330,40 @@ unshipped qualifier/noun separator fix; four questions still refuse with
 
 ---
 
-## OPEN · Coordinated axis lists are read as measures
+## OPEN · Coordinated axis lists are read as measures — DIAGNOSED, NOT FIXED
 
-Two questions, one shape, and the second was hidden behind a false refusal until
-`1062e43`'s successor removed it.
+Scoped in `1aaf52f`. **Not fixed**, and the diagnosis changed what it is.
 
-    Q17C  "Break Direct portfolio balance down across LTV, ticket size and
-           borrower age."
-    Q22C  "Which of the Direct and Acquired books drove more of the
-           month-on-month balance increase?"
+**It is a bounded rule, not coordination parsing.** The coordination is already
+parsed: `_grouping_segments` splits Q17C into three segments and
+`_classify_segments` resolves all three axes with their bands. The correct
+builder exists and already handles three or more axes
+(`_build_multi_dim_table_spec`). The failure is **branch order**: the
+multi-measure branch returns first because `detect_measure_set` finds balance +
+LTV + borrower age, masks their spans, and keeps one dimension.
 
-Q17C names three axes and the deterministic parser carries one. `ticket size`
-becomes `ticket_bucket`; `borrower age` is carried in the wrong ROLE, as a
-measure ("Average Borrower Age"); `LTV` vanishes. Truth is 143 cells, the answer
-is 5 rows, and nothing in the receipt says an axis was lost. Its sibling Q17A —
-which spells each axis with the word "bucket" — is correct today, so the defect
-is the bare wording in a coordinated list, not the axes.
+**Bare vs banded is the variable, not coordination.** A bare axis fails ALONE —
+"Show balance by LTV." parses zero dimensions. Coordination enters only as an
+arity effect, and backwards: the TWO-item bare coordination works, the
+THREE-item one fails, because the third bare term is the second measure.
 
-Q22C is the same family on the other side: the scope mask consumes "Acquired
-books" and leaves a bare "Direct" from the elided coordination, which then
-raises a lost narrowing.
+**It is NOT Q22C.** Q17C's segmenter returns three segments; Q22C's returns
+zero. Q22C needs an elided head noun distributed over both conjuncts and nothing
+in the estate does that. Q17C does not join it.
 
-The Stage 1 completeness check fires on Q17C today, deterministically, naming
-`measure 'borrower age'` as stated-and-unresolved. It does not see bare `LTV` —
-no owner resolves it as a dimension there, which is the recorded limit that the
-check's recall is the owners' recall.
+**Worth one question.** Across 1,446 corpus questions, 152 name two or more
+resolvable axes and **three** lose one. **No currently CORRECT answer is in the
+affected set, on either arm.** Recovery is Q17C (WRONG on the deterministic arm,
+**already CORRECT on the merge arm**) and Q12C (FALSE_REFUSAL, and an adjacent
+trigger — the word "plot" sets `explicit_plot` and skips the grouping branch).
+The third refuses for an unrelated reason.
 
-**Owner: separate work, and it is the strongest case yet for wiring the
-completeness check.** Measured in
-`migration_phase0/MI_FRAGMENT_AND_COLLISION_RESULT.md` §4.
+**The risk is not in the affected set.** Those three bound the recovery. A
+precedence change is judged against the **149** questions that name two or more
+axes and get them all today, and against genuine multi-measure requests whose
+bare terms must stay measures.
+
+Measured in `migration_phase0/MI_COORDINATED_AXIS_SCOPE.md`.
 
 ---
 
@@ -332,31 +387,94 @@ concatenating the two spec fields.
 
 ---
 
-## OPEN · Fifteen pipeline and forecast questions are answered from another dataset
+## OPEN · Three routes answer from the funded book when the question named the pipeline
 
-Found while scoping the completeness-check wiring, on the 1,446-question corpus.
-Not visible on any bank this programme has run, because none of the fifteen has a
-computable truth — so none is graded WRONG and none was ever looked at.
+Scoped in the commit carrying `MI_DATASET_CLASS_SCOPE.md`. **Not fixed**, and the
+diagnosis corrects the count I previously recorded here.
+
+**It is four questions, not fifteen.** Eleven of the fifteen were a NAMING
+mismatch, not a substitution: `analytical_composition` and
+`forecast_extrapolation` publish `datasetContext: forecast` beside
+`reconciliation.dataset: funded+pipeline`, and the forecast frame IS funded plus
+pipeline — measured at 645 rows = 640 + 5. Two correct names for one composed
+frame. I asserted "all genuine losses" on a test that cannot tell a composite
+from a substitution.
+
+**The four, and their routes:**
 
 ```
-"Summarise the current pipeline."
-   metadata.datasetContext : pipeline
-   reconciliation.dataset  : funded
-   -> "At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m…"
+portfolio_summary  Summarise the current pipeline.
+risk_limits        Based on the current book and forward pipeline, which
+                   concentration tests are we at risk of breaching?
+funded_bridge      Show funded vs pipeline contribution.
+funded_bridge      What is the weighted expected pipeline contribution?
 ```
 
-Fifteen questions naming the pipeline or a forecast publish a `datasetContext`
-that disagrees with the `reconciliation.dataset` the answer was actually
-reconciled against — `pipeline` vs `funded`, `forecast` vs `funded+pipeline`.
-The reader asked about one book and was given another, in full confidence.
+**The mechanism is a precondition stated twice in comments and enforced nowhere.**
+`chat_routing.py:262` — *"`workspace.resolve_dataset`, which is the single owner.
+Routes ask that owner"*. `chat_routing.py:3495` — *"the route asks
+`workspace.resolve_dataset` for it"*. **`chat_routing.py` never calls it**; all
+four mentions in the file are comments, and the three implicated handlers take no
+parameter that could carry the answer. `try_route` receives `view` and uses it
+only for the value catalogue, the interpretation projection and the ownership
+re-read — never to select the answering frame.
 
-**The contradiction is already in the envelope.** Nothing needs to be inferred:
-the estate records both the decision and what it read, and they differ. That is
-why the completeness check sees all fifteen with no new reader.
+**The data is present and the capability works.** `_resolve_frame('pipeline')`
+returns 8 rows, £3.6m, 5 stages, and a SIBLING FORMULATION already answers from
+it: *"Give me an overview of the pipeline by size and stage"* falls to the
+point-in-time path and reconciles against `pipeline`. The point-in-time path
+honours the dataset; the routed path does not. The only difference between the
+siblings is which route claims the sentence.
 
-**Owner: separate work, and it is larger than the wiring that found it.** This is
-not a disclosure problem — the answers are to a different question. Measured in
-`migration_phase0/MI_COMPLETENESS_WIRING_SCOPE.md`.
+**Q19C's shape, two causes of three.** Cause 1 (a name published with nothing
+behind it) and cause 2 (a documented precondition nothing enforces) are both
+present. Cause 3 is INVERTED and favourably: these routes DO publish
+`reconciliation.dataset`, so the contradiction sits in one envelope and a
+deterministic check finds it with no new reader. Q19C's routes published nothing.
+
+**Recovery 4, risk 32.** Two of the four already carry a frozen wrong verdict.
+The risk zone is 32 delivering route-claimed questions on a non-default dataset,
+of which **nine are correct compositions** (`funded+pipeline`) that a naive
+"honour the named dataset" rule would break. The composite is not a bug.
+
+**Owner: separate work.** Measured in
+`migration_phase0/MI_DATASET_CLASS_SCOPE.md`.
+
+---
+
+## OPEN · My grader buries recorded verdicts behind NO_COMPUTABLE_TRUTH
+
+F3's family, on this programme's own instrument.
+
+`grader.grade_75` returns `NO_COMPUTABLE_TRUTH` the moment `independent_truth` is
+null, and **never reads the frozen human `grade` sitting in the same row of
+`MI_FINAL_LIVE_DATA_READINESS.json`**. Of the 22 pack rows it so labels, five
+carry a recorded wrong verdict that the label buries:
+
+| id | frozen human grade | frozen rationale |
+|---|---|---|
+| Q10A | **WRONG / SILENT** | answered from the FUNDED book; the question named the pipeline dataset |
+| Q07B | **WRONG / SILENT** | both scopes dropped; a whole-book figure answered a comparison question |
+| Q25A | **CURRENT-STATE SUBSTITUTION** | a FORWARD question answered with today's risk-limit status |
+| Q25B | **CURRENT-STATE SUBSTITUTION** | as above |
+| Q25C | **CURRENT-STATE SUBSTITUTION** | as above |
+
+F3 says an instrument that cannot be measured must report NOT MEASURED, never
+clean. `NO_COMPUTABLE_TRUTH` reports not-measured honestly — and then **out-ranks
+a verdict somebody else already measured.** Reporting a gap in one's own oracle
+must not overwrite another oracle's finding.
+
+The consequence is the sentence I wrote and should not have: *"none grades WRONG
+because none has a computable truth, which is how all fifteen survived every bank
+this programme has run."* They did not survive the bank. The bank caught them and
+my grader discarded the verdict.
+
+Cheaper than the product fix, and recovers more: deferring to the frozen grade
+surfaces five recorded wrong verdicts, including Q07B, which has nothing to do
+with datasets.
+
+**Owner: separate work.** Measured in
+`migration_phase0/MI_DATASET_CLASS_SCOPE.md` §4.
 
 ---
 
