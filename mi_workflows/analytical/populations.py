@@ -181,6 +181,32 @@ def resolve_lens(spec: PopulationSpec):
     return _routing._resolve_lens(f"the {spec.lens_term} book", None)
 
 
+def lens_narrowing(spec: PopulationSpec, lens: Any = None
+                   ) -> Tuple[Optional[str], Tuple[Tuple[str, str], ...]]:
+    """A provenance narrowing, said twice: once for a reader, once for a machine.
+
+    Returns ``(predicate_text, narrowed_on)``.
+
+    THE SHARED PRIMITIVE, and it exists because there were two of them. Both
+    ``apply`` here and ``executors.period_movement`` composed the reader text
+    themselves, the second under a comment asserting it matched the first — so
+    the two agreed only for as long as nobody changed one. They then had to be
+    changed, and one was.
+
+    ``narrowed_on`` is the same filter written so a consumer can read it: the
+    lens NAME is a value of the source-portfolio type field, which is the concept
+    a lens scopes to however the registry enumerates it into ids. Not a second
+    claim, and nothing here is computed — the lens has already been resolved.
+    """
+    if not spec.lens_term:
+        return None, ()
+    lens = resolve_lens(spec) if lens is None else lens
+    ids = (lens.filters or {}).get(_portfolio_lens.SOURCE_ID_FIELD) or []
+    text = (f"portfolio lens = {lens.label}"
+            + (f" ({', '.join(sorted(str(i) for i in ids))})" if ids else ""))
+    return text, ((_portfolio_lens.SOURCE_TYPE_FIELD, str(lens.name)),)
+
+
 def apply(frame, spec: PopulationSpec, semantics: Optional[Mapping[str, Any]] = None,
           *, lens_filter=None) -> Tuple[Any, PopulationRef, Dict[str, Any]]:
     """Narrow ``frame`` to ``spec``. Returns ``(frame, ref, evidence)``.
@@ -199,6 +225,7 @@ def apply(frame, spec: PopulationSpec, semantics: Optional[Mapping[str, Any]] = 
     rows_before = int(len(frame))
     work = frame
     predicate_text: Optional[str] = None
+    narrowed_on: Tuple[Tuple[str, str], ...] = ()
 
     if spec.lens_term and lens_filter is None:
         # Nothing to narrow with. Recording it as unavailable is what keeps the
@@ -208,10 +235,7 @@ def apply(frame, spec: PopulationSpec, semantics: Optional[Mapping[str, Any]] = 
     elif spec.lens_term:
         lens = resolve_lens(spec)
         work = lens_filter(work, lens)
-        ids = (lens.filters or {}).get(_portfolio_lens.SOURCE_ID_FIELD) or []
-        predicate_text = (f"portfolio lens = {lens.label}"
-                          + (f" ({', '.join(sorted(str(i) for i in ids))})"
-                             if ids else ""))
+        predicate_text, narrowed_on = lens_narrowing(spec, lens)
 
     if spec.filters:
         predicates = _population.material_predicates(spec.filters, semantics)
@@ -237,5 +261,6 @@ def apply(frame, spec: PopulationSpec, semantics: Optional[Mapping[str, Any]] = 
     ref = PopulationRef(key=spec.key, label=spec.label,
                         predicate=predicate_text or None,
                         rows=rows_after, rows_before=rows_before,
-                        exposure=exposure, is_total=spec.is_total)
+                        exposure=exposure, is_total=spec.is_total,
+                        narrowed_on=narrowed_on)
     return work, ref, evidence

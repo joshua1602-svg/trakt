@@ -441,15 +441,13 @@ def period_movement(ctx: AnalyticalContext, *,
                        method=resolution.resolution_method,
                        available=tuple(str(s.reporting_date) for s in snaps))
     predicate_text = "; ".join(p.describe() for p in predicates)
+    narrowed_on: Tuple[Tuple[str, str], ...] = ()
     if not predicate_text and population.lens_term:
-        # The RESOLVED lens, with the registry's explicit portfolio ids — the
-        # same text ``populations.apply`` records, so a population reads
-        # identically whichever capability produced it.
-        lens = pops.resolve_lens(population)
-        ids = (lens.filters or {}).get("source_portfolio_id") or []
-        predicate_text = (f"portfolio lens = {lens.label}"
-                          + (f" ({', '.join(sorted(str(i) for i in ids))})"
-                             if ids else ""))
+        # The RESOLVED lens, through the one primitive that composes it. This
+        # branch used to compose the text itself under a comment asserting it
+        # matched ``populations.apply``; the assertion held until the two had to
+        # say more than text, and then it did not.
+        predicate_text, narrowed_on = pops.lens_narrowing(population)
     # A3 — the membership of this population at the START of the compared
     # period. Taken from the snapshot the governed resolution actually chose,
     # matched by reporting date, so it describes the same two dates the movement
@@ -463,7 +461,8 @@ def period_movement(ctx: AnalyticalContext, *,
                         rows=rows_after, rows_before=rows_before,
                         rows_prior=rows_prior,
                         time_relative=(population.kind == pops.KIND_SEASONING),
-                        is_total=population.is_total)
+                        is_total=population.is_total,
+                        narrowed_on=narrowed_on)
 
     out: List[Finding] = []
     wanted = set(measures) if measures else None
