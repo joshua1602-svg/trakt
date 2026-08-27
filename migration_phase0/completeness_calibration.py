@@ -42,40 +42,61 @@ class CalibrationError(RuntimeError):
     """The calibration could not be measured. Never absorbed into a pass."""
 
 
-#: The 21 type-(c) failures on the 75-question bank.
+#: The type-(c) failures on the 75-question bank. Twenty-one at the diagnosis;
+#: twenty now, because Q19C was one of them and has been FIXED — see REGRADED.
 TYPE_C: Tuple[str, ...] = (
     "Q01C", "Q02B", "Q03A", "Q03C", "Q04A", "Q05B", "Q05C", "Q07B", "Q10A",
-    "Q10C", "Q12C", "Q15B", "Q15C", "Q16B", "Q17B", "Q17C", "Q19C", "Q22B",
+    "Q10C", "Q12C", "Q15B", "Q15C", "Q16B", "Q17B", "Q17C", "Q22B",
     "Q22C", "Q23B", "Q24B")
 TYPE_B: Tuple[str, ...] = ("Q21B", "Q21C")
 TYPE_D: Tuple[str, ...] = ("Q01B", "Q20B")
 
+#: Grades that MOVED since `MI_FINAL_LIVE_DATA_READINESS.json` was frozen,
+#: with the reason. The frozen file is not retro-edited: it is the record of
+#: what was measured then, and a record edited to agree with a later run is not
+#: evidence. The movement is declared here instead, where it is visible.
+REGRADED: Dict[str, Tuple[str, str]] = {
+    "Q19C": ("EXACT",
+             "was WRONG / SILENT at £22.6m — the whole book's movement "
+             "reported for the Direct book, which moved £12.4m. The route "
+             "derived its lens from the contract, `lens_from_contract` "
+             "returned `{source_portfolio_type: direct}`, and "
+             "`_apply_lens_filter` reads `source_portfolio_id` and returned "
+             "the frame unchanged. Now answers £12.4m (£105.0m → £117.4m over "
+             "441 of 640 loans), which matches the pre-registered independent "
+             "truth of 12,366,371.4 exactly."),
+}
+
 #: PRE-REGISTERED. Each is a question the check gets wrong, named, with the
 #: reason. A new name appearing here is a regression; a name leaving it is an
 #: improvement that must be explained before the figure is moved.
-EXPECTED_FALSE_POSITIVES: Dict[str, str] = {
-    "Q19B": "period_movement applied the Direct scope and published no record "
-            "of it; its envelope matches Q19C's, where the same scope was "
-            "dropped and the answer was wrong by £10.2m",
-    "CFO69": "evolution answered from the pipeline and published no population",
-    "CFO70": "evolution_pipeline_stage answered from the pipeline and "
-             "published no population",
-    "S29": "concentration_analysis applied the Direct scope and published no "
-           "narrowing",
-    "S32": "evolution_pipeline_stage answered from the pipeline and published "
-           "no population",
-}
+#: NONE. The five that stood here were one cause and it was a live defect:
+#: routes that narrowed to a book or read a dataset and published no record of
+#: having done so. Q19B (period_movement), S29 (concentration_analysis) now
+#: publish `metadata.scopeApplied`; CFO69/CFO70/S32 were already publishing
+#: `reconciliation.dataset`, and this check was reading the DECISION
+#: (`metadata.datasetContext`) instead of it. All five are silent, and the one
+#: whose receipt could not be told from a wrong answer's is fixed.
+EXPECTED_FALSE_POSITIVES: Dict[str, str] = {}
+
 EXPECTED_MISSES: Dict[str, str] = {
-    "Q15B": "no owner reads `Direct-book` outside a selector position, so the "
-            "lost concept is invisible to a deterministic detector",
+    "Q15B": "THE CHECK'S RECALL IS THE OWNERS' RECALL. `portfolio_lens` does "
+            "not read `Direct-book` outside a selector position — `For "
+            "Direct-book` (Q05B) and `of Direct-book balance` (Q17B) carry a "
+            "selector mark and `Break Direct-book balance` does not — and no "
+            "other owner claims it either. A concept NO OWNER RESOLVES cannot "
+            "be seen lost by any deterministic detector. This is the stated "
+            "limit of the deterministic arm, not a tuning shortfall, and it is "
+            "the argument for a proposal step: a reader that proposes concepts "
+            "does not need the grammar to reach them.",
 }
 
 #: PRE-REGISTERED separation, measured at the head this file was written on.
 EXPECTED = {
-    "type_c_fires": 20, "type_c_total": 21,
-    "exact_fires": 1, "exact_total": 30,
-    "cfo_exact_fires": 2, "cfo_exact_total": 73,
-    "deliver_fires": 2, "deliver_total": 53,
+    "type_c_fires": 19, "type_c_total": 20,
+    "exact_fires": 0, "exact_total": 31,
+    "cfo_exact_fires": 0, "cfo_exact_total": 73,
+    "deliver_fires": 0, "deliver_total": 53,
 }
 
 PORTFOLIO = "client_001/mi_2026_06"
@@ -131,7 +152,9 @@ def _questions() -> List[Tuple[str, str, str, str]]:
          "MI_FINAL_LIVE_DATA_READINESS.json").read_text())["rows"]}
     for case in bank["cases"]:
         for f in case["formulations"]:
-            out.append(("BANK75", f["id"], f["q"], grades.get(f["id"], "?")))
+            qid = f["id"]
+            grade = REGRADED[qid][0] if qid in REGRADED else grades.get(qid, "?")
+            out.append(("BANK75", qid, f["q"], grade))
 
     cfo = json.loads((_REPO / "migration_phase0" /
                       "MI_FINAL_LIVE_DATA_READINESS.json").read_text())["cfo_91"]
@@ -194,6 +217,19 @@ def run() -> Dict[str, Any]:
     misses = sorted(i for i in TYPE_C if not by_id[i]["fires"])
 
     return {
+        "regraded_since_the_diagnosis": {k: {"grade": v[0], "why": v[1]}
+                                         for k, v in REGRADED.items()},
+        "what_this_check_does_not_see": {
+            "mis_binding": "IT COMPARES PRESENCE, NOT CORRECTNESS. Q21C bound "
+                           "the function word `among` as a categorical value "
+                           "and every concept the sentence states is still in "
+                           "the contract, so this check is silent — by design. "
+                           "A concept carried into the WRONG governed field is "
+                           "invisible here and always will be; disagreement "
+                           "reporting between a proposal and the registry is "
+                           "what covers that case, not this.",
+            "concepts_no_owner_resolves": EXPECTED_MISSES["Q15B"],
+        },
         "measured": measured,
         "pre_registered": EXPECTED,
         "matches_pre_registration": measured == EXPECTED,

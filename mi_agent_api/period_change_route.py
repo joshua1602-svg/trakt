@@ -105,6 +105,7 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
                     population: Sequence[Any] = (),
                     semantics: Optional[Dict[str, Any]] = None,
                     evidence_out: Optional[List[Any]] = None,
+                    scope_evidence_out: Optional[List[Any]] = None,
                     ) -> Tuple[SnapshotFrame, ...]:
     """Governed portfolio snapshots, oldest → newest, for a client and lens.
 
@@ -124,6 +125,14 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
 
     Execution goes through `population.apply_population` — the single governed
     meaning of a predicate — and FAILS CLOSED on any snapshot it cannot narrow.
+
+    THE LENS NOW FAILS CLOSED TOO. It did not, and the difference was a wrong
+    number: a contract-derived lens carrying ``source_portfolio_type`` rather
+    than the registry's id list narrowed nothing, five snapshots came through
+    unchanged, and "the Direct book" was answered with the whole book's £22.6m
+    against its real £12.4m. ``scope_evidence_out`` receives what the lens
+    actually did, per snapshot, so that answer and this one can never again
+    publish the same receipt.
     """
     from . import chat_routing
     from . import contract_scope as _scope
@@ -137,8 +146,15 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
         source_df = frame.get("df")
         if source_df is None:
             continue
-        df = (chat_routing._apply_lens_filter(source_df, lens)
+        # THE LENS IS APPLIED PER SNAPSHOT, AND WHAT IT DID IS RECORDED.
+        # `_apply_lens_filter` now raises rather than widening, so a scope this
+        # route cannot apply stops the answer instead of retitling it.
+        _scope_ev: List[Any] = []
+        df = (chat_routing._apply_lens_filter(source_df, lens,
+                                              evidence_out=_scope_ev)
               if lens is not None else source_df)
+        if _scope_ev and scope_evidence_out is not None:
+            scope_evidence_out.append((str(frame.get("run_id")), _scope_ev[-1]))
         if population:
             from mi_agent import population as _population
 
@@ -416,6 +432,7 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
 
     _population = _plan.row_predicates(_plan.row_predicate_step(interpretation))
     _pop_evidence: List[Any] = []
+    _scope_evidence: List[Any] = []
     try:
         snapshots = build_snapshots(output_root, client_id, to_run_id=run_id,
                                     lens=resolved_lens,
@@ -429,7 +446,19 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                                     # nothing. Same object the funded evolution
                                     # route passes to the same call.
                                     semantics=semantics,
-                                    evidence_out=_pop_evidence)
+                                    evidence_out=_pop_evidence,
+                                    scope_evidence_out=_scope_evidence)
+    except chat_routing.LensNotApplied as exc:
+        # THE SCOPE THE READER NAMED WAS NOT APPLIED, SO NOTHING IS ANSWERED.
+        # The alternative is the defect this guard exists for: a whole-book
+        # movement published under the label of one book.
+        message = (f"I understood the book you asked about, but this "
+                   f"comparison could not be narrowed to it ({exc.detail}). I "
+                   f"have not compared the whole book instead.")
+        return chat_routing._envelope(
+            ok=False, question=question, spec=spec_dict, artifacts=[],
+            answer=message, error=message, route="period_change",
+            warnings=[message])
     except PopulationNotApplied as exc:
         # THE REQUESTED POPULATION WAS NOT APPLIED, SO NOTHING IS ANSWERED.
         # Naming it is the point: a reader who asked about one population must
@@ -606,6 +635,20 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                if ranking.applied else None)
     out = _render(result, question, spec_dict, portfolio_id, as_of,
                   receipt=receipt)
+    if _scope_evidence:
+        # THE ROUTE DECLARES WHAT SCOPE IT APPLIED, on the same rule the
+        # population ledger follows: execution evidence only, and a silent
+        # route is treated as having covered everything. Silence here is what
+        # made a correct Direct answer and a wrong one indistinguishable.
+        _last_scope = _scope_evidence[-1][1]
+        out.setdefault("metadata", {})["scopeApplied"] = {
+            "context": _last_scope.get("context"),
+            "label": _last_scope.get("label"),
+            "detail": _last_scope.get("detail"),
+            "rowsBefore": _last_scope.get("rows_before"),
+            "rowsAfter": _last_scope.get("rows_after"),
+            "snapshots": len(_scope_evidence),
+        }
     if _population and _pop_evidence:
         # THE ROUTE DECLARES WHAT IT APPLIED. The population ledger accepts
         # execution evidence only and treats a silent route as having widened,

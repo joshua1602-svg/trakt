@@ -440,24 +440,85 @@ def _resolve_lens(question: str, source_lens) -> Any:
         return lens
 
 
-def _apply_lens_filter(df, lens) -> Any:
+class LensNotApplied(RuntimeError):
+    """A lens named a scope, and this frame could not be narrowed to it.
+
+    Raised instead of returning the frame unchanged. See `_apply_lens_filter`.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(detail)
+        self.detail = detail
+
+
+def _apply_lens_filter(df, lens, *, evidence_out=None) -> Any:
     """Narrow a dataframe to the portfolio ids a RESOLVED lens carries.
 
-    ``_resolve_lens`` returns the registry-resolved id list (never a type
-    string), so this is the same narrowing the point-in-time executor performs —
-    a group is exactly the sum of its current members. Total carries no filter
-    and the frame is returned unchanged; a frame without provenance is likewise
-    unchanged (a single-portfolio deployment is already the whole scope).
+    This is the same narrowing the point-in-time executor performs — a group is
+    exactly the sum of its current members. Total carries no filter and the
+    frame is returned unchanged; a frame without provenance is likewise
+    unchanged, because a book that records no source portfolio holds exactly
+    one and IS the scope.
+
+    IT FAILS CLOSED. The docstring here used to state a PRECONDITION —
+    "``_resolve_lens`` returns the registry-resolved id list (never a type
+    string)" — and nothing enforced it. When `period_change_route` stopped
+    reading the sentence and began deriving its lens from the contract, that
+    precondition quietly stopped holding: `contract_scope.lens_from_contract`
+    returned ``{source_portfolio_type: "direct"}``, `ids` was empty, and this
+    function returned the whole frame. Five snapshots went in at 520, 545, 570,
+    600 and 640 rows and came out at 520, 545, 570, 600 and 640.
+
+    "Summarise the month-on-month movement in the Direct book" then answered
+    £22.6m — the whole book — for a book that moved £12.4m, and the receipt
+    declared `portfolioScope: direct` beside it. The same question through
+    `period_movement` answered £12.4m, and the two envelopes were identical in
+    every field a consumer can read. A wrong figure vouched for by its own
+    receipt is the outcome this estate ranks above every other, so the widening
+    is now an exception and not a return value.
+
+    ``evidence_out``, when given, receives the narrowing that was performed —
+    the same "execution evidence only" rule `metadata.populationApplied`
+    follows. A caller that narrows and stays silent is indistinguishable from
+    one that did not narrow at all, which is precisely how the defect above
+    survived being measured.
     """
-    ids = (lens.filters or {}).get(_portfolio_lens.SOURCE_ID_FIELD)
-    if df is None or not ids:
+    name = getattr(lens, "name", None) if lens is not None else None
+    if df is None or lens is None or name in (None, _portfolio_lens.LENS_TOTAL):
         return df
+    # THE IDS, WHEREVER THE LENS CARRIES THEM. A registry-resolved lens puts
+    # them in `filters`; `_selection_lens` — "several books chosen explicitly,
+    # exactly those, never their type" — puts them in `cohort_ids` and leaves
+    # `filters` empty. Reading only `filters` treated an explicit multi-book
+    # selection exactly as it treated the type lens that produced the wrong
+    # movement figure: no ids, frame returned whole.
+    ids = ((getattr(lens, "filters", None) or {}).get(_portfolio_lens.SOURCE_ID_FIELD)
+           or getattr(lens, "cohort_ids", None)
+           or getattr(lens, "cohort_id", None))
+    rows_before = len(df)
     if _portfolio_lens.SOURCE_ID_FIELD not in getattr(df, "columns", []):
+        # NO PROVENANCE COLUMN: the book records one source portfolio and is
+        # already the scope. Recorded as applied, because it is.
+        if evidence_out is not None:
+            evidence_out.append({
+                "context": name, "label": getattr(lens, "label", None),
+                "rows_before": rows_before, "rows_after": rows_before,
+                "detail": "this book records a single source portfolio"})
         return df
+    if not ids:
+        raise LensNotApplied(
+            "the %s scope resolved to no portfolio id, and this book records "
+            "provenance for more than one" % (getattr(lens, "label", None) or name))
     wanted = {str(i).strip().lower() for i in (ids if isinstance(ids, (list, tuple, set))
                                                else [ids])}
     col = df[_portfolio_lens.SOURCE_ID_FIELD].astype("string").str.strip().str.lower()
-    return df[col.isin(wanted)]
+    out = df[col.isin(wanted)]
+    if evidence_out is not None:
+        evidence_out.append({
+            "context": name, "label": getattr(lens, "label", None),
+            "rows_before": rows_before, "rows_after": len(out),
+            "detail": ", ".join(sorted(wanted))})
+    return out
 
 
 def _pct_points(value: Optional[float], decimals: int = 1) -> str:
@@ -814,12 +875,13 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
                     + (f", of which {_gbp(mv.get('completionsBalanceInPrimaryRegion'))} "
                        f"is in the {primary['region']}." if primary else "."),
         })
-    return _envelope(
+    out = _envelope(
         ok=True, question=question, answer=answer, spec=spec_dict,
         artifacts=artifacts,
         reconciliation={"dataset": "funded", "coverage_by_balance_pct": 100.0,
                         "missing_dimension_policy": "exclude"},
         source_notes=notes, route="period_movement")
+    return _declare_scope(out, mv.get("scopeApplied"), label=mv.get("lens"))
 
 
 def _upper_first(text: str) -> str:
@@ -925,6 +987,34 @@ def _route_compare(question, spec_dict, *, client_id, run_id, output_root,
 # --------------------------------------------------------------------------- #
 # B. Evolution / trend
 # --------------------------------------------------------------------------- #
+def _declare_scope(envelope: Dict[str, Any], applied,
+                   *, context: Optional[str] = None,
+                   label: Optional[str] = None) -> Dict[str, Any]:
+    """Record the source-portfolio scope this answer was NARROWED to.
+
+    The same execution-evidence rule `populationApplied` and `_declare_grain`
+    follow: the route says what it did, and a route that says nothing is read
+    as having covered everything.
+
+    Saying nothing was the whole defect. `portfolioScope` publishes the scope a
+    request RESOLVED, and both a correct Direct answer and a whole-book answer
+    mislabelled Direct published `context_id: "direct"` beside figures of
+    £12.4m and £22.6m. Nothing else in either envelope differed. This is the
+    field that differs.
+    """
+    if not applied:
+        return envelope
+    envelope.setdefault("metadata", {})["scopeApplied"] = {
+        "context": context or applied.get("context"),
+        "label": label or applied.get("label"),
+        "detail": applied.get("detail"),
+        "rowsBefore": applied.get("rowsBefore"),
+        "rowsAfter": applied.get("rowsAfter"),
+        "snapshots": applied.get("snapshots"),
+    }
+    return envelope
+
+
 def _declare_grain(envelope: Dict[str, Any], grain: str) -> Dict[str, Any]:
     """Record the reporting grain this answer was actually published at.
 
@@ -3040,6 +3130,17 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     single = _single_name_evidence(result)
     if single:
         envelope.setdefault("metadata", {})["concentration"] = single
+    # THE SCOPE THIS ANALYSIS WAS NARROWED TO, from the workflow's own record.
+    # It titles its table "— Direct" and reports 441 of 640 loans; until this
+    # was published, nothing a consumer could read said the narrowing had
+    # happened, which is the same silence that hid a wrong movement figure.
+    if scope.get("context_id") not in (None, _portfolio_lens.LENS_TOTAL):
+        _declare_scope(envelope,
+                       {"detail": ", ".join(scope.get("portfolio_ids") or ()),
+                        "rowsBefore": int(len(df)),
+                        "rowsAfter": scope.get("row_count")},
+                       context=scope.get("context_id"),
+                       label=scope.get("label"))
     return envelope
 
 

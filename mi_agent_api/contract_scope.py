@@ -13,7 +13,10 @@ back to that owner's own constructors. Nothing here reads a question.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
+
+_logger = logging.getLogger(__name__)
 
 
 def lens_from_contract(interpretation: Any) -> Any:
@@ -38,10 +41,55 @@ def lens_from_contract(interpretation: Any) -> Any:
     if name == "total":
         return lens_mod.total_lens()
     if name in ("direct", "acquired"):
-        return lens_mod.lens_from_term(name)
+        return _through_the_registry(lens_mod.lens_from_term(name))
     if name == "cohort" and ids:
-        return lens_mod._selection_lens(list(ids))
+        return _through_the_registry(lens_mod._selection_lens(list(ids)))
     return None
+
+
+def _through_the_registry(lens: Any) -> Any:
+    """``lens`` re-expressed as the explicit portfolio-id list it names.
+
+    THE LENS A ROUTE APPLIES MUST CARRY IDS, NOT A TYPE STRING.
+    `portfolio_lens._type_lens` builds ``{source_portfolio_type: "direct"}``,
+    and every consumer that narrows a frame — `chat_routing._apply_lens_filter`
+    and the point-in-time executor alike — filters on
+    ``source_portfolio_id``. Handed a type lens, the filter matched nothing to
+    narrow BY and returned the frame unchanged.
+
+    That is what "Summarise the month-on-month movement in the Direct book"
+    answered from: five snapshots, 520 rows in and 520 rows out of every one,
+    a whole-book movement of £22.6m reported for a book that moved £12.4m, and
+    a receipt that declared the Direct scope it had not applied. The same
+    question routed to `period_movement` — which resolves its lens through
+    `chat_routing._resolve_lens` — answered £12.4m. The two envelopes were
+    identical in every published field.
+
+    This is the same registry resolution `_resolve_lens` performs, and it is
+    performed HERE so that a lens derived from the contract and a lens derived
+    from the sentence are the same object by construction rather than by
+    coincidence. Best-effort, exactly as there: an unavailable registry returns
+    the lens unresolved — and `_apply_lens_filter` then REFUSES it rather than
+    quietly widening, which is the half of this fix that keeps the class shut.
+    """
+    from mi_agent import portfolio_lens as lens_mod
+
+    try:
+        from . import portfolio_context as _ctx
+
+        scope = _ctx.resolve_context(lens_mod.context_id(lens),
+                                     discover_pipeline=False).scope
+        filters = dict(getattr(scope, "filters", None) or {})
+        if not filters.get(lens_mod.SOURCE_ID_FIELD):
+            return lens
+        return lens_mod.PortfolioLens(name=lens.name, label=lens.label,
+                                      filters=filters, cohort_id=lens.cohort_id)
+    except Exception:  # noqa: BLE001 - an unavailable registry is not a decision
+        _logger.info("contract lens %r could not be resolved through the "
+                     "registry; it stays unresolved and any consumer that "
+                     "cannot apply it must refuse", getattr(lens, "name", None),
+                     exc_info=True)
+        return lens
 
 
 def requested_context_id(interpretation: Any) -> Optional[str]:

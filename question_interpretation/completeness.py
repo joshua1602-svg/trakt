@@ -44,25 +44,42 @@ THE ONE RULE
     A concept the sentence states is CARRIED only when the executed contract
     POSITIVELY RECORDS it. Silence is a finding, not a pass.
 
-That rule is uniform, and it is what makes the check honest rather than
-tuned. It also means the check reports three questions across the standing
-banks — Q19B, CFO69, CFO70, plus S29 and S32 on the composition banks — that
-answer CORRECTLY and record nothing: `period_movement`, `evolution` and
-`concentration_analysis` applied a scope or a dataset and published no
-population, no narrowing and no facet to say so. Their envelopes are
-indistinguishable from Q19C's, where the same scope was dropped and the answer
-was wrong by £10.2m. Those five are the check's false positives TODAY and the
-fix belongs in those routes' receipts, not here: suppressing them would mean
-suppressing Q19C too.
+That rule is uniform, and it is what makes the check honest rather than tuned.
+It is also what found the defect it was calibrated against. Five questions
+across the standing banks answered CORRECTLY and recorded nothing —
+`period_movement` and `concentration_analysis` narrowed to a book, `evolution`
+read the pipeline, and none of them published a population, a narrowing or a
+facet to say so. Their envelopes were indistinguishable from Q19C's, where the
+same scope was DROPPED and the answer was wrong by £10.2m.
+
+Reading them as false positives and tuning them away would have suppressed
+Q19C with them. They were fixed instead: the two scope routes now publish
+`metadata.scopeApplied`, the dataset axis is read from `reconciliation.dataset`
+(what the answer was reconciled against) rather than `metadata.datasetContext`
+(what the request decided), and the lens that named a book and narrowed nothing
+now raises rather than returning the frame. Across the 75-question bank, the
+frozen CFO 91 and the two composition banks, the check now fires on no
+delivering question at all.
+
+WHAT IT COMPARES IS PRESENCE, NOT CORRECTNESS. Q21C bound the function word
+`among` as a categorical value; every concept the sentence states is still in
+the contract, so this is silent. A concept carried into the WRONG governed
+field is invisible here by construction, and reporting disagreement between a
+proposed concept and the field the registry binds it to is what covers that
+case.
 
 WHAT IT CANNOT SEE
 ------------------
-Its recall is the OWNERS' recall. "Break Direct-book balance down by both
+ITS RECALL IS THE OWNERS' RECALL. "Break Direct-book balance down by both
 broker channel and loan type" loses `Direct-book` and this check is silent,
 because `portfolio_lens` does not read the hyphenated form outside a selector
-position and no other owner claims it either. A concept no owner resolves is a
-concept this cannot miss being lost — that bound is the whole reason a
-proposal step exists upstream, and it is stated here rather than papered over.
+position — `For Direct-book` and `of Direct-book balance` carry a selector mark
+and `Break Direct-book balance` does not — and no other owner claims it either.
+A concept NO OWNER RESOLVES cannot be seen lost by any deterministic detector.
+
+That is a stated limit, not a tuning shortfall, and it is the argument for a
+proposal step upstream: a reader that PROPOSES concepts does not need the
+grammar to reach them, and this check then has something to compare.
 
 ROLE DISAGREEMENT IS NOT LOSS
 -----------------------------
@@ -133,10 +150,12 @@ class ExecutedContract:
     forecast_target: Optional[float] = None
     scope_context: Optional[str] = None
     dataset_context: Optional[str] = None
+    dataset_reconciled: Optional[str] = None
     route: Optional[str] = None
     narrowed: bool = False
     population_total: Optional[int] = None
     population_applied: bool = False
+    scope_applied: bool = False
     applied_fields: Tuple[str, ...] = ()
     facets: Tuple[Tuple[str, str, str], ...] = ()   # (kind, label, status)
 
@@ -172,6 +191,7 @@ def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
     ex = envelope.get("executionSummary") or {}
     scope = envelope.get("portfolioScope") or {}
     pop = meta.get("populationApplied") or {}
+    scope_ledger = meta.get("scopeApplied") or {}
 
     dims = list(spec.get("dimensions") or [])
     if spec.get("dimension"):
@@ -188,10 +208,12 @@ def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
         forecast_target=spec.get("forecast_target_value"),
         scope_context=scope.get("context_id"),
         dataset_context=meta.get("datasetContext"),
+        dataset_reconciled=(envelope.get("reconciliation") or {}).get("dataset"),
         route=meta.get("route"),
         narrowed=bool(ex.get("narrowed")),
         population_total=ex.get("populationTotal"),
         population_applied=bool(pop.get("applied") or meta.get("applied_filter_fields")),
+        scope_applied=bool(scope_ledger),
         applied_fields=applied,
         facets=facets,
     )
@@ -318,16 +340,21 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
     if kind == "scope":
         # SCOPED IS NOT APPLIED. `portfolioScope` reports the scope the request
         # RESOLVED; Q19C published `direct` and answered the whole book. Only an
-        # executed narrowing counts.
-        return contract.scoped and (any(f in filters for f in SCOPE_FIELDS)
+        # executed narrowing counts — `metadata.scopeApplied` is the route's own
+        # record of the one it performed.
+        return contract.scoped and (contract.scope_applied
+                                    or any(f in filters for f in SCOPE_FIELDS)
                                     or contract.narrowing_recorded)
     if kind == "scope_comparison":
         return bool(contract.route) or contract.scoped
     if kind == "dataset":
-        # `datasetContext` is the DECISION. A route that ignores it publishes no
-        # population, and that silence is the finding.
-        return (contract.dataset_context == value
-                and contract.population_total is not None)
+        # `datasetContext` is the DECISION; `reconciliation.dataset` is what the
+        # answer was RECONCILED AGAINST, which is the estate's own record of
+        # what it read. "Summarise the current pipeline" publishes
+        # `datasetContext: pipeline` beside `reconciliation.dataset: funded` —
+        # the contradiction is already in the envelope, and reading the decision
+        # alone would have called that carried.
+        return contract.dataset_reconciled == value
     if kind == "dimension":
         want = set(value.split("|"))
         return bool(want & dims) or bool(want & applied) or bool(want & filters)

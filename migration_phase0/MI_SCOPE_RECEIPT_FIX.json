@@ -1,0 +1,7241 @@
+{
+ "title": "MI Query Agent — Q19C: a whole-book movement published as one book's, and the receipt that could not tell",
+ "stage": "Stage 1 follow-up, before Stage 2. Production defect, fixed.",
+ "commit_at_start": "365b37c",
+ "branch": "claude/mi-query-agent-c7-2tlhr6",
+ "the_defect": {
+  "symptom": "'Summarise the month-on-month movement in the Direct book.' answered +£22.6m — the whole portfolio's movement — for a book that moved £12.4m. 'What changed in the Direct portfolio since last month?' answered £12.4m. Both published portfolioScope.context_id = 'direct' and were otherwise identical in every field a consumer can read.",
+  "severity": "a wrong figure vouched for by its own receipt, on the shipped path",
+  "measured_error": "£10.2m on a £12.4m movement (82%)",
+  "first_cause": {
+   "where": "mi_agent_api/contract_scope.lens_from_contract",
+   "what": "returned portfolio_lens._type_lens, whose filters are {source_portfolio_type: 'direct'}. Every consumer that narrows a frame filters on source_portfolio_id. The contract lens named a book and carried nothing to narrow BY.",
+   "when_it_started": "when period_change_route stopped reading the sentence and began deriving its lens from the contract. That change removed a second reader of the question and was right; it silently swapped a registry-resolved id-list lens for a bare type lens."
+  },
+  "second_cause": {
+   "where": "mi_agent_api/chat_routing._apply_lens_filter",
+   "what": "stated the precondition in its docstring — '_resolve_lens returns the registry-resolved id list (never a type string)' — and enforced nothing. Handed a lens with no ids it returned the frame whole.",
+   "tape_evidence": "five snapshots in at 520 / 545 / 570 / 600 / 640 rows, out at 520 / 545 / 570 / 600 / 640",
+   "why_it_matters_more": "the first cause is a bug; the second is what turned it into a wrong number instead of a refusal. A documented precondition that nothing enforces is a fail-open guard."
+  },
+  "third_cause": {
+   "where": "the route receipts",
+   "what": "period_movement and concentration_analysis narrowed to a book and published no record of it; evolution read the pipeline and published no population. A route that narrows and stays silent is indistinguishable from one that did not narrow — which is how the £10.2m error survived being measured."
+  }
+ },
+ "the_fix": {
+  "1": "contract_scope._through_the_registry — the contract lens is resolved to the registry's explicit portfolio-id list, the same resolution chat_routing._resolve_lens performs, so a contract-derived lens and a sentence-derived one are the same object by construction. Applied to the cohort branch too, which had the identical defect.",
+  "2": "chat_routing._apply_lens_filter FAILS CLOSED — a lens that names a non-total scope over a book that records provenance for more than one portfolio, and carries no id to narrow by, raises LensNotApplied. period_change_route catches it and refuses by name rather than comparing the whole book.",
+  "3": "the ids are read WHEREVER THE LENS CARRIES THEM. _selection_lens — 'exactly those, never their type' — leaves filters empty and puts its ids in cohort_ids. Reading only filters treated an explicit multi-book selection exactly like the type lens above; the guard would have refused it.",
+  "4": "chat_routing._declare_scope publishes metadata.scopeApplied — context, label, detail, rowsBefore, rowsAfter — on the same execution-evidence rule populationApplied and _declare_grain already follow. Published by period_change_analysis, period_movement and concentration_analysis.",
+  "5": "evolution._scope_frame_lens, the second place a frame is narrowed to a scope, records the same fact in the same vocabulary. Optional sink; no caller changes behaviour by not passing it.",
+  "6": "the completeness check reads reconciliation.dataset — what the answer was RECONCILED AGAINST — rather than metadata.datasetContext, which is what the request DECIDED. 'Summarise the current pipeline' publishes datasetContext: pipeline beside reconciliation.dataset: funded; the contradiction was already in the envelope."
+ },
+ "answer_movement": {
+  "measured_over": "the 75-question bank and the frozen CFO 91 (166 answers)",
+  "moved": 1,
+  "detail": [
+   {
+    "id": "Q19C",
+    "question": "Summarise the month-on-month movement in the Direct book.",
+    "before": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +£22.6m (£149.5m → £",
+    "after": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +£12.4m (£105.0m → £"
+   }
+  ],
+  "two_others_in_the_diff_were_not_this_change": "CFO84 and CFO86 also differ from the frozen readiness file. Both were verified by stashing this change and re-asking at HEAD: both already carried the newer refusal wording, which landed in earlier work. Both remain TRUE_REFUSAL. This change moves exactly one answer.",
+  "Q19C_regrade": "WRONG / SILENT -> EXACT. £12.4m (£105.0m -> £117.4m over 441 of 640 loans) against the pre-registered independent truth of 12,366,371.4."
+ },
+ "calibration_after_the_fix": {
+  "type_c_fires": "19 of 20 (Q19C left the class by being fixed)",
+  "75_bank_EXACT": "0 of 31 fire",
+  "CFO_91_EXACT": "0 of 73 fire",
+  "composition_banks_DELIVER": "0 of 53 fire",
+  "false_positives": "NONE, across all 157 delivering questions",
+  "measured": {
+   "type_c_fires": 19,
+   "type_c_total": 20,
+   "exact_fires": 0,
+   "exact_total": 31,
+   "cfo_exact_fires": 0,
+   "cfo_exact_total": 73,
+   "deliver_fires": 0,
+   "deliver_total": 53
+  },
+  "pre_registered": {
+   "type_c_fires": 19,
+   "type_c_total": 20,
+   "exact_fires": 0,
+   "exact_total": 31,
+   "cfo_exact_fires": 0,
+   "cfo_exact_total": 73,
+   "deliver_fires": 0,
+   "deliver_total": 53
+  },
+  "matches_pre_registration": true
+ },
+ "recorded_not_fixed": {
+  "Q15B_the_stated_limit": "THE CHECK'S RECALL IS THE OWNERS' RECALL. portfolio_lens does not read `Direct-book` outside a selector position — `For Direct-book` (Q05B) and `of Direct-book balance` (Q17B) carry a selector mark and `Break Direct-book balance` does not — and no other owner claims it either. A concept NO OWNER RESOLVES cannot be seen lost by any deterministic detector. This is the stated limit of the deterministic arm, not a tuning shortfall, and it is the argument for the proposal step: a reader that PROPOSES concepts does not need the grammar to reach them. To be quoted in Stage 2's pre-registration rather than rediscovered.",
+  "Q21C_presence_not_correctness": "THIS CHECK COMPARES PRESENCE, NOT CORRECTNESS. Q21C bound the function word `among` as a categorical value; every concept the sentence states is still in the contract, so the check is silent — by design. A concept carried into the WRONG governed field is invisible here and always will be. Stage 3's disagreement reporting between a proposed concept and the field the registry binds it to is what covers that case. Recorded in completeness.py's docstring and in the calibration's own output under `what_this_check_does_not_see`."
+ },
+ "assurance": {
+  "mi_regression": "278 modules, 85 failing names — IDENTICAL to the frozen baseline, after a production change touching _apply_lens_filter, _scope_frame_lens, contract_scope, period_change_route, movement_summary and two routes.",
+  "analytical_meaning_census": "0 in every category",
+  "route_substitution_detector": "0 of 2",
+  "unit_tests": "32 passed (18 completeness + 14 scope receipt)",
+  "mutation_controls": [
+   "fail open again on a lens with no ids -> 3 tests fail",
+   "read only filters, ignoring cohort ids -> 1 test fails",
+   "stop resolving the contract lens -> 1 test fails (the end-to-end assertion; testing the helper alone left this mutation GREEN, and the gap was closed rather than reported)",
+   "read the dataset DECISION instead of the reconciliation -> CALIBRATION FAILED (type-(c) 19 -> 17, Q10A and Q10C join the miss set)"
+  ]
+ },
+ "stage_1_evidence_unchanged": {
+  "approach_decision": {
+   "question": "span coverage, or residue?",
+   "decided_on": "measurement, not the docstring at question_interpretation/schema.py:273",
+   "span_coverage": {
+    "measured_over": "the 75-question acceptance bank, 505 claims",
+    "claims_carrying_a_recoverable_span": "160 of 505 (31.7%)",
+    "EXACT": {
+     "questions": 30,
+     "claims": 218,
+     "claims_with_a_span": 74,
+     "pct_with_a_span": 33.9,
+     "char_coverage_median_pct": 85.2,
+     "char_coverage_min_pct": 55.8,
+     "char_coverage_max_pct": 100.0
+    },
+    "type_c": {
+     "questions": 21,
+     "claims": 139,
+     "claims_with_a_span": 48,
+     "pct_with_a_span": 34.5,
+     "char_coverage_median_pct": 98.6,
+     "char_coverage_min_pct": 44.0,
+     "char_coverage_max_pct": 100.0
+    },
+    "best_achievable_threshold": {
+     "on": "character coverage",
+     "threshold_pct": 45,
+     "fires_on_type_c": "2 of 21",
+     "fires_on_EXACT": "0 of 30"
+    },
+    "verdict": "REJECTED. Span availability is 33.9% on the questions that answered exactly and 34.5% on the questions that lost a concept, and median character coverage is HIGHER on the failures (98.6%) than on the successes (85.2%). No threshold separates the two populations: the best one available fires on 2 of 21 losses. An absent span is not evidence of a lost concept — it is evidence that the interpreter emitted a field key rather than the words, which it does two times in three."
+   },
+   "residue": {
+    "verdict": "CHOSEN, in the form STATED-BUT-NOT-CARRIED",
+    "why": "The failures are not uncovered TEXT, they are concepts an owner can resolve that never reach the contract. Asking each existing owner what it reads and comparing that against the estate's own record of what it executed separates the two populations; measuring how much of the sentence is covered does not.",
+    "no_third_reader": "Every reading is a call to an owner that already ships: requested_dimension_terms, categorical_spans.value_field, portfolio_lens, workspace.resolve_dataset, _detect_metric, _forecast_target_value (gated by answer_type.asked), detect_requested_facets. The module owns the COMPARISON and nothing else."
+   }
+  },
+  "the_one_rule": "A concept the sentence states is CARRIED only when the executed contract POSITIVELY RECORDS it. Silence is a finding, not a pass."
+ },
+ "calibration_rows": [
+  {
+   "bank": "BANK75",
+   "id": "Q01A",
+   "question": "How many loans are to borrowers over 55 with LTV above 50%?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 55",
+     "term": "LTV over 55",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q01B",
+   "question": "How many loans have a borrower older than 55 and an LTV greater than 50%?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 55",
+     "term": "LTV over 55",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q01C",
+   "question": "Count the loans where borrower age is above 55 and current LTV is over 50%.",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 55",
+     "term": "LTV over 55",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 55",
+     "term": "LTV over 55",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q02A",
+   "question": "What is the balance of loans to borrowers over 75 with LTV above 40%?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 75",
+     "term": "LTV over 75",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 40",
+     "term": "LTV over 40",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q02B",
+   "question": "How much outstanding balance do we have where borrower age exceeds 75 and LTV is over 40%?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "outstanding balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 75",
+     "term": "LTV over 75",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 40",
+     "term": "LTV over 40",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 40",
+     "term": "LTV over 40",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q02C",
+   "question": "Show the total balance for loans with borrowers older than 75 and current LTV greater than 40%.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 75",
+     "term": "LTV over 75",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 40",
+     "term": "LTV over 40",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q03A",
+   "question": "How many drawdown loans have LTV above 50%?",
+   "expectation": "WRONG / SILENT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q03B",
+   "question": "Of the drawdown loans, how many are over 50% LTV?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q03C",
+   "question": "Count drawdown cases where current LTV exceeds 50%.",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q04A",
+   "question": "What is the balance of Direct-book loans in London to borrowers over 75?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "borrower age over 75",
+     "term": "borrower age over 75",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q04B",
+   "question": "How much balance is in the Direct portfolio for London loans where the borrower is older than 75?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "borrower age over 75",
+     "term": "borrower age over 75",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q04C",
+   "question": "Show total outstanding balance for London loans in the Direct book with borrower age above 75.",
+   "expectation": "WRONG / DISCLOSED",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "outstanding balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "borrower age over 75.",
+     "term": "borrower age over 75.",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q05A",
+   "question": "What is the weighted-average LTV of lump sum loans in the Direct book?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q05B",
+   "question": "For Direct-book lump sum loans, what is the weighted average current LTV?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q05C",
+   "question": "Give me WA LTV for lump sum lending in the Direct portfolio.",
+   "expectation": "WRONG / SILENT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q06A",
+   "question": "Summarise the portfolio.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "portfolio_summary",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q06B",
+   "question": "Give me a management summary of the current book.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "portfolio_summary",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q06C",
+   "question": "Give me a concise overview of the funded portfolio.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "portfolio_summary",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q07A",
+   "question": "Compare the Direct and Acquired books.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "portfolio_risk_comparison",
+   "stated": [
+    {
+     "kind": "scope_comparison",
+     "field": "portfolio_lens",
+     "value": "acquired,direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_comparison_lenses"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q07B",
+   "question": "How do the Direct and Acquired portfolios differ?",
+   "expectation": "WRONG / SILENT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "source_portfolio_type",
+     "value": "acquired",
+     "term": "Acquired",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "value",
+     "field": "source_portfolio_type",
+     "value": "acquired",
+     "term": "Acquired",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q07C",
+   "question": "Give me a side-by-side comparison of Direct versus Acquired.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "portfolio_risk_comparison",
+   "stated": [
+    {
+     "kind": "scope_comparison",
+     "field": "portfolio_lens",
+     "value": "acquired,direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_comparison_lenses"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q08A",
+   "question": "Where are our largest concentrations today?",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q08B",
+   "question": "What are the biggest concentration exposures in the book?",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "exposures",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q08C",
+   "question": "Summarise the main current portfolio concentrations.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q09A",
+   "question": "Are any concentration limits currently breached or close to breach?",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "risk_limits",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q09B",
+   "question": "Which of our concentration tests are most at risk today?",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q09C",
+   "question": "Summarise our current position against the concentration limits.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "risk_limits",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q10A",
+   "question": "Summarise the current pipeline.",
+   "expectation": "WRONG / SILENT",
+   "ok": true,
+   "route": "portfolio_summary",
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q10B",
+   "question": "Give me an overview of the pipeline by size and stage.",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "pipeline_stage",
+     "value": "pipeline_stage",
+     "term": "stage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "pipeline_stage",
+     "value": "stage",
+     "term": "stage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q10C",
+   "question": "What does the current pipeline look like?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q11A",
+   "question": "Show a table of balance by LTV bucket and ticket-size bucket.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ticket_bucket",
+     "value": "ticket_bucket",
+     "term": "ticket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ticket_bucket",
+     "value": "ticket",
+     "term": "ticket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q11B",
+   "question": "Cross-tab the outstanding balance by LTV band and ticket-size band.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv band",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ticket_bucket",
+     "value": "ticket_bucket",
+     "term": "ticket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "outstanding balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv band",
+     "term": "ltv band",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ticket_bucket",
+     "value": "ticket",
+     "term": "ticket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q11C",
+   "question": "Break the balance down by both LTV bucket and ticket-size bucket.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ticket_bucket",
+     "value": "ticket_bucket",
+     "term": "ticket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ticket_bucket",
+     "value": "ticket",
+     "term": "ticket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q12A",
+   "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "age_bucket",
+     "value": "age_bucket",
+     "term": "age bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "age_bucket",
+     "value": "age bucket",
+     "term": "age bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q12B",
+   "question": "Show me balance split by both LTV band and age band.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv band",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "age_bucket",
+     "value": "age_bucket",
+     "term": "age band",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv band",
+     "term": "ltv band",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "age_bucket",
+     "value": "age band",
+     "term": "age band",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q12C",
+   "question": "Plot portfolio balance across LTV buckets and borrower-age buckets.",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv buckets",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "age_bucket",
+     "value": "age_bucket",
+     "term": "age buckets",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv buckets",
+     "term": "ltv buckets",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "age_bucket",
+     "value": "age buckets",
+     "term": "age buckets",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "age_bucket",
+     "value": "age_bucket",
+     "term": "age buckets",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "age_bucket",
+     "value": "age buckets",
+     "term": "age buckets",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q13A",
+   "question": "Show a table of balance by LTV bucket and interest-rate bucket.",
+   "expectation": "CAPABILITY GAP",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q13B",
+   "question": "Cross-tab balance by LTV band and interest-rate band.",
+   "expectation": "CAPABILITY GAP",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv band",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv band",
+     "term": "ltv band",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q13C",
+   "question": "Break down outstanding balance by both LTV bucket and rate bucket.",
+   "expectation": "CAPABILITY GAP",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "outstanding balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q14A",
+   "question": "Show loan count by region and product type.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q14B",
+   "question": "Give me a table of loan numbers split by region and loan type.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "loan type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "loan type",
+     "term": "loan type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q14C",
+   "question": "Break the number of loans down by both geographic region and product type.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "geographic region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "geographic region",
+     "term": "geographic region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q15A",
+   "question": "For the Direct book, show balance by broker and product type.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q15B",
+   "question": "Break Direct-book balance down by both broker channel and loan type.",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "loan type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "loan type",
+     "term": "loan type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q15C",
+   "question": "Give me a broker-by-product balance table for the Direct portfolio.",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product",
+     "term": "product",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q16A",
+   "question": "For drawdown loans, show balance by region and LTV bucket.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q16B",
+   "question": "Break drawdown balance down by both geography and LTV band.",
+   "expectation": "WRONG / SILENT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "geography",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv band",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "geography",
+     "term": "geography",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv band",
+     "term": "ltv band",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q16C",
+   "question": "Show me the regional balance by LTV bucket for drawdown loans.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "regional",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "regional",
+     "term": "regional",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q17A",
+   "question": "For the Direct book, show balance by LTV bucket, ticket-size bucket and borrower-age bucket.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ticket_bucket",
+     "value": "ticket_bucket",
+     "term": "ticket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "age_bucket",
+     "value": "age_bucket",
+     "term": "age bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ticket_bucket",
+     "value": "ticket",
+     "term": "ticket",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "age_bucket",
+     "value": "age bucket",
+     "term": "age bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q17B",
+   "question": "Give me a table of Direct-book balance split by LTV band, ticket-size band and age band.",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv band",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "ticket_bucket",
+     "value": "ticket_bucket",
+     "term": "ticket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "age_bucket",
+     "value": "age_bucket",
+     "term": "age band",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv band",
+     "term": "ltv band",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ticket_bucket",
+     "value": "ticket",
+     "term": "ticket",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "age_bucket",
+     "value": "age band",
+     "term": "age band",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q17C",
+   "question": "Break Direct portfolio balance down across LTV, ticket size and borrower age.",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ticket_bucket",
+     "value": "ticket_bucket",
+     "term": "ticket size",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ticket_bucket",
+     "value": "ticket size",
+     "term": "ticket size",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q18A",
+   "question": "How did the book change in the last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q18B",
+   "question": "What changed in the portfolio since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_movement",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q18C",
+   "question": "Give me a summary of how the funded book moved over the last month.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q19A",
+   "question": "How did the Direct book change last month?",
+   "expectation": "SUBSTANTIVELY CORRECT",
+   "ok": true,
+   "route": "cohort_progression",
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q19B",
+   "question": "What changed in the Direct portfolio since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_movement",
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q19C",
+   "question": "Summarise the month-on-month movement in the Direct book.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (period on period)",
+     "term": "comparison period (period on period)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q20A",
+   "question": "How did drawdown loans change last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q20B",
+   "question": "What changed in the drawdown book since last month?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": "period_movement",
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q20C",
+   "question": "Summarise the month-on-month movement for drawdown loans.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (period on period)",
+     "term": "comparison period (period on period)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q21A",
+   "question": "Which region added the most balance last month for loans with LTV above 50%?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q21B",
+   "question": "For loans over 50% LTV, which region contributed the most balance growth since last month?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q21C",
+   "question": "Among loans with current LTV above 50%, where did balance increase the most over the last month?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q22A",
+   "question": "Which source portfolio contributed most to balance growth last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "funded_bridge",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "source_portfolio_id",
+     "value": "source_portfolio_id",
+     "term": "source portfolio",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "source_portfolio_id",
+     "value": "ranking by source portfolio",
+     "term": "ranking by source portfolio",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "source_portfolio_id",
+     "value": "source portfolio",
+     "term": "source portfolio",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q22B",
+   "question": "Did Direct or Acquired add more balance during the last month?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": "analytical_composition",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "source_portfolio_type",
+     "value": "source_portfolio_type",
+     "term": "direct or acquired",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "source_portfolio_type",
+     "value": "direct or acquired",
+     "term": "direct or acquired",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "source_portfolio_type",
+     "value": "source_portfolio_type",
+     "term": "direct or acquired",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "source_portfolio_type",
+     "value": "direct or acquired",
+     "term": "direct or acquired",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q22C",
+   "question": "Which of the Direct and Acquired books drove more of the month-on-month balance increase?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": "analytical_composition",
+   "stated": [
+    {
+     "kind": "value",
+     "field": "source_portfolio_type",
+     "value": "acquired",
+     "term": "Acquired",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (period on period)",
+     "term": "comparison period (period on period)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "value",
+     "field": "source_portfolio_type",
+     "value": "acquired",
+     "term": "Acquired",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "origination_channel",
+     "value": "Direct",
+     "term": "Direct",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q23A",
+   "question": "When will we reach £100m of funded loans?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "forecast_extrapolation",
+   "stated": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "100000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    },
+    {
+     "kind": "facet:projection",
+     "field": "",
+     "value": "a forward projection",
+     "term": "a forward projection",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q23B",
+   "question": "At the current trajectory, when do we get to £100 million?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "100000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "100000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q23C",
+   "question": "When does the funded book reach the £100m milestone?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "forecast_extrapolation",
+   "stated": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "100000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q24A",
+   "question": "At the current run rate, when will we reach £250m?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "forecast_extrapolation",
+   "stated": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "250000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    },
+    {
+     "kind": "facet:projection",
+     "field": "",
+     "value": "a forward projection",
+     "term": "a forward projection",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q24B",
+   "question": "When are we expected to get to £250 million of funded loans?",
+   "expectation": "FALSE REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "250000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "250000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q24C",
+   "question": "Based on the current run rate, when does the book reach £250m?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "forecast_extrapolation",
+   "stated": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "250000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q25A",
+   "question": "Do we expect to breach any concentration tests?",
+   "expectation": "CURRENT-STATE SUBSTITUTION",
+   "ok": true,
+   "route": "risk_limits",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q25B",
+   "question": "Are any concentration limits likely to be breached as the book grows?",
+   "expectation": "CURRENT-STATE SUBSTITUTION",
+   "ok": true,
+   "route": "risk_limits",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "BANK75",
+   "id": "Q25C",
+   "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
+   "expectation": "CURRENT-STATE SUBSTITUTION",
+   "ok": true,
+   "route": "risk_limits",
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO01",
+   "question": "What is our total funded balance?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO02",
+   "question": "How many loans do we have?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO03",
+   "question": "What is the average loan balance?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "loan balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO04",
+   "question": "What is our weighted average LTV?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO05",
+   "question": "What is the average borrower age?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO06",
+   "question": "What is the average interest rate on the book?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_interest_rate",
+     "value": "current_interest_rate",
+     "term": "interest rate",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO07",
+   "question": "Show balance by region.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO08",
+   "question": "Show loan count by region.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO09",
+   "question": "Show balance by product type.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO10",
+   "question": "Show balance by broker channel.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO11",
+   "question": "Show balance by origination channel.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "origination_channel",
+     "value": "origination_channel",
+     "term": "origination channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "origination_channel",
+     "value": "origination channel",
+     "term": "origination channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO12",
+   "question": "Show balance by LTV bucket.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "ltv_bucket",
+     "value": "ltv_bucket",
+     "term": "ltv bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "ltv_bucket",
+     "value": "ltv bucket",
+     "term": "ltv bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO13",
+   "question": "Show balance by age bucket.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "age_bucket",
+     "value": "age_bucket",
+     "term": "age bucket",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "age_bucket",
+     "value": "age bucket",
+     "term": "age bucket",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO14",
+   "question": "Show loan count by product type.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO15",
+   "question": "What is the balance in the direct book?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO16",
+   "question": "What is the balance in the acquired book?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "acquired",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "source_portfolio_type",
+     "value": "acquired",
+     "term": "acquired",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO17",
+   "question": "Summarise the portfolio.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "portfolio_summary",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO18",
+   "question": "Give me a portfolio overview.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "portfolio_summary",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO19",
+   "question": "Show funded balance over time.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "evolution",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO20",
+   "question": "Show loan count over time.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "evolution",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO21",
+   "question": "Show funded balance evolution.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "evolution",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO22",
+   "question": "How has the book grown over the last 3 months?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (change over time)",
+     "term": "comparison period (change over time)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO23",
+   "question": "Show average LTV over time.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "evolution",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO24",
+   "question": "Show average balance over time.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "evolution",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO25",
+   "question": "What has changed since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_movement",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO26",
+   "question": "How did the book move last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO27",
+   "question": "How did balance change since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO28",
+   "question": "How did average LTV change since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO29",
+   "question": "Compare this month with last month.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO30",
+   "question": "How does the current month compare with the previous month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO31",
+   "question": "Compare the direct and acquired books.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "portfolio_risk_comparison",
+   "stated": [
+    {
+     "kind": "scope_comparison",
+     "field": "portfolio_lens",
+     "value": "acquired,direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_comparison_lenses"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO32",
+   "question": "What is the balance difference between this month and last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO33",
+   "question": "Show the balance bridge for last month.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "funded_bridge",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO34",
+   "question": "What drove the movement in the book last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "funded_bridge",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO35",
+   "question": "What is the balance for loans with LTV above 50%?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO36",
+   "question": "How many loans have LTV above 50%?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO37",
+   "question": "Balance by region for loans with LTV above 50%.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO38",
+   "question": "For loans with LTV above 50%, balance by region",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "balance over 50",
+     "term": "balance over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO39",
+   "question": "What is the balance for loans with borrower age above 75?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "borrower age over 75",
+     "term": "borrower age over 75",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO40",
+   "question": "For loans with borrower age above 75, balance by region",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "balance over 75,",
+     "term": "balance over 75,",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO41",
+   "question": "Balance by region for loans with borrower age above 75.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "youngest_borrower_age",
+     "value": "youngest_borrower_age",
+     "term": "borrower age",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "borrower age over 75.",
+     "term": "borrower age over 75.",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO42",
+   "question": "How many loans are above £300,000?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "over 300,000",
+     "term": "over 300,000",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO43",
+   "question": "What is the balance for loans in London?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO44",
+   "question": "How many loans have an interest rate above 7%?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_interest_rate",
+     "value": "current_interest_rate",
+     "term": "interest rate",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "interest rate over 7",
+     "term": "interest rate over 7",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO45",
+   "question": "Balance by product type for loans with LTV above 40%.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 40",
+     "term": "LTV over 40",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO46",
+   "question": "How many drawdown loans do we have?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO47",
+   "question": "Which region has the largest balance?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO48",
+   "question": "Which region has the smallest balance?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO49",
+   "question": "Which broker channel has the largest balance?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "broker_channel",
+     "value": "ranking by broker channel",
+     "term": "ranking by broker channel",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO50",
+   "question": "Which region added the most balance since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO51",
+   "question": "Which region lost the most balance since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO52",
+   "question": "Which two regions added the most balance since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "regions",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by regions",
+     "term": "ranking by regions",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "regions",
+     "term": "regions",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO53",
+   "question": "Which three regions added the most balance since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "regions",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by regions",
+     "term": "ranking by regions",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "regions",
+     "term": "regions",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO54",
+   "question": "Which region grew fastest in balance since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO55",
+   "question": "Which broker channel added the most balance since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "broker_channel",
+     "value": "ranking by broker channel",
+     "term": "ranking by broker channel",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO56",
+   "question": "Which region added the most balance since last month for loans with LTV above 50%?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO57",
+   "question": "For loans with LTV above 50%, which region added the most balance since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "LTV over 50",
+     "term": "LTV over 50",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO58",
+   "question": "Which product type grew the most since last month?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "erm_product_type",
+     "value": "ranking by product type",
+     "term": "ranking by product type",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO59",
+   "question": "What proportion of the book is in London?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "London",
+     "term": "London",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:share",
+     "field": "",
+     "value": "a proportion of the book",
+     "term": "a proportion of the book",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO60",
+   "question": "Show product concentration.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product",
+     "term": "product",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO61",
+   "question": "Show broker concentration.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO62",
+   "question": "Which product type has the largest share of the book?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "erm_product_type",
+     "value": "ranking by product type",
+     "term": "ranking by product type",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO63",
+   "question": "What share of the book is drawdown?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:share",
+     "field": "",
+     "value": "a proportion of the book",
+     "term": "a proportion of the book",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO64",
+   "question": "Show origination channel concentration.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "origination_channel",
+     "value": "origination_channel",
+     "term": "origination channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "origination_channel",
+     "value": "origination channel",
+     "term": "origination channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO65",
+   "question": "What proportion of the book is in the acquired portfolio?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "acquired",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "source_portfolio_type",
+     "value": "acquired",
+     "term": "acquired",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:share",
+     "field": "",
+     "value": "a proportion of the book",
+     "term": "a proportion of the book",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO66",
+   "question": "What is the pipeline balance?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO67",
+   "question": "How many cases are in the pipeline?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO68",
+   "question": "Show the pipeline by stage.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "pipeline_stage",
+     "value": "pipeline_stage",
+     "term": "stage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "pipeline_stage",
+     "value": "stage",
+     "term": "stage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO69",
+   "question": "How has the pipeline evolved?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "evolution",
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO70",
+   "question": "Show pipeline evolution by stage.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "evolution_pipeline_stage",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "pipeline_stage",
+     "value": "pipeline_stage",
+     "term": "stage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "pipeline_stage",
+     "value": "stage",
+     "term": "stage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO71",
+   "question": "What is the value of outstanding offers?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO72",
+   "question": "Are any of our concentration limits at risk?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "risk_limits",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO73",
+   "question": "Which of our limits are currently most at risk?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "risk_limits",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO74",
+   "question": "At the current run rate, when do we reach £250m of loans?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "forecast_extrapolation",
+   "stated": [
+    {
+     "kind": "target",
+     "field": "forecast_target_value",
+     "value": "250000000.0",
+     "term": "",
+     "owner": "llm_query_parser._forecast_target_value"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO75",
+   "question": "What is our largest single-name exposure?",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "exposure",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO76",
+   "question": "Show the largest 10 loan exposures.",
+   "expectation": "EXACT",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "exposures",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO77",
+   "question": "Which region grew the most?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": "period_change",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO78",
+   "question": "What changed?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": "period_change",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO79",
+   "question": "Which region added the most?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": "period_change",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO80",
+   "question": "Show me the trend.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": "evolution",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO81",
+   "question": "How much is in the Highgate Mortgages book?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO82",
+   "question": "Show balance by risk grade.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "internal_risk_grade",
+     "value": "internal_risk_grade",
+     "term": "risk grade",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "internal_risk_grade",
+     "value": "risk grade",
+     "term": "risk grade",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO83",
+   "question": "What is our arrears rate?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "arrears_balance",
+     "value": "arrears_balance",
+     "term": "arrears",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "measure",
+     "field": "arrears_balance",
+     "value": "arrears_balance",
+     "term": "arrears",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO84",
+   "question": "Show the cure rate by vintage.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "vintage_year",
+     "value": "vintage_year",
+     "term": "vintage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "vintage_year",
+     "value": "vintage",
+     "term": "vintage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "vintage_year",
+     "value": "vintage_year",
+     "term": "vintage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "vintage_year",
+     "value": "vintage",
+     "term": "vintage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO85",
+   "question": "What is the NNEG exposure?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "exposure",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "exposure",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO86",
+   "question": "Show roll rates by bucket.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO87",
+   "question": "How many loans have a Risk Score above 700?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "over 700",
+     "term": "over 700",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "facet:threshold",
+     "field": "",
+     "value": "over 700",
+     "term": "over 700",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO88",
+   "question": "Compare us with the market.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO89",
+   "question": "Show balance by servicer.",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO90",
+   "question": "What will the book be worth in five years?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "facet:projection",
+     "field": "",
+     "value": "a forward projection",
+     "term": "a forward projection",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "facet:projection",
+     "field": "",
+     "value": "a forward projection",
+     "term": "a forward projection",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "CFO91",
+   "id": "CFO91",
+   "question": "Which cohort is performing best?",
+   "expectation": "TRUE_REFUSAL",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "portfolio_cohort",
+     "value": "portfolio_cohort",
+     "term": "cohort",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "account_status",
+     "value": "performing",
+     "term": "performing",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "account_status",
+     "value": "Performing",
+     "term": "Performing",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "portfolio_cohort",
+     "value": "cohort",
+     "term": "cohort",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "portfolio_cohort",
+     "value": "portfolio_cohort",
+     "term": "cohort",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "account_status",
+     "value": "performing",
+     "term": "performing",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "account_status",
+     "value": "Performing",
+     "term": "Performing",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "portfolio_cohort",
+     "value": "cohort",
+     "term": "cohort",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S01",
+   "question": "Show balance by region.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S02",
+   "question": "Show balance by broker channel.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S03",
+   "question": "Show balance by product type.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S04",
+   "question": "How many loans by region?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S05",
+   "question": "Count by product type.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S06",
+   "question": "Which region has the largest balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S07",
+   "question": "Which region has the smallest balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S08",
+   "question": "Which broker channel has the largest balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "broker_channel",
+     "value": "ranking by broker channel",
+     "term": "ranking by broker channel",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S09",
+   "question": "Which broker channel has the smallest balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "broker_channel",
+     "value": "ranking by broker channel",
+     "term": "ranking by broker channel",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S10",
+   "question": "Which product type has the largest balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "erm_product_type",
+     "value": "ranking by product type",
+     "term": "ranking by product type",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product type",
+     "term": "product type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S11",
+   "question": "What are the top three regions by balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "regions",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by regions",
+     "term": "ranking by regions",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "regions",
+     "term": "regions",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S12",
+   "question": "Top 5 regions by balance",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "regions",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "top 5 by regions",
+     "term": "top 5 by regions",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "regions",
+     "term": "regions",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S13",
+   "question": "Top 2 brokers by balance",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "brokers",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "broker_channel",
+     "value": "top 2 by brokers",
+     "term": "top 2 by brokers",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "brokers",
+     "term": "brokers",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S14",
+   "question": "Smallest 3 regions by balance",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "regions",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "regions",
+     "term": "regions",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S15",
+   "question": "Top 1 region by balance",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "top 1 by region",
+     "term": "top 1 by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S16",
+   "question": "How many lump sum loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S17",
+   "question": "How many drawdown loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S18",
+   "question": "How many Gamma Direct loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "broker_channel",
+     "value": "Gamma Direct",
+     "term": "Gamma Direct",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S19",
+   "question": "What is the total balance for Wales loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "Wales",
+     "term": "Wales",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "Wales",
+     "term": "Wales",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S20",
+   "question": "How many Gamma Direct loans are in the Direct book?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "broker_channel",
+     "value": "Gamma Direct",
+     "term": "Gamma Direct",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S21",
+   "question": "Show balance by region for lump sum loans.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S22",
+   "question": "Which broker channel has the largest balance for lump sum loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "broker_channel",
+     "value": "ranking by broker channel",
+     "term": "ranking by broker channel",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S23",
+   "question": "How many loans are in the direct book?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S24",
+   "question": "How many loans are in the acquired book?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "acquired",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "value",
+     "field": "source_portfolio_type",
+     "value": "acquired",
+     "term": "acquired",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S25",
+   "question": "What share of the book is drawdown?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:share",
+     "field": "",
+     "value": "a proportion of the book",
+     "term": "a proportion of the book",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S26",
+   "question": "What share of the balance is in Scotland?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "geographic_region_obligor",
+     "value": "Scotland",
+     "term": "Scotland",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:geographic_scope",
+     "field": "geographic_region_obligor",
+     "value": "Scotland",
+     "term": "Scotland",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:share",
+     "field": "",
+     "value": "a proportion of the book",
+     "term": "a proportion of the book",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S27",
+   "question": "Show concentration.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S28",
+   "question": "Show broker concentration.",
+   "expectation": "REFUSE",
+   "ok": false,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S29",
+   "question": "Show product concentration for the direct book.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": "concentration_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "product",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "product",
+     "term": "product",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S30",
+   "question": "What is the pipeline balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S31",
+   "question": "Show the pipeline by stage.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "pipeline_stage",
+     "value": "pipeline_stage",
+     "term": "stage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "pipeline_stage",
+     "value": "stage",
+     "term": "stage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S32",
+   "question": "Show pipeline evolution by stage",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": "evolution_pipeline_stage",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "pipeline_stage",
+     "value": "pipeline_stage",
+     "term": "stage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "pipeline_stage",
+     "value": "stage",
+     "term": "stage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S33",
+   "question": "How many cases are at offer stage?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "pipeline_stage",
+     "value": "pipeline_stage",
+     "term": "stage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "pipeline_stage",
+     "value": "stage",
+     "term": "stage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S34",
+   "question": "What is the balance of offer stage cases?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "pipeline_stage",
+     "value": "pipeline_stage",
+     "term": "stage",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dataset",
+     "field": "view",
+     "value": "pipeline",
+     "term": "",
+     "owner": "workspace.resolve_dataset"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "pipeline_stage",
+     "value": "stage",
+     "term": "stage",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S35",
+   "question": "How does the current month compare with the previous month?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "SIMPLE",
+   "id": "S36",
+   "question": "Which region added the most balance since last month?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN01",
+   "question": "How many lump sum loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN02",
+   "question": "How many drawdown loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN03",
+   "question": "How many performing loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "account_status",
+     "value": "performing",
+     "term": "performing",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN04",
+   "question": "How many owner occupied loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "occupancy_type",
+     "value": "occupancy_type",
+     "term": "owner occupied",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "occupancy_type",
+     "value": "owner occupied",
+     "term": "owner occupied",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN05",
+   "question": "How many second home loans do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "occupancy_type",
+     "value": "second_home",
+     "term": "second home",
+     "owner": "categorical_spans.value_field"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN06",
+   "question": "What is the balance for lump sum loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN07",
+   "question": "What is the balance for drawdown loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN08",
+   "question": "What is the balance for owner occupied loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "occupancy_type",
+     "value": "occupancy_type",
+     "term": "owner occupied",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "occupancy_type",
+     "value": "owner occupied",
+     "term": "owner occupied",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN09",
+   "question": "What is the balance for redeemed loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "account_status",
+     "value": "redeemed",
+     "term": "redeemed",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "account_status",
+     "value": "Redeemed",
+     "term": "Redeemed",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN10",
+   "question": "Balance by region for drawdown loans.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN11",
+   "question": "Balance by region for lump sum loans.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN12",
+   "question": "Loan count by region for owner occupied loans.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "dimension",
+     "field": "occupancy_type",
+     "value": "occupancy_type",
+     "term": "owner occupied",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "occupancy_type",
+     "value": "owner occupied",
+     "term": "owner occupied",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN13",
+   "question": "For lump sum loans, balance by region",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN14",
+   "question": "For drawdown loans, how many do we have?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN15",
+   "question": "Which region has the largest balance for drawdown loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN16",
+   "question": "Which broker channel has the largest balance for lump sum loans?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker channel",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "broker_channel",
+     "value": "ranking by broker channel",
+     "term": "ranking by broker channel",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker channel",
+     "term": "broker channel",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN17",
+   "question": "How did balance change since last month for drawdown loans?",
+   "expectation": "EITHER",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "drawdown",
+     "term": "drawdown",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:lost_narrowing",
+     "field": "erm_product_type",
+     "value": "Drawdown",
+     "term": "Drawdown",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN18",
+   "question": "Which region added the most balance since last month for lump sum loans?",
+   "expectation": "EITHER",
+   "ok": true,
+   "route": "period_change_analysis",
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "collateral_geography",
+     "value": "collateral_geography|geographic_region_obligor",
+     "term": "region",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "value",
+     "field": "erm_product_type",
+     "value": "lump_sum",
+     "term": "lump sum",
+     "owner": "categorical_spans.value_field"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:comparison_period",
+     "field": "",
+     "value": "comparison period (last month)",
+     "term": "comparison period (last month)",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "collateral_geography",
+     "value": "ranking by region",
+     "term": "ranking by region",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "collateral_geography",
+     "value": "region",
+     "term": "region",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN19",
+   "question": "How many broker loans do we have?",
+   "expectation": "REFUSE",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [
+    {
+     "kind": "dimension",
+     "field": "broker_channel",
+     "value": "broker_channel",
+     "term": "broker",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "broker_channel",
+     "value": "broker",
+     "term": "broker",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "fires": true
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN20",
+   "question": "How many direct loans do we have?",
+   "expectation": "EITHER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "scope",
+     "field": "portfolio_lens",
+     "value": "direct",
+     "term": "",
+     "owner": "portfolio_lens.resolve_lens"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN21",
+   "question": "What is the balance for offshore loans?",
+   "expectation": "EITHER",
+   "ok": false,
+   "route": null,
+   "stated": [
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN22",
+   "question": "Show balance by loan type.",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "loan type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "loan type",
+     "term": "loan type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  },
+  {
+   "bank": "GEN",
+   "id": "GEN23",
+   "question": "Which loan type has the largest balance?",
+   "expectation": "DELIVER",
+   "ok": true,
+   "route": null,
+   "stated": [
+    {
+     "kind": "dimension",
+     "field": "erm_product_type",
+     "value": "erm_product_type",
+     "term": "loan type",
+     "owner": "requested_dimension_terms"
+    },
+    {
+     "kind": "measure",
+     "field": "current_outstanding_balance",
+     "value": "current_outstanding_balance",
+     "term": "balance",
+     "owner": "llm_query_parser._detect_metric"
+    },
+    {
+     "kind": "facet:ranking",
+     "field": "erm_product_type",
+     "value": "ranking by loan type",
+     "term": "ranking by loan type",
+     "owner": "detect_requested_facets"
+    },
+    {
+     "kind": "facet:grouping_dimension",
+     "field": "erm_product_type",
+     "value": "loan type",
+     "term": "loan type",
+     "owner": "detect_requested_facets"
+    }
+   ],
+   "lost": [],
+   "fires": false
+  }
+ ]
+}

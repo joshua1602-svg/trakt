@@ -267,25 +267,43 @@ def _period_label(fr: Dict[str, Any]) -> str:
     return str(rd)[:7] if rd else str(fr.get("run_id"))
 
 
-def _scope_frame_lens(df, lens_filters):
+def _scope_frame_lens(df, lens_filters, *, evidence_out=None):
     """Narrow a funded frame to a source-portfolio scope.
 
     A governed scope resolves to a LIST of portfolio ids (a group is the sum of
     its current members), so list values are matched with membership; a single
     value still matches by equality. Case/whitespace-insensitive; a filter on an
-    absent column is a no-op."""
+    absent column is a no-op.
+
+    ``evidence_out``, when given, receives what this narrowing actually did —
+    the fields narrowed on and the row counts either side. A route that narrows
+    and publishes nothing is indistinguishable from one that narrowed nothing,
+    and that indistinguishability is what let a whole-book movement be reported
+    under the Direct label with a receipt no consumer could challenge. Optional,
+    so no existing caller changes behaviour by not passing it.
+    """
     if not lens_filters or df is None:
         return df
     work = df
+    rows_before = len(work)
+    applied = []
     for col, val in lens_filters.items():
         if col not in work.columns:
             continue
+        applied.append(col)
         norm = work[col].astype(str).str.strip().str.casefold()
         if isinstance(val, (list, tuple, set)):
             wanted = {str(v).strip().casefold() for v in val}
             work = work[norm.isin(wanted)]
         else:
             work = work[norm == str(val).strip().casefold()]
+    if evidence_out is not None and applied:
+        evidence_out.append({"fields": tuple(applied),
+                             "detail": ", ".join(
+                                 sorted(str(v) for val in lens_filters.values()
+                                        for v in (val if isinstance(val, (list, tuple, set))
+                                                  else [val]))),
+                             "rows_before": rows_before, "rows_after": len(work)})
     return work
 
 

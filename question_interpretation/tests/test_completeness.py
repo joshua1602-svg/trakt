@@ -43,17 +43,26 @@ def test_a_carried_categorical_value_is_not_reported():
 
 
 def test_a_dropped_dataset_is_reported():
-    """"Summarise the current pipeline" answered from the funded book."""
+    """"Summarise the current pipeline" was DECIDED as pipeline and
+    RECONCILED against funded. The contradiction is already in the envelope."""
     stated = [_c("dataset", "view", "pipeline")]
     routed = ExecutedContract(dataset_context="pipeline", route="portfolio_summary",
-                              population_total=None)
+                              dataset_reconciled="funded")
     assert [c.value for c in unresolved_concepts(stated, routed)] == ["pipeline"]
 
 
-def test_a_dataset_the_executor_published_a_population_over_is_not_reported():
+def test_a_dataset_the_answer_reconciled_against_is_not_reported():
     stated = [_c("dataset", "view", "pipeline")]
-    served = ExecutedContract(dataset_context="pipeline", population_total=8)
+    served = ExecutedContract(dataset_context="pipeline", dataset_reconciled="pipeline")
     assert unresolved_concepts(stated, served) == []
+
+
+def test_a_dataset_nothing_reconciled_against_is_reported():
+    """A refusal reconciles against nothing, and the decision alone is not
+    evidence that anything was read."""
+    stated = [_c("dataset", "view", "pipeline")]
+    assert len(unresolved_concepts(stated, ExecutedContract(
+        dataset_context="pipeline"))) == 1
 
 
 # --------------------------------------------------------------------------- #
