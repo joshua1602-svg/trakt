@@ -211,29 +211,71 @@ Scoped in `migration_phase0/MI_COMPOSITE_BOUNDARY_SCOPE.md`.
 
 ---
 
-## OPEN · The parser emits `intent='chart'` with `chart_type='none'`
+## CLOSED · The parser emitted `intent='chart'` with `chart_type='none'`
 
-Found while deciding the narrowing question, and independent of it.
+One builder, one spec kind: `_bridge_recognizer` declared an output shape it did
+not name, because the waterfall is built by the `funded_bridge` route rather than
+the chart factory. 23 of 1,446 corpus specs carried the pair, all from that
+builder. Invisible while the route claimed every such question; the moment one was
+declined the reader saw *"chart_type 'none' is not valid for intent 'chart'"* — an
+internal message, not a governed refusal.
 
-```
-_deterministic_parse("show funded vs pipeline contribution.")
-    intent='chart'   chart_type='none'   metric=None   dims=[]
-_deterministic_parse("what is the weighted expected pipeline contribution?")
-    intent='chart'   chart_type='none'   metric=None   dims=[]
-```
+Fixed at the owner (`intent="table"`, the pair the validator permits) and the
+invariant enforced: `_deterministic_parse` is now a wrapper that **fails closed**
+rather than emitting a self-contradictory spec.
 
-Any question reaching the point-in-time path with that spec fails validation and
-the reader is shown *"I could not build a governed query for this question:
-chart_type 'none' is not valid for intent 'chart'."* — an internal message, not a
-governed refusal.
+**Only the self-contradiction, and measurement drew the line.** The validator's
+other chart rules ask whether a chart can be RENDERED — 22 corpus questions carry
+such a spec and are answered correctly by a route today. Failing those closed
+would convert working answers into refusals. Zero answer movement.
 
-It is invisible today because `funded_bridge` claims both questions before the
-spec is validated. **It becomes visible the moment that route's eligibility is
-narrowed**, which is why the narrowing decision puts this first for those two
-cases: narrowing without it trades a wrong answer for an error message.
+---
 
-**Owner: separate work.** Measured in
-`migration_phase0/MI_NARROWING_DECISION.md` §4.
+## OPEN · CR4 — twenty-four questions with a proven capability and no recognition
+
+The largest recoverable population in the estate, catalogued in
+`migration_phase0/MI_CAPABILITY_RECOVERY.md`. Every one has either a CORRECT
+sibling formulation of the same case or is answered by the merge arm, so the
+analysis demonstrably works and the wording fails **before capability selection**.
+
+Includes the funded/pipeline contribution family: *"What is the weighted expected
+pipeline contribution?"* classifies into the same families as three sibling
+wordings that build `['funded_balance_forecast', 'pipeline_completion_forecast']`,
+and `plan_for` returns `None` for it.
+
+**Not repairable with more deterministic phrase rules** — that is the F1 failure
+mode at scale. Recorded for the semantic layer.
+
+---
+
+## OPEN · `funded_bridge` shadows a family whose replacement is unreachable
+
+`funded_bridge` claims *"Show funded vs pipeline contribution."* and *"What is the
+weighted expected pipeline contribution?"* and answers both with a funded-balance
+bridge. The capability that computes them exists —
+`executors.funded_balance_forecast` produces current funded, expected completions
+from the open pipeline, the completed/withdrawn exclusion, and the forecast total.
+
+**It cannot be narrowed yet.** Both wordings are CR4 and never reach that
+capability, so narrowing would leave one answering a pipeline total that is not a
+funded-vs-pipeline contribution and the other refusing. The replacement path must
+be proven first.
+
+Established while tracing: `weighted_expected_funded_amount` is **NaN for
+COMPLETED and WITHDRAWN**, so the open-pipeline sum and the all-rows sum are the
+same £1,320,000 and no double-count is possible through that column.
+
+---
+
+## OPEN · A public forecast capability with no MI caller
+
+`mi_agent_api/forecast_bridge.py::compute_forecast_bridge` is public and
+deterministic. Its only live callers are in `mi_agent_pptx` — the deck builder.
+No MI route reaches it.
+
+CR2-shaped, and **not actionable today**: the questions it might serve are CR4 and
+never reach a planner, so wiring it would recover nothing. Recorded so the find is
+not lost.
 
 ---
 
