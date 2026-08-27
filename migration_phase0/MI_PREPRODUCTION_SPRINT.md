@@ -184,15 +184,31 @@ Measured today (2026-08-27):
 * `ANTHROPIC_API_KEY` is **absent** from this container's environment; no key
   file exists anywhere on disk;
 * the `anthropic` SDK **is** installed (1.1.0), so this is not a packaging gap;
-* both API keys shared earlier in this window were tried against
-  `messages.create`. Both returned:
+* every API key supplied in this window was tried. All returned:
 
   ```
   400 invalid_request_error — You have reached your specified API usage limits.
   You will regain access on 2026-09-01 at 00:00 UTC.
   ```
 
-  request ids `req_011CeTy5sHpCPRNbaRc29t6g` and `req_011CeTy5tMZDxqgxA6Q3oXp4`.
+  request ids include `req_011CeTy5sHpCPRNbaRc29t6g`,
+  `req_011CeTy5tMZDxqgxA6Q3oXp4` and `req_011CeTz94ibpoA1MZZxjPhHh`.
+
+**The cause is a spend ceiling, not a configuration.** This was separated
+rather than assumed. On the same key, in the same process:
+
+| call | result |
+|---|---|
+| `models.list` | **SUCCESS** — returns `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5` |
+| `messages.create` · `claude-opus-5` | 400 usage limit |
+| `messages.create` · `claude-opus-4-1` | 400 usage limit |
+| `messages.create` · `claude-haiku-4-5` | 400 usage limit |
+| `messages.create` · `claude-3-5-haiku` | 400 usage limit |
+
+So the key authenticates, the SDK and network path work end to end, and the
+account is entitled to the model this sprint targets. Inference alone is
+refused, across every model including the cheapest — there is no model choice
+or endpoint that routes around it.
 
 **Successful API completions: 0. Valid semantic proposals: 0. Accepted
 deterministic bindings: 0. Returned model identifier: none — no response was
@@ -290,5 +306,8 @@ achieved *same truth* and *zero blast* with **no additional reach at all**.
 Freezing now would freeze 24 known-unreachable capabilities and 8 known-wrong
 answers, with the layer intended to address them never once exercised.
 
-The block is an expired API allowance, not a design failure. Access returns
-2026-09-01. Phases 3 and 4 should run then, against these two commits.
+The block is an exhausted API spend allowance, not a design failure and not a
+configuration one — `models.list` succeeds on the same key that every
+`messages.create` is refused for. Access returns 2026-09-01. Phases 3 and 4
+should run then, against these two commits, with no further code changes
+needed to start them.
