@@ -258,23 +258,47 @@ def make_client_config(tmp_path: Path, *, valid: bool = True) -> Path:
     return p
 
 
+#: The clients an engine fixture stands up as already onboarded. A client not
+#: listed here has no active configuration, which is exactly what the isolation
+#: tests need to assert — so this list is deliberately explicit rather than
+#: "whatever the run asks for".
+ONBOARDED_TEST_CLIENTS = ("client_a", "client_b", "c")
+
+
+def onboard_client(store: OpsStore, client_id: str, config: Path) -> None:
+    """Stand ``client_id`` up as an onboarded client holding ``config``.
+
+    The engine has no client-configuration path of its own: a client is
+    governed by what its own onboarding activated. Tests that run a delivery
+    therefore need an activated artefact, and this writes one — the same
+    artefact ``OnboardingService.activate`` produces, at the same key.
+    """
+    from operations_control.onboarding.artefacts import client_config_rel
+    from operations_control.onboarding.store import OnboardingStore
+    OnboardingStore(store).write_artefact(
+        client_id, 1, client_config_rel(client_id),
+        Path(config).read_text(encoding="utf-8"))
+
+
 def make_engine(store: OpsStore, source_registry: SourceRegistry,
                 scenario: str = "happy",
                 adapters: Optional[AgentAdapters] = None,
                 annex2_scenario: str = "happy",
                 annex2_stages=None,
-                client_config: Optional[Path] = None) -> OpsEngine:
+                client_config: Optional[Path] = None,
+                onboarded=ONBOARDED_TEST_CLIENTS) -> OpsEngine:
     shared = adapters or ScriptedAdapters(scenario)
     a2 = annex2_stages or StubAnnex2Stages(annex2_scenario)
     if client_config is None:
         import tempfile
         client_config = make_client_config(
             Path(tempfile.mkdtemp(prefix="ops-cfg-")))
+    for client_id in onboarded:
+        onboard_client(store, client_id, client_config)
     return OpsEngine(store,
                      adapter_factory=lambda run: shared,
                      source_registry_factory=lambda: source_registry,
-                     annex2_stages=a2,
-                     client_config_path=str(client_config))
+                     annex2_stages=a2)
 
 
 @pytest.fixture()
