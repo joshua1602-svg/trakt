@@ -237,34 +237,75 @@ cases: narrowing without it trades a wrong answer for an error message.
 
 ---
 
-## OPEN · `FORECAST_BREACH` is a governed operation with no consumer
+## CLOSED · `FORECAST_BREACH` now gates the current-state limits route
 
-The MI intent owner already separates current from forward concentration risk:
-`mi_workflows.analytical.intent.classify` returns
-`families=('LIMITS_CONCENTRATION','FORECAST_PROJECTION')` and
-`operations=(…, 'FORECAST_BREACH')` with `requirements=('limit_evidence','forecast')`
-for *"do we expect to breach any concentration limits?"* and its siblings.
+Two bounded rulings, implemented together.
 
-**`FORECAST_BREACH` is defined at `intent.py:93`, appended at `:750`, and
-consumed by nothing on the MI query path.** The only other occurrence in the
-estate is `CONCENTRATION_FORECAST_BREACH` in `mi_agent_pptx/watchlist.py` — the
-deck builder, a different surface with a separately-named constant. The operation
-is a label.
+**`risk_limits` is the governed owner of the approved client concentration tests
+on today's funded book, and now declines a forward question.** Eligibility asks
+`mi_workflows.analytical.intent.classify` whether the sentence carries
+`FORECAST_PROJECTION` or `FORECAST_BREACH` — the governed intent owner, not a
+second reading of the sentence and not a word test. `run_funded_vs_forecast` was
+deliberately NOT wired in: it forecasts group shares against placeholder RAG
+thresholds, names no approved test, needs a caller-supplied dimension and a
+SnapshotStore the MI path does not construct.
 
-Two consequences, both measured:
+**The intent owner was extended by one construction.** `" at risk of breach "` /
+`" at risk of breaching "`, gated on `limiting` so it cannot widen any other
+family, and deliberately NOT added to `_FORECAST_TERMS`, which every family
+reads. `_LIMIT_HEADROOM_TERMS` already contains `" at risk "` — correct for
+*"which limits are most at risk?"*, a ranking of today's headroom — but *"at risk
+of BREACHING"* names a breach that has not happened, which is what *"do we expect
+to breach"* already carries.
 
-* **Two forward phrasings already refuse correctly** — *"Are any limits projected
-  to breach?"* and *"Which limits could breach based on the current forecast?"*
-  raise the forward-projection facet and decline. Two others substitute the
-  current-state answer.
-* **One phrase short.** *"Which concentration tests are we at risk of breaching?"*
-  classifies as `LIMITS_CONCENTRATION` only, matching just `('breaching',)` — so
-  any gate built on the existing family leaves that case substituting.
+Verified apart: *"which limits are most at risk?"* still classifies HEADROOM,
+current-only; *"which region is most at risk?"* is untouched.
 
-**Owner: separate work.** The forward CALCULATION cannot be built from existing
-capability (see below); the intent classification is a different and much smaller
-question. Measured in
-`migration_phase0/MI_CURRENT_VS_FORWARD_CONCENTRATION.md`.
+**Measured. Exactly three answers moved, on each arm, all of them Q25:**
+
+| id | before | after |
+|---|---|---|
+| Q25A | WRONG — today's status | **controlled refusal** |
+| Q25B | WRONG — today's status | **controlled refusal** |
+| Q25C | WRONG — today's status | `analytical_composition` — see below |
+
+WRONG falls 11→8 (deterministic arm) and 6→3 (merge). CFO 91 byte-identical.
+The six registered pipeline answers byte-identical. 278 modules: 85 failures
+before and after. No new WRONG, no previously CORRECT answer changed.
+
+The refusal is written by the existing facet layer, not at the route:
+
+> *"…this asks about concentration limits, which are governed by the portfolio's
+> limit schedule rather than by the loan tape; and this asks for a forward-looking
+> figure, which needs a governed forecast rather than a current position. I have
+> NOT substituted a current-position figure, because that would answer a
+> different question from the one you asked."*
+
+---
+
+## OPEN · A SECOND route substitutes on the forward-limits question
+
+Exposed by the gate above, and it needs its own ruling.
+
+With `risk_limits` declining, **Q25C is claimed by `analytical_composition`**,
+which reconciles `funded+pipeline` honestly and answers:
+
+> *"Current funded balance is £172.1m as at 2026-06-30. Gross pipeline in the
+> governed extract is £3.6m… Forecast funded balance: £173.4m. Expected to land:
+> 2026-06 £975k; 2026-07 £225k; 2026-08 £120k."*
+
+The question asked **which concentration TESTS are at risk of breaching**. The
+answer is about **balance**. It is not the forbidden current-state substitution,
+it discloses its exclusions, and its reconciliation is truthful — but it answers
+a different question, which is the same class of defect in a different route.
+
+Q25A and Q25B refuse correctly because no route claims them. Q25C differs only in
+naming the pipeline, which brings `analytical_composition` into scope.
+
+**Not fixed: gating `analytical_composition` was not authorised** by the ruling
+that produced this, and doing it unasked would be the scope creep that ruling
+excluded. Recorded for a decision.
+
 
 ---
 

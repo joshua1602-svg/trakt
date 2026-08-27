@@ -1826,6 +1826,35 @@ def _route_concentration_tests(question, spec, spec_dict, *, client_id,
     return envelope_out
 
 
+def _projects_forward(question, spec=None) -> bool:
+    """Does the GOVERNED INTENT OWNER read this sentence as forward-looking?
+
+    `mi_workflows.analytical.intent` already separates a current limits question
+    from a forward one — `FORECAST_PROJECTION` / `FORECAST_BREACH`, with
+    `requirements` naming `forecast`. This asks that owner rather than adding a
+    second reading of the sentence here, which is the rule this estate applies to
+    every other shared vocabulary.
+
+    Deliberately NOT a word test. "forecast", "risk" and "pipeline" all appear in
+    questions that are squarely current-state, and a word test would decline
+    them; the classifier reports the analytic and temporal intent instead.
+
+    Fails OPEN, and that is the safe direction here: if the classifier cannot be
+    reached, the route keeps its pre-existing behaviour rather than refusing a
+    question it has always answered.
+    """
+    try:
+        from mi_workflows.analytical.intent import (
+            FAMILY_FORECAST_PROJECTION, OP_FORECAST_BREACH, classify)
+
+        reading = classify(question, spec=spec)
+        return (FAMILY_FORECAST_PROJECTION in (reading.families or ())
+                or OP_FORECAST_BREACH in (reading.operations or ()))
+    except Exception as exc:  # noqa: BLE001 - eligibility must never break a query
+        _logger.info("forward-intent read unavailable for %r: %s", question, exc)
+        return False
+
+
 def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
                 portfolio_id, as_of) -> Dict[str, Any]:
     # The operator-APPROVED concentration-test configuration is the governed
@@ -3506,11 +3535,39 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 interpretation=r.resolve_interpretation())),
 
-        # 10. Contractual risk limits.
+        # 10. Contractual risk limits — CURRENT STATE ONLY.
+        #
+        # THIS ROUTE IS THE GOVERNED OWNER OF THE APPROVED CLIENT CONCENTRATION
+        # TESTS, EVALUATED ON TODAY'S FUNDED BOOK. It has no forward capability
+        # and must not stand in for one.
+        #
+        # Measured before this gate: "do we expect to breach any concentration
+        # limits?" and "which concentration tests are we at risk of breaching?"
+        # were answered with *"5 passed, 6 breach(es) … Nearest to limit: Top 3
+        # brokers (-31.5 pp headroom)"* — today's status, presented to a reader
+        # who asked what is COMING. The frozen readiness bank records that as
+        # CURRENT-STATE SUBSTITUTION on Q25A/B/C.
+        #
+        # The forward question is declined here rather than answered, and the
+        # existing forward-projection facet produces the refusal — no sentence is
+        # written at this site. `run_funded_vs_forecast` is deliberately NOT
+        # wired in: it forecasts group SHARES against placeholder RAG thresholds
+        # (amber 0.20 / red 0.30), carries no approved test name and no headroom,
+        # needs a caller-supplied dimension, and needs a SnapshotStore the MI
+        # path does not construct. Projected approved-limit testing is a separate
+        # capability that does not exist yet; see
+        # `migration_phase0/MI_CURRENT_VS_FORWARD_CONCENTRATION.md`.
+        #
+        # The test is the ANALYTIC INTENT, not the presence of a word: it asks
+        # the governed intent owner whether the sentence projects, so "which
+        # limits are most at risk?" — a ranking of today's headroom — is
+        # untouched, while "at risk of BREACHING" is not.
         Recogniser(
             name="risk_limits", priority=100, capability=CAP_RISK,
-            description="Contractual concentration limits and headroom tests.",
-            recognise=lambda r: bool(getattr(r.spec, "risk_limit_query", None)),
+            description="Contractual concentration limits and headroom tests "
+                        "on the current funded book.",
+            recognise=lambda r: (bool(getattr(r.spec, "risk_limit_query", None))
+                                 and not _projects_forward(r.question, r.spec)),
             handle=lambda r: _route_risk(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,

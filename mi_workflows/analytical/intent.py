@@ -180,6 +180,27 @@ _LIMIT_TERMS: Tuple[str, ...] = (
 )
 
 #: A question is a FORECAST when it asks about a state that has not happened.
+#: "at risk of BREACHING" is a forward breach, not a current ranking.
+#:
+#: Scoped to limits questions and to this exact construction, deliberately.
+#: `_LIMIT_HEADROOM_TERMS` already contains " at risk ", which is right for
+#: "which limits are most at risk?" — a ranking of today's headroom. But
+#: "at risk of breaching" names a breach that has NOT happened, which is the same
+#: thing "do we expect to breach" and "are any limits projected to breach" name,
+#: and those two already carry FORECAST_PROJECTION + FORECAST_BREACH. Measured
+#: before this: "which concentration tests are we at risk of breaching?"
+#: classified LIMITS_CONCENTRATION only, matching just ('breaching',), and was
+#: answered with today's risk-limit status — the CURRENT-STATE SUBSTITUTION the
+#: frozen bank recorded against Q25A/B/C.
+#:
+#: NOT added to `_FORECAST_TERMS`. That vocabulary is read by every family, and
+#: a phrase that means "forward" only in front of a breach would widen
+#: forecasting across the whole classifier.
+_AT_RISK_OF_BREACH_TERMS: Tuple[str, ...] = (
+    " at risk of breach ", " at risk of breaching ",
+)
+
+
 _FORECAST_TERMS: Tuple[str, ...] = (
     " forecast ", " forecasts ", " forecast to ", " forecasting ",
     " project ", " projected ", " projection ", " projections ",
@@ -673,6 +694,13 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     rating = _any(text, _RUN_RATE_TERMS)
     limiting = _any(text, _LIMIT_TERMS)
     forecasting = _any(text, _FORECAST_TERMS) or _spec_forecast(spec)
+    # A LIMIT question asking about the risk of BREACHING is forward, and is
+    # classified with the other forward-breach phrasings rather than as a
+    # ranking of today's headroom. Gated on `limiting` so the phrase cannot
+    # widen any other family.
+    if limiting and _any(text, _AT_RISK_OF_BREACH_TERMS):
+        forecasting = True
+        matched += _hits(text, _AT_RISK_OF_BREACH_TERMS)
 
     if comparative:
         signals.append(SIGNAL_COMPARISON); matched += _hits(text, _COMPARISON_TERMS)
