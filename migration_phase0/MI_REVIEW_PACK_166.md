@@ -6,6 +6,8 @@ Every question in the 75-question acceptance bank and the frozen CFO 91, with th
 
 Whole book: **640 loans**. Sorted so the likely mis-grades come first.
 
+**One column in this pack is a capture artefact, not data.** `spec dimensions` is built here as `spec.dimensions + [spec.dimension]`, and a single governed axis travels on BOTH fields by design — so every single-axis row shows that axis twice. It is not a duplicate dimension in the spec, and it is not a defect. I read it as one myself and reported Q07B as a merge-arm duplicate dimension; that was wrong. Q07B's actual cause is a recogniser gap — *"How do X and Y differ?"* reaches no comparison route, while *"Compare X and Y"* reaches `portfolio_risk_comparison` — so the axis the merge filled had no route able to apply it and the silently-dropped-dimension guard refused. Every component behaved correctly.
+
 ## What to look at, in order
 
 | bucket | what it is | count |

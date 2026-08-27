@@ -125,6 +125,11 @@ class StatedConcept:
     value: str
     term: str
     owner: str
+    #: Other governed fields that CARRY this concept when the contract holds
+    #: them — the registry's own `derived_from` relation, resolved where the
+    #: semantics are in hand so `_carried` never needs them. See ROLE
+    #: DISAGREEMENT IS NOT LOSS in the module docstring.
+    carried_by: Tuple[str, ...] = ()
 
     def as_dict(self) -> Dict[str, str]:
         return {"kind": self.kind, "field": self.field, "value": self.value,
@@ -309,7 +314,8 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
     if metric_key:
         out.append(StatedConcept("measure", metric_key, metric_key,
                                  ",".join(matched_terms),
-                                 "llm_query_parser._detect_metric"))
+                                 "llm_query_parser._detect_metric",
+                                 carried_by=_bands_of(metric_key, semantics)))
 
     # ---- the TARGET owner, gated by the ANSWER-TYPE owner ----------------- #
     if AT.asked(q) == AT.DATE:
@@ -327,6 +333,20 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
                                      facet.label or "", facet.label or "",
                                      "detect_requested_facets"))
     return out
+
+
+def _bands_of(field: str, semantics: Dict[str, Any]) -> Tuple[str, ...]:
+    """Every governed dimension the registry declares DERIVED FROM ``field``.
+
+    `age_bucket` is `derived_from: youngest_borrower_age`; `ltv_bucket` is
+    `derived_from: current_loan_to_value`. Nineteen such fields are declared, so
+    this is read rather than listed, and a band added tomorrow needs no edit
+    here. Used by `_carried` to decide that a question stating a field and an
+    answer banding it are talking about the same concept.
+    """
+    fields = (semantics or {}).get("fields") or {}
+    return tuple(sorted(
+        k for k, e in fields.items() if (e or {}).get("derived_from") == field))
 
 
 def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
@@ -369,6 +389,22 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
         return bool(want & dims) or bool(want & applied) or bool(want & filters)
     if kind == "measure":
         if contract.metric == field or field in filters or field in applied:
+            return True
+        # A BAND OF A FIELD IS THAT FIELD. "Show balance by borrower age bucket"
+        # states `youngest_borrower_age`; the contract groups by `age_bucket`,
+        # which the registry declares `derived_from: youngest_borrower_age`. The
+        # concept reached the contract — banded, and as an axis rather than a
+        # measure — so this is ROLE DISAGREEMENT, not loss, and the module
+        # docstring already says role disagreement is not loss.
+        #
+        # Measured before this existed: fourteen delivering questions across the
+        # corpora were reported incomplete for a concept they had plainly
+        # answered by, including "Show balance by interest rate bucket" and
+        # "balance by ltv band". Every one is a bucket naming its own source
+        # field. The relation is read from `derived_from`, which the registry
+        # already declares for all nineteen derived fields, so there is no list
+        # here and a bucket added tomorrow is covered without an edit.
+        if set(concept.carried_by) & (dims | filters | applied):
             return True
         # A ROUTE THAT SUPPLIES ITS OWN MEASURE is not a loss. A parser that
         # bound a DIFFERENT measure is — which is how Q21B's mis-binding of

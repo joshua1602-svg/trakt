@@ -74,6 +74,69 @@ product.
 
 ---
 
+# TOP OF THE OPEN LIST
+
+The two items below lead deliberately. The first is a deployment-shaped defect that
+degrades governed answers with nothing in any bank to catch it. The second is a guard
+evasion held open on purpose rather than closed as a side effect.
+
+---
+
+## F6 · A configuration path resolved against the process working directory
+
+`trakt_core.capability.load_registry` resolves
+`config/system/mi_capability_registry.yaml` **relative to the process cwd**, and
+`mi_agent_workflow._capability_explanation` wraps the load in a bare
+`except Exception: return None`.
+
+Run from anywhere but the repository root, the `FileNotFoundError` is swallowed
+and two capability-aware refusals silently degrade:
+
+```
+from the repo root   "Cure Rate is measured ACROSS governed snapshots and MI Query
+                      answers from a single dataset… request it through the governed
+                      history tools, where the snapshot window is resolved."
+from anywhere else   "I couldn't map this question to a governed analytic."
+```
+
+No wrong number either way — both refuse. What is lost is the governed
+methodology and the route to the number, replaced by an admission of ignorance
+about a question the estate can name precisely. **A deployment's answer quality
+should not depend on which directory it was started from**, and an absorbed
+`FileNotFoundError` is how it came to.
+
+Found while checking review-pack fidelity: two CFO questions differed between
+two runs of the same code on the same tape, and the only difference was cwd.
+
+**Owner: separate work.** Every measurement in this programme is now run from
+the repository root.
+
+---
+
+## OPEN · The separator evasion in `_unknown_named_book`
+
+Deliberately NOT closed by the sentence-position property that shipped in
+`8a4f2ab`, and deliberately not closed as a side effect of anything since.
+
+"Direct-book" yields the token `Direct-`. `_PROPER_TOKEN_RE` admits an internal
+hyphen, so the trailing separator comes with it, and `direct-` matches no entry in
+`_GENERIC_BOOK_WORDS` or any other word list — the run is therefore judged a proper
+name **whatever the list holds**. Same shape as the verb defect the property fixed
+(a token the guard cannot match, rather than a word nobody listed); different
+mechanism.
+
+Four questions still refuse with `'Direct- book'`. One survives in the data-claim
+audit's `QUOTES_A_MANGLED_PHRASE` class, which fell 2 → 1 rather than to 0 for
+exactly this reason.
+
+**It is coupled to the unshipped hyphen fix** in `portfolio_lens._qualified_span_re`,
+and that coupling is why it waits. A simulated edge-punctuation normalisation removes
+all four (7 fragments removed, 0 raised) — but it changes behaviour on the same
+questions the separator fix touches, so shipping it alone would decide the hyphen
+question by side effect. Measured in `migration_phase0/MI_DIRECT_COLLISION_SCOPE.md`.
+
+---
+
 ## OPEN · A live wrong answer on the shipped path, independent of this split
 
 **Not caused by this programme, and not fixed by it.** Logged here so it is not
@@ -217,37 +280,6 @@ unshipped qualifier/noun separator fix; four questions still refuse with
 
 ---
 
-## F6 · A configuration path resolved against the process working directory
-
-`trakt_core.capability.load_registry` resolves
-`config/system/mi_capability_registry.yaml` **relative to the process cwd**, and
-`mi_agent_workflow._capability_explanation` wraps the load in a bare
-`except Exception: return None`.
-
-Run from anywhere but the repository root, the `FileNotFoundError` is swallowed
-and two capability-aware refusals silently degrade:
-
-```
-from the repo root   "Cure Rate is measured ACROSS governed snapshots and MI Query
-                      answers from a single dataset… request it through the governed
-                      history tools, where the snapshot window is resolved."
-from anywhere else   "I couldn't map this question to a governed analytic."
-```
-
-No wrong number either way — both refuse. What is lost is the governed
-methodology and the route to the number, replaced by an admission of ignorance
-about a question the estate can name precisely. **A deployment's answer quality
-should not depend on which directory it was started from**, and an absorbed
-`FileNotFoundError` is how it came to.
-
-Found while checking review-pack fidelity: two CFO questions differed between
-two runs of the same code on the same tape, and the only difference was cwd.
-
-**Owner: separate work.** Every measurement in this programme is now run from
-the repository root.
-
----
-
 ## OPEN · Coordinated axis lists are read as measures
 
 Two questions, one shape, and the second was hidden behind a false refusal until
@@ -297,3 +329,58 @@ duplicate dimension. It is not: `spec.dimensions=['source_portfolio_type']` with
 `spec.dimension='source_portfolio_type'` is the documented single-axis
 convention, and the "duplicate" was an artefact of the review pack's own capture
 concatenating the two spec fields.
+
+---
+
+## OPEN · Fifteen pipeline and forecast questions are answered from another dataset
+
+Found while scoping the completeness-check wiring, on the 1,446-question corpus.
+Not visible on any bank this programme has run, because none of the fifteen has a
+computable truth — so none is graded WRONG and none was ever looked at.
+
+```
+"Summarise the current pipeline."
+   metadata.datasetContext : pipeline
+   reconciliation.dataset  : funded
+   -> "At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m…"
+```
+
+Fifteen questions naming the pipeline or a forecast publish a `datasetContext`
+that disagrees with the `reconciliation.dataset` the answer was actually
+reconciled against — `pipeline` vs `funded`, `forecast` vs `funded+pipeline`.
+The reader asked about one book and was given another, in full confidence.
+
+**The contradiction is already in the envelope.** Nothing needs to be inferred:
+the estate records both the decision and what it read, and they differ. That is
+why the completeness check sees all fifteen with no new reader.
+
+**Owner: separate work, and it is larger than the wiring that found it.** This is
+not a disclosure problem — the answers are to a different question. Measured in
+`migration_phase0/MI_COMPLETENESS_WIRING_SCOPE.md`.
+
+---
+
+## OPEN · Two routes narrow correctly and record nothing
+
+The precondition for gating on the completeness check, and the reason the wiring
+stopped.
+
+```
+Summarise the acquired book              -> 199 loans, £54.7m   correct, narrowed
+Summarise the direct book                -> 441 loans, £117.4m  correct, narrowed
+portfolio summary for the acquired book  -> 199 loans           correct, narrowed
+                                            …all three: scopeApplied = None
+```
+
+`portfolio_summary` and `funded_bridge` apply the lens and publish no record of
+having done so. The completeness check is right that nothing positively records
+the narrowing — Q19C proved an envelope indistinguishable from these carried a
+figure wrong by £10.2m — but as a GATE the check would refuse three correct
+answers, and eight questions are in the class.
+
+Stage 1's own record reads *"the two scope routes now publish
+`metadata.scopeApplied`"*. These are further routes with the same silence,
+invisible on the 157-question calibration surface and visible on 854.
+
+**Owner: separate work, and it is step 1 of the wiring order.** Make them publish
+and the class empties.
