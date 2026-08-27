@@ -237,6 +237,72 @@ cases: narrowing without it trades a wrong answer for an error message.
 
 ---
 
+## OPEN · `FORECAST_BREACH` is a governed operation with no consumer
+
+The MI intent owner already separates current from forward concentration risk:
+`mi_workflows.analytical.intent.classify` returns
+`families=('LIMITS_CONCENTRATION','FORECAST_PROJECTION')` and
+`operations=(…, 'FORECAST_BREACH')` with `requirements=('limit_evidence','forecast')`
+for *"do we expect to breach any concentration limits?"* and its siblings.
+
+**`FORECAST_BREACH` is defined at `intent.py:93`, appended at `:750`, and
+consumed by nothing on the MI query path.** The only other occurrence in the
+estate is `CONCENTRATION_FORECAST_BREACH` in `mi_agent_pptx/watchlist.py` — the
+deck builder, a different surface with a separately-named constant. The operation
+is a label.
+
+Two consequences, both measured:
+
+* **Two forward phrasings already refuse correctly** — *"Are any limits projected
+  to breach?"* and *"Which limits could breach based on the current forecast?"*
+  raise the forward-projection facet and decline. Two others substitute the
+  current-state answer.
+* **One phrase short.** *"Which concentration tests are we at risk of breaching?"*
+  classifies as `LIMITS_CONCENTRATION` only, matching just `('breaching',)` — so
+  any gate built on the existing family leaves that case substituting.
+
+**Owner: separate work.** The forward CALCULATION cannot be built from existing
+capability (see below); the intent classification is a different and much smaller
+question. Measured in
+`migration_phase0/MI_CURRENT_VS_FORWARD_CONCENTRATION.md`.
+
+---
+
+## OPEN · The funded-vs-forecast concentration primitive cannot answer the limits question
+
+`mi_agent.risk_monitor.run_funded_vs_forecast` is real, deterministic, and runs
+clean on the live MI frames — funded 640, pipeline 8, forecast 645 — returning
+per-group `baseline_share`, `current_share`, `share_change`, `increasing`,
+`status_current`.
+
+**It has no concentration TESTS in it.** `status_current` is RAG against
+`get_concentration_thresholds` — `{"amber": 0.20, "red": 0.30}` — a generic share
+band. The approved tests live in `config/client/risk_limits_config.py::ALL_LIMITS`,
+which is what `risk_limits` reads, and `config/mi/risk_monitor.yaml` says so
+outright: *"Thresholds below are PLACEHOLDER defaults… client concentration limits
+will live in a separate config/client/ file."*
+
+```
+risk_limits             "6 breach(es)… Nearest to limit: Top 3 brokers
+                         (-31.5 pp headroom)"        <- named tests + headroom
+run_funded_vs_forecast   eight regional shares, all green, no test named
+```
+
+Three further blockers, each sufficient on its own: **no `SnapshotStore` exists
+on the MI path** (abstract, one adapter, zero references under `mi_agent_api/`,
+none in the fixture); it requires a **caller-chosen `dimension`** the question
+does not supply; and its thresholds are not the approved limits.
+
+And the route that DOES own the approved limits never gets the question:
+`mi_workflows/analytical/planner.py::plan_for` returns **None for all six**
+concentration questions, current and forward, so `analytical_composition` never
+claims one — even though `concentration_limits` (`funded`, `limits`) and
+`funded_balance_forecast` (`funded`, `pipeline`) both exist as capabilities.
+
+**Owner: separate work, and it is a methodology question, not a routing one.**
+
+---
+
 ## OPEN · The separator evasion in `_unknown_named_book`
 
 Deliberately NOT closed by the sentence-position property that shipped in
