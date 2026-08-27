@@ -80,11 +80,21 @@ _REQUEST_OPENERS = ("break ", "show ", "give ", "plot ", "chart ", "cross-tab ")
 _QUOTED = re.compile(r"'([^']{2,60})'")
 
 #: PRE-REGISTERED. A name entering or leaving this set is the finding.
-EXPECTED_FALSE: Dict[str, str] = {
-    "'interest rate bucket'": "the tape carries interest_rate_bucket on 640 of "
-                              "640 rows across five bands; the field is simply "
-                              "not declared in the MI semantics registry",
-}
+#:
+#: EMPTY, and it was not empty. It held `'interest rate bucket'` — the only
+#: false claim this audit has ever found across its 226 questions — until the
+#: field was declared in `mi_agent/build_mi_semantics_registry.py::CURATION`
+#: and the registry regenerated. Nothing about the tape changed: it carried
+#: `interest_rate_bucket` on 640 of 640 rows in five bands the whole time, and
+#: `config/mi/buckets.yaml` had defined the eight bands, and the chart path had
+#: been grouping by the column. One missing declaration was the whole of it.
+#:
+#: The set is emptied rather than deleted. An empty pre-registration is the
+#: strongest form of this instrument: any refusal that starts making a false
+#: claim about a client's book, anywhere on the surface, fails the audit on the
+#: first run, with the tape evidence printed. Do not repopulate it to make a
+#: run pass — a name entering this set IS the finding.
+EXPECTED_FALSE: Dict[str, str] = {}
 
 PORTFOLIO = "client_001/mi_2026_06"
 

@@ -31,6 +31,10 @@ DERIVED_BUCKETS = [
     "ltv_bucket",
     "original_ltv_bucket",
     "ticket_bucket",
+    # The banding was defined, materialised and charted long before it was
+    # DECLARED. Listing it here is what makes it answer the same template
+    # assertions as the other eight, so it cannot drift away from them.
+    "interest_rate_bucket",
     "arrears_bucket",
     "term_bucket",
     "vintage_year",
@@ -129,9 +133,15 @@ def test_registry_field_count_and_tiers(semantics):
     # date_of_lease_expiration, number_of_leased_objects == 116.
     # P1J-1 adds the 2 governed seasoning dimensions (seasoning_segment,
     # seasoning_bucket), derived from months_on_book == 118.
-    assert m["field_count"] == 118
-    # +2 core: both governed seasoning dimensions are core-tier (P1J-1).
-    assert m["core_field_count"] == 82
+    # interest_rate_bucket == 119. The band was already defined in
+    # config/mi/buckets.yaml, already materialised onto the tape by the one
+    # bucket engine, and already grouped by on the chart path; only the
+    # DECLARATION was missing, and its absence made the query path refuse with
+    # a claim about the client's data that was false on all 640 rows.
+    assert m["field_count"] == 119
+    # +2 core: both governed seasoning dimensions are core-tier (P1J-1);
+    # +1 core: interest_rate_bucket, core like every other derived bucket.
+    assert m["core_field_count"] == 83
     # The generated metadata counts must match the actual entries (drift guard).
     assert m["field_count"] == len(semantics["fields"])
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])

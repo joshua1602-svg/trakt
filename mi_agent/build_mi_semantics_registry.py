@@ -724,6 +724,36 @@ CURATION: Dict[str, dict] = {
                      "balance bucket", "exposure band", "loan size", "ticket"],
         "overrides": dict(_BUCKET_OVERRIDES),
     },
+    # NOT a second computation of the bands, and not even a second call site.
+    # `config/mi/buckets.yaml` defines the eight edges, `analytics_lib/buckets.py`
+    # materialises the column once at prep, and the chart path already GROUPS BY
+    # that column through `PROFILE_DIMENSIONS`. Everything in front of this entry
+    # was already in place — the bucket config, the `_DIM_SPEC` materialisation,
+    # the pipeline field contract, the stratification catalogue, three route
+    # configs, `EXPLICIT_DIMENSION_TERMS`, `semantic_resolver` and
+    # `quantile_buckets`. The registry entry was the ONE missing declaration, and
+    # without it `_explicit_dimensions` discarded every term that pointed here.
+    #
+    # What that cost was not a missing capability but a FALSE CLAIM ABOUT THE
+    # CLIENT'S DATA: "'interest rate bucket' is not available in this dataset.
+    # This book does not report it" — said over a tape carrying a value on 640 of
+    # 640 rows, in five bands, with a parenthetical assurance that nothing had
+    # been fabricated. `migration_phase0/data_claim_audit.py` scores that class
+    # across 226 questions and this was the only false member.
+    #
+    # No band list here, deliberately: `ltv_bucket`, `age_bucket` and
+    # `ticket_bucket` enumerate none either, and `config/mi/buckets.yaml` stays
+    # the one place the edges are declared.
+    "interest_rate_bucket": {
+        "tier": "core", "derived": True, "derived_from": "current_interest_rate",
+        "business_name": "Interest Rate Bucket",
+        "business_description": "Interest-rate band (derived from "
+                                "current_interest_rate).",
+        "synonyms": ["interest rate band", "interest rate bucket",
+                     "interest rate range", "rate band", "rate bucket",
+                     "coupon band", "coupon bucket"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
     "arrears_bucket": {
         "tier": "core", "derived": True, "derived_from": "number_of_days_in_arrears",
         "business_name": "Arrears Bucket",
