@@ -27,7 +27,7 @@
 # generates the answer into, so nothing is stored twice:
 #
 #   client_config:<dotted.path>    config/client/config_client_{CLIENT}.yaml
-#   annex12_config:<dotted.path>   config/client/config_client_annex12.yaml
+#   annex12_config:<dotted.path>   config/client/config_client_{CLIENT}_annex12.yaml
 #
 # A field with no `writes_to` is captured and audited but has no artefact to
 # land in yet — those are listed under `unrepresented` at the foot of each
@@ -51,7 +51,7 @@ products:
   # -----------------------------------------------------------------------
   # ESMA Annex 2 — non-ABCP underlying exposure report.
   # Standing fields are the three `defaults:` entries the projector injects
-  # into every row (config/client/config_client_ERM_UK.yaml) plus the two
+  # into every row of a client's generated configuration, plus the two
   # original-lender defaults the delivery rules permit.
   # -----------------------------------------------------------------------
   esma_annex2:
@@ -183,8 +183,8 @@ products:
 
   # -----------------------------------------------------------------------
   # ESMA Annex 12 — investor report. Standing fields are the `annex12.deal`
-  # entries of config/regime/annex12_template.yaml that the client instance
-  # config supplies (config/client/config_client_annex12.yaml).
+  # entries of config/regime/annex12_template.yaml that a client's generated
+  # investor-report configuration supplies.
   # -----------------------------------------------------------------------
   investor_reporting:
     label: Investor Reporting
@@ -322,9 +322,9 @@ products:
       - key: IVSR_triggers
         label: Trigger definitions (IVSR1-IVSR10)
         reason: >-
-          Currently hard-coded per deal in config/client/config_client_annex12.yaml
-          as forced XML-structure values. They are deal-structure information,
-          not client standing information, and are left where they are until a
+          Currently carried per deal in the investor-report configuration as
+          forced XML-structure values. They are deal-structure information, not
+          client standing information, and are left where they are until a
           governed trigger model exists.
       - key: IVSF_cashflows
         label: Cashflow items (IVSF1-IVSF6)
