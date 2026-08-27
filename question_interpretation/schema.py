@@ -233,12 +233,32 @@ BASE_POPULATIONS = (BASE_FUNDED, BASE_DIRECT, BASE_ACQUIRED)
 #:                     supplied, so the complete funded population applies.
 #:     unresolved      the question NAMED a scope and it could not be resolved.
 #:                     Never Funded — see `UNRESOLVABLE`.
+#:     model_inferred  the question said something the deterministic grammar
+#:                     could not reach, and a MODEL proposed the concept a
+#:                     governed owner then bound. A FOURTH kind of authority,
+#:                     added to this vocabulary rather than given one of its
+#:                     own, because "did the reader choose this, or did we?" is
+#:                     the same question with one more possible answer.
+#:
+#:                     IT IS NOT `explicit_user`, AND NOTHING MAY TREAT IT AS
+#:                     ONE. The Opus run walked straight through the guards
+#:                     that make "What changed?" and "Show me the trend."
+#:                     refuse, because those guards fire on a RECORDED DEFAULT
+#:                     and the model had supplied the missing element itself,
+#:                     so no default was ever recorded. `stated_by_user` is
+#:                     False for this value on every claim that exposes it,
+#:                     which is the whole reason it lives here.
 PROV_EXPLICIT_USER = "explicit_user"
 PROV_CALLER_CONTEXT = "caller_context"
+PROV_MODEL_INFERRED = "model_inferred"
 PROV_DEFAULT = "default"
 PROV_UNRESOLVED = "unresolved"
-SCOPE_PROVENANCES = (PROV_EXPLICIT_USER, PROV_CALLER_CONTEXT, PROV_DEFAULT,
-                     PROV_UNRESOLVED)
+SCOPE_PROVENANCES = (PROV_EXPLICIT_USER, PROV_CALLER_CONTEXT,
+                     PROV_MODEL_INFERRED, PROV_DEFAULT, PROV_UNRESOLVED)
+
+#: The provenances a HUMAN is behind. Precedence, guards and disclosure all
+#: turn on this distinction and not on membership of the tuple above.
+CHOSEN_BY_A_PERSON = (PROV_EXPLICIT_USER, PROV_CALLER_CONTEXT)
 
 
 @dataclass(frozen=True)
