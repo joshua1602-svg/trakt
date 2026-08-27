@@ -444,6 +444,28 @@ def names_a_book_noun(text: Optional[str]) -> bool:
 #: `NBS`, but not `the`, `of`, `by`).
 _PROPER_TOKEN_RE = re.compile(r"^[A-Z][A-Za-z0-9&'\u2019-]*$")
 
+#: THE CAPITAL IS EXPLAINED BY POSITION, so it is not evidence of a name.
+#:
+#: A run of capitalised tokens is the only signal `_unknown_named_book` has that
+#: a book has been NAMED. The first word of a sentence is capitalised by
+#: orthographic convention whatever it is, so its capital says nothing — and
+#: reading it as part of the name is how "Break Direct portfolio balance down
+#: across LTV…" came to refuse with *"'Break Direct portfolio' is not a governed
+#: portfolio for this book"*, quoting the reader's own verb back at them as the
+#: name of a book they had not named.
+#:
+#: This is the PROPERTY the guard needed. `_GENERIC_BOOK_WORDS` had been carrying
+#: the job as a list — its last block is commented "question scaffolding that can
+#: be sentence-initial or capitalised" and holds `show`, `give`, `summarise` — and
+#: a list of the verbs someone thought of does not produce silence on the verbs
+#: they did not: measured over 1,446 corpus questions, `break`, `plot` and
+#: `which` were all missing, and each produced the same fragment. The list is a
+#: closed set; sentence position is a property of every sentence.
+#:
+#: Matches an empty/whitespace prefix (the token opens the text) or one ending in
+#: a sentence terminator, with any closing quote or bracket after it.
+_SENTENCE_INITIAL_RE = re.compile(r"(?:^|[.!?][\"')\]]*)\s*$")
+
 #: Words that may be capitalised in front of "Book"/"Portfolio" WITHOUT naming a
 #: particular book: governed scope vocabulary, seasoning/vintage vocabulary,
 #: ordinary lending nouns, and the sentence-initial verbs a question opens with.
@@ -551,16 +573,38 @@ def _unknown_named_book(text: Optional[str], registry) -> Optional[PortfolioLens
 
       * it fires only on a run of tokens CAPITALISED IN THE ORIGINAL TEXT
         immediately before "Book"/"Portfolio" — "the portfolio", "the acquired
-        book" and "a portfolio summary" carry no such run; and
-      * at least one token in that run must be outside `_GENERIC_BOOK_WORDS`,
-        so "the Acquired Back Book" resolves through the category and seasoning
-        vocabulary that owns it rather than being read as a proper name.
+        book" and "a portfolio summary" carry no such run;
+      * the SENTENCE-INITIAL token of that run is discounted, because its
+        capital is explained by position rather than by naming anything (see
+        `_SENTENCE_INITIAL_RE`); and
+      * at least one of the tokens that remain must be outside
+        `_GENERIC_BOOK_WORDS`, so "the Acquired Back Book" resolves through the
+        category and seasoning vocabulary that owns it rather than being read as
+        a proper name.
 
-    KNOWN LIMIT, stated rather than papered over: a book named entirely in lower
-    case ("summarise the highgate mortgages book") carries no proper-name signal
-    and is not caught here. Requiring capitalisation is what stops this refusing
-    ordinary questions; recognising lower-case unknown names needs a vocabulary
-    check this layer does not own.
+    KNOWN LIMITS, stated rather than papered over.
+
+    A book named entirely in lower case ("summarise the highgate mortgages
+    book") carries no proper-name signal and is not caught here. Requiring
+    capitalisation is what stops this refusing ordinary questions; recognising
+    lower-case unknown names needs a vocabulary check this layer does not own.
+
+    A ONE-WORD book name opening a sentence ("Highgate Book summary") is
+    discounted along with the verbs, because at that position the two are
+    genuinely indistinguishable by capitalisation — the only signal here. The
+    trade is deliberate and measured: over 1,446 corpus questions the property
+    removes three fragments and raises nothing new, and a widening that
+    discloses nothing is a worse failure than a name this layer declines to
+    recognise.
+
+    A TRAILING SEPARATOR still evades the guard. "Direct-book" yields the token
+    `Direct-`, and `direct-` matches no entry in any word list, so the run is
+    judged a name whatever the list holds. That is the same shape of defect as
+    the one this property fixes — a token the guard cannot match rather than a
+    word nobody listed — and it is NOT fixed here: it is coupled to the
+    qualifier/noun separator in `_qualified_span_re`, which is unshipped. Four
+    questions still refuse with `'Direct- book'`. Measured and recorded in
+    `migration_phase0/MI_DIRECT_COLLISION_SCOPE.md`, not left to be rediscovered.
 
     Returns ``None`` when there is no registry to check against, so a caller
     that supplies none keeps exactly its pre-1E behaviour.
@@ -571,6 +615,10 @@ def _unknown_named_book(text: Optional[str], registry) -> Optional[PortfolioLens
     for match in _BOOK_NOUN_RE.finditer(raw):
         head = raw[:match.start()].rstrip()
         run: List[str] = []
+        # What stood before the run's FIRST token, so the sentence-position test
+        # below can be asked of the right offset. Re-derived each iteration
+        # because the run grows leftwards; the last value is the one that counts.
+        before = head
         while len(run) < 5:
             token_match = re.search(r"([A-Za-z0-9&'\u2019-]+)$", head)
             if not token_match:
@@ -579,10 +627,22 @@ def _unknown_named_book(text: Optional[str], registry) -> Optional[PortfolioLens
             if not _PROPER_TOKEN_RE.match(token):
                 break
             run.insert(0, token)
+            before = head[:token_match.start()]
             head = head[:token_match.start()].rstrip()
         if not run:
             continue
-        if all(tok.lower() in _GENERIC_BOOK_WORDS for tok in run):
+        # THE PROPERTY, not a longer list. A sentence-initial token is
+        # capitalised whatever it is, so it carries no proper-name evidence and
+        # is not part of the name. Only the FIRST token is discounted: a
+        # multi-word name that opens a sentence still has the rest of its run to
+        # be judged on, so "Highgate Mortgages Book balance by region" is still a
+        # named book.
+        judged = run[1:] if _SENTENCE_INITIAL_RE.search(before) else run
+        # Nothing left to judge: every capital in the run was explained by
+        # position, so no book was named here.
+        if not judged:
+            continue
+        if all(tok.lower() in _GENERIC_BOOK_WORDS for tok in judged):
             continue
         return _unresolved_lens(" ".join(run + [match.group(1)]))
     return None

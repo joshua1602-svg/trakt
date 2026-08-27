@@ -163,3 +163,137 @@ not. Every other bucket axis on this tape — `ltv_bucket`, `age_bucket`,
 **Owner: separate work, and the cheapest remedy measured in Stage 4** — three
 questions for one registry entry and no code, against the threshold kind's
 three questions for a new concept kind.
+
+---
+
+## CLOSED · The registry gap the estate reported as a data gap
+
+Fixed in `9968025`. `interest_rate_bucket` declared from the same template as
+the other derived buckets; Q13A/B/C `FALSE_REFUSAL -> CORRECT` on both arms at
+30 cells against the frozen truth; `data_claim_audit`'s
+`FALSE_about_the_book` class fell 3 -> 0 and its pre-registered set is now
+**empty**, so any refusal that starts lying about a client's book fails the
+audit on its first run.
+
+---
+
+## F1, SECOND INSTANCE · A guard list is not a guard
+
+The standing finding says *a vocabulary gap does not produce silence, it
+produces the nearest expressible thing*. `portfolio_lens._unknown_named_book`
+was the second instance, and it is worth recording because the failure was
+louder than the first.
+
+The function reads a run of capitalised tokens before "Book"/"Portfolio" as a
+proper name. Its only guard was `_GENERIC_BOOK_WORDS`, whose last block is
+commented *"question scaffolding that can be sentence-initial or capitalised"*
+and holds `show`, `give`, `summarise`, `provide`, `list`, `report`. It did not
+hold `break`, `split`, `plot` or `which`. So
+
+    "Break Direct portfolio balance down across LTV, ticket size and borrower age."
+
+refused with *"'Break Direct portfolio' is not a governed portfolio for this
+book"* — the reader's own verb quoted back as the name of a book they never
+named. Not silence: the nearest expressible thing.
+
+**The fix was a property, not a longer list.** A sentence-initial token is
+capitalised by orthographic convention whatever it is, so its capital is no
+evidence of a name; discount it. Measured over 1,446 corpus questions: three
+fragments removed, none raised, every genuine unknown book name still caught.
+A list is a closed set; sentence position is a property of every sentence.
+
+**The corollary, recorded because it is the more useful half.** The list was
+not two words short. It was short by however many words nobody had thought of,
+and there was no way to know which — `which` is not even a verb. Whenever a
+guard is a hand-maintained list of the members of an open class, the question
+to ask is what property the members share, not which ones are missing.
+
+**Still open in the same function:** a token carrying a trailing separator.
+"Direct-book" yields `Direct-`, and `direct-` matches no entry in any word
+list, so the run is judged a name whatever the list holds. Same shape — a token
+the guard cannot match rather than a word nobody listed. Coupled to the
+unshipped qualifier/noun separator fix; four questions still refuse with
+`'Direct- book'`.
+
+---
+
+## F6 · A configuration path resolved against the process working directory
+
+`trakt_core.capability.load_registry` resolves
+`config/system/mi_capability_registry.yaml` **relative to the process cwd**, and
+`mi_agent_workflow._capability_explanation` wraps the load in a bare
+`except Exception: return None`.
+
+Run from anywhere but the repository root, the `FileNotFoundError` is swallowed
+and two capability-aware refusals silently degrade:
+
+```
+from the repo root   "Cure Rate is measured ACROSS governed snapshots and MI Query
+                      answers from a single dataset… request it through the governed
+                      history tools, where the snapshot window is resolved."
+from anywhere else   "I couldn't map this question to a governed analytic."
+```
+
+No wrong number either way — both refuse. What is lost is the governed
+methodology and the route to the number, replaced by an admission of ignorance
+about a question the estate can name precisely. **A deployment's answer quality
+should not depend on which directory it was started from**, and an absorbed
+`FileNotFoundError` is how it came to.
+
+Found while checking review-pack fidelity: two CFO questions differed between
+two runs of the same code on the same tape, and the only difference was cwd.
+
+**Owner: separate work.** Every measurement in this programme is now run from
+the repository root.
+
+---
+
+## OPEN · Coordinated axis lists are read as measures
+
+Two questions, one shape, and the second was hidden behind a false refusal until
+`1062e43`'s successor removed it.
+
+    Q17C  "Break Direct portfolio balance down across LTV, ticket size and
+           borrower age."
+    Q22C  "Which of the Direct and Acquired books drove more of the
+           month-on-month balance increase?"
+
+Q17C names three axes and the deterministic parser carries one. `ticket size`
+becomes `ticket_bucket`; `borrower age` is carried in the wrong ROLE, as a
+measure ("Average Borrower Age"); `LTV` vanishes. Truth is 143 cells, the answer
+is 5 rows, and nothing in the receipt says an axis was lost. Its sibling Q17A —
+which spells each axis with the word "bucket" — is correct today, so the defect
+is the bare wording in a coordinated list, not the axes.
+
+Q22C is the same family on the other side: the scope mask consumes "Acquired
+books" and leaves a bare "Direct" from the elided coordination, which then
+raises a lost narrowing.
+
+The Stage 1 completeness check fires on Q17C today, deterministically, naming
+`measure 'borrower age'` as stated-and-unresolved. It does not see bare `LTV` —
+no owner resolves it as a dimension there, which is the recorded limit that the
+check's recall is the owners' recall.
+
+**Owner: separate work, and it is the strongest case yet for wiring the
+completeness check.** Measured in
+`migration_phase0/MI_FRAGMENT_AND_COLLISION_RESULT.md` §4.
+
+---
+
+## OPEN · The comparison recogniser does not accept "How do X and Y differ?"
+
+    "Compare the Direct and Acquired books."             -> portfolio_risk_comparison
+    "How do the Direct and Acquired portfolios differ?"  -> no route
+
+The second falls to the generic path. On the deterministic arm it answers with a
+plain 640-loan count — an answer to a different question, escaping a WRONG grade
+only because there is no computable truth for it. On the merge arm the merge
+fills `source_portfolio_type`, the generic path cannot honour it, and the
+silently-dropped-dimension guard refuses. Every component behaved correctly; the
+gap is the recogniser's phrasing coverage.
+
+Recorded here because it was previously mislabelled — by me — as a merge-arm
+duplicate dimension. It is not: `spec.dimensions=['source_portfolio_type']` with
+`spec.dimension='source_portfolio_type'` is the documented single-axis
+convention, and the "duplicate" was an artefact of the review pack's own capture
+concatenating the two spec fields.

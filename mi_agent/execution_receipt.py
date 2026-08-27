@@ -522,6 +522,7 @@ def dimension_values(frame, semantics: dict, *, max_cardinality: int = 60
             token = name.strip().lower()
             if token:
                 named_by.setdefault(token, set()).add(key)
+    claimed: Dict[str, Set[str]] = {}
     for key, entry in fields.items():
         if (entry or {}).get("role") != "dimension":
             continue
@@ -538,8 +539,76 @@ def dimension_values(frame, semantics: dict, *, max_cardinality: int = 60
             token = str(value).strip().lower()
             if len(token) < 4 or (named_by.get(token, set()) - {key}):
                 continue
-            out.setdefault(token, key)
+            claimed.setdefault(token, set()).add(key)
+    for token, keys in claimed.items():
+        winner = _value_owner(token, keys, fields)
+        if winner is not None:
+            out[token] = winner
     return out
+
+
+def _value_owner(token: str, keys: Set[str], fields: Mapping[str, Any]
+                 ) -> Optional[str]:
+    """Which field owns a value TWO governed fields both carry.
+
+    THE SEGMENTATION KEY WINS. Not a preference, and not a list: it is read from
+    what the registry already declares about the two fields, so a client whose
+    book collides on a different word is decided by the same rule with nothing
+    added here.
+
+    Measured, and it is why this exists. `direct` is 146 rows of
+    `origination_channel` and 441 rows of `source_portfolio_type` — the only
+    value collision on the shipped book, established by enumerating every
+    governed value the tape carries. This map was built with `setdefault`, so
+    the winner was **whichever field the registry happened to iterate first**.
+    `origination_channel` precedes `source_portfolio_type`, so a bare `direct`
+    resolved to the channel: the field with a third of the rows, chosen by file
+    order, disclosed to nobody. `_detect_lost_narrowing` then refused with
+    *"Direct (Origination Channel) — this narrowing was not applied"*, naming a
+    field the reader had not asked about.
+
+    Worse than the wrong answer was the disagreement: `categorical_spans.
+    value_field` REFUSES the same token as ambiguous, by design — "an ambiguous
+    narrowing must be disclosed, never resolved by preference". Two owners of the
+    same word, one refusing and one silently picking the losing field. That is
+    indefensible whichever sense is right, and it is what this closes.
+
+    THE DOMAIN RULING it implements: a lender saying "direct" means the
+    ORIGINATED book — provenance — not the origination channel. The channel sense
+    takes a qualifier ("direct channel", "direct-to-consumer"). The registry
+    already separates the two fields twice over, so the ruling needs no new key
+    and no new binder:
+
+        origination_channel     source_criteria: [curated]
+        source_portfolio_type   source_criteria: [segmentation_key]
+
+    A `segmentation_key` is, by declaration, a field the book is SEGMENTED BY —
+    which is precisely the question "whose value is this bare word?" asks.
+
+    IT RECOVERS NO QUESTIONS, and that is not the reason to do it. Measured over
+    the 166-question review pack on both arms and 98 further provenance/channel
+    questions in two fixtures: three refusals stop naming the wrong field, no
+    answer changes, no population changes, nothing degrades. The gain is a
+    receipt that no longer says something untrue about which field it means.
+
+    DELIBERATELY NOT ALSO IN `categorical_spans.value_field`. `source_portfolio_type`
+    is a scope-owned field, and narrowing it is `portfolio_lens`'s job. Applying
+    the ruling in the filter binder as well was measured: it adds a redundant
+    `source_portfolio_type` predicate alongside the scope owner's cohort filter —
+    harmless on a book with one direct cohort, an undeclared empty intersection
+    on a book with two. One declaration, one reader; the other defers.
+
+    Between fields of EQUAL standing the value stays ambiguous and is dropped, so
+    a collision this rule cannot decide is still not decided by iteration order.
+    """
+    if len(keys) == 1:
+        return next(iter(keys))
+    segmentation = {k for k in keys
+                    if "segmentation_key" in ((fields.get(k) or {})
+                                              .get("source_criteria") or ())}
+    if len(segmentation) == 1:
+        return next(iter(segmentation))
+    return None
 
 
 #: Words that say the question COMPARES two things rather than narrowing to one.
