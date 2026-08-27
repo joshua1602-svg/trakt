@@ -236,9 +236,19 @@ class TestAssemblerAgentRegimeRouting(unittest.TestCase):
             self.skipTest("could not stamp synthetic canonical")
 
         out = self.td / "out"
+        # The projection needs a client configuration, and this test names one
+        # explicitly. It previously got one by accident: build_regime_command
+        # substituted a particular client's repository file whenever a caller
+        # passed none, so this test silently projected the synthetic demo tape
+        # under ERE Funding's identity. That substitution is gone, and the
+        # dependency is now stated.
+        client_config = (_REPO / "synthetic_demo" / "config"
+                         / "config_client_SYNTHETIC_ERM.yaml")
+        self.assertTrue(client_config.exists(), client_config)
         res = aa.run_assembler_agent(self.inputs, out, client_id="ERE",
                                      pipeline="regime", regime="ESMA_Annex2",
-                                     run_regime=True, regime_allow_unreviewed=True)
+                                     run_regime=True, regime_allow_unreviewed=True,
+                                     regime_client_config=str(client_config))
         if res.regime_run is None or not res.regime_run["ok"]:
             self.skipTest(f"regime projector unavailable: "
                           f"{(res.regime_run or {}).get('stderr_tail','')[-300:]}")

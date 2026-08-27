@@ -133,13 +133,15 @@ def _mi_routing(central_canonical: Path) -> Dict[str, Any]:
     }
 
 
-def _regime_routing(central_canonical: Path, out_dir: Path, regime: str) -> Dict[str, Any]:
+def _regime_routing(central_canonical: Path, out_dir: Path, regime: str,
+                    client_config: Optional[str] = None) -> Dict[str, Any]:
     return {
         "consumer": "regime_projection_agent",
         "central_canonical": str(central_canonical),
         "regime": regime,
         "input_canonical": str(central_canonical),
-        "command": build_regime_command(central_canonical, out_dir, regime),
+        "command": build_regime_command(central_canonical, out_dir, regime,
+                                        config=client_config),
         "note": "Run the existing regime projector with this central canonical as "
                 "input. ESMA output stays template-clean; the projector writes the "
                 "provenance companion linking each row to source_portfolio_id / "
@@ -162,11 +164,19 @@ def run_assembler_agent(
     created_at: Optional[str] = None,
     run_regime: bool = False,
     regime_allow_unreviewed: bool = False,
+    regime_client_config: Optional[str] = None,
 ) -> AssemblerAgentResult:
     """Consolidate per-portfolio canonicals and route to ``pipeline``.
 
     Returns an :class:`AssemblerAgentResult` carrying the central canonical path,
     the lineage manifest and downstream routing info.
+
+    ``regime_client_config`` is the client configuration the regime projection
+    runs against. There is no default: a caller with a client names that
+    client's configuration, and one without leaves the projector to its own
+    documented behaviour. Substituting some particular client's file for an
+    absent argument is how a portfolio ends up reported under another client's
+    identity, so this seam does not do it.
     """
     pipeline = (pipeline or PIPELINE_MI).strip().lower()
     if pipeline not in VALID_PIPELINES:
@@ -204,7 +214,8 @@ def run_assembler_agent(
     if PIPELINE_MI in routes:
         routing[PIPELINE_MI] = _mi_routing(central)
     if PIPELINE_REGIME in routes:
-        routing[PIPELINE_REGIME] = _regime_routing(central, out_dir, regime)
+        routing[PIPELINE_REGIME] = _regime_routing(central, out_dir, regime,
+                                                   regime_client_config)
     for fut in FUTURE_PIPELINES:
         if pipeline == fut:
             routing[fut] = {
@@ -217,6 +228,7 @@ def run_assembler_agent(
     regime_run: Optional[Dict[str, Any]] = None
     if run_regime and PIPELINE_REGIME in routes:
         cmd = build_regime_command(central, out_dir, regime,
+                                   config=regime_client_config,
                                    allow_unreviewed=regime_allow_unreviewed)
         proc = subprocess.run(cmd, capture_output=True, text=True)
         regime_run = {
