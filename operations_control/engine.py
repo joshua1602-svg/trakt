@@ -120,8 +120,7 @@ class OpsEngine:
                  adapter_factory=None,
                  source_registry_factory=None,
                  persistence_factory=None,
-                 annex2_stages=None,
-                 client_config_path: Optional[str] = None):
+                 annex2_stages=None):
         from .rules import memory_root
         self.store = store
         self.rules = RuleStore(store)
@@ -133,8 +132,6 @@ class OpsEngine:
         # Governed Annex 2 delivery chain (I1): real runners by default; tests
         # substitute a stub with the same method signatures.
         self._annex2_stages = annex2_stages
-        self.client_config_path = Path(client_config_path or os.environ.get(
-            "TRAKT_OPS_CLIENT_CONFIG", "config/client/config_client_ERM_UK.yaml"))
         self.real_agents = real_agents
         self._adapter_factory = adapter_factory
         self._source_registry_factory = source_registry_factory
@@ -356,8 +353,39 @@ class OpsEngine:
 
     def _config_resolver(self):
         from .configuration.resolver import EffectiveConfigResolver
-        return EffectiveConfigResolver(self.store, self.rules,
-                                       client_config_path=self.client_config_path)
+        return EffectiveConfigResolver(self.store, self.rules)
+
+    def _snapshot_dir(self, run: WorkflowRun, version: int) -> Path:
+        return self._staging_dir(run) / f"config_snapshot_v{version:04d}"
+
+    def _pinned_client_config(self, run: WorkflowRun) -> Path:
+        """The client configuration THIS run pinned, for this run's client.
+
+        Not the repository working tree, and never another client's file: the
+        bytes come from the snapshot the run materialised when it resolved its
+        effective configuration, re-materialised from the pinned record if the
+        staging directory has since been cleared. A hash mismatch, an
+        unresolvable client or an unreadable store all stop the run.
+        """
+        version = int((run.effective_config or {}).get("version") or 0)
+        if not version:
+            raise OpsError(
+                "OPS_EFFECTIVE_CONFIG_REQUIRED",
+                "This run has no pinned configuration yet. Start it again.",
+                409)
+        resolver = self._config_resolver()
+        dest = self._snapshot_dir(run, version)
+        pinned = dest / resolver.CLIENT_LAYER_REL
+        if pinned.exists():
+            return pinned
+        effective = resolver.load_effective(run.client_id, run.workflow_id,
+                                            version)
+        if effective is None:
+            raise OpsError(
+                "OPS_EFFECTIVE_CONFIG_MISSING",
+                "The configuration this run pinned could not be found. "
+                "Nothing has been delivered. Start the run again.", 409)
+        return resolver.materialise_client_layer(effective, dest)
 
     @property
     def intake(self):
@@ -852,7 +880,7 @@ class OpsEngine:
         if cfg_outcome.effective is not None and self._adapter_factory is None:
             snapshot = resolver.materialise_snapshot(
                 cfg_outcome.effective,
-                staging / f"config_snapshot_v{cfg_outcome.effective.version:04d}")
+                self._snapshot_dir(run, cfg_outcome.effective.version))
 
         def recorder(step: str, result) -> None:
             self._on_step(client_id, workflow_id, step, result)
@@ -1020,7 +1048,8 @@ class OpsEngine:
         # ---- Stage: regulatory details preflight (I3) -------------------- #
         from .annex2 import preflight as _pf
         overrides = self._client_rule_overrides(run)
-        pf = _pf.run_preflight(client_config_path=self.client_config_path,
+        client_config_path = self._pinned_client_config(run)
+        pf = _pf.run_preflight(client_config_path=client_config_path,
                                overrides=overrides,
                                reporting_period=run.reporting_period)
         if pf["status"] == "blocked":
@@ -1070,13 +1099,18 @@ class OpsEngine:
         if not done(STAGE_PROJECTION, "projected_csv"):
             self._save_stage_gar(run, STAGE_PROJECTION, ST_RUNNING,
                                  "Projecting the regulatory data.")
-            effective_cfg = None
+            # The projector reads THIS run's pinned client configuration, with
+            # any approved overrides layered on top. Never the working tree,
+            # and never a repository default: the projector's own `--config`
+            # fallback is a developer convenience, and reaching it here would
+            # mean projecting one client's exposures under another's identity.
+            effective_cfg = client_config_path
             if overrides:
                 effective_cfg = _pf.materialise_effective_config(
-                    base_config_path=self.client_config_path,
+                    base_config_path=client_config_path,
                     overrides=overrides,
                     out_path=chain_dir / "effective_client_config.yaml")
-                a2["effective_config"] = str(effective_cfg)
+            a2["effective_config"] = str(effective_cfg)
             out = runners.run_projection(
                 central_canonical=state.central_canonical_path,
                 out_dir=chain_dir / "projection",

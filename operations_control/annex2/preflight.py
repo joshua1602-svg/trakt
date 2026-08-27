@@ -20,8 +20,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-DEFAULT_CLIENT_CONFIG = Path("config/client/config_client_ERM_UK.yaml")
-
 LEI_RE = re.compile(r"^[A-Z0-9]{18}[0-9]{2}$")   # ISO 17442 shape
 CCY_RE = re.compile(r"^[A-Z]{3}$")
 COUNTRY_RE = re.compile(r"^[A-Z]{2}$")

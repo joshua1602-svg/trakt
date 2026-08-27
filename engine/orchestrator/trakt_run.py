@@ -1107,7 +1107,12 @@ examples:
              "the global alias files at Gate 1 (the client's approved onboarding "
              "contract). Repeatable; later directories win.",
     )
-    ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
+    # No client default: a run states which client's configuration it uses.
+    ap.add_argument("--master-config", default=None,
+                    help="Client configuration YAML for this run. Generated per "
+                         "client by Client Onboarding; there is no repository "
+                         "default, because defaulting it would run one client's "
+                         "tape under another client's identity.")
     ap.add_argument(
         "--product-defaults", dest="product_defaults", default=None,
         help="Asset-pack YAML (Layer 2) merged UNDER the client config at Gate 4. "

@@ -37,8 +37,14 @@ from .catalogue import Catalogue, catalogue, validate_value
 
 REPO = Path(__file__).resolve().parents[2]
 
-DEFAULT_CLIENT_CONFIG = REPO / "config/client/config_client_ERM_UK.yaml"
-DEFAULT_ANNEX12_CONFIG = REPO / "config/client/config_client_annex12.yaml"
+#: Where a legacy client's documents are, when the caller does not say. There
+#: is no repository default any more: a client whose documents are not supplied
+#: adopts nothing, which is the correct outcome — the alternative was every
+#: adoption silently reading one particular client's file. Deployments that
+#: still hold legacy documents point at them explicitly, per adoption, or
+#: through ``TRAKT_OPS_CLIENT_CONFIG``.
+DEFAULT_CLIENT_CONFIG: Optional[Path] = None
+DEFAULT_ANNEX12_CONFIG: Optional[Path] = None
 DEFAULT_PORTFOLIO_REGISTRY = REPO / "config/client/portfolio_registry.yaml"
 DEFAULT_TENANCY = REPO / "config/tenancy.yaml"
 
@@ -98,10 +104,12 @@ def adopt(client_id: str, *,
     from .catalogue import catalogue as _default_catalogue
     cat = catalogue or _default_catalogue()
 
-    client_config_path = Path(client_config_path or os.environ.get(
-        "TRAKT_OPS_CLIENT_CONFIG", DEFAULT_CLIENT_CONFIG))
+    configured = client_config_path or os.environ.get(
+        "TRAKT_OPS_CLIENT_CONFIG") or DEFAULT_CLIENT_CONFIG
+    client_config_path = Path(configured) if configured else None
+    annex12_config_path = annex12_config_path or DEFAULT_ANNEX12_CONFIG
     cfg = _load(client_config_path)
-    annex12 = _load(Path(annex12_config_path or DEFAULT_ANNEX12_CONFIG))
+    annex12 = _load(Path(annex12_config_path) if annex12_config_path else None)
     portfolios_doc = _load(Path(portfolio_registry_path
                                 or DEFAULT_PORTFOLIO_REGISTRY))
     tenancy = _load(Path(tenancy_path or DEFAULT_TENANCY))
@@ -111,8 +119,7 @@ def adopt(client_id: str, *,
         adoption.sources_read.append(str(client_config_path))
         adoption.base_documents[ARTEFACT_CLIENT_CONFIG] = cfg
     if annex12:
-        adoption.sources_read.append(str(annex12_config_path
-                                         or DEFAULT_ANNEX12_CONFIG))
+        adoption.sources_read.append(str(annex12_config_path))
         adoption.base_documents[ARTEFACT_ANNEX12_CONFIG] = annex12
     if portfolios_doc:
         adoption.sources_read.append(str(portfolio_registry_path

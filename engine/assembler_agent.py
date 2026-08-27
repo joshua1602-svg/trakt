@@ -104,11 +104,17 @@ def build_regime_command(
         "--regime", regime,
         "--registry", registry or str(_CONFIG_ROOT / "system" / "fields_registry.yaml"),
         "--enum-mapping", enum_mapping or str(_CONFIG_ROOT / "system" / "enum_mapping.yaml"),
-        "--config", config or str(_CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"),
         "--template-order", template_order or str(_CONFIG_ROOT / "system" / "esma_code_order.yaml"),
         "--portfolio-type", portfolio_type,
         "--output-dir", str(out_dir),
     ]
+    # No client default. A caller that has a client passes that client's
+    # configuration; a caller that has none omits the flag, and the projector
+    # applies its own documented behaviour. Substituting one client's file for
+    # an absent argument is how a portfolio ends up projected under another
+    # client's identity, so this seam does not do it.
+    if config:
+        cmd += ["--config", str(config)]
     if output_prefix:
         cmd += ["--output-prefix", output_prefix]
     if allow_unreviewed:
