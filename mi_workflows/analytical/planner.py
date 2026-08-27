@@ -271,6 +271,68 @@ ALL_INTENTS: Tuple[str, ...] = (
 )
 
 
+#: Governed requirements a PLAN can be judged on before it runs, and the
+#: capability declaration that satisfies each.
+#:
+#: `produces` is the existing declaration — `concentration_limits` produces
+#: `limit`, `funded_balance_forecast` produces `forecast`. Nothing is added here.
+#:
+#: THE OTHER REQUIREMENTS ARE DELIBERATELY ABSENT, and measurement is why.
+#: `intent.unmet_requirements` judges what was ACTUALLY EXECUTED — its `dataset`,
+#: `periods`, `grouping` and `populations` keys describe a finished answer. Applied
+#: to a plan they over-decline: measured over 1,446 corpus questions, six
+#: legitimate funded-balance-forecast plans read `funded+pipeline` and failed a
+#: `dataset != "pipeline"` string test, and two pipeline plans failed a period
+#: count no plan carries. Those requirements stay where they already work, on the
+#: executed answer in `mi_service._fail_closed_analytical`.
+_REQUIREMENT_PROVIDED_BY: Dict[str, str] = {
+    intent_mod.REQ_LIMIT_EVIDENCE: "limit",
+    intent_mod.REQ_FORECAST: "forecast",
+}
+
+
+def _unprovided_requirements(plan: AnalyticalPlan, reading, registry
+                             ) -> List[str]:
+    """Governed requirements this plan does not produce.
+
+    THE INVARIANT: a plan may claim a question only if it satisfies every
+    governed requirement the intent owner emitted. **Partial coverage declines;
+    it does not substitute the part it can do.**
+
+    Measured, and this is the defect it closes. *"Based on the current book and
+    forward pipeline, which concentration tests are we at risk of breaching?"*
+    emits `requirements=('limit_evidence', 'forecast')`. The planner could supply
+    `forecast` — `funded_balance_forecast` + `pipeline_completion_forecast` — and
+    so it claimed the question, and answered *"Current funded balance is £172.1m…
+    Forecast funded balance: £173.4m."* Truthful, honestly reconciled against
+    `funded+pipeline`, and about BALANCE, to a reader who asked which
+    concentration TESTS are at risk. Half the requirement was met and the other
+    half was quietly dropped.
+
+    `limit_evidence` means evidence against the approved concentration-test
+    schedule, which only `concentration_limits` produces. A funded-balance
+    forecast, a pipeline contribution and a generic concentration share are none
+    of them that.
+
+    Not a word test, no question exception, no new family and no new capability:
+    the requirement comes from the governed intent owner and the answer from each
+    capability's own `produces` declaration. A capability that later produces
+    limit evidence satisfies it with no edit here.
+
+    Measured blast radius: over 1,446 corpus questions, 55 build a plan and
+    exactly ONE declines — the case above. The other 54 are unchanged.
+    """
+    produced = set()
+    for call in plan.calls:
+        capability = registry.get(call.capability)
+        if capability is not None:
+            produced.update(capability.produces or ())
+    return [requirement
+            for requirement in (getattr(reading, "requirements", ()) or ())
+            if requirement in _REQUIREMENT_PROVIDED_BY
+            and _REQUIREMENT_PROVIDED_BY[requirement] not in produced]
+
+
 def plan_for(question: str, *, spec: Any = None, frame=None,
              semantics: Optional[Mapping[str, Any]] = None,
              registry: CapabilityRegistry = CAPABILITIES
@@ -299,6 +361,10 @@ def plan_for(question: str, *, spec: Any = None, frame=None,
             errors = validate(plan, registry)
             if errors:  # a deterministic plan that fails its own contract is a bug
                 raise AssertionError("; ".join(errors))
+            if _unprovided_requirements(plan, reading, registry):
+                # PARTIAL COVERAGE DECLINES. It does not substitute the part it
+                # can do. See `_unprovided_requirements`.
+                return None
             return plan
     return None
 
