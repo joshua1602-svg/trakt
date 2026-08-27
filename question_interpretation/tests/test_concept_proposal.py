@@ -21,6 +21,8 @@ from question_interpretation.concept_proposal import (
 
 VALUES = {
     "erm_product_type": {"drawdown": "drawdown", "lump_sum": "lump_sum"},
+    "ltv_bucket": {"40-50%": "40-50%", "50-60%": "50-60%"},
+    "age_bucket": {"75-80": "75-80", "80-85": "80-85"},
     "occupancy_type": {"owner_occupied": "owner_occupied"},
     "origination_channel": {"direct": "direct", "broker": "broker"},
     "source_portfolio_type": {"direct": "direct", "acquired": "acquired"},
@@ -40,7 +42,8 @@ def tape_columns():
     return {"erm_product_type", "occupancy_type", "origination_channel",
             "source_portfolio_type", "geographic_region_obligor",
             "broker_channel", "account_status", "current_outstanding_balance",
-            "current_loan_to_value", "youngest_borrower_age", "ltv_bucket"}
+            "current_loan_to_value", "youngest_borrower_age", "ltv_bucket",
+            "age_bucket", "current_interest_rate"}
 
 
 @pytest.fixture(scope="module")
@@ -100,6 +103,92 @@ def test_a_kind_the_vocabulary_does_not_have_is_rejected(vocab):
     outcome = _bind1("erm_product_type", "field_key", vocab)
     assert isinstance(outcome, RejectedConcept)
     assert outcome.reason == CP.REJECT_UNKNOWN_KIND
+
+
+# --------------------------------------------------------------------------- #
+# The threshold kind — what its absence cost, and what its presence must not
+# --------------------------------------------------------------------------- #
+def _threshold(term, comparator, value):
+    return ProposedConcept(CP.KIND_THRESHOLD, term, comparator=comparator,
+                           value=value)
+
+
+def test_a_threshold_binds_to_a_governed_predicate(vocab):
+    outcome = (bind([_threshold("ltv", "above", 50)], vocab)[0] or [None])[0]
+    assert isinstance(outcome, BoundConcept)
+    assert (outcome.field, outcome.operator, outcome.value) == (
+        "current_loan_to_value", "gt", 50.0)
+
+
+def test_the_comparator_vocabulary_is_delegated_not_restated():
+    """`lexical.COMPARATOR_PHRASES` is THE list. A second one here would put
+    the model's vocabulary and the parser's out of step by exactly the five
+    phrases — `bigger than`, `larger than`, `higher than`, `smaller than`,
+    `lower than` — whose absence returned the whole book as fact."""
+    from question_interpretation import lexical as LEX
+
+    assert dict(CP.comparator_phrases()) == {
+        str(p).strip().lower(): op for p, op in LEX.COMPARATOR_PHRASES}
+    for phrase in ("bigger than", "larger than", "higher than", "smaller than",
+                   "lower than"):
+        assert phrase in CP.comparator_phrases()
+
+
+def test_a_negated_comparator_is_not_read_with_the_negation_dropped(vocab):
+    """`no more than 50` is `le 50`, not `gt 50` — the shadowing bug the
+    longest-first ordering of the comparator list exists to prevent."""
+    outcome = (bind([_threshold("ltv", "no more than", 50)], vocab)[0])[0]
+    assert outcome.operator == "le"
+
+
+def test_a_comparator_this_estate_does_not_read_is_rejected(vocab):
+    outcome = (bind([_threshold("ltv", "banana", 50)], vocab)[1])[0]
+    assert outcome.reason == CP.REJECT_UNKNOWN_COMPARATOR
+
+
+def test_a_threshold_missing_a_part_is_rejected_not_completed(vocab):
+    for bad in (_threshold("ltv", None, 50), _threshold("ltv", "over", None),
+                _threshold("ltv", "over", "quite high")):
+        outcome = (bind([bad], vocab)[1])[0]
+        assert outcome.reason == CP.REJECT_MALFORMED_THRESHOLD, bad
+
+
+def test_AN_AXIS_IS_NOT_A_QUANTITY(vocab):
+    """`age_bucket` is a band LABEL. "age_bucket over 75" compares a number
+    against a name. The threshold vocabulary is the MEASURE list and nothing
+    else, because the measure owner is the one that knows which governed fields
+    are quantities."""
+    for axis in ("age bucket", "ltv bucket", "region", "product type"):
+        outcome = (bind([_threshold(axis, "over", 75)], vocab)[1])[0]
+        assert isinstance(outcome, RejectedConcept), axis
+
+
+def test_the_prompt_tells_the_model_not_to_reach_for_buckets(vocab):
+    """THE WHOLE POINT OF THE KIND. Measured before it existed: with no way to
+    say "borrowers over 75", the model proposed the bucket labels "75-80",
+    "80-85", "85+", and the first filled an empty slot — turning a question
+    about everyone over 75 into one about a single band, on 8 questions that
+    are EXACT today."""
+    prompt = build_proposal_prompt("balance for borrowers over 75", vocab)
+    assert "threshold" in prompt["system"]
+    assert "bucket" in prompt["system"]
+    assert "over" in prompt["system"] and "at least" in prompt["system"]
+
+
+def test_a_threshold_proposal_is_read_back_with_all_three_parts():
+    parsed = parse_proposal_response(
+        '{"concepts":[{"kind":"threshold","term":"borrower age",'
+        '"comparator":"over","value":75,"covers":"borrowers over 75"}]}')
+    assert parsed == [ProposedConcept("threshold", "borrower age",
+                                      "borrowers over 75", "over", 75)]
+
+
+def test_the_bucket_values_stay_in_the_vocabulary(vocab):
+    """They are GENUINE governed values — `ltv_bucket` really does carry
+    `40-50%` and some questions genuinely name a band. The threshold kind
+    competes with them; removing them would be deleting real concepts to make a
+    measurement look better."""
+    assert vocab.offers(CP.KIND_VALUE, "40-50%")
 
 
 # --------------------------------------------------------------------------- #
@@ -260,7 +349,10 @@ def test_every_offered_term_binds(semantics, tape_columns):
                        available_columns=tape_columns)
     for kind, terms in vocab.terms.items():
         for term in terms:
-            bound, rejected = bind([ProposedConcept(kind, term)], vocab)
+            candidate = (ProposedConcept(kind, term, comparator="over", value=0)
+                         if kind == CP.KIND_THRESHOLD
+                         else ProposedConcept(kind, term))
+            bound, rejected = bind([candidate], vocab)
             assert bound, "offered but unbindable: %s / %s -> %s" % (
                 kind, term, rejected[0].reason if rejected else "?")
 

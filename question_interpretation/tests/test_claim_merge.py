@@ -203,6 +203,109 @@ def test_the_claims_that_expose_stated_by_user_say_False_for_it():
 
 
 # --------------------------------------------------------------------------- #
+# The threshold kind
+# --------------------------------------------------------------------------- #
+def _threshold(field, op, value):
+    return BoundConcept(ProposedConcept("threshold", "t", comparator=op,
+                                        value=value), field, value, "test",
+                        operator=op)
+
+
+def test_a_threshold_fills_the_row_predicate_slot_for_its_field():
+    result = merge((), [_threshold("current_loan_to_value", "gt", 50.0)])
+    filled = result.filled_by_model[0]
+    assert (filled.slot, filled.key, filled.value, filled.operator) == (
+        "row_predicates", "current_loan_to_value", 50.0, "gt")
+
+
+def test_a_threshold_AND_ITS_INVERSE_are_a_conflict_not_an_agreement():
+    """`gt 50` and `lt 50` carry the same value and select opposite halves of
+    the book. A merge comparing values alone would call them the same claim and
+    report no disagreement between a threshold and its inverse."""
+    existing = (_slot("row_predicates", "current_loan_to_value", 50.0,
+                      PROV_EXPLICIT_USER),)
+    same_value_other_way = merge(
+        (SlotValue("row_predicates", "current_loan_to_value", 50.0,
+                   PROV_EXPLICIT_USER, operator="gt"),),
+        [_threshold("current_loan_to_value", "lt", 50.0)])
+    assert same_value_other_way.conflicts
+    assert not same_value_other_way.filled_by_model
+
+
+def test_the_same_threshold_twice_is_agreement():
+    result = merge((SlotValue("row_predicates", "current_loan_to_value", 50.0,
+                              PROV_EXPLICIT_USER, operator="gt"),),
+                   [_threshold("current_loan_to_value", "gt", 50.0)])
+    assert result.findings[0].outcome == CM.AGREED
+    assert not result.conflicts
+
+
+def test_a_stated_threshold_the_merge_satisfied_reaches_the_check():
+    """MEASURED BEFORE THIS EXISTED: the check decides a stated facet is
+    carried by matching the SERVED facet list on (kind, label), and
+    `merged_contract` touched only `filters`. So a stated threshold stayed LOST
+    after the merge had filled the very predicate that satisfies it, and reach
+    on threshold losses was pinned at zero whatever the model proposed."""
+    from question_interpretation.completeness import (StatedConcept,
+                                                      unresolved_concepts)
+    stated = [StatedConcept("facet:threshold", "", "LTV over 40",
+                            "LTV over 40", "receipt")]
+    contract = ExecutedContract(filters=(), facets=())
+    assert unresolved_concepts(stated, contract)
+    result = merge((), [_threshold("current_loan_to_value", "gt", 40.0)])
+    assert not unresolved_concepts(stated, merged_contract(contract, result,
+                                                           stated))
+
+
+def test_it_fails_closed_on_a_bound_that_does_not_match():
+    from question_interpretation.completeness import (StatedConcept,
+                                                      unresolved_concepts)
+    stated = [StatedConcept("facet:threshold", "", "LTV over 40",
+                            "LTV over 40", "receipt")]
+    contract = ExecutedContract(filters=(), facets=())
+    wrong = merge((), [_threshold("current_loan_to_value", "gt", 90.0)])
+    assert unresolved_concepts(stated, merged_contract(contract, wrong, stated))
+
+
+def test_a_bucket_fill_does_not_satisfy_a_stated_threshold():
+    """The substitution this whole kind exists to stop: narrowing to one band
+    is not answering a question about everything above a line."""
+    from question_interpretation.completeness import (StatedConcept,
+                                                      unresolved_concepts)
+    stated = [StatedConcept("facet:threshold", "", "LTV over 40",
+                            "LTV over 40", "receipt")]
+    bucket = merge((), [_bound("category_value", "40-50%", "ltv_bucket",
+                               "40-50%")])
+    assert unresolved_concepts(stated, merged_contract(
+        ExecutedContract(filters=(), facets=()), bucket, stated))
+
+
+def test_a_fill_with_no_comparator_never_satisfies_a_threshold():
+    """A threshold is a COMPARISON. A categorical fill whose value happens to
+    equal the bound is an equality on a different field, and letting it count
+    would mark a stated narrowing satisfied by something that is not one."""
+    from question_interpretation.completeness import (StatedConcept,
+                                                      unresolved_concepts)
+    stated = [StatedConcept("facet:threshold", "", "LTV over 40",
+                            "LTV over 40", "receipt")]
+    equality = merge((), [_bound("category_value", "40", "some_coded_field", 40)])
+    assert equality.filled_by_model
+    assert equality.filled_by_model[0].operator is None
+    assert unresolved_concepts(stated, merged_contract(
+        ExecutedContract(filters=(), facets=()), equality, stated))
+
+
+def test_the_stated_concepts_are_optional_and_nothing_is_marked_without_them():
+    from question_interpretation.completeness import (StatedConcept,
+                                                      unresolved_concepts)
+    stated = [StatedConcept("facet:threshold", "", "LTV over 40",
+                            "LTV over 40", "receipt")]
+    result = merge((), [_threshold("current_loan_to_value", "gt", 40.0)])
+    assert unresolved_concepts(stated, merged_contract(
+        ExecutedContract(filters=(), facets=()), result))
+
+
+# --------------------------------------------------------------------------- #
 # Feeding the completeness check
 # --------------------------------------------------------------------------- #
 def test_the_merged_contract_carries_what_the_model_filled():

@@ -63,7 +63,21 @@ __all__ = ["CONCEPT_KINDS", "ProposedConcept", "BoundConcept", "RejectedConcept"
            "ConceptVocabulary", "vocabulary", "bind", "build_proposal_prompt",
            "parse_proposal_response", "ProposalFormatError",
            "REJECT_UNREGISTERED", "REJECT_AMBIGUOUS", "REJECT_UNAVAILABLE",
-           "REJECT_UNKNOWN_KIND"]
+           "REJECT_UNKNOWN_KIND", "REJECT_MALFORMED_THRESHOLD",
+           "REJECT_UNKNOWN_COMPARATOR", "KIND_THRESHOLD", "comparator_phrases"]
+
+#: A NUMERIC THRESHOLD ON A GOVERNED FIELD, and the only kind that is not a
+#: single term. Added after Stage 3 measured what its absence cost: with no way
+#: to say "borrowers over 75" in registered concepts, the model reached for the
+#: nearest expressible things — the FIELD as a `measure` (declined 32 times) and
+#: the BUCKET VALUES as category values ("75-80", "80-85", "85+"), the first of
+#: which filled an empty slot. "Balance for borrowers over 75" became "balance
+#: for age_bucket == 75-80", on 8 questions that are EXACT today.
+#:
+#: A vocabulary gap does not produce silence. It produces the nearest
+#: expressible thing, and that substitution is invisible: every proposal is
+#: in-vocabulary, every binding is registry-owned, every guard reports green.
+KIND_THRESHOLD = "threshold"
 
 KIND_VALUE = "category_value"
 KIND_MEASURE = "measure"
@@ -71,17 +85,38 @@ KIND_DIMENSION = "dimension"
 KIND_BOOK = "source_book"
 KIND_DATASET = "dataset"
 
-CONCEPT_KINDS: Tuple[str, ...] = (KIND_VALUE, KIND_MEASURE, KIND_DIMENSION,
-                                  KIND_BOOK, KIND_DATASET)
+CONCEPT_KINDS: Tuple[str, ...] = (KIND_VALUE, KIND_THRESHOLD, KIND_MEASURE,
+                                  KIND_DIMENSION, KIND_BOOK, KIND_DATASET)
 
 REJECT_UNREGISTERED = "not a registered concept"
 REJECT_AMBIGUOUS = "more than one governed field claims this concept"
 REJECT_UNAVAILABLE = "this book does not carry the field it names"
 REJECT_UNKNOWN_KIND = "not a proposable kind of concept"
+REJECT_MALFORMED_THRESHOLD = "a threshold needs a field, a comparator and a number"
+REJECT_UNKNOWN_COMPARATOR = "not a comparator this estate reads"
 
 
 class ProposalFormatError(ValueError):
     """The model's output was not a proposal. Never silently coerced."""
+
+
+def comparator_phrases() -> Dict[str, str]:
+    """``{phrase: operator}`` — DELEGATED, never restated here.
+
+    `question_interpretation.lexical.COMPARATOR_PHRASES` is THE list, and its
+    own docstring says why it is one owner with independent consumers: where
+    both the parser and the receipt were blind to `bigger than`, `larger than`,
+    `higher than`, `smaller than` and `lower than`, the narrowing vanished, no
+    facet was raised, and the whole book came back as fact — 43.15% weighted LTV
+    over 11,035 loans for a question about 5,857.
+
+    A second list here would put the model's vocabulary and the parser's out of
+    step by exactly those five phrases again.
+    """
+    from . import lexical as _LEX
+
+    return {str(phrase).strip().lower(): op
+            for phrase, op in _LEX.COMPARATOR_PHRASES}
 
 
 def _norm(term: Any) -> str:
@@ -96,9 +131,19 @@ class ProposedConcept:
     kind: str
     term: str
     covers: str = ""
+    #: THRESHOLD ONLY. The comparator, in the estate's own words ("over", "at
+    #: least", "under"), and the bound. Absent on every other kind, because a
+    #: threshold is the one concept a single term cannot carry.
+    comparator: Optional[str] = None
+    value: Optional[Any] = None
 
-    def as_dict(self) -> Dict[str, str]:
-        return {"kind": self.kind, "term": self.term, "covers": self.covers}
+    def as_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {"kind": self.kind, "term": self.term,
+                             "covers": self.covers}
+        if self.kind == KIND_THRESHOLD:
+            d["comparator"] = self.comparator
+            d["value"] = self.value
+        return d
 
 
 @dataclass(frozen=True)
@@ -107,12 +152,17 @@ class BoundConcept:
 
     proposal: ProposedConcept
     field: str
-    value: Optional[str]
+    value: Optional[Any]
     owner: str
+    #: THRESHOLD ONLY. The governed operator the comparator resolved to.
+    operator: Optional[str] = None
 
     def as_dict(self) -> Dict[str, Any]:
-        return {**self.proposal.as_dict(), "field": self.field,
-                "value": self.value, "bound_by": self.owner}
+        d = {**self.proposal.as_dict(), "field": self.field,
+             "value": self.value, "bound_by": self.owner}
+        if self.operator is not None:
+            d["operator"] = self.operator
+        return d
 
 
 @dataclass(frozen=True)
@@ -206,6 +256,15 @@ def vocabulary(semantics: Dict[str, Any], *, available_values: Any = None,
         if key and (not columns or key in columns):
             terms[KIND_MEASURE].add(_norm(term))
 
+    # --- thresholds: the fields a NUMBER can be compared against ----------- #
+    #
+    # Reusing the measure terms and nothing else. A threshold is a comparison
+    # against a quantity, and the measure owner is the one that knows which
+    # governed fields are quantities — `age_bucket` is an axis and `75-80` is a
+    # label, not a bound. Asking a different owner here would be a second
+    # opinion about what a number can be compared to.
+    terms[KIND_THRESHOLD].update(terms[KIND_MEASURE])
+
     # --- books and datasets: small, governed, and named by their owners ---- #
     terms[KIND_BOOK].update({"direct", "acquired", "total"})
     try:
@@ -235,7 +294,14 @@ def vocabulary(semantics: Dict[str, Any], *, available_values: Any = None,
     withheld: Dict[str, set] = {}
     for kind in CONCEPT_KINDS:
         for term in sorted(terms[kind]):
-            outcome = _bind_one(ProposedConcept(kind, term), probe)
+            # A THRESHOLD IS PROBED AS A THRESHOLD. Probing it with a bare term
+            # asks "does this bind with no comparator and no bound", which is
+            # malformed by construction — it withheld the entire threshold
+            # vocabulary on the first run. The probe supplies the two parts the
+            # kind requires and asks only whether the FIELD resolves.
+            candidate = (ProposedConcept(kind, term, comparator="over", value=0)
+                         if kind == KIND_THRESHOLD else ProposedConcept(kind, term))
+            outcome = _bind_one(candidate, probe)
             if not isinstance(outcome, BoundConcept):
                 withheld.setdefault(kind, set()).add(term)
     for kind, dropped in withheld.items():
@@ -246,10 +312,19 @@ def vocabulary(semantics: Dict[str, Any], *, available_values: Any = None,
     # KIND separates them, so binding is unambiguous — but a model that
     # proposes the wrong kind gets a wrong binding that looks entirely valid,
     # and the estate should be able to count these without reading this file.
+    # ONE PAIR IS SHARED ON PURPOSE AND IS NOT A COLLISION. `measure` and
+    # `threshold` are two questions about the same quantity — "what is the
+    # balance" and "balance over 300000" — so the threshold list IS the measure
+    # list, by construction, a few lines above. Counting all 53 as collisions
+    # would bury the five that are real (`acquired`, `broker`, `loan size`,
+    # `owner occupied`, `ticket size`) under noise the design intends.
+    _BY_DESIGN = frozenset({KIND_MEASURE, KIND_THRESHOLD})
     cross: Dict[str, set] = {}
     for kind, offered in terms.items():
         for other, other_offered in terms.items():
             if other <= kind:
+                continue
+            if {kind, other} == _BY_DESIGN:
                 continue
             for shared in offered & other_offered:
                 cross.setdefault(shared, set()).update({kind, other})
@@ -274,6 +349,8 @@ def _bind_one(proposal: ProposedConcept, vocab: ConceptVocabulary):
     if kind not in CONCEPT_KINDS:
         return RejectedConcept(proposal, REJECT_UNKNOWN_KIND,
                                "kinds are: " + ", ".join(CONCEPT_KINDS))
+    if kind == KIND_THRESHOLD:
+        return _bind_threshold(proposal, term, vocab)
     if term in (vocab.ambiguous.get(kind) or ()):
         return RejectedConcept(proposal, REJECT_AMBIGUOUS, term)
     if not vocab.offers(kind, term):
@@ -324,6 +401,50 @@ def _bind_one(proposal: ProposedConcept, vocab: ConceptVocabulary):
     return BoundConcept(proposal, "dataset", term, "workspace")
 
 
+def _bind_threshold(proposal: ProposedConcept, term: str,
+                    vocab: ConceptVocabulary):
+    """A threshold, bound by the owners that already bind one.
+
+    THE ONLY THING THIS ASSEMBLES IS THE THREE PARTS. The comparator comes from
+    `lexical.COMPARATOR_PHRASES`, the field from the measure owner, and the
+    predicate from `population.predicate_of` — the same normaliser both
+    executors go through, so a proposed threshold and a parsed one cannot mean
+    different things. Measured over six thresholds on the acceptance tape: the
+    proposal selects exactly the rows the deterministic parser selects for the
+    equivalent question, 6 of 6.
+    """
+    from mi_agent import llm_query_parser as LQ
+    from mi_agent import population as POP
+
+    comparator = _norm(proposal.comparator)
+    value = proposal.value
+    if not comparator or value is None:
+        return RejectedConcept(proposal, REJECT_MALFORMED_THRESHOLD,
+                               "comparator=%r value=%r" % (proposal.comparator,
+                                                           proposal.value))
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return RejectedConcept(proposal, REJECT_MALFORMED_THRESHOLD,
+                               "value %r is not a number" % (value,))
+    operator = comparator_phrases().get(comparator)
+    if operator is None:
+        return RejectedConcept(proposal, REJECT_UNKNOWN_COMPARATOR, comparator)
+    if not vocab.offers(KIND_THRESHOLD, term):
+        return RejectedConcept(proposal, REJECT_UNREGISTERED, term)
+    # THE MEASURE OWNER FIRST, and deliberately: `loan size` is both a dimension
+    # term and a measure term, and for a threshold the quantity is what is being
+    # compared. Recorded in the scope note rather than left in a call order.
+    key = LQ._detect_metric(term, vocab.semantics)[0]
+    if not key:
+        return RejectedConcept(proposal, REJECT_UNREGISTERED, term)
+    if vocab.available_columns and key not in vocab.available_columns:
+        return RejectedConcept(proposal, REJECT_UNAVAILABLE, key)
+    predicate = POP.predicate_of(key, {"op": operator, "value": number})
+    return BoundConcept(proposal, predicate.field, predicate.value,
+                        "population.predicate_of", operator=predicate.op)
+
+
 def bind(proposals: Sequence[ProposedConcept], vocab: ConceptVocabulary
          ) -> Tuple[List[BoundConcept], List[RejectedConcept]]:
     """``(bound, rejected)`` — deterministic, by the registry, never by the model."""
@@ -350,6 +471,21 @@ Reply with JSON only: {"concepts": [{"kind": ..., "term": ..., "covers": ...}]}
 never adapt one, never abbreviate one.
   covers  the words of the question this concept is for.
 
+A "threshold" carries two more fields, and needs both:
+
+  {"kind": "threshold", "term": "<a term from the threshold list>",
+   "comparator": "<a phrase from the comparator list>", "value": <a number>,
+   "covers": "..."}
+
+USE "threshold" WHENEVER THE QUESTION COMPARES SOMETHING AGAINST A NUMBER — \
+"over 55", "above 40%%", "at least 100", "under 7%%". Do NOT list the range or \
+bucket labels that happen to sit near that number: a bucket is a named band the \
+book reports on, and offering "40-50%%" for "above 40%%" narrows the answer to \
+one band when the reader asked for everything above the line.
+
+THE COMPARATOR PHRASES:
+%(comparators)s
+
 If part of the question matches no term in the list, LEAVE IT OUT. Do not offer \
 the closest term instead — a near miss is a different thing and will be read as \
 though the reader asked for it. An empty list is a valid and useful answer.
@@ -374,8 +510,10 @@ def build_proposal_prompt(question: str, vocab: ConceptVocabulary,
         offered = vocab.terms.get(kind) or ()
         if offered:
             blocks.append("%s:\n  %s" % (kind, "\n  ".join(offered)))
-    system = _PROMPT_SYSTEM % {"kinds": ", ".join(CONCEPT_KINDS),
-                               "vocabulary": "\n\n".join(blocks)}
+    system = _PROMPT_SYSTEM % {
+        "kinds": ", ".join(CONCEPT_KINDS),
+        "comparators": "  " + ", ".join(sorted(comparator_phrases())),
+        "vocabulary": "\n\n".join(blocks)}
     user = "Question: %s" % (question or "")
     if unresolved:
         user += ("\n\nThese parts were not understood: "
@@ -410,6 +548,10 @@ def parse_proposal_response(text: str) -> List[ProposedConcept]:
         term = str(item.get("term") or "").strip()
         if not kind or not term:
             raise ProposalFormatError("a concept has no kind or no term: %r" % (item,))
-        out.append(ProposedConcept(kind=kind, term=term,
-                                   covers=str(item.get("covers") or "").strip()))
+        out.append(ProposedConcept(
+            kind=kind, term=term,
+            covers=str(item.get("covers") or "").strip(),
+            comparator=(str(item.get("comparator")).strip()
+                        if item.get("comparator") is not None else None),
+            value=item.get("value")))
     return out

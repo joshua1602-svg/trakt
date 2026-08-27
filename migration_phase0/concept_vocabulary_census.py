@@ -44,6 +44,11 @@ OPUS_BREAKS = (
      "Opus bound this to account_status"),
 )
 
+#: A threshold the model must not be able to reach: an AXIS is not a quantity,
+#: and "age_bucket over 75" compares a number against a band label.
+MUST_NOT_BIND_AS_A_THRESHOLD = ("age bucket", "ltv bucket", "region",
+                                "product type", "platinum")
+
 #: Terms that must NOT be proposable, with the reason.
 MUST_NOT_BE_PROPOSABLE = {
     "erm sub product type": "a registered dimension this tape does not carry",
@@ -53,11 +58,12 @@ MUST_NOT_BE_PROPOSABLE = {
 
 #: PRE-REGISTERED, measured at the head this file was written on.
 EXPECTED = {
-    "category_value": 39, "measure": 53, "dimension": 63,
+    "category_value": 39, "threshold": 53, "measure": 53, "dimension": 63,
     "source_book": 3, "dataset": 3,
     "ambiguous_within_kind": 1, "cross_kind_collisions": 5,
     "raw_field_keys_offered": 0, "off_tape_fields_offered": 0,
     "opus_breaks_reachable": 0,
+    "axes_bindable_as_a_threshold": 0,
     #: Terms the registry offers that the question-shaped owner will not bind.
     #: Withheld from the model rather than dropped silently, and counted here so
     #: the disagreement between the two stays visible.
@@ -140,7 +146,13 @@ def run() -> Dict[str, Any]:
     unbindable: List[Dict[str, str]] = []
     for kind, terms in vocab.terms.items():
         for term in terms:
-            bound, rejected = CP.bind([CP.ProposedConcept(kind, term)], vocab)
+            # A THRESHOLD IS PROBED AS A THRESHOLD. A bare term asks "does this
+            # bind with no comparator and no bound", which is malformed by
+            # construction and reported all 53 threshold terms as traps.
+            candidate = (CP.ProposedConcept(kind, term, comparator="over", value=0)
+                         if kind == CP.KIND_THRESHOLD
+                         else CP.ProposedConcept(kind, term))
+            bound, rejected = CP.bind([candidate], vocab)
             if not bound:
                 unbindable.append({"kind": kind, "term": term,
                                    "reason": rejected[0].reason})
@@ -155,6 +167,20 @@ def run() -> Dict[str, Any]:
         1 for b in breaks if b["reachable_wrong_field"])
     measured["withheld"] = sum(len(v) for v in vocab.withheld.values())
 
+    # AN AXIS IS NOT A QUANTITY. A threshold compares a number against
+    # something measurable; `age_bucket` is a band label and "age_bucket over
+    # 75" is not a narrowing anyone asked for.
+    axis_thresholds: List[Dict[str, Any]] = []
+    for term in MUST_NOT_BIND_AS_A_THRESHOLD:
+        bound, rejected = CP.bind(
+            [CP.ProposedConcept(CP.KIND_THRESHOLD, term, comparator="over",
+                                value=1)], vocab)
+        axis_thresholds.append({"term": term,
+                                "bound_to": bound[0].field if bound else None,
+                                "rejected": rejected[0].reason if rejected else None})
+    measured["axes_bindable_as_a_threshold"] = sum(
+        1 for a in axis_thresholds if a["bound_to"])
+
     return {
         "measured": measured, "pre_registered": EXPECTED,
         "matches_pre_registration": measured == EXPECTED,
@@ -162,6 +188,7 @@ def run() -> Dict[str, Any]:
         "raw_field_keys_offered": raw_keys,
         "off_tape_fields_offered": off_tape,
         "opus_breaks": breaks,
+        "axes_as_thresholds": axis_thresholds,
         "must_not_be_proposable": forbidden,
         "offered_but_unbindable": unbindable,
     }
@@ -172,10 +199,12 @@ def main(argv=None) -> int:
     ap.add_argument("--json", dest="out")
     args = ap.parse_args(argv)
 
+    from question_interpretation import concept_proposal as CP
+
     result = run()
     m = result["measured"]
     print("concept vocabulary census")
-    for kind in ("category_value", "measure", "dimension", "source_book", "dataset"):
+    for kind in CP.CONCEPT_KINDS:
         print("  %-16s %3d terms" % (kind, m[kind]))
     print("  ambiguous within a kind : %d  %s"
           % (m["ambiguous_within_kind"], result["vocabulary"]["ambiguous"]))
@@ -187,6 +216,9 @@ def main(argv=None) -> int:
     print("  offered but unbindable  : %d" % len(result["offered_but_unbindable"]))
     print("  withheld (offered by the registry, refused by the owner): %d  %s"
           % (m["withheld"], result["vocabulary"]["withheld"]))
+    print("  axes bindable as a threshold (must be 0): %d  %s"
+          % (m["axes_bindable_as_a_threshold"],
+             [a["term"] for a in result["axes_as_thresholds"] if a["bound_to"]]))
     print("  the Opus mis-bindings:")
     for b in result["opus_breaks"]:
         print("     %-12s -> %-24s (expected %s)  %s"

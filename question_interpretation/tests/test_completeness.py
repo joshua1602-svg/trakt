@@ -172,6 +172,18 @@ def test_from_envelope_reads_the_estate_s_own_record():
     assert contract.applied_fields == ("current_loan_to_value",)
 
 
+def test_a_facet_is_applied_if_ANY_record_says_so():
+    """A refused answer publishes ("threshold", "LTV over 55", "lost"). A merge
+    that later satisfies that threshold appends its own record. Returning on the
+    FIRST match made the second unreachable, and a threshold filled with exactly
+    the right bound still read as lost."""
+    contract = ExecutedContract(facets=(("threshold", "LTV over 55", "lost"),
+                                        ("threshold", "LTV over 55", "applied")))
+    assert contract.facet_applied("threshold", "LTV over 55") is True
+    lost_only = ExecutedContract(facets=(("threshold", "LTV over 55", "lost"),))
+    assert lost_only.facet_applied("threshold", "LTV over 55") is False
+
+
 def test_an_empty_envelope_carries_nothing_and_reports_everything():
     """A refusal records no execution. Everything stated is unrecorded, and the
     check says so rather than treating an absent record as a pass."""

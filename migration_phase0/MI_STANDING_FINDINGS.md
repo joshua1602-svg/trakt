@@ -103,3 +103,32 @@ mechanism the Opus acceptance run walked through.
 DETERMINISTIC arm stops refusing and prints the LLM arm in full regardless.
 Failing the instrument on a known-open finding would only teach the estate to
 stop running it.
+
+---
+
+## OPEN · The receipt stamps a threshold applied/lost the wrong way round
+
+**Found while measuring the threshold kind. Not caused by it, not fixed by it.**
+
+*"How much outstanding balance do we have where borrower age exceeds 75 and LTV
+is over 40%?"* (Q02B) publishes:
+
+```
+served facets : ('threshold', 'LTV over 75', 'applied')
+                ('threshold', 'LTV over 40', 'lost')
+spec filters  : ('current_loan_to_value',)
+```
+
+Both labels are wrong — `execution_receipt._detect_thresholds` does not resolve
+the field, so the borrower-age threshold is labelled `LTV` — and the two
+statuses are **inverted against the contract**: the facet stamped *applied*
+names a predicate the spec does not carry, and the facet stamped *lost* names
+one it does.
+
+The consequence for anything reading the receipt is that a threshold the
+contract holds reads as lost and one it does not hold reads as satisfied. It is
+why Q02B was classified as a threshold loss and is not one.
+
+**Owner: separate work.** Recorded in
+`migration_phase0/MI_THRESHOLD_KIND_RESULT.json` under
+`prediction_B.why_the_third_did_not_land`.

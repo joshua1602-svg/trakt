@@ -84,6 +84,7 @@ KEYED_SLOTS: Tuple[str, ...] = (SLOT_DIMENSIONS, SLOT_ROW_PREDICATES)
 #: Which slot each proposal kind addresses. The mapping is total: a proposal
 #: whose kind is not here cannot reach any slot.
 KIND_TO_SLOT: Dict[str, str] = {
+    "threshold": SLOT_ROW_PREDICATES,
     "measure": SLOT_SUBJECT,
     "source_book": SLOT_SOURCE_SCOPE,
     "dataset": SLOT_DATASET,
@@ -114,6 +115,11 @@ class SlotValue:
     key: Optional[str]
     value: Any
     provenance: Optional[str]
+    #: THE COMPARISON, where the slot holds a predicate. `gt 50` and `lt 50`
+    #: carry the same value and select opposite halves of the book, so a merge
+    #: that compared values alone would call them the same claim and report no
+    #: disagreement between a threshold and its inverse.
+    operator: Optional[str] = None
 
     @property
     def address(self) -> Tuple[str, Optional[str]]:
@@ -124,8 +130,11 @@ class SlotValue:
         return self.provenance in CHOSEN_BY_A_PERSON
 
     def as_dict(self) -> Dict[str, Any]:
-        return {"slot": self.slot, "key": self.key, "value": self.value,
-                "provenance": self.provenance}
+        d = {"slot": self.slot, "key": self.key, "value": self.value,
+             "provenance": self.provenance}
+        if self.operator is not None:
+            d["operator"] = self.operator
+        return d
 
 
 @dataclass(frozen=True)
@@ -233,7 +242,8 @@ def deterministic_slots(interpretation: Any) -> Tuple[SlotValue, ...]:
             out.append(SlotValue(SLOT_ROW_PREDICATES, str(key),
                                  getattr(pred, "value", None),
                                  getattr(pred, "provenance", None)
-                                 or PROV_EXPLICIT_USER))
+                                 or PROV_EXPLICIT_USER,
+                                 operator=getattr(pred, "operator", None)))
     return tuple(out)
 
 
@@ -247,8 +257,21 @@ def _address(slot: str, field: Optional[str]) -> Tuple[str, Optional[str]]:
 def _same(a: Any, b: Any) -> bool:
     if a is None or b is None:
         return a is b
+    try:
+        return float(a) == float(b)
+    except (TypeError, ValueError):
+        pass
     return str(a).strip().lower().replace("_", " ") == \
         str(b).strip().lower().replace("_", " ")
+
+
+def _same_claim(current: "SlotValue", value: Any, operator: Optional[str]) -> bool:
+    """The whole claim, not just its value. See `SlotValue.operator`."""
+    if not _same(current.value, value):
+        return False
+    if current.operator is None and operator is None:
+        return True
+    return str(current.operator or "").lower() == str(operator or "").lower()
 
 
 def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
@@ -275,6 +298,7 @@ def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
             continue
         field = getattr(item, "field", None)
         value = getattr(item, "value", None)
+        operator = getattr(item, "operator", None)
         if value is None:
             value = field
         address = _address(slot, field)
@@ -282,12 +306,13 @@ def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
 
         if current is None:
             slots[address] = SlotValue(address[0], address[1], value,
-                                       PROV_MODEL_INFERRED)
+                                       PROV_MODEL_INFERRED, operator=operator)
             findings.append(MergeFinding(
                 FILLED_BY_MODEL, address[0], address[1], value,
-                detail="the slot was empty"))
+                detail="the slot was empty%s"
+                       % (" (%s)" % operator if operator else "")))
             continue
-        if _same(current.value, value):
+        if _same_claim(current, value, operator):
             findings.append(MergeFinding(
                 AGREED, address[0], address[1], value, current.value,
                 current.provenance,
@@ -323,7 +348,29 @@ def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
 # --------------------------------------------------------------------------- #
 # Feeding Stage 1's completeness check
 # --------------------------------------------------------------------------- #
-def merged_contract(contract: Any, result: MergeResult) -> Any:
+_NUMBER_RE = __import__("re").compile(r"-?\d+(?:\.\d+)?")
+
+
+def _stated_bounds(concept: Any) -> Tuple[float, ...]:
+    """The numbers a stated threshold facet names.
+
+    THE ONLY FACT THAT FACET RELIABLY CARRIES. `execution_receipt._detect_thresholds`
+    does not resolve the field — which is why the facet raised for "borrowers
+    over 55" is LABELLED "LTV over 55" — so the bound is the only thing both
+    sides hold, and matching on it is not a shortcut but the whole of the
+    available evidence.
+    """
+    out = []
+    for token in _NUMBER_RE.findall(str(getattr(concept, "value", "") or "")):
+        try:
+            out.append(float(token))
+        except ValueError:
+            continue
+    return tuple(out)
+
+
+def merged_contract(contract: Any, result: MergeResult,
+                    stated: Sequence[Any] = ()) -> Any:
     """``contract`` with the model's fills added, for the completeness check.
 
     Stage 1's check must run on the MERGED claim set, not on the deterministic
@@ -355,7 +402,31 @@ def merged_contract(contract: Any, result: MergeResult) -> Any:
         elif slot.slot == SLOT_SOURCE_SCOPE and scope in (None, "total"):
             scope = slot.value
 
+    # A THRESHOLD THE MERGE APPLIED, RECORDED WHERE THE CHECK LOOKS.
+    #
+    # The completeness check decides a stated facet is carried by matching the
+    # SERVED facet list on (kind, label), and everything above touches only
+    # `filters`. Measured before this existed: a stated threshold stayed LOST
+    # after the merge had filled the very predicate that satisfies it, so reach
+    # on threshold losses was pinned at zero whatever the model proposed.
+    #
+    # FAILS CLOSED. A stated threshold is marked applied only where the merge
+    # filled a comparator predicate whose bound is one of the numbers that
+    # facet names. No match, no mark.
+    facets = list(getattr(contract, "facets", ()) or ())
+    filled_bounds = {slot.value for slot in result.filled_by_model
+                     if slot.slot == SLOT_ROW_PREDICATES and slot.operator}
+    if filled_bounds:
+        for concept in stated or ():
+            if getattr(concept, "kind", None) != "facet:threshold":
+                continue
+            label = getattr(concept, "value", None)
+            if any(_same(bound, wanted) for bound in filled_bounds
+                   for wanted in _stated_bounds(concept)):
+                facets.append(("threshold", label, "applied"))
+
     return dataclasses.replace(
         contract, filters=tuple(dict.fromkeys(filters)),
         dimensions=tuple(dict.fromkeys(dimensions)), metric=metric,
-        dataset_reconciled=dataset, scope_context=scope)
+        dataset_reconciled=dataset, scope_context=scope,
+        facets=tuple(facets))

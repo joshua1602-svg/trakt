@@ -178,10 +178,19 @@ class ExecutedContract:
         return bool(self.narrowed or self.population_applied or self.filters)
 
     def facet_applied(self, kind: str, label: str) -> bool:
-        for k, lbl, status in self.facets:
-            if k == kind and lbl == label:
-                return status == "applied"
-        return False
+        """Did ANYTHING apply this facet?
+
+        ANY, not the first match. The estate publishes its own record — a
+        refused answer publishes `("threshold", "LTV over 55", "lost")` — and a
+        merge that later satisfies that threshold appends its own. Returning on
+        the FIRST match made the second record unreachable, so a threshold the
+        merge had filled with exactly the right bound still read as lost, and
+        reach on threshold losses stayed pinned at zero after the rule that was
+        supposed to unpin it. Two records of one facet is not a contradiction to
+        resolve by position; the question is whether any of them applied it.
+        """
+        return any(k == kind and lbl == label and status == "applied"
+                   for k, lbl, status in self.facets)
 
 
 def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
