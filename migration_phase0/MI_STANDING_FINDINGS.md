@@ -832,3 +832,64 @@ invisible on the 157-question calibration surface and visible on 854.
 
 **Owner: separate work, and it is step 1 of the wiring order.** Make them publish
 and the class empties.
+
+---
+
+## CLOSED · A narrowing that ran, in a form nothing could read
+
+The section above ("Two routes narrow correctly and record nothing") has a third
+instance, and it is the one that actually refused an answer.
+
+An analytical plan narrowed twice through the portfolio lens, measured both
+books to the penny, and refused both questions on the ground that neither
+narrowing had been applied:
+
+```
+Q22B  "Did Direct or Acquired add more balance during the last month?"
+Q22C  "Which of the Direct and Acquired books drove more of the
+       month-on-month balance increase?"
+
+Direct    £105.0m -> £117.4m  (+£12.4m)   441 loans
+Acquired   £44.5m ->  £54.7m  (+£10.2m)   199 loans
+                                          narrowedTo: []
+```
+
+The difference from the two open cases is worth stating precisely, because it
+changes what the fix has to be. Those routes record **nothing**. This plan
+recorded the narrowing **in a form no consumer could parse**:
+
+```
+predicate = "portfolio lens = Direct (direct_001)"
+```
+
+`narrowedTo` — the one channel the receipt reads for *"was this answer scoped to
+X?"* — is built by splitting field-named predicates apart. Everything
+`mi_agent.population` produces is field-named. The lens clause names a lens, so
+splitting it yields the field `"portfolio lens"`, which is not a field, and the
+builder skipped it with a `continue`. The narrowing was performed, described,
+and invisible.
+
+**Carried means a consumer can read it.** A record in a form only a human can
+parse is a record the contract does not carry, and it fails the standing test
+the same way silence does.
+
+Fixed by giving the population contract a machine-readable twin
+(`PopulationRef.narrowed_on`) for exactly the case where the predicate text
+names no field. No guard changed; both refusals lifted through readers that were
+already there and whose strictness is unchanged.
+
+### The pattern this adds, and it is the fail-open guard's sibling
+
+There were **two** producers of the lens predicate text. The second composed it
+itself, under a comment asserting it matched the first:
+
+> *"the same text ``populations.apply`` records, so a population reads
+> identically whichever capability produced it."*
+
+True when written. The fix went into `apply`; the capability that runs these two
+questions used the other; both answers stayed refused **with the fix in the
+tree**. The comment was the only thing holding the two in agreement.
+
+**Portable test, alongside the fail-open one:** *when a comment says its output
+matches another component's — check that it calls it.* An assertion of agreement
+between two implementations is a statement about the past.
