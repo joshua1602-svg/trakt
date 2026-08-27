@@ -4279,19 +4279,94 @@ def _message_text(message) -> str:
     return "".join(parts)
 
 
-# Model families that REJECT sampling params (`temperature`/`top_p`/`top_k`)
-# with an HTTP 400. Newer reasoning models fix their own sampling; sending
-# `temperature=0.0` to them fails the request outright. When overriding
-# ``MI_AGENT_LLM_MODEL`` to one of these, we must omit the sampling kwargs.
-_NO_SAMPLING_MODELS = (
-    "opus-4-7", "opus-4-8", "opus-4.7", "opus-4.8",
-    "sonnet-5", "fable", "mythos",
-)
+# --------------------------------------------------------------------------- #
+# SAMPLING PARAMETERS — ASKED, NOT ASSUMED
+# --------------------------------------------------------------------------- #
+# There was a hardcoded allowlist here:
+#
+#     _NO_SAMPLING_MODELS = ("opus-4-7", "opus-4-8", "opus-4.7", "opus-4.8",
+#                            "sonnet-5", "fable", "mythos")
+#
+# and `temperature=0.0` was sent to every model that did not match it. It cost a
+# whole measurement. `claude-haiku-4-5-20251001` — THE REPOSITORY DEFAULT — is
+# not on that list, and neither is `claude-opus-5`, so an LLM-enabled
+# acceptance run over 166 questions raised `TypeError` on every single call,
+# before any HTTP request, and was reported as a clean model comparison having
+# never reached the API.
+#
+# The list was answering the wrong question. Whether `temperature` can be sent
+# is TWO facts, and the allowlist encoded neither:
+#
+#   1. DOES THIS SDK EXPOSE THE PARAMETER? `anthropic` 1.x removed
+#      `temperature`, `top_p` and `top_k` from `messages.create()` altogether.
+#      On that SDK no model accepts them, whatever its name — which is why an
+#      allowlist keyed on the model could not get this right for any model.
+#      This is asked of the signature, once, and cached.
+#
+#   2. DOES THIS MODEL ACCEPT IT? Only reachable where (1) is true, and only
+#      the API can answer. It is LEARNED from the rejection — a 400 naming a
+#      sampling parameter — and remembered, so one model release costs one
+#      retry rather than a source edit.
+#
+# The point is not that the list was stale. It is that a list keyed on model
+# names must be edited on every release, which is a maintenance bomb that has
+# already gone off once. Nothing here needs updating when a model ships.
+
+#: Models the API has told us reject sampling parameters, learned at runtime.
+_SAMPLING_REJECTED: set = set()
+
+#: Phrases an SDK or the API uses when the sampling kwarg is the problem. Not a
+#: model list: a list of ways one specific rejection is worded.
+_SAMPLING_REJECTION_MARKS = ("temperature", "top_p", "top_k")
 
 
-def _supports_temperature(model: str) -> bool:
-    m = (model or "").lower()
-    return not any(tok in m for tok in _NO_SAMPLING_MODELS)
+def _sdk_sampling_parameters(client) -> frozenset:
+    """Which sampling parameters THIS SDK's ``messages.create`` accepts.
+
+    Asked of the signature rather than assumed from a version string, because
+    a version string is one more thing to keep in step with a release. An SDK
+    that accepts arbitrary ``**kwargs`` reports them as acceptable and the
+    model's own rejection (below) is then the authority, which is the correct
+    order: the SDK cannot know what the API allows.
+    """
+    import inspect
+
+    try:
+        params = inspect.signature(client.messages.create).parameters
+    except (TypeError, ValueError):  # noqa: BLE001 - an unreadable signature
+        return frozenset(_SAMPLING_REJECTION_MARKS)
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return frozenset(_SAMPLING_REJECTION_MARKS)
+    return frozenset(n for n in _SAMPLING_REJECTION_MARKS if n in params)
+
+
+def _is_sampling_rejection(exc: BaseException) -> bool:
+    """Is this failure the sampling parameter being refused?
+
+    A `TypeError` from the SDK and a 400 from the API are the same fact told
+    two ways, and both must downgrade rather than escape. The old code caught
+    neither on the uncached call.
+    """
+    text = str(exc).lower()
+    if not any(mark in text for mark in _SAMPLING_REJECTION_MARKS):
+        return False
+    return isinstance(exc, TypeError) or "400" in text or "unexpected keyword" \
+        in text or "not supported" in text or "deprecated" in text \
+        or "unsupported" in text or "invalid_request" in text
+
+
+def _sampling_for(client, model: str) -> Dict[str, Any]:
+    """The sampling kwargs to send for ``model`` on this client, possibly none.
+
+    Determinism where the runtime allows it. Where it does not, the task is a
+    constrained NL->JSON parse validated downstream, so the model's own default
+    sampling is used rather than the call being failed.
+    """
+    if (model or "") in _SAMPLING_REJECTED:
+        return {}
+    if "temperature" not in _sdk_sampling_parameters(client):
+        return {}
+    return {"temperature": 0.0}
 
 
 def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
@@ -4306,33 +4381,49 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
         ) from exc
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-    # Determinism where the model allows it; newer models reject `temperature`
-    # and are deterministic enough for strict-JSON parsing without it.
-    sampling = {"temperature": 0.0} if _supports_temperature(model) else {}
+    sampling = _sampling_for(client, model)
+
+    def _create(**kwargs):
+        """One call, downgrading ONCE if the sampling parameter is refused.
+
+        The refusal is remembered against the model, so a run of 166 questions
+        pays for it once rather than 166 times — and never pays for it again on
+        this process. The old code sent the sampling kwargs on BOTH the cached
+        and the uncached attempt and caught the failure on NEITHER of the paths
+        that mattered: the cached attempt swallowed every exception into
+        "cache unsupported", and the uncached one let the `TypeError` out. That
+        is how an entire acceptance run raised before reaching the API and was
+        reported as a model comparison.
+        """
+        try:
+            return client.messages.create(**kwargs, **sampling)
+        except Exception as exc:  # noqa: BLE001 - re-raised unless it is THIS
+            if not sampling or not _is_sampling_rejection(exc):
+                raise
+            _SAMPLING_REJECTED.add(model or "")
+            logger.info("model %r rejects sampling parameters (%s); retrying "
+                        "without them and remembering", model, exc)
+            sampling.clear()
+            return client.messages.create(**kwargs)
+
     cache_supported = False
     message = None
-    # NOTE: ``temperature`` is intentionally NOT sent. Newer Claude models
-    # (Sonnet 5 / Opus 4.x …) reject it with a 400 "temperature is deprecated"
-    # error; the model's default sampling is used. The task is a constrained
-    # NL->JSON parse validated downstream, so a fixed temperature isn't needed.
     if use_cache:
         try:
-            message = client.messages.create(
+            message = _create(
                 model=model, max_tokens=1024,
                 system=[{"type": "text", "text": prompt["system"],
                          "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": prompt["user"]}],
-                **sampling,
             )
             cache_supported = True
         except Exception:  # pragma: no cover - SDK without cache support
             message = None
     if message is None:
-        message = client.messages.create(
+        message = _create(
             model=model, max_tokens=1024,
             system=prompt["system"],
             messages=[{"role": "user", "content": prompt["user"]}],
-            **sampling,
         )
     text = _message_text(message)
     u = getattr(message, "usage", None)
