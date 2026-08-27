@@ -283,28 +283,58 @@ The refusal is written by the existing facet layer, not at the route:
 
 ---
 
-## OPEN · A SECOND route substitutes on the forward-limits question
+## CLOSED · Partial requirement coverage must decline, not substitute
 
-Exposed by the gate above, and it needs its own ruling.
+A plan may claim a question only if it satisfies **every** governed requirement
+the intent owner emitted. Partial coverage declines; it does not substitute the
+part it can do.
 
-With `risk_limits` declining, **Q25C is claimed by `analytical_composition`**,
-which reconciles `funded+pipeline` honestly and answers:
+**The defect, measured.** *"Based on the current book and forward pipeline, which
+concentration tests are we at risk of breaching?"* emits
+`requirements=('limit_evidence', 'forecast')`. The planner could supply
+`forecast` — `funded_balance_forecast` + `pipeline_completion_forecast` — so it
+claimed the question and answered *"Current funded balance is £172.1m… Forecast
+funded balance: £173.4m."* Truthful, honestly reconciled against
+`funded+pipeline`, and about **balance**, to a reader who asked which
+concentration **tests** are at risk. Half the requirement met, the other half
+quietly dropped.
 
-> *"Current funded balance is £172.1m as at 2026-06-30. Gross pipeline in the
-> governed extract is £3.6m… Forecast funded balance: £173.4m. Expected to land:
-> 2026-06 £975k; 2026-07 £225k; 2026-08 £120k."*
+**Enforced at the narrowest existing seam** — `planner.plan_for`'s return, via
+`_unprovided_requirements`. The requirement comes from the governed intent owner;
+the answer from each capability's own `produces` declaration
+(`concentration_limits` produces `limit`, `funded_balance_forecast` produces
+`forecast`). No word test, no question exception, no new intent family, no new
+capability, no forecast methodology. A capability that later produces limit
+evidence satisfies the requirement with no edit.
 
-The question asked **which concentration TESTS are at risk of breaching**. The
-answer is about **balance**. It is not the forbidden current-state substitution,
-it discloses its exclusions, and its reconciliation is truthful — but it answers
-a different question, which is the same class of defect in a different route.
+**Only the requirements a PLAN can honestly be judged on, and measurement decided
+which.** `intent.unmet_requirements` judges what was ACTUALLY EXECUTED — its
+`dataset`, `periods`, `grouping` and `populations` keys describe a finished
+answer. The general form applied at the plan seam **over-declines**: six
+legitimate funded-balance-forecast plans read `funded+pipeline` and failed a
+`dataset != "pipeline"` string equality, and two pipeline plans failed a period
+count no plan carries. Those stay where they already work — on the executed
+answer in `mi_service._fail_closed_analytical`.
 
-Q25A and Q25B refuse correctly because no route claims them. Q25C differs only in
-naming the pipeline, which brings `analytical_composition` into scope.
+**Blast radius: 1 of 1,446.** 55 questions build a plan; exactly one declines.
+The other 54 are unchanged, including every forecast question:
 
-**Not fixed: gating `analytical_composition` was not authorised** by the ruling
-that produced this, and doing it unasked would be the scope creep that ruling
-excluded. Recorded for a decision.
+```
+What funded balance should we expect once the current pipeline flows through?     unchanged
+Show forecast balance by expected completion month.                               unchanged
+If the current pipeline converts as expected, what will our funded balance be?    unchanged
+How much do we currently have at offer and how much of it is likely to complete?  unchanged
+```
+
+**One answer moved per arm** — Q25C, from the balance composition to the same
+controlled refusal Q25A and Q25B give, citing the same governed boundary. CFO 91
+byte-identical. Six registered pipeline answers byte-identical. 278 modules: 85
+failures before and after. No new WRONG, no previously CORRECT answer changed, no
+movement outside Q25C.
+
+Q25A, Q25B and Q25C now all controlled-refuse for one boundary, and forward
+approved-limit testing remains the separate future capability it was.
+
 
 
 ---
