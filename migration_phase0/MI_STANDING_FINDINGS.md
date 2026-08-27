@@ -163,6 +163,39 @@ the repository root.
 
 ---
 
+## OPEN · A documented precondition nothing enforces — fail-open guard, THIRD instance
+
+Worth naming as a pattern, because three separate defects in this programme have
+had the same cause: the estate knew a rule, wrote it down, and had no mechanism
+that could tell whether it held.
+
+| | the precondition | what enforced it |
+|---|---|---|
+| Q19C | routes must publish the narrowing they performed | nothing, until `metadata.scopeApplied` |
+| `_unknown_named_book` | a capitalised run before a book noun is a name UNLESS generic | a hand-maintained word list, short by four |
+| **the dataset class** | **routes ask `workspace.resolve_dataset` for the dataset** | **nothing — the sentence exists only in comments** |
+
+The third is the cleanest specimen. `chat_routing.py` states it twice —
+
+```
+:262   "`workspace.resolve_dataset`, which is the single owner. Routes ask that owner"
+:3495  "the route asks `workspace.resolve_dataset` for it"
+```
+
+— and **all four occurrences of `resolve_dataset` in the file are comments.**
+`try_route` receives `view` and spends it on the value catalogue, the
+interpretation projection and the ownership re-read; never on the answering
+frame. `_route_portfolio_summary` takes no dataset parameter at all, so it could
+not honour the request even if it asked.
+
+**A precondition written in a comment is a wish.** The test for this class:
+whenever a comment says another component "asks", "must" or "already handles",
+check that a call exists. Twice now the call did not.
+
+Scoped in `migration_phase0/MI_COMPOSITE_BOUNDARY_SCOPE.md`.
+
+---
+
 ## OPEN · The separator evasion in `_unknown_named_book`
 
 Deliberately NOT closed by the sentence-position property that shipped in
