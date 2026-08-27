@@ -246,14 +246,16 @@ def main() -> None:
         sb.success(f"Loaded {len(ss.df):,} rows ({ss.df_source}).")
 
     sb.markdown("### Parser")
-    llm_choice = sb.radio(
-        "Mode", ["Deterministic", "LLM"],
-        index=1 if cfg.available else 0,
-        help="The LLM only proposes a governed MIQuerySpec; the validator and "
-             "executor remain the control layer.",
-    )
-    if llm_choice == "LLM" and not cfg.available:
-        sb.warning("LLM requested but unavailable — using deterministic parser.")
+    # THE FREE-FORM ARM IS WITHDRAWN FROM EVERY SERVING SURFACE, this one
+    # included. The help text below used to say the validator and executor
+    # "remain the control layer", and that is exactly what a model emitting the
+    # contract defeats: the guards check the contract, so a contract the model
+    # wrote is checked against itself. `mi_agent_api.datasets._mi_llm_config`
+    # carries the measured failures and names the replacement.
+    sb.radio("Mode", ["Deterministic"], index=0, disabled=True,
+             help="Questions are parsed deterministically. The free-form LLM "
+                  "parser is withdrawn: it emitted the governed contract "
+                  "itself, which no downstream guard can check.")
     sb.caption(f"LLM provider: **{cfg.provider}** · model: **{cfg.model}**")
     sb.caption(cfg.status)
     for w in cfg.warnings:
@@ -284,8 +286,7 @@ def main() -> None:
 
     st.markdown(f"**Question:** {question}")
 
-    use_llm = (llm_choice == "LLM") and cfg.available
-    parser_mode = "llm" if use_llm else "deterministic"
+    use_llm, parser_mode = False, "deterministic"
     try:
         result = run_mi_agent_query(
             question, ss.df, semantics_path,
