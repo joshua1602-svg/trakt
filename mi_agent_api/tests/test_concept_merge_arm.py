@@ -141,6 +141,65 @@ def test_no_interpretation_means_no_arm():
 
 
 # --------------------------------------------------------------------------- #
+# The replay seam
+# --------------------------------------------------------------------------- #
+def test_a_replayed_proposal_is_used_instead_of_a_live_call(monkeypatch):
+    """The same injection `parse_with_repair` offers as `llm_callable`, and for
+    the same reason: a review pack that re-derived its numbers from a SECOND
+    live call would be a review of a different run."""
+    from mi_agent import llm_query_parser as LQ
+
+    def _never(*a, **k):
+        raise AssertionError("the model must not be called for a replay")
+
+    monkeypatch.setattr(LQ, "_call_llm", _never)
+    ARM.set_replay({"how many drawdown loans?": [
+        {"kind": "category_value", "term": "drawdown"}]})
+    try:
+        spec = _Spec()
+
+        class _QI:
+            subject = source_scope = dataset = None
+            dimensions = row_predicates = ()
+
+        from migration_phase0.assurance_semantics import load_assurance_semantics
+        evidence = ARM.apply(
+            "how many drawdown loans?", spec, load_assurance_semantics(),
+            interpretation=_QI(),
+            available_values={"erm_product_type": {"drawdown": "drawdown"}},
+            available_columns={"erm_product_type"})
+    finally:
+        ARM.set_replay(None)
+    assert evidence["source"] == "replayed"
+    assert evidence["model"] is None
+    assert spec.filters == {"erm_product_type": "drawdown"}
+
+
+def test_replay_is_off_unless_it_is_set(monkeypatch):
+    """Serving must never silently answer from a recording."""
+    ARM.set_replay(None)
+    assert ARM._REPLAY == {}
+    called = {}
+
+    def _live(prompt, model, **k):
+        called["yes"] = True
+        return '{"concepts":[]}', {}, False
+
+    from mi_agent import llm_query_parser as LQ
+    monkeypatch.setattr(LQ, "_call_llm", _live)
+    spec = _Spec()
+
+    class _QI:
+        subject = source_scope = dataset = None
+        dimensions = row_predicates = ()
+
+    from migration_phase0.assurance_semantics import load_assurance_semantics
+    ARM.apply("anything at all", spec, load_assurance_semantics(),
+              interpretation=_QI(), available_values={}, available_columns={"a"})
+    assert called.get("yes") is True
+
+
+# --------------------------------------------------------------------------- #
 # The vocabulary cache
 # --------------------------------------------------------------------------- #
 def test_the_vocabulary_cache_is_keyed_on_content_not_identity():

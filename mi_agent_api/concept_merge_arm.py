@@ -40,6 +40,24 @@ logger = logging.getLogger(__name__)
 _VOCAB_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 
+#: A recorded proposal per question, used INSTEAD of a live call when set.
+#:
+#: The same injection seam `parse_with_repair` already offers as `llm_callable`,
+#: and for the same reason: a measurement has to be reproducible without paying
+#: for the model again, and a review pack that re-derives its numbers from a
+#: SECOND live call is a review of a different run. Set by a harness, never in
+#: serving — `apply` consults it only when it is non-empty, and records in the
+#: evidence that the proposal was replayed rather than asked for.
+_REPLAY: Dict[str, Any] = {}
+
+
+def set_replay(proposals_by_question: Optional[Dict[str, Any]]) -> None:
+    """Replay recorded proposals instead of calling the model. ``None`` clears."""
+    _REPLAY.clear()
+    if proposals_by_question:
+        _REPLAY.update(proposals_by_question)
+
+
 def enabled() -> bool:
     """Is the concept-merge arm on for this process?"""
     mode = os.environ.get("MI_AGENT_CONCEPT_MERGE", "off").strip().lower()
@@ -131,11 +149,18 @@ def apply(question: str, spec: Any, semantics: Dict[str, Any], *,
     from question_interpretation import claim_merge as CM
     from question_interpretation import concept_proposal as CP
 
+    replayed = question in _REPLAY
     try:
         vocab = _vocabulary(semantics, available_values, available_columns)
-        prompt = CP.build_proposal_prompt(question, vocab)
-        text, usage, _cached = LQ._call_llm(prompt, model_name())
-        proposals = CP.parse_proposal_response(text)
+        if replayed:
+            usage = {}
+            proposals = [CP.ProposedConcept(
+                p["kind"], p["term"], p.get("covers") or "",
+                p.get("comparator"), p.get("value")) for p in _REPLAY[question]]
+        else:
+            prompt = CP.build_proposal_prompt(question, vocab)
+            text, usage, _cached = LQ._call_llm(prompt, model_name())
+            proposals = CP.parse_proposal_response(text)
     except Exception as exc:  # noqa: BLE001 - the arm degrades, the request lives
         logger.info("concept proposal unavailable for %r: %s: %s",
                     question, type(exc).__name__, exc)
@@ -148,7 +173,8 @@ def apply(question: str, spec: Any, semantics: Dict[str, Any], *,
 
     return {
         "status": "applied" if applied else "no_change",
-        "model": model_name(),
+        "source": "replayed" if replayed else "model",
+        "model": None if replayed else model_name(),
         "provenance": CM.PROV_MODEL_INFERRED,
         "proposed": [p.as_dict() for p in proposals],
         "bound": [b.as_dict() for b in bound],
