@@ -3695,6 +3695,35 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                          registry=registry_for_scope, caller_scope=source_lens,
                          available_values=values_for_scope)
 
+    # THE CONCEPT-MERGE ARM, off by default and independent of the free-form
+    # parser. It runs HERE — after the deterministic contract exists and before
+    # any recogniser has seen the spec — so a concept the model recovers is
+    # routed on, rather than being added to a contract routing has already
+    # decided against. The interpretation it merges into is the DETERMINISTIC
+    # one, built from the spec before any fill.
+    concept_merge_evidence = None
+    try:
+        from . import concept_merge_arm as _merge_arm
+
+        if _merge_arm.enabled():
+            concept_merge_evidence = _merge_arm.apply(
+                question, spec, semantics,
+                interpretation=_build_interpretation(),
+                available_values=_values_for_recognition(),
+                available_columns=getattr(parsed, "available_columns", None))
+    except Exception as exc:  # noqa: BLE001 - the arm never fails a request
+        _logger.info("concept merge arm skipped: %s: %s", type(exc).__name__, exc)
+    if concept_merge_evidence is not None:
+        # CARRIED ON THE PARSE METADATA, which is already the channel for "how
+        # was this contract arrived at". The point-in-time path returns no
+        # routed envelope to stamp, and the spec it executes is the same object
+        # this arm just changed — so the evidence has to travel with the parse,
+        # not with a route.
+        try:
+            parsed.meta["conceptMerge"] = concept_merge_evidence
+        except Exception:  # noqa: BLE001 - evidence never fails a request
+            pass
+
     request = RouteRequest(
         question=question, spec=spec, spec_dict=spec.to_dict(),
         available_values=_values_for_recognition(),

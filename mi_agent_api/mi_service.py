@@ -1213,6 +1213,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None
+    # WHAT THE CONCEPT-MERGE ARM DID, on whichever envelope this request
+    # produces. The arm runs inside routing (it needs the interpretation, which
+    # routing builds) and carries its evidence out on the parse metadata,
+    # because the point-in-time path returns no routed envelope to stamp and
+    # executes the very spec the arm changed.
+    _concept_merge = (getattr(parsed, "meta", None) or {}).get("conceptMerge")
+
     if routed is not None:
         route = (routed.get("metadata") or {}).get("route") if isinstance(routed, dict) else None
         if isinstance(routed, dict):
@@ -1220,6 +1227,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             if isinstance(rmeta, dict):
                 rmeta.setdefault("parserProvenance", _parser_provenance(
                     {"metadata": {"parse_metadata": dict(getattr(parsed, "meta", {}) or {})}}))
+                if _concept_merge is not None:
+                    rmeta["conceptMerge"] = _concept_merge
         _stamp_routed_scope(routed, req)
         routed = _guard_routed_answer(routed, question=req.question, route=route,
                                       semantics=semantics, frame=df,
@@ -1279,6 +1288,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                              "model": llm_cfg.model if llm_cfg.available else None,
                              "status": llm_cfg.status}
         meta.setdefault("parserProvenance", _parser_provenance(workflow))
+        if _concept_merge is not None:
+            meta["conceptMerge"] = _concept_merge
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
     # Governed portfolio scope + coverage. The BACKEND states which portfolios
