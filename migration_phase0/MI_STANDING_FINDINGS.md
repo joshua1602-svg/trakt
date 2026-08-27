@@ -442,39 +442,81 @@ of which **nine are correct compositions** (`funded+pipeline`) that a naive
 
 ---
 
-## OPEN · My grader buries recorded verdicts behind NO_COMPUTABLE_TRUTH
+## F3, SECOND INSTANCE — INSIDE THE INSTRUMENT THAT ENFORCES F3 · CLOSED
 
-F3's family, on this programme's own instrument.
+F3 says *an instrument that cannot be measured must report NOT MEASURED, never
+clean.* It does **not** say that not-measured may overrule a measurement somebody
+else made. The grader that enforces F3 across this programme was doing exactly
+that.
 
-`grader.grade_75` returns `NO_COMPUTABLE_TRUTH` the moment `independent_truth` is
-null, and **never reads the frozen human `grade` sitting in the same row of
-`MI_FINAL_LIVE_DATA_READINESS.json`**. Of the 22 pack rows it so labels, five
-carry a recorded wrong verdict that the label buries:
+`grade_75` returned `NO_COMPUTABLE_TRUTH` the moment `independent_truth` was
+null — **over the top of a `grade` field sitting in the same row of the same
+file**, recorded by a human who had read the answer. Twenty-two pack rows carried
+that label. Five of them were recorded wrong verdicts:
 
-| id | frozen human grade | frozen rationale |
+| id | buried verdict | frozen rationale |
 |---|---|---|
-| Q10A | **WRONG / SILENT** | answered from the FUNDED book; the question named the pipeline dataset |
-| Q07B | **WRONG / SILENT** | both scopes dropped; a whole-book figure answered a comparison question |
-| Q25A | **CURRENT-STATE SUBSTITUTION** | a FORWARD question answered with today's risk-limit status |
-| Q25B | **CURRENT-STATE SUBSTITUTION** | as above |
-| Q25C | **CURRENT-STATE SUBSTITUTION** | as above |
+| Q10A | WRONG / SILENT | answered from the FUNDED book; the question named the pipeline dataset |
+| **Q07B** | WRONG / SILENT | both scopes dropped; a whole-book figure answered a comparison question |
+| Q25A/B/C | CURRENT-STATE SUBSTITUTION | a FORWARD question answered with today's risk-limit status |
 
-F3 says an instrument that cannot be measured must report NOT MEASURED, never
-clean. `NO_COMPUTABLE_TRUTH` reports not-measured honestly — and then **out-ranks
-a verdict somebody else already measured.** Reporting a gap in one's own oracle
-must not overwrite another oracle's finding.
+**Q07B has nothing to do with the dataset class it was found beside.** It was
+buried by a label that reads as innocuous, in every pack this programme has
+published.
 
-The consequence is the sentence I wrote and should not have: *"none grades WRONG
-because none has a computable truth, which is how all fifteen survived every bank
-this programme has run."* They did not survive the bank. The bank caught them and
-my grader discarded the verdict.
+**Fixed, and the fix is deference gated on fidelity.** Precedence is now: a
+refusal is a refusal; then the COMPUTED truth where one exists, because it is the
+stronger oracle and it is what caught Q19C; then the frozen human grade, **only
+where today's answer is byte-identical to the one that grade was recorded
+against**; then `NO_COMPUTABLE_TRUTH`, which now means nobody has measured this
+rather than "I could not, so nothing else counts".
 
-Cheaper than the product fix, and recovers more: deferring to the frozen grade
-surfaces five recorded wrong verdicts, including Q07B, which has nothing to do
-with datasets.
+The fidelity gate is load-bearing. A frozen grade judges a PARTICULAR ANSWER, not
+a question, and code has shipped since that run. Deferring to a grade recorded
+against a different answer would assert a stale verdict with a human's authority
+behind it — a worse failure than the one being fixed. Where the answer has moved,
+the grader says so in its reason rather than silently deferring.
 
-**Owner: separate work.** Measured in
-`migration_phase0/MI_DATASET_CLASS_SCOPE.md` §4.
+**Measured, both arms, zero answers moved** (a grader is not the product):
+
+| | CORRECT | FALSE_REFUSAL | NO_COMPUTABLE_TRUTH | TRUE_REFUSAL | WRONG |
+|---|---:|---:|---:|---:|---:|
+| off before | 102 | 21 | 22 | 15 | 6 |
+| **off after** | **118** | 21 | **1** | 15 | **11** |
+| merge before | 109 | 20 | 20 | 15 | 2 |
+| **merge after** | **123** | 20 | **2** | 15 | **6** |
+
+Five recorded wrong verdicts surfaced on the deterministic arm and four on the
+merge arm; sixteen answers a human had graded correct stopped being reported as
+unmeasured. `NO_COMPUTABLE_TRUTH` now falls to 1 and 2 — which is what an honest
+"nobody has measured this" should look like on a bank this well covered.
+
+**The grader is now in the repository**, at `migration_phase0/pack_grader.py`. It
+graded a committed, hand-reviewed artefact from an ephemeral scratch directory
+where no one could read it. A review artefact whose oracle is not reviewable is
+an assertion, not evidence.
+
+---
+
+## F6 CONFIRMED IN PRACTICE · a `cd` silently changed the pack
+
+While re-running the pack for the grader fix, two CFO refusals changed wording
+between two runs of identical code. The cause was F6 exactly: one shell
+invocation began with `cd` into the scratch directory, so
+`trakt_core.capability.load_registry` — which resolves
+`config/system/mi_capability_registry.yaml` **relative to the process cwd** —
+raised `FileNotFoundError`, `_capability_explanation` swallowed it, and two
+governed refusals degraded from naming their owned metric and its methodology to
+*"I couldn't map this question to a governed analytic."*
+
+Instrumented, the failure fires on the **first** call in such a process and every
+call after it. Re-run from the repository root, the rich wording returns and the
+pack is byte-reproducible.
+
+No wrong number either way — but a measurement harness that changes directory
+produced a different pack, silently, and nothing said so. **F6 stays at the top of
+the open list; this is the second time it has cost a measurement in this
+programme.**
 
 ---
 

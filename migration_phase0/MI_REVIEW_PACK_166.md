@@ -12,14 +12,14 @@ Whole book: **640 loans**. Sorted so the likely mis-grades come first.
 
 | bucket | what it is | count |
 |---|---|---|
-| `0a_` | **WRONG** — a figure that is not the truth, with a receipt. Read these first | **6** |
+| `0a_` | **WRONG** — a figure that is not the truth, with a receipt. Read these first | **11** |
 | `0b_` | The two arms DISAGREE on the grade — compare the pair | **5** |
 | `1a_` | CORRECT, answered over the WHOLE BOOK, and the question NARROWS | **0** |
 | `1b_` | CORRECT, answered over the whole book, and the question is a whole-book question | **31** |
 | `2_n` | The question NAMES a narrowing and NO filter was applied | **5** |
 | `3_q` | The answer quotes a figure the truth calculation did not produce | **0** |
 | `4_k` | Known grader divergences | **3** |
-| `5_r` | The rest | **116** |
+| `5_r` | The rest | **111** |
 
 ## Surface 1 — a CORRECT answer covering more rows than the narrowing implies
 
@@ -157,6 +157,76 @@ concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'erm
 grade reason: count 278 found; wa_ltv 37.05% found
 
 
+## Q07B · BANK75
+
+**Question as typed:** How do the Direct and Acquired portfolios differ?
+
+**Truth:** — no independently computed truth for this case
+
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `WRONG`**
+population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
+measure `None` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+
+> 640 loans · Current Outstanding Balance: £172.1MM.
+> 
+> Calculated: Count of loans · 640 loans · as at 30 June 2026.
+
+grade reason: frozen human grade 'WRONG / SILENT' on a byte-identical answer — both scopes dropped; a whole-book figure answered a comparison question
+
+**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
+population: not published by this route
+measure `None` · aggregation `count` · narrowed `None`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `['source_portfolio_type', 'source_portfolio_type']`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
+concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'source_portfolio_type'}] · conflicts 2
+
+> parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.
+
+grade reason: expected an answer, got a refusal
+
+
+## Q10A · BANK75
+
+**Question as typed:** Summarise the current pipeline.
+
+**Truth:** — no independently computed truth for this case
+
+**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Governed analysis` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
+
+> At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.
+> 
+> Calculated: Governed analysis.
+
+grade reason: frozen human grade 'WRONG / SILENT' on a byte-identical answer — answered from the FUNDED book; the question named the pipeline dataset
+
+**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Governed analysis` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.
+> 
+> Calculated: Governed analysis.
+
+grade reason: frozen human grade 'WRONG / SILENT' on a byte-identical answer — answered from the FUNDED book; the question named the pipeline dataset
+
+
 ## Q16B · BANK75
 
 **Question as typed:** Break drawdown balance down by both geography and LTV band.
@@ -273,6 +343,114 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 grade reason: delta 12366371.40 ABSENT
 
 
+## Q25A · BANK75
+
+**Question as typed:** Do we expect to breach any concentration tests?
+
+**Truth:** — no independently computed truth for this case
+
+**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+
+> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
+> 
+> Calculated: Concentration limits vs the governing document.
+
+grade reason: frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing
+
+**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
+> 
+> Calculated: Concentration limits vs the governing document.
+
+grade reason: frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing
+
+
+## Q25B · BANK75
+
+**Question as typed:** Are any concentration limits likely to be breached as the book grows?
+
+**Truth:** — no independently computed truth for this case
+
+**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+
+> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
+> 
+> Calculated: Concentration limits vs the governing document.
+
+grade reason: frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing
+
+**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `none`
+scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
+> 
+> Calculated: Concentration limits vs the governing document.
+
+grade reason: frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing
+
+
+## Q25C · BANK75
+
+**Question as typed:** Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?
+
+**Truth:** — no independently computed truth for this case
+
+**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Concentration limits vs the governing document` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `['collateral_geography']`
+scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
+
+> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
+> 
+> Calculated: Concentration limits vs the governing document.
+
+grade reason: frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing
+
+**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `WRONG`**
+population: not published by this route
+measure `Concentration limits vs the governing document` · aggregation `sum` · narrowed `False`
+filters applied: `none`
+spec filters: `{}`
+dimensions applied: `none` · spec dimensions: `['collateral_geography']`
+scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
+concept merge: `no_change` (replayed) · applied [] · conflicts 0
+
+> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
+> 
+> Calculated: Concentration limits vs the governing document.
+
+grade reason: frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing
+
+
 ---
 
 # The two arms DISAGREE on the grade — compare the pair  (`0b_`)
@@ -386,38 +564,42 @@ concept merge: `applied` (replayed) · applied [{'kind': 'filter', 'field': 'cur
 grade reason: count 45 found
 
 
-## Q07B · BANK75
+## Q10B · BANK75
 
-**Question as typed:** How do the Direct and Acquired portfolios differ?
+**Question as typed:** Give me an overview of the pipeline by size and stage.
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: **640** of 640 (whole book 640)  ← THE WHOLE BOOK
-measure `None` · aggregation `count` · narrowed `False`
+**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `CORRECT`**
+population: **8** of 8 (whole book 640)
+measure `Balance` · aggregation `sum` · narrowed `False`
 filters applied: `none`
 spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
+dimensions applied: `['Pipeline Stage']` · spec dimensions: `['pipeline_stage']`
+scope `None` · scopeApplied `None` · dataset context `pipeline` · reconciled against `pipeline`
+facets: grouping_dimension `stage` → applied
 
-> 640 loans · Current Outstanding Balance: £172.1MM.
+> Here is the bar for your query, covering 5 groups.
 > 
-> Calculated: Count of loans · 640 loans · as at 30 June 2026.
+> Calculated: Total Balance · grouped by Pipeline Stage · 5 groups · 8 loans.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the PIPELINE dataset, not the funded book
 
-**MERGE ON** — route `point-in-time` · verdict `refused` · **grade `FALSE_REFUSAL`**
-population: not published by this route
-measure `None` · aggregation `count` · narrowed `None`
+**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+population: **8** of 8 (whole book 640)
+measure `Balance` · aggregation `sum` · narrowed `False`
 filters applied: `none`
 spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['source_portfolio_type', 'source_portfolio_type']`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `None`
-concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'source_portfolio_type'}] · conflicts 2
+dimensions applied: `['Ticket Size', 'Pipeline Stage']` · spec dimensions: `['ticket_bucket', 'pipeline_stage']`
+scope `None` · scopeApplied `None` · dataset context `pipeline` · reconciled against `pipeline`
+facets: grouping_dimension `stage` → applied
+concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'ticket_bucket'}] · conflicts 0
 
-> parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.
+> Here is the bar for your query, covering 8 groups.
+> 
+> Calculated: Total Balance · grouped by Ticket Size and Pipeline Stage · 8 groups · 8 loans.
 
-grade reason: expected an answer, got a refusal
+grade reason: no independent truth, and the frozen grade 'SUBSTANTIVELY CORRECT' was recorded against a different answer
 
 
 ## Q23A · BANK75
@@ -426,7 +608,7 @@ grade reason: expected an answer, got a refusal
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -439,7 +621,7 @@ facets: projection `a forward projection` → applied
 > 
 > Calculated: Run-rate extrapolation.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'EXACT' on a byte-identical answer — states the milestone is already reached — £112.8m at the earliest snapshot, so the crossing predates available history; no future date was fabricated
 
 **MERGE ON** — route `forecast_extrapolation` · verdict `refused` · **grade `FALSE_REFUSAL`**
 population: not published by this route
@@ -4850,7 +5032,7 @@ grade reason: expected an answer, got a refusal
 
 **Frozen bank expects:** `DELIVER`
 
-**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Governed analysis` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -4862,9 +5044,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Governed analysis.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance
 
-**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Governed analysis` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -4877,7 +5059,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Governed analysis.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance
 
 
 ## Q06B · BANK75
@@ -4886,7 +5068,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Governed analysis` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -4898,9 +5080,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Governed analysis.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance
 
-**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Governed analysis` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -4913,7 +5095,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Governed analysis.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance
 
 
 ## Q06C · BANK75
@@ -4922,7 +5104,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Governed analysis` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -4934,9 +5116,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Governed analysis.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance
 
-**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Governed analysis` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -4949,7 +5131,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Governed analysis.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance
 
 
 ## Q07A · BANK75
@@ -4958,7 +5140,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `portfolio_risk_comparison` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `portfolio_risk_comparison` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age` · aggregation `count` · narrowed `False`
 filters applied: `['Direct vs Acquired']`
@@ -4971,9 +5153,9 @@ facets: cohort_comparison `a comparison by how the loans were sourced` → appli
 > 
 > Calculated: Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age · Direct vs Acquired.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted
 
-**MERGE ON** — route `portfolio_risk_comparison` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `portfolio_risk_comparison` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age` · aggregation `count` · narrowed `False`
 filters applied: `['Direct vs Acquired']`
@@ -4987,7 +5169,7 @@ concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': '
 > 
 > Calculated: Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age · Direct vs Acquired.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted
 
 
 ## Q07C · BANK75
@@ -4996,7 +5178,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `portfolio_risk_comparison` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `portfolio_risk_comparison` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age` · aggregation `count` · narrowed `False`
 filters applied: `['Direct vs Acquired']`
@@ -5009,9 +5191,9 @@ facets: cohort_comparison `a comparison by how the loans were sourced` → appli
 > 
 > Calculated: Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age · Direct vs Acquired.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted
 
-**MERGE ON** — route `portfolio_risk_comparison` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `portfolio_risk_comparison` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age` · aggregation `count` · narrowed `False`
 filters applied: `['Direct vs Acquired']`
@@ -5025,7 +5207,7 @@ concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': '
 > 
 > Calculated: Total Current Outstanding Balance · Loan Count · Weighted-average Current Loan To Value · Weighted-average Current Interest Rate · Average Youngest Borrower Age · Direct vs Acquired.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted
 
 
 ## Q08A · BANK75
@@ -5034,7 +5216,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `loan_level` · narrowed `False`
 filters applied: `none`
@@ -5047,9 +5229,9 @@ facets: requested_statistic `the maximum` → applied
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares
 
-**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `loan_level` · narrowed `False`
 filters applied: `none`
@@ -5063,7 +5245,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares
 
 
 ## Q08B · BANK75
@@ -5072,7 +5254,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `loan_level` · narrowed `False`
 filters applied: `none`
@@ -5085,9 +5267,9 @@ facets: requested_statistic `the maximum` → applied
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares
 
-**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `loan_level` · narrowed `False`
 filters applied: `none`
@@ -5101,7 +5283,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares
 
 
 ## Q08C · BANK75
@@ -5110,7 +5292,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -5122,9 +5304,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares
 
-**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -5137,7 +5319,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares
 
 
 ## Q09A · BANK75
@@ -5146,7 +5328,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -5158,9 +5340,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Concentration limits vs the governing document.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits
 
-**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -5173,7 +5355,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Concentration limits vs the governing document.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits
 
 
 ## Q09B · BANK75
@@ -5182,7 +5364,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -5194,9 +5376,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits
 
-**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `concentration_analysis` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Exposure concentration` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -5209,7 +5391,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Exposure concentration.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits
 
 
 ## Q09C · BANK75
@@ -5218,7 +5400,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -5230,9 +5412,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Concentration limits vs the governing document.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits
 
-**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
 filters applied: `none`
@@ -5245,81 +5427,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Concentration limits vs the governing document.
 
-grade reason: no independent truth was computed for this case
-
-
-## Q10A · BANK75
-
-**Question as typed:** Summarise the current pipeline.
-
-**Truth:** — no independently computed truth for this case
-
-**MODEL OFF** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Governed analysis` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
-
-> At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.
-> 
-> Calculated: Governed analysis.
-
-grade reason: no independent truth was computed for this case
-
-**MERGE ON** — route `portfolio_summary` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Governed analysis` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.
-> 
-> Calculated: Governed analysis.
-
-grade reason: no independent truth was computed for this case
-
-
-## Q10B · BANK75
-
-**Question as typed:** Give me an overview of the pipeline by size and stage.
-
-**Truth:** — no independently computed truth for this case
-
-**MODEL OFF** — route `point-in-time` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: **8** of 8 (whole book 640)
-measure `Balance` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `['Pipeline Stage']` · spec dimensions: `['pipeline_stage']`
-scope `None` · scopeApplied `None` · dataset context `pipeline` · reconciled against `pipeline`
-facets: grouping_dimension `stage` → applied
-
-> Here is the bar for your query, covering 5 groups.
-> 
-> Calculated: Total Balance · grouped by Pipeline Stage · 5 groups · 8 loans.
-
-grade reason: no independent truth was computed for this case
-
-**MERGE ON** — route `point-in-time` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: **8** of 8 (whole book 640)
-measure `Balance` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `['Ticket Size', 'Pipeline Stage']` · spec dimensions: `['ticket_bucket', 'pipeline_stage']`
-scope `None` · scopeApplied `None` · dataset context `pipeline` · reconciled against `pipeline`
-facets: grouping_dimension `stage` → applied
-concept merge: `applied` (replayed) · applied [{'kind': 'dimension', 'field': 'ticket_bucket'}] · conflicts 0
-
-> Here is the bar for your query, covering 8 groups.
-> 
-> Calculated: Total Balance · grouped by Ticket Size and Pipeline Stage · 8 groups · 8 loans.
-
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits
 
 
 ## Q10C · BANK75
@@ -6088,7 +6196,7 @@ grade reason: expected an answer, got a refusal
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -6100,9 +6208,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Run-rate extrapolation.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'EXACT' on a byte-identical answer — states the milestone is already reached — £112.8m at the earliest snapshot, so the crossing predates available history; no future date was fabricated
 
-**MERGE ON** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `forecast_extrapolation` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -6115,7 +6223,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Run-rate extrapolation.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'EXACT' on a byte-identical answer — states the milestone is already reached — £112.8m at the earliest snapshot, so the crossing predates available history; no future date was fabricated
 
 
 ## Q24A · BANK75
@@ -6124,7 +6232,7 @@ grade reason: no independent truth was computed for this case
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -6137,9 +6245,9 @@ facets: projection `a forward projection` → applied
 > 
 > Calculated: Run-rate extrapolation.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots
 
-**MERGE ON** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `forecast_extrapolation` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -6153,7 +6261,7 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Run-rate extrapolation.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots
 
 
 ## Q24B · BANK75
@@ -6194,7 +6302,7 @@ grade reason: expected an answer, got a refusal
 
 **Truth:** — no independently computed truth for this case
 
-**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MODEL OFF** — route `forecast_extrapolation` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -6206,9 +6314,9 @@ scope `total` · scopeApplied `None` · dataset context `funded` · reconciled a
 > 
 > Calculated: Run-rate extrapolation.
 
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots
 
-**MERGE ON** — route `forecast_extrapolation` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
+**MERGE ON** — route `forecast_extrapolation` · verdict `answered` · **grade `CORRECT`**
 population: not published by this route
 measure `Run-rate extrapolation` · aggregation `sum` · narrowed `False`
 filters applied: `none`
@@ -6221,112 +6329,4 @@ concept merge: `no_change` (replayed) · applied [] · conflicts 0
 > 
 > Calculated: Run-rate extrapolation.
 
-grade reason: no independent truth was computed for this case
-
-
-## Q25A · BANK75
-
-**Question as typed:** Do we expect to breach any concentration tests?
-
-**Truth:** — no independently computed truth for this case
-
-**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-
-> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
-> 
-> Calculated: Concentration limits vs the governing document.
-
-grade reason: no independent truth was computed for this case
-
-**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
-> 
-> Calculated: Concentration limits vs the governing document.
-
-grade reason: no independent truth was computed for this case
-
-
-## Q25B · BANK75
-
-**Question as typed:** Are any concentration limits likely to be breached as the book grows?
-
-**Truth:** — no independently computed truth for this case
-
-**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-
-> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
-> 
-> Calculated: Concentration limits vs the governing document.
-
-grade reason: no independent truth was computed for this case
-
-**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Concentration limits vs the governing document` · aggregation `count` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `none`
-scope `total` · scopeApplied `None` · dataset context `funded` · reconciled against `funded`
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
-> 
-> Calculated: Concentration limits vs the governing document.
-
-grade reason: no independent truth was computed for this case
-
-
-## Q25C · BANK75
-
-**Question as typed:** Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?
-
-**Truth:** — no independently computed truth for this case
-
-**MODEL OFF** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Concentration limits vs the governing document` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['collateral_geography']`
-scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
-
-> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
-> 
-> Calculated: Concentration limits vs the governing document.
-
-grade reason: no independent truth was computed for this case
-
-**MERGE ON** — route `risk_limits` · verdict `answered` · **grade `NO_COMPUTABLE_TRUTH`**
-population: not published by this route
-measure `Concentration limits vs the governing document` · aggregation `sum` · narrowed `False`
-filters applied: `none`
-spec filters: `{}`
-dimensions applied: `none` · spec dimensions: `['collateral_geography']`
-scope `total` · scopeApplied `None` · dataset context `pipeline` · reconciled against `funded`
-concept merge: `no_change` (replayed) · applied [] · conflicts 0
-
-> 5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.
-> 
-> Calculated: Concentration limits vs the governing document.
-
-grade reason: no independent truth was computed for this case
+grade reason: frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots

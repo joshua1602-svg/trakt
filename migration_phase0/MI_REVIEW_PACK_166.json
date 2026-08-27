@@ -745,6 +745,364 @@
    "known_divergence": null
   },
   {
+   "id": "Q07B",
+   "bank": "BANK75",
+   "question": "How do the Direct and Acquired portfolios differ?",
+   "flags": [
+    "0a_WRONG[off]",
+    "0b_the_arms_disagree",
+    "2_names_a_narrowing_none_applied[merge]",
+    "2_names_a_narrowing_none_applied[off]"
+   ],
+   "off": {
+    "arm": "off",
+    "bank": "BANK75",
+    "id": "Q07B",
+    "question": "How do the Direct and Acquired portfolios differ?",
+    "ok": true,
+    "answer": "640 loans · Current Outstanding Balance: £172.1MM.\n\nCalculated: Count of loans · 640 loans · as at 30 June 2026.",
+    "error": "",
+    "route": null,
+    "population": 640,
+    "populationTotal": 640,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": null,
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "funded",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Count of loans · 640 loans · as at 30 June 2026.",
+    "warnings": [],
+    "artefacts": [
+     {
+      "title": "Summary",
+      "type": "kpi",
+      "rows": 0
+     }
+    ],
+    "concept_merge": null,
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'WRONG / SILENT' on a byte-identical answer — both scopes dropped; a whole-book figure answered a comparison question"
+   },
+   "merge": {
+    "arm": "merge",
+    "bank": "BANK75",
+    "id": "Q07B",
+    "question": "How do the Direct and Acquired portfolios differ?",
+    "ok": false,
+    "answer": "parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.",
+    "error": "parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.",
+    "route": null,
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": null,
+    "whole_book_rows": 640,
+    "narrowed": null,
+    "measure": null,
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [
+     "source_portfolio_type",
+     "source_portfolio_type"
+    ],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": null,
+    "dataset_context": "funded",
+    "facets": [],
+    "not_applied": [],
+    "receipt": null,
+    "warnings": [
+     "parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension."
+    ],
+    "artefacts": [
+     {
+      "title": "Query Validation",
+      "type": "validation",
+      "rows": 0
+     }
+    ],
+    "concept_merge": {
+     "status": "applied",
+     "source": "replayed",
+     "model": null,
+     "provenance": "model_inferred",
+     "proposed": [
+      {
+       "kind": "source_book",
+       "term": "direct",
+       "covers": "Direct"
+      },
+      {
+       "kind": "source_book",
+       "term": "acquired",
+       "covers": "Acquired"
+      },
+      {
+       "kind": "dimension",
+       "term": "direct or acquired",
+       "covers": "Direct and Acquired portfolios"
+      }
+     ],
+     "bound": [
+      {
+       "kind": "source_book",
+       "term": "direct",
+       "covers": "Direct",
+       "field": "portfolio_lens",
+       "value": "direct",
+       "bound_by": "portfolio_lens.lens_from_term"
+      },
+      {
+       "kind": "source_book",
+       "term": "acquired",
+       "covers": "Acquired",
+       "field": "portfolio_lens",
+       "value": "acquired",
+       "bound_by": "portfolio_lens.lens_from_term"
+      },
+      {
+       "kind": "dimension",
+       "term": "direct or acquired",
+       "covers": "Direct and Acquired portfolios",
+       "field": "source_portfolio_type",
+       "value": null,
+       "bound_by": "llm_query_parser._explicit_dimensions"
+      }
+     ],
+     "rejected": [],
+     "applied": [
+      {
+       "kind": "dimension",
+       "field": "source_portfolio_type"
+      }
+     ],
+     "findings": [
+      {
+       "outcome": "declined_slot_chosen_by_a_person",
+       "slot": "source_scope",
+       "key": null,
+       "proposed": "direct",
+       "deterministic": "total",
+       "deterministic_provenance": "explicit_user",
+       "detail": "a filled slot is never overwritten; the disagreement is reported and neither side is picked",
+       "is_conflict": true
+      },
+      {
+       "outcome": "declined_slot_chosen_by_a_person",
+       "slot": "source_scope",
+       "key": null,
+       "proposed": "acquired",
+       "deterministic": "total",
+       "deterministic_provenance": "explicit_user",
+       "detail": "a filled slot is never overwritten; the disagreement is reported and neither side is picked",
+       "is_conflict": true
+      },
+      {
+       "outcome": "filled_by_model",
+       "slot": "dimensions",
+       "key": "source_portfolio_type",
+       "proposed": "source_portfolio_type",
+       "deterministic": null,
+       "deterministic_provenance": null,
+       "detail": "the slot was empty",
+       "is_conflict": false
+      }
+     ],
+     "conflicts": 2,
+     "usage": {}
+    },
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "FALSE_REFUSAL",
+    "grade_why": "expected an answer, got a refusal"
+   },
+   "data_claim_off": null,
+   "data_claim_merge": null,
+   "known_divergence": null
+  },
+  {
+   "id": "Q10A",
+   "bank": "BANK75",
+   "question": "Summarise the current pipeline.",
+   "flags": [
+    "0a_WRONG[merge]",
+    "0a_WRONG[off]"
+   ],
+   "off": {
+    "arm": "off",
+    "bank": "BANK75",
+    "id": "Q10A",
+    "question": "Summarise the current pipeline.",
+    "ok": true,
+    "answer": "At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.\n\nCalculated: Governed analysis.",
+    "error": "",
+    "route": "portfolio_summary",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Governed analysis",
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "pipeline",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Governed analysis.",
+    "warnings": [],
+    "artefacts": [
+     {
+      "title": "Portfolio summary — 30 June 2026",
+      "type": "kpi",
+      "rows": 0
+     },
+     {
+      "title": "Funded balance by region",
+      "type": "chart",
+      "rows": 7
+     },
+     {
+      "title": "Funded balance by source portfolio",
+      "type": "table",
+      "rows": 2
+     }
+    ],
+    "concept_merge": null,
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'WRONG / SILENT' on a byte-identical answer — answered from the FUNDED book; the question named the pipeline dataset"
+   },
+   "merge": {
+    "arm": "merge",
+    "bank": "BANK75",
+    "id": "Q10A",
+    "question": "Summarise the current pipeline.",
+    "ok": true,
+    "answer": "At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.\n\nCalculated: Governed analysis.",
+    "error": "",
+    "route": "portfolio_summary",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Governed analysis",
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "pipeline",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Governed analysis.",
+    "warnings": [],
+    "artefacts": [
+     {
+      "title": "Portfolio summary — 30 June 2026",
+      "type": "kpi",
+      "rows": 0
+     },
+     {
+      "title": "Funded balance by region",
+      "type": "chart",
+      "rows": 7
+     },
+     {
+      "title": "Funded balance by source portfolio",
+      "type": "table",
+      "rows": 2
+     }
+    ],
+    "concept_merge": {
+     "status": "no_change",
+     "source": "replayed",
+     "model": null,
+     "provenance": "model_inferred",
+     "proposed": [
+      {
+       "kind": "dataset",
+       "term": "pipeline",
+       "covers": "current pipeline"
+      }
+     ],
+     "bound": [
+      {
+       "kind": "dataset",
+       "term": "pipeline",
+       "covers": "current pipeline",
+       "field": "dataset",
+       "value": "pipeline",
+       "bound_by": "workspace"
+      }
+     ],
+     "rejected": [],
+     "applied": [],
+     "findings": [
+      {
+       "outcome": "agreed_with_the_deterministic_claim",
+       "slot": "dataset",
+       "key": null,
+       "proposed": "pipeline",
+       "deterministic": "pipeline",
+       "deterministic_provenance": "explicit_user",
+       "detail": "the deterministic claim already says this",
+       "is_conflict": false
+      }
+     ],
+     "conflicts": 0,
+     "usage": {}
+    },
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'WRONG / SILENT' on a byte-identical answer — answered from the FUNDED book; the question named the pipeline dataset"
+   },
+   "data_claim_off": null,
+   "data_claim_merge": null,
+   "known_divergence": null
+  },
+  {
    "id": "Q16B",
    "bank": "BANK75",
    "question": "Break drawdown balance down by both geography and LTV band.",
@@ -1654,6 +2012,426 @@
    "known_divergence": "the frozen human grade says SUBSTANTIVELY CORRECT; the numeric oracle says the £12.4m delta is absent from the answer"
   },
   {
+   "id": "Q25A",
+   "bank": "BANK75",
+   "question": "Do we expect to breach any concentration tests?",
+   "flags": [
+    "0a_WRONG[merge]",
+    "0a_WRONG[off]"
+   ],
+   "off": {
+    "arm": "off",
+    "bank": "BANK75",
+    "id": "Q25A",
+    "question": "Do we expect to breach any concentration tests?",
+    "ok": true,
+    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
+    "error": "",
+    "route": "risk_limits",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Concentration limits vs the governing document",
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "funded",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Concentration limits vs the governing document.",
+    "warnings": [
+     "3 test(s) unavailable (missing fields).",
+     "1 limit(s) need manual review."
+    ],
+    "artefacts": [
+     {
+      "title": "Concentration vs Schedule 8 limits",
+      "type": "risk",
+      "rows": 0
+     },
+     {
+      "title": "Risk limit tests",
+      "type": "table",
+      "rows": 15
+     }
+    ],
+    "concept_merge": null,
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing"
+   },
+   "merge": {
+    "arm": "merge",
+    "bank": "BANK75",
+    "id": "Q25A",
+    "question": "Do we expect to breach any concentration tests?",
+    "ok": true,
+    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
+    "error": "",
+    "route": "risk_limits",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Concentration limits vs the governing document",
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "funded",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Concentration limits vs the governing document.",
+    "warnings": [
+     "3 test(s) unavailable (missing fields).",
+     "1 limit(s) need manual review."
+    ],
+    "artefacts": [
+     {
+      "title": "Concentration vs Schedule 8 limits",
+      "type": "risk",
+      "rows": 0
+     },
+     {
+      "title": "Risk limit tests",
+      "type": "table",
+      "rows": 15
+     }
+    ],
+    "concept_merge": {
+     "status": "no_change",
+     "source": "replayed",
+     "model": null,
+     "provenance": "model_inferred",
+     "proposed": [],
+     "bound": [],
+     "rejected": [],
+     "applied": [],
+     "findings": [],
+     "conflicts": 0,
+     "usage": {}
+    },
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing"
+   },
+   "data_claim_off": null,
+   "data_claim_merge": null,
+   "known_divergence": null
+  },
+  {
+   "id": "Q25B",
+   "bank": "BANK75",
+   "question": "Are any concentration limits likely to be breached as the book grows?",
+   "flags": [
+    "0a_WRONG[merge]",
+    "0a_WRONG[off]"
+   ],
+   "off": {
+    "arm": "off",
+    "bank": "BANK75",
+    "id": "Q25B",
+    "question": "Are any concentration limits likely to be breached as the book grows?",
+    "ok": true,
+    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
+    "error": "",
+    "route": "risk_limits",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Concentration limits vs the governing document",
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "funded",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Concentration limits vs the governing document.",
+    "warnings": [
+     "3 test(s) unavailable (missing fields).",
+     "1 limit(s) need manual review."
+    ],
+    "artefacts": [
+     {
+      "title": "Concentration vs Schedule 8 limits",
+      "type": "risk",
+      "rows": 0
+     },
+     {
+      "title": "Risk limit tests",
+      "type": "table",
+      "rows": 15
+     }
+    ],
+    "concept_merge": null,
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing"
+   },
+   "merge": {
+    "arm": "merge",
+    "bank": "BANK75",
+    "id": "Q25B",
+    "question": "Are any concentration limits likely to be breached as the book grows?",
+    "ok": true,
+    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
+    "error": "",
+    "route": "risk_limits",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Concentration limits vs the governing document",
+    "aggregation": "count",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": null,
+    "spec_filters": {},
+    "spec_dimensions": [],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "funded",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Concentration limits vs the governing document.",
+    "warnings": [
+     "3 test(s) unavailable (missing fields).",
+     "1 limit(s) need manual review."
+    ],
+    "artefacts": [
+     {
+      "title": "Concentration vs Schedule 8 limits",
+      "type": "risk",
+      "rows": 0
+     },
+     {
+      "title": "Risk limit tests",
+      "type": "table",
+      "rows": 15
+     }
+    ],
+    "concept_merge": {
+     "status": "no_change",
+     "source": "replayed",
+     "model": null,
+     "provenance": "model_inferred",
+     "proposed": [],
+     "bound": [],
+     "rejected": [],
+     "applied": [],
+     "findings": [],
+     "conflicts": 0,
+     "usage": {}
+    },
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing"
+   },
+   "data_claim_off": null,
+   "data_claim_merge": null,
+   "known_divergence": null
+  },
+  {
+   "id": "Q25C",
+   "bank": "BANK75",
+   "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
+   "flags": [
+    "0a_WRONG[merge]",
+    "0a_WRONG[off]"
+   ],
+   "off": {
+    "arm": "off",
+    "bank": "BANK75",
+    "id": "Q25C",
+    "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
+    "ok": true,
+    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
+    "error": "",
+    "route": "risk_limits",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Concentration limits vs the governing document",
+    "aggregation": "sum",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": "current_outstanding_balance",
+    "spec_filters": {},
+    "spec_dimensions": [
+     "collateral_geography"
+    ],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "pipeline",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Concentration limits vs the governing document.",
+    "warnings": [
+     "3 test(s) unavailable (missing fields).",
+     "1 limit(s) need manual review."
+    ],
+    "artefacts": [
+     {
+      "title": "Concentration vs Schedule 8 limits",
+      "type": "risk",
+      "rows": 0
+     },
+     {
+      "title": "Risk limit tests",
+      "type": "table",
+      "rows": 15
+     }
+    ],
+    "concept_merge": null,
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing"
+   },
+   "merge": {
+    "arm": "merge",
+    "bank": "BANK75",
+    "id": "Q25C",
+    "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
+    "ok": true,
+    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
+    "error": "",
+    "route": "risk_limits",
+    "population": null,
+    "populationTotal": null,
+    "populationLabel": "loans",
+    "whole_book_rows": 640,
+    "narrowed": false,
+    "measure": "Concentration limits vs the governing document",
+    "aggregation": "sum",
+    "filters_applied": [],
+    "dimensions_applied": [],
+    "spec_metric": "current_outstanding_balance",
+    "spec_filters": {},
+    "spec_dimensions": [
+     "collateral_geography"
+    ],
+    "portfolio_scope": "total",
+    "scope_applied": null,
+    "population_applied": null,
+    "reconciliation_dataset": "funded",
+    "dataset_context": "pipeline",
+    "facets": [],
+    "not_applied": [],
+    "receipt": "Calculated: Concentration limits vs the governing document.",
+    "warnings": [
+     "3 test(s) unavailable (missing fields).",
+     "1 limit(s) need manual review."
+    ],
+    "artefacts": [
+     {
+      "title": "Concentration vs Schedule 8 limits",
+      "type": "risk",
+      "rows": 0
+     },
+     {
+      "title": "Risk limit tests",
+      "type": "table",
+      "rows": 15
+     }
+    ],
+    "concept_merge": {
+     "status": "no_change",
+     "source": "replayed",
+     "model": null,
+     "provenance": "model_inferred",
+     "proposed": [
+      {
+       "kind": "dataset",
+       "term": "pipeline",
+       "covers": "forward pipeline"
+      }
+     ],
+     "bound": [
+      {
+       "kind": "dataset",
+       "term": "pipeline",
+       "covers": "forward pipeline",
+       "field": "dataset",
+       "value": "pipeline",
+       "bound_by": "workspace"
+      }
+     ],
+     "rejected": [],
+     "applied": [],
+     "findings": [
+      {
+       "outcome": "agreed_with_the_deterministic_claim",
+       "slot": "dataset",
+       "key": null,
+       "proposed": "pipeline",
+       "deterministic": "pipeline",
+       "deterministic_provenance": "explicit_user",
+       "detail": "the deterministic claim already says this",
+       "is_conflict": false
+      }
+     ],
+     "conflicts": 0,
+     "usage": {}
+    },
+    "truth": null,
+    "cfo_expect": null,
+    "cfo_must": null,
+    "cfo_rows": null,
+    "grade": "WRONG",
+    "grade_why": "frozen human grade 'CURRENT-STATE SUBSTITUTION' on a byte-identical answer — a FORWARD question answered with today's risk-limit status (route risk_limits). A governed funded-vs-forecast concentration primitive exists in mi_agent.risk_monitor but no mi_agent_api route reaches it, so no forward assessment was produced and none was said to be missing"
+   },
+   "data_claim_off": null,
+   "data_claim_merge": null,
+   "known_divergence": null
+  },
+  {
    "id": "Q01C",
    "bank": "BANK75",
    "question": "Count the loans where borrower age is above 55 and current LTV is over 50%.",
@@ -2341,49 +3119,63 @@
    "known_divergence": null
   },
   {
-   "id": "Q07B",
+   "id": "Q10B",
    "bank": "BANK75",
-   "question": "How do the Direct and Acquired portfolios differ?",
+   "question": "Give me an overview of the pipeline by size and stage.",
    "flags": [
-    "0b_the_arms_disagree",
-    "2_names_a_narrowing_none_applied[merge]",
-    "2_names_a_narrowing_none_applied[off]"
+    "0b_the_arms_disagree"
    ],
    "off": {
     "arm": "off",
     "bank": "BANK75",
-    "id": "Q07B",
-    "question": "How do the Direct and Acquired portfolios differ?",
+    "id": "Q10B",
+    "question": "Give me an overview of the pipeline by size and stage.",
     "ok": true,
-    "answer": "640 loans · Current Outstanding Balance: £172.1MM.\n\nCalculated: Count of loans · 640 loans · as at 30 June 2026.",
+    "answer": "Here is the bar for your query, covering 5 groups.\n\nCalculated: Total Balance · grouped by Pipeline Stage · 5 groups · 8 loans.",
     "error": "",
     "route": null,
-    "population": 640,
-    "populationTotal": 640,
+    "population": 8,
+    "populationTotal": 8,
     "populationLabel": "loans",
     "whole_book_rows": 640,
     "narrowed": false,
-    "measure": null,
-    "aggregation": "count",
+    "measure": "Balance",
+    "aggregation": "sum",
     "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
+    "dimensions_applied": [
+     "Pipeline Stage"
+    ],
+    "spec_metric": "current_outstanding_balance",
     "spec_filters": {},
-    "spec_dimensions": [],
-    "portfolio_scope": "total",
+    "spec_dimensions": [
+     "pipeline_stage"
+    ],
+    "portfolio_scope": null,
     "scope_applied": null,
     "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "funded",
-    "facets": [],
+    "reconciliation_dataset": "pipeline",
+    "dataset_context": "pipeline",
+    "facets": [
+     {
+      "kind": "grouping_dimension",
+      "label": "stage",
+      "status": "applied",
+      "reason": ""
+     }
+    ],
     "not_applied": [],
-    "receipt": "Calculated: Count of loans · 640 loans · as at 30 June 2026.",
+    "receipt": "Calculated: Total Balance · grouped by Pipeline Stage · 5 groups · 8 loans.",
     "warnings": [],
     "artefacts": [
      {
-      "title": "Summary",
-      "type": "kpi",
-      "rows": 0
+      "title": "Give me an overview of the pipeline by size and stage.",
+      "type": "chart",
+      "rows": 5
+     },
+     {
+      "title": "Give me an overview of the pipeline by size and stage.",
+      "type": "table",
+      "rows": 5
      }
     ],
     "concept_merge": null,
@@ -2391,49 +3183,62 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the PIPELINE dataset, not the funded book"
    },
    "merge": {
     "arm": "merge",
     "bank": "BANK75",
-    "id": "Q07B",
-    "question": "How do the Direct and Acquired portfolios differ?",
-    "ok": false,
-    "answer": "parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.",
-    "error": "parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension.",
+    "id": "Q10B",
+    "question": "Give me an overview of the pipeline by size and stage.",
+    "ok": true,
+    "answer": "Here is the bar for your query, covering 8 groups.\n\nCalculated: Total Balance · grouped by Ticket Size and Pipeline Stage · 8 groups · 8 loans.",
+    "error": "",
     "route": null,
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": null,
+    "population": 8,
+    "populationTotal": 8,
+    "populationLabel": "loans",
     "whole_book_rows": 640,
-    "narrowed": null,
-    "measure": null,
-    "aggregation": "count",
+    "narrowed": false,
+    "measure": "Balance",
+    "aggregation": "sum",
     "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
+    "dimensions_applied": [
+     "Ticket Size",
+     "Pipeline Stage"
+    ],
+    "spec_metric": "current_outstanding_balance",
     "spec_filters": {},
     "spec_dimensions": [
-     "source_portfolio_type",
-     "source_portfolio_type"
+     "ticket_bucket",
+     "pipeline_stage"
     ],
-    "portfolio_scope": "total",
+    "portfolio_scope": null,
     "scope_applied": null,
     "population_applied": null,
-    "reconciliation_dataset": null,
-    "dataset_context": "funded",
-    "facets": [],
-    "not_applied": [],
-    "receipt": null,
-    "warnings": [
-     "parsed dimension(s) neither applied nor rejected: source_portfolio_type. Refusing to answer with a silently dropped dimension."
+    "reconciliation_dataset": "pipeline",
+    "dataset_context": "pipeline",
+    "facets": [
+     {
+      "kind": "grouping_dimension",
+      "label": "stage",
+      "status": "applied",
+      "reason": ""
+     }
     ],
+    "not_applied": [],
+    "receipt": "Calculated: Total Balance · grouped by Ticket Size and Pipeline Stage · 8 groups · 8 loans.",
+    "warnings": [],
     "artefacts": [
      {
-      "title": "Query Validation",
-      "type": "validation",
-      "rows": 0
+      "title": "Give me an overview of the pipeline by size and stage.",
+      "type": "chart",
+      "rows": 8
+     },
+     {
+      "title": "Give me an overview of the pipeline by size and stage.",
+      "type": "table",
+      "rows": 8
      }
     ],
     "concept_merge": {
@@ -2443,43 +3248,43 @@
      "provenance": "model_inferred",
      "proposed": [
       {
-       "kind": "source_book",
-       "term": "direct",
-       "covers": "Direct"
-      },
-      {
-       "kind": "source_book",
-       "term": "acquired",
-       "covers": "Acquired"
+       "kind": "dataset",
+       "term": "pipeline",
+       "covers": "pipeline"
       },
       {
        "kind": "dimension",
-       "term": "direct or acquired",
-       "covers": "Direct and Acquired portfolios"
+       "term": "loan size",
+       "covers": "by size"
+      },
+      {
+       "kind": "dimension",
+       "term": "pipeline stage",
+       "covers": "stage"
       }
      ],
      "bound": [
       {
-       "kind": "source_book",
-       "term": "direct",
-       "covers": "Direct",
-       "field": "portfolio_lens",
-       "value": "direct",
-       "bound_by": "portfolio_lens.lens_from_term"
-      },
-      {
-       "kind": "source_book",
-       "term": "acquired",
-       "covers": "Acquired",
-       "field": "portfolio_lens",
-       "value": "acquired",
-       "bound_by": "portfolio_lens.lens_from_term"
+       "kind": "dataset",
+       "term": "pipeline",
+       "covers": "pipeline",
+       "field": "dataset",
+       "value": "pipeline",
+       "bound_by": "workspace"
       },
       {
        "kind": "dimension",
-       "term": "direct or acquired",
-       "covers": "Direct and Acquired portfolios",
-       "field": "source_portfolio_type",
+       "term": "loan size",
+       "covers": "by size",
+       "field": "ticket_bucket",
+       "value": null,
+       "bound_by": "llm_query_parser._explicit_dimensions"
+      },
+      {
+       "kind": "dimension",
+       "term": "pipeline stage",
+       "covers": "stage",
+       "field": "pipeline_stage",
        "value": null,
        "bound_by": "llm_query_parser._explicit_dimensions"
       }
@@ -2488,50 +3293,50 @@
      "applied": [
       {
        "kind": "dimension",
-       "field": "source_portfolio_type"
+       "field": "ticket_bucket"
       }
      ],
      "findings": [
       {
-       "outcome": "declined_slot_chosen_by_a_person",
-       "slot": "source_scope",
+       "outcome": "agreed_with_the_deterministic_claim",
+       "slot": "dataset",
        "key": null,
-       "proposed": "direct",
-       "deterministic": "total",
+       "proposed": "pipeline",
+       "deterministic": "pipeline",
        "deterministic_provenance": "explicit_user",
-       "detail": "a filled slot is never overwritten; the disagreement is reported and neither side is picked",
-       "is_conflict": true
-      },
-      {
-       "outcome": "declined_slot_chosen_by_a_person",
-       "slot": "source_scope",
-       "key": null,
-       "proposed": "acquired",
-       "deterministic": "total",
-       "deterministic_provenance": "explicit_user",
-       "detail": "a filled slot is never overwritten; the disagreement is reported and neither side is picked",
-       "is_conflict": true
+       "detail": "the deterministic claim already says this",
+       "is_conflict": false
       },
       {
        "outcome": "filled_by_model",
        "slot": "dimensions",
-       "key": "source_portfolio_type",
-       "proposed": "source_portfolio_type",
+       "key": "ticket_bucket",
+       "proposed": "ticket_bucket",
        "deterministic": null,
        "deterministic_provenance": null,
        "detail": "the slot was empty",
        "is_conflict": false
+      },
+      {
+       "outcome": "agreed_with_the_deterministic_claim",
+       "slot": "dimensions",
+       "key": "pipeline_stage",
+       "proposed": "pipeline_stage",
+       "deterministic": "pipeline_stage",
+       "deterministic_provenance": "explicit_user",
+       "detail": "the deterministic claim already says this",
+       "is_conflict": false
       }
      ],
-     "conflicts": 2,
+     "conflicts": 0,
      "usage": {}
     },
     "truth": null,
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "FALSE_REFUSAL",
-    "grade_why": "expected an answer, got a refusal"
+    "grade": "NO_COMPUTABLE_TRUTH",
+    "grade_why": "no independent truth, and the frozen grade 'SUBSTANTIVELY CORRECT' was recorded against a different answer"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -2600,8 +3405,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'EXACT' on a byte-identical answer — states the milestone is already reached — £112.8m at the earliest snapshot, so the crossing predates available history; no future date was fabricated"
    },
    "merge": {
     "arm": "merge",
@@ -25285,8 +26090,8 @@
     "cfo_expect": "DELIVER",
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance"
    },
    "merge": {
     "arm": "merge",
@@ -25352,8 +26157,8 @@
     "cfo_expect": "DELIVER",
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -25418,8 +26223,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance"
    },
    "merge": {
     "arm": "merge",
@@ -25485,8 +26290,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -25551,8 +26356,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance"
    },
    "merge": {
     "arm": "merge",
@@ -25644,8 +26449,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries loan count and funded balance"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -25734,8 +26539,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted"
    },
    "merge": {
     "arm": "merge",
@@ -25905,8 +26710,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -25995,8 +26800,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted"
    },
    "merge": {
     "arm": "merge",
@@ -26166,8 +26971,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries both books named and contrasted"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -26252,8 +27057,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares"
    },
    "merge": {
     "arm": "merge",
@@ -26339,8 +27144,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -26425,8 +27230,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares"
    },
    "merge": {
     "arm": "merge",
@@ -26538,8 +27343,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -26619,8 +27424,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares"
    },
    "merge": {
     "arm": "merge",
@@ -26701,8 +27506,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries the largest exposures with their shares"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -26765,8 +27570,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits"
    },
    "merge": {
     "arm": "merge",
@@ -26830,8 +27635,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -26911,8 +27716,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits"
    },
    "merge": {
     "arm": "merge",
@@ -26993,8 +27798,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -27057,8 +27862,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits"
    },
    "merge": {
     "arm": "merge",
@@ -27122,391 +27927,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "data_claim_off": null,
-   "data_claim_merge": null,
-   "known_divergence": null
-  },
-  {
-   "id": "Q10A",
-   "bank": "BANK75",
-   "question": "Summarise the current pipeline.",
-   "flags": [
-    "5_rest"
-   ],
-   "off": {
-    "arm": "off",
-    "bank": "BANK75",
-    "id": "Q10A",
-    "question": "Summarise the current pipeline.",
-    "ok": true,
-    "answer": "At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.\n\nCalculated: Governed analysis.",
-    "error": "",
-    "route": "portfolio_summary",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Governed analysis",
-    "aggregation": "count",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
-    "spec_filters": {},
-    "spec_dimensions": [],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "pipeline",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Governed analysis.",
-    "warnings": [],
-    "artefacts": [
-     {
-      "title": "Portfolio summary — 30 June 2026",
-      "type": "kpi",
-      "rows": 0
-     },
-     {
-      "title": "Funded balance by region",
-      "type": "chart",
-      "rows": 7
-     },
-     {
-      "title": "Funded balance by source portfolio",
-      "type": "table",
-      "rows": 2
-     }
-    ],
-    "concept_merge": null,
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "merge": {
-    "arm": "merge",
-    "bank": "BANK75",
-    "id": "Q10A",
-    "question": "Summarise the current pipeline.",
-    "ok": true,
-    "answer": "At 30 June 2026 the portfolio holds 640 loans with a funded balance of £172.1m. Weighted-average current LTV is 36.3%, the weighted-average interest rate is 6.26% and the average youngest-borrower age is 74.3 years. The largest regional exposures are Scotland (£28.9m, 16.8%), North (£26.8m, 15.6%) and Midlands (£25.1m, 14.6%). By source portfolio: direct_001 £117.4m and acquired_001 £54.7m.\n\nCalculated: Governed analysis.",
-    "error": "",
-    "route": "portfolio_summary",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Governed analysis",
-    "aggregation": "count",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
-    "spec_filters": {},
-    "spec_dimensions": [],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "pipeline",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Governed analysis.",
-    "warnings": [],
-    "artefacts": [
-     {
-      "title": "Portfolio summary — 30 June 2026",
-      "type": "kpi",
-      "rows": 0
-     },
-     {
-      "title": "Funded balance by region",
-      "type": "chart",
-      "rows": 7
-     },
-     {
-      "title": "Funded balance by source portfolio",
-      "type": "table",
-      "rows": 2
-     }
-    ],
-    "concept_merge": {
-     "status": "no_change",
-     "source": "replayed",
-     "model": null,
-     "provenance": "model_inferred",
-     "proposed": [
-      {
-       "kind": "dataset",
-       "term": "pipeline",
-       "covers": "current pipeline"
-      }
-     ],
-     "bound": [
-      {
-       "kind": "dataset",
-       "term": "pipeline",
-       "covers": "current pipeline",
-       "field": "dataset",
-       "value": "pipeline",
-       "bound_by": "workspace"
-      }
-     ],
-     "rejected": [],
-     "applied": [],
-     "findings": [
-      {
-       "outcome": "agreed_with_the_deterministic_claim",
-       "slot": "dataset",
-       "key": null,
-       "proposed": "pipeline",
-       "deterministic": "pipeline",
-       "deterministic_provenance": "explicit_user",
-       "detail": "the deterministic claim already says this",
-       "is_conflict": false
-      }
-     ],
-     "conflicts": 0,
-     "usage": {}
-    },
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "data_claim_off": null,
-   "data_claim_merge": null,
-   "known_divergence": null
-  },
-  {
-   "id": "Q10B",
-   "bank": "BANK75",
-   "question": "Give me an overview of the pipeline by size and stage.",
-   "flags": [
-    "5_rest"
-   ],
-   "off": {
-    "arm": "off",
-    "bank": "BANK75",
-    "id": "Q10B",
-    "question": "Give me an overview of the pipeline by size and stage.",
-    "ok": true,
-    "answer": "Here is the bar for your query, covering 5 groups.\n\nCalculated: Total Balance · grouped by Pipeline Stage · 5 groups · 8 loans.",
-    "error": "",
-    "route": null,
-    "population": 8,
-    "populationTotal": 8,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Balance",
-    "aggregation": "sum",
-    "filters_applied": [],
-    "dimensions_applied": [
-     "Pipeline Stage"
-    ],
-    "spec_metric": "current_outstanding_balance",
-    "spec_filters": {},
-    "spec_dimensions": [
-     "pipeline_stage"
-    ],
-    "portfolio_scope": null,
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "pipeline",
-    "dataset_context": "pipeline",
-    "facets": [
-     {
-      "kind": "grouping_dimension",
-      "label": "stage",
-      "status": "applied",
-      "reason": ""
-     }
-    ],
-    "not_applied": [],
-    "receipt": "Calculated: Total Balance · grouped by Pipeline Stage · 5 groups · 8 loans.",
-    "warnings": [],
-    "artefacts": [
-     {
-      "title": "Give me an overview of the pipeline by size and stage.",
-      "type": "chart",
-      "rows": 5
-     },
-     {
-      "title": "Give me an overview of the pipeline by size and stage.",
-      "type": "table",
-      "rows": 5
-     }
-    ],
-    "concept_merge": null,
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "merge": {
-    "arm": "merge",
-    "bank": "BANK75",
-    "id": "Q10B",
-    "question": "Give me an overview of the pipeline by size and stage.",
-    "ok": true,
-    "answer": "Here is the bar for your query, covering 8 groups.\n\nCalculated: Total Balance · grouped by Ticket Size and Pipeline Stage · 8 groups · 8 loans.",
-    "error": "",
-    "route": null,
-    "population": 8,
-    "populationTotal": 8,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Balance",
-    "aggregation": "sum",
-    "filters_applied": [],
-    "dimensions_applied": [
-     "Ticket Size",
-     "Pipeline Stage"
-    ],
-    "spec_metric": "current_outstanding_balance",
-    "spec_filters": {},
-    "spec_dimensions": [
-     "ticket_bucket",
-     "pipeline_stage"
-    ],
-    "portfolio_scope": null,
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "pipeline",
-    "dataset_context": "pipeline",
-    "facets": [
-     {
-      "kind": "grouping_dimension",
-      "label": "stage",
-      "status": "applied",
-      "reason": ""
-     }
-    ],
-    "not_applied": [],
-    "receipt": "Calculated: Total Balance · grouped by Ticket Size and Pipeline Stage · 8 groups · 8 loans.",
-    "warnings": [],
-    "artefacts": [
-     {
-      "title": "Give me an overview of the pipeline by size and stage.",
-      "type": "chart",
-      "rows": 8
-     },
-     {
-      "title": "Give me an overview of the pipeline by size and stage.",
-      "type": "table",
-      "rows": 8
-     }
-    ],
-    "concept_merge": {
-     "status": "applied",
-     "source": "replayed",
-     "model": null,
-     "provenance": "model_inferred",
-     "proposed": [
-      {
-       "kind": "dataset",
-       "term": "pipeline",
-       "covers": "pipeline"
-      },
-      {
-       "kind": "dimension",
-       "term": "loan size",
-       "covers": "by size"
-      },
-      {
-       "kind": "dimension",
-       "term": "pipeline stage",
-       "covers": "stage"
-      }
-     ],
-     "bound": [
-      {
-       "kind": "dataset",
-       "term": "pipeline",
-       "covers": "pipeline",
-       "field": "dataset",
-       "value": "pipeline",
-       "bound_by": "workspace"
-      },
-      {
-       "kind": "dimension",
-       "term": "loan size",
-       "covers": "by size",
-       "field": "ticket_bucket",
-       "value": null,
-       "bound_by": "llm_query_parser._explicit_dimensions"
-      },
-      {
-       "kind": "dimension",
-       "term": "pipeline stage",
-       "covers": "stage",
-       "field": "pipeline_stage",
-       "value": null,
-       "bound_by": "llm_query_parser._explicit_dimensions"
-      }
-     ],
-     "rejected": [],
-     "applied": [
-      {
-       "kind": "dimension",
-       "field": "ticket_bucket"
-      }
-     ],
-     "findings": [
-      {
-       "outcome": "agreed_with_the_deterministic_claim",
-       "slot": "dataset",
-       "key": null,
-       "proposed": "pipeline",
-       "deterministic": "pipeline",
-       "deterministic_provenance": "explicit_user",
-       "detail": "the deterministic claim already says this",
-       "is_conflict": false
-      },
-      {
-       "outcome": "filled_by_model",
-       "slot": "dimensions",
-       "key": "ticket_bucket",
-       "proposed": "ticket_bucket",
-       "deterministic": null,
-       "deterministic_provenance": null,
-       "detail": "the slot was empty",
-       "is_conflict": false
-      },
-      {
-       "outcome": "agreed_with_the_deterministic_claim",
-       "slot": "dimensions",
-       "key": "pipeline_stage",
-       "proposed": "pipeline_stage",
-       "deterministic": "pipeline_stage",
-       "deterministic_provenance": "explicit_user",
-       "detail": "the deterministic claim already says this",
-       "is_conflict": false
-      }
-     ],
-     "conflicts": 0,
-     "usage": {}
-    },
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'SUBSTANTIVELY CORRECT' on a byte-identical answer — carries position against the concentration limits"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -32862,8 +33284,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'EXACT' on a byte-identical answer — states the milestone is already reached — £112.8m at the earliest snapshot, so the crossing predates available history; no future date was fabricated"
    },
    "merge": {
     "arm": "merge",
@@ -32952,8 +33374,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'EXACT' on a byte-identical answer — states the milestone is already reached — £112.8m at the earliest snapshot, so the crossing predates available history; no future date was fabricated"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -33022,8 +33444,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots"
    },
    "merge": {
     "arm": "merge",
@@ -33093,8 +33515,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
@@ -33299,8 +33721,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots"
    },
    "merge": {
     "arm": "merge",
@@ -33363,425 +33785,8 @@
     "cfo_expect": null,
     "cfo_must": null,
     "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "data_claim_off": null,
-   "data_claim_merge": null,
-   "known_divergence": null
-  },
-  {
-   "id": "Q25A",
-   "bank": "BANK75",
-   "question": "Do we expect to breach any concentration tests?",
-   "flags": [
-    "5_rest"
-   ],
-   "off": {
-    "arm": "off",
-    "bank": "BANK75",
-    "id": "Q25A",
-    "question": "Do we expect to breach any concentration tests?",
-    "ok": true,
-    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
-    "error": "",
-    "route": "risk_limits",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Concentration limits vs the governing document",
-    "aggregation": "count",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
-    "spec_filters": {},
-    "spec_dimensions": [],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "funded",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Concentration limits vs the governing document.",
-    "warnings": [
-     "3 test(s) unavailable (missing fields).",
-     "1 limit(s) need manual review."
-    ],
-    "artefacts": [
-     {
-      "title": "Concentration vs Schedule 8 limits",
-      "type": "risk",
-      "rows": 0
-     },
-     {
-      "title": "Risk limit tests",
-      "type": "table",
-      "rows": 15
-     }
-    ],
-    "concept_merge": null,
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "merge": {
-    "arm": "merge",
-    "bank": "BANK75",
-    "id": "Q25A",
-    "question": "Do we expect to breach any concentration tests?",
-    "ok": true,
-    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
-    "error": "",
-    "route": "risk_limits",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Concentration limits vs the governing document",
-    "aggregation": "count",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
-    "spec_filters": {},
-    "spec_dimensions": [],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "funded",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Concentration limits vs the governing document.",
-    "warnings": [
-     "3 test(s) unavailable (missing fields).",
-     "1 limit(s) need manual review."
-    ],
-    "artefacts": [
-     {
-      "title": "Concentration vs Schedule 8 limits",
-      "type": "risk",
-      "rows": 0
-     },
-     {
-      "title": "Risk limit tests",
-      "type": "table",
-      "rows": 15
-     }
-    ],
-    "concept_merge": {
-     "status": "no_change",
-     "source": "replayed",
-     "model": null,
-     "provenance": "model_inferred",
-     "proposed": [],
-     "bound": [],
-     "rejected": [],
-     "applied": [],
-     "findings": [],
-     "conflicts": 0,
-     "usage": {}
-    },
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "data_claim_off": null,
-   "data_claim_merge": null,
-   "known_divergence": null
-  },
-  {
-   "id": "Q25B",
-   "bank": "BANK75",
-   "question": "Are any concentration limits likely to be breached as the book grows?",
-   "flags": [
-    "5_rest"
-   ],
-   "off": {
-    "arm": "off",
-    "bank": "BANK75",
-    "id": "Q25B",
-    "question": "Are any concentration limits likely to be breached as the book grows?",
-    "ok": true,
-    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
-    "error": "",
-    "route": "risk_limits",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Concentration limits vs the governing document",
-    "aggregation": "count",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
-    "spec_filters": {},
-    "spec_dimensions": [],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "funded",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Concentration limits vs the governing document.",
-    "warnings": [
-     "3 test(s) unavailable (missing fields).",
-     "1 limit(s) need manual review."
-    ],
-    "artefacts": [
-     {
-      "title": "Concentration vs Schedule 8 limits",
-      "type": "risk",
-      "rows": 0
-     },
-     {
-      "title": "Risk limit tests",
-      "type": "table",
-      "rows": 15
-     }
-    ],
-    "concept_merge": null,
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "merge": {
-    "arm": "merge",
-    "bank": "BANK75",
-    "id": "Q25B",
-    "question": "Are any concentration limits likely to be breached as the book grows?",
-    "ok": true,
-    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
-    "error": "",
-    "route": "risk_limits",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Concentration limits vs the governing document",
-    "aggregation": "count",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": null,
-    "spec_filters": {},
-    "spec_dimensions": [],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "funded",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Concentration limits vs the governing document.",
-    "warnings": [
-     "3 test(s) unavailable (missing fields).",
-     "1 limit(s) need manual review."
-    ],
-    "artefacts": [
-     {
-      "title": "Concentration vs Schedule 8 limits",
-      "type": "risk",
-      "rows": 0
-     },
-     {
-      "title": "Risk limit tests",
-      "type": "table",
-      "rows": 15
-     }
-    ],
-    "concept_merge": {
-     "status": "no_change",
-     "source": "replayed",
-     "model": null,
-     "provenance": "model_inferred",
-     "proposed": [],
-     "bound": [],
-     "rejected": [],
-     "applied": [],
-     "findings": [],
-     "conflicts": 0,
-     "usage": {}
-    },
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "data_claim_off": null,
-   "data_claim_merge": null,
-   "known_divergence": null
-  },
-  {
-   "id": "Q25C",
-   "bank": "BANK75",
-   "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
-   "flags": [
-    "5_rest"
-   ],
-   "off": {
-    "arm": "off",
-    "bank": "BANK75",
-    "id": "Q25C",
-    "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
-    "ok": true,
-    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
-    "error": "",
-    "route": "risk_limits",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Concentration limits vs the governing document",
-    "aggregation": "sum",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": "current_outstanding_balance",
-    "spec_filters": {},
-    "spec_dimensions": [
-     "collateral_geography"
-    ],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "pipeline",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Concentration limits vs the governing document.",
-    "warnings": [
-     "3 test(s) unavailable (missing fields).",
-     "1 limit(s) need manual review."
-    ],
-    "artefacts": [
-     {
-      "title": "Concentration vs Schedule 8 limits",
-      "type": "risk",
-      "rows": 0
-     },
-     {
-      "title": "Risk limit tests",
-      "type": "table",
-      "rows": 15
-     }
-    ],
-    "concept_merge": null,
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
-   },
-   "merge": {
-    "arm": "merge",
-    "bank": "BANK75",
-    "id": "Q25C",
-    "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
-    "ok": true,
-    "answer": "5 passed, 0 warning(s), 6 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-31.5 pp headroom). Largest concentration: Top 3 brokers at 76.5%.\n\nCalculated: Concentration limits vs the governing document.",
-    "error": "",
-    "route": "risk_limits",
-    "population": null,
-    "populationTotal": null,
-    "populationLabel": "loans",
-    "whole_book_rows": 640,
-    "narrowed": false,
-    "measure": "Concentration limits vs the governing document",
-    "aggregation": "sum",
-    "filters_applied": [],
-    "dimensions_applied": [],
-    "spec_metric": "current_outstanding_balance",
-    "spec_filters": {},
-    "spec_dimensions": [
-     "collateral_geography"
-    ],
-    "portfolio_scope": "total",
-    "scope_applied": null,
-    "population_applied": null,
-    "reconciliation_dataset": "funded",
-    "dataset_context": "pipeline",
-    "facets": [],
-    "not_applied": [],
-    "receipt": "Calculated: Concentration limits vs the governing document.",
-    "warnings": [
-     "3 test(s) unavailable (missing fields).",
-     "1 limit(s) need manual review."
-    ],
-    "artefacts": [
-     {
-      "title": "Concentration vs Schedule 8 limits",
-      "type": "risk",
-      "rows": 0
-     },
-     {
-      "title": "Risk limit tests",
-      "type": "table",
-      "rows": 15
-     }
-    ],
-    "concept_merge": {
-     "status": "no_change",
-     "source": "replayed",
-     "model": null,
-     "provenance": "model_inferred",
-     "proposed": [
-      {
-       "kind": "dataset",
-       "term": "pipeline",
-       "covers": "forward pipeline"
-      }
-     ],
-     "bound": [
-      {
-       "kind": "dataset",
-       "term": "pipeline",
-       "covers": "forward pipeline",
-       "field": "dataset",
-       "value": "pipeline",
-       "bound_by": "workspace"
-      }
-     ],
-     "rejected": [],
-     "applied": [],
-     "findings": [
-      {
-       "outcome": "agreed_with_the_deterministic_claim",
-       "slot": "dataset",
-       "key": null,
-       "proposed": "pipeline",
-       "deterministic": "pipeline",
-       "deterministic_provenance": "explicit_user",
-       "detail": "the deterministic claim already says this",
-       "is_conflict": false
-      }
-     ],
-     "conflicts": 0,
-     "usage": {}
-    },
-    "truth": null,
-    "cfo_expect": null,
-    "cfo_must": null,
-    "cfo_rows": null,
-    "grade": "NO_COMPUTABLE_TRUTH",
-    "grade_why": "no independent truth was computed for this case"
+    "grade": "CORRECT",
+    "grade_why": "frozen human grade 'EXACT' on a byte-identical answer — run-rate £14.8m/month reconciles to the independently computed mean monthly growth of £14.81m over the five snapshots"
    },
    "data_claim_off": null,
    "data_claim_merge": null,
