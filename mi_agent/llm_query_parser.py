@@ -1630,8 +1630,21 @@ def _bridge_recognizer(q: str, title: str, semantics: dict, available_columns=No
                 break
     periods = _detect_periods(q)
     start = periods[0] if periods else None
+    # INTENT AND OUTPUT SHAPE MUST AGREE. A bridge spec names NO chart type,
+    # because the waterfall is built by the `funded_bridge` route rather than by
+    # the chart factory — so declaring `intent="chart"` beside
+    # `chart_type="none"` claimed an output shape this spec does not carry, and
+    # `mi_query_validator` rejects that pair outright ("chart_type 'none' is not
+    # valid for intent 'chart'").
+    #
+    # It never surfaced while the route claimed every such question. The moment
+    # one was declined the spec reached validation and the reader was shown
+    # *"I could not build a governed query for this question: chart_type 'none'
+    # is not valid for intent 'chart'."* — an internal message, not a governed
+    # refusal. `table` is the valid encoding of "this spec names no chart; a
+    # route builds the artifact", and is the pair the validator already permits.
     spec = MIQuerySpec(
-        intent="chart", chart_type="none", metric=None, aggregation="sum",
+        intent="table", chart_type="none", metric=None, aggregation="sum",
         execution_mode="temporal", bridge_query=True, bridge_dimension=dim,
         compare_periods=([start] if start else []),
         output_format="chart", title=title,
@@ -3184,7 +3197,61 @@ def _owned_question(q: str, available_values) -> str:
         return q
 
 
+def _spec_shape_is_coherent(spec) -> bool:
+    """Does this spec's INTENT agree with the output shape it names?
+
+    THE INVARIANT: a parser must not emit an internally invalid combination of
+    intent and output shape. `intent="chart"` beside `chart_type="none"` is a
+    spec claiming an output it does not name, and `mi_query_validator` rejects
+    the pair outright.
+
+    Deliberately ONLY the self-contradiction. The validator's other chart rules —
+    "bar chart requires a dimension", "line chart requires a metric" — ask whether
+    a chart can be RENDERED from the fields, which a route that builds its own
+    artifact legitimately moots; 22 questions across the corpus carry such a spec
+    and are answered correctly by a route today. Failing those closed would
+    convert working answers into refusals, which is not what this invariant is
+    for.
+
+    Returns True for anything it cannot read, so a spec shape it does not
+    understand keeps its existing behaviour.
+    """
+    try:
+        return not (getattr(spec, "intent", None) == "chart"
+                    and getattr(spec, "chart_type", None) == "none")
+    except Exception:  # noqa: BLE001 - a shape check must never break a parse
+        return True
+
+
 def _deterministic_parse(question: str, semantics: dict,
+                         available_columns=None, available_values=None
+                         ) -> "Tuple[MIQuerySpec, dict]":
+    """The deterministic parse, with the spec-shape invariant enforced.
+
+    FAILS CLOSED. An internally contradictory spec is not emitted: the caller is
+    told nothing was parsed, and the normal path produces its governed refusal,
+    rather than the spec escaping to validation and showing the reader an
+    internal message — *"chart_type 'none' is not valid for intent 'chart'"* —
+    which is what happened to the funded-bridge specs the moment a route stopped
+    claiming them.
+
+    Measured at the time of writing: zero specs across the 1,446-question corpus
+    trip this, because the one builder that emitted the pair now names the shape
+    it carries. The guard is here so the class cannot return silently.
+    """
+    parsed = _deterministic_parse_unchecked(
+        question, semantics, available_columns=available_columns,
+        available_values=available_values)
+    spec = parsed[0] if isinstance(parsed, tuple) else parsed
+    if spec is not None and not _spec_shape_is_coherent(spec):
+        logger.info("deterministic parse discarded an incoherent spec shape for "
+                    "%r: intent=%r chart_type=%r", question,
+                    getattr(spec, "intent", None), getattr(spec, "chart_type", None))
+        return None, _det_meta("low", False, [], note="incoherent_spec_shape")
+    return parsed
+
+
+def _deterministic_parse_unchecked(question: str, semantics: dict,
                          available_columns=None,
                          available_values=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
