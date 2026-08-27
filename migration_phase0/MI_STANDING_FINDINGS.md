@@ -188,9 +188,24 @@ interpretation projection and the ownership re-read; never on the answering
 frame. `_route_portfolio_summary` takes no dataset parameter at all, so it could
 not honour the request even if it asked.
 
-**A precondition written in a comment is a wish.** The test for this class:
-whenever a comment says another component "asks", "must" or "already handles",
-check that a call exists. Twice now the call did not.
+**A precondition written in a comment is a wish.**
+
+### THE TEST, and it needs no knowledge of this codebase
+
+> **When a comment says another component "asks", "must", "already handles" or
+> "is responsible for" — check that a call exists.**
+
+Two lines of `grep` settle it. Run against `chat_routing.py` it returns four
+mentions of `resolve_dataset` and zero calls; run against `_unknown_named_book`
+it returns a guard list and no test of the property the comment describes. Both
+times the estate had written the rule down and had nothing that could tell
+whether it held.
+
+The test generalises because the failure does: a comment is the cheapest place
+to record an obligation and the only place that cannot enforce one. Anywhere a
+component's correctness depends on a peer behaving a certain way, either the
+call is there or the obligation is fiction — and prose about it reads exactly the
+same in both cases.
 
 Scoped in `migration_phase0/MI_COMPOSITE_BOUNDARY_SCOPE.md`.
 
@@ -422,16 +437,14 @@ concatenating the two spec fields.
 
 ## OPEN · Three routes answer from the funded book when the question named the pipeline
 
-Scoped in the commit carrying `MI_DATASET_CLASS_SCOPE.md`. **Not fixed**, and the
-diagnosis corrects the count I previously recorded here.
+Diagnosed in `963a60d`, and **half addressed**: all five hard-coded sites now
+DERIVE what they read. The read itself is unchanged and the narrowing decision is
+still open.
 
-**It is four questions, not fifteen.** Eleven of the fifteen were a NAMING
-mismatch, not a substitution: `analytical_composition` and
-`forecast_extrapolation` publish `datasetContext: forecast` beside
-`reconciliation.dataset: funded+pipeline`, and the forecast frame IS funded plus
-pipeline — measured at 645 rows = 640 + 5. Two correct names for one composed
-frame. I asserted "all genuine losses" on a test that cannot tell a composite
-from a substitution.
+**Four questions, not fifteen.** Eleven of the fifteen were a NAMING mismatch:
+`analytical_composition` and `forecast_extrapolation` publish
+`datasetContext: forecast` beside `reconciliation.dataset: funded+pipeline`, and
+the forecast frame IS funded plus pipeline — measured at 645 rows = 640 + 5.
 
 **The four, and their routes:**
 
@@ -443,35 +456,37 @@ funded_bridge      Show funded vs pipeline contribution.
 funded_bridge      What is the weighted expected pipeline contribution?
 ```
 
-**The mechanism is a precondition stated twice in comments and enforced nowhere.**
-`chat_routing.py:262` — *"`workspace.resolve_dataset`, which is the single owner.
-Routes ask that owner"*. `chat_routing.py:3495` — *"the route asks
-`workspace.resolve_dataset` for it"*. **`chat_routing.py` never calls it**; all
-four mentions in the file are comments, and the three implicated handlers take no
-parameter that could carry the answer. `try_route` receives `view` and uses it
-only for the value catalogue, the interpretation projection and the ownership
-re-read — never to select the answering frame.
-
 **The data is present and the capability works.** `_resolve_frame('pipeline')`
-returns 8 rows, £3.6m, 5 stages, and a SIBLING FORMULATION already answers from
-it: *"Give me an overview of the pipeline by size and stage"* falls to the
-point-in-time path and reconciles against `pipeline`. The point-in-time path
-honours the dataset; the routed path does not. The only difference between the
-siblings is which route claims the sentence.
+returns 8 rows, £3.6m, 5 stages, and a sibling formulation already answers from
+it — *"Give me an overview of the pipeline by size and stage"* falls to the
+point-in-time path and reconciles `pipeline`. The point-in-time path honours the
+dataset; the routed path does not.
 
-**Q19C's shape, two causes of three.** Cause 1 (a name published with nothing
-behind it) and cause 2 (a documented precondition nothing enforces) are both
-present. Cause 3 is INVERTED and favourably: these routes DO publish
-`reconciliation.dataset`, so the contradiction sits in one envelope and a
-deterministic check finds it with no new reader. Q19C's routes published nothing.
+### What deriving established, and it is the input to the narrowing decision
 
-**Recovery 4, risk 32.** Two of the four already carry a frozen wrong verdict.
-The risk zone is 32 delivering route-claimed questions on a non-default dataset,
-of which **nine are correct compositions** (`funded+pipeline`) that a naive
-"honour the named dataset" rule would break. The composite is not a bug.
+All five sites now call `workspace.datasets_read(output_root=...)` and report what
+that returns. **The derived value equals the value they used to assert, at every
+site: `funded`.** Nothing moved — no answer, no grade, no `reconciliation.dataset`
+string, on either arm of the 166 and across the 1,446.
+
+That null result is the finding. **The substitution is a READ failure, not a
+LABELLING failure.** The three routes were not mislabelling a pipeline read as
+funded; they genuinely read only the funded book, and none of the five even takes
+a `pipeline_root` parameter. A labelling change therefore cannot fix these four
+questions, and no amount of better disclosure will: only narrowing, refusing, or
+routing elsewhere can.
+
+What deriving DID buy is that the claim is now produced by the same code path that
+did the reading, so a route that later consumes `pipeline_root` says so without
+anyone remembering to edit a string — and the class cannot silently regrow, which
+is why all five were converted rather than the three that had been reached.
+
+**Still open: whether these routes should narrow, refuse, or disclose.** Not
+bundled, so a regression can be attributed to one half or the other.
 
 **Owner: separate work.** Measured in
-`migration_phase0/MI_DATASET_CLASS_SCOPE.md`.
+`migration_phase0/MI_DATASET_CLASS_SCOPE.md` and
+`migration_phase0/MI_COMPOSITE_BOUNDARY_SCOPE.md`.
 
 ---
 

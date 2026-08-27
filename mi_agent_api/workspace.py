@@ -9,7 +9,7 @@ the deterministic bridge) used only for view breakdowns / queries.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -18,6 +18,65 @@ from mi_agent import portfolio_lens as lens_mod
 
 VIEWS = ("funded", "pipeline", "forecast")
 DEFAULT_VIEW = "funded"
+
+#: The DATA ROOT a caller read, mapped to the dataset that root holds. The map
+#: is the derivation: a route names the root it consumed, not the answer.
+_ROOT_DATASET = (("output_root", "funded"), ("pipeline_root", "pipeline"))
+
+
+def datasets_read(**roots: Any) -> Tuple[str, ...]:
+    """The datasets a caller actually read, from the ROOTS it actually consumed.
+
+    THE POINT IS THAT IT IS DERIVED. Five routes in `chat_routing` used to write
+    ``{"dataset": "funded", ...}`` as a literal at their own return site, and
+    three of them were wrong: `_route_portfolio_summary`, `_route_risk` and
+    `_route_bridge` answered "Summarise the current pipeline" and its siblings
+    from the funded book while `metadata.datasetContext` said `pipeline`. A
+    constant cannot be wrong about itself in any detectable way, and a route that
+    cannot say what it read cannot be checked against what it was asked for.
+
+    Pass the root you read and the name follows. A route that later reads the
+    pipeline extract passes `pipeline_root` and says so without anyone
+    remembering to edit a string — which is the whole difference between a
+    derivation and a re-typed constant.
+
+    Order follows `_ROOT_DATASET`, so a composition reads `funded+pipeline`
+    rather than depending on keyword order at the call site.
+    """
+    out: List[str] = []
+    for key, dataset in _ROOT_DATASET:
+        if roots.get(key) is not None and dataset not in out:
+            out.append(dataset)
+    return tuple(out)
+
+
+def reconciliation_for(datasets: Iterable[str], **extra: Any) -> Dict[str, Any]:
+    """The reconciliation block naming the datasets an answer was computed from.
+
+    ONE IMPLEMENTATION, ADOPTED — not a sixth. `mi_workflows.analytical.route.
+    _reconciliation` already derived this correctly, from the capabilities that
+    ran, and its docstring already said why: *"an offer-stage question reads the
+    pipeline and nothing else, and reporting it as a full-coverage funded answer
+    would misdescribe what was measured."* That was right, and it was the only
+    site doing it. This is that logic, lifted so both callers share it; the
+    alternative — five sites each deriving their own way — is the disease rather
+    than the cure.
+
+    Full coverage is claimed only where the funded book is among the datasets,
+    which is the contract the analytical route already applied.
+    """
+    names = [str(d) for d in datasets if d]
+    funded = any(n.startswith(DEFAULT_VIEW) for n in names)
+    out: Dict[str, Any] = {
+        "dataset": "+".join(names) or DEFAULT_VIEW,
+        "coverage_by_balance_pct": 100.0 if funded else None,
+    }
+    # Extras pass through UNFILTERED, including None. Dropping a None-valued
+    # `reporting_date` would change the envelope shape for the routes adopting
+    # this, and a consolidation that quietly alters its callers' output is not a
+    # consolidation.
+    out.update(extra)
+    return out
 
 #: The PRE-FUNDING ARTEFACTS. A question naming one of these is about the
 #: pipeline tape even though it names no view: nobody asks how many "pipeline"

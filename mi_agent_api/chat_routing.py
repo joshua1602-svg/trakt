@@ -707,8 +707,9 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
     return _envelope(
         ok=True, question=question, answer=answer, spec=spec_dict,
         artifacts=artifacts,
-        reconciliation={"dataset": "funded", "coverage_by_balance_pct": 100.0,
-                        "missing_dimension_policy": "exclude"},
+        reconciliation=_workspace.reconciliation_for(
+            _workspace.datasets_read(output_root=output_root),
+            missing_dimension_policy="exclude"),
         source_notes=notes, route="portfolio_summary")
 
 
@@ -878,8 +879,9 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
     out = _envelope(
         ok=True, question=question, answer=answer, spec=spec_dict,
         artifacts=artifacts,
-        reconciliation={"dataset": "funded", "coverage_by_balance_pct": 100.0,
-                        "missing_dimension_policy": "exclude"},
+        reconciliation=_workspace.reconciliation_for(
+            _workspace.datasets_read(output_root=output_root),
+            missing_dimension_policy="exclude"),
         source_notes=notes, route="period_movement")
     return _declare_scope(out, mv.get("scopeApplied"), label=mv.get("lens"))
 
@@ -1922,8 +1924,9 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
         ], rows=trows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
 
     notes = [{"field": "limit_source", "note": rl.get("limitsSource", "Schedule 8 extracted")}]
-    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
-             "reporting_date": rl.get("reportingDate")}
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root),
+        reporting_date=rl.get("reportingDate"))
     warnings = []
     if summ.get("unavailable"):
         warnings.append(f"{summ['unavailable']} test(s) unavailable (missing fields).")
@@ -2067,8 +2070,9 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
                "delta": c["delta"]} for c in br["contributions"]],
         spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
 
-    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
-             "reporting_date": end.get("reporting_date")}
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root),
+        reporting_date=end.get("reporting_date"))
     notes = [{"field": "bridge_periods",
               "note": f"Opening {start.get('reporting_date') or start['period']}; "
                       f"closing {end.get('reporting_date') or end['period']} (latest); "
@@ -2196,8 +2200,9 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
     if prog.get("singlePeriod"):
         warnings.append("Only one reporting period has loans for this cohort — a "
                         "progression reads best with two or more periods.")
-    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
-             "reporting_date": (last or {}).get("reporting_date")}
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root),
+        reporting_date=(last or {}).get("reporting_date"))
     notes = [{"field": "cohort", "note": prog["lineage"]["note"]}]
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                      artifacts=[chart, table], reconciliation=recon, source_notes=notes,

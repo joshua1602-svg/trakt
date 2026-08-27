@@ -316,17 +316,22 @@ def _reconciliation(result: orchestrator_mod.AnalyticalResult) -> Dict[str, Any]
     reads the pipeline and nothing else, and reporting it as a full-coverage
     funded answer would misdescribe what was measured.
     """
+    from mi_agent_api import workspace as _workspace
+
     datasets: List[str] = []
     for call in result.plan.calls:
         capability = CAPABILITIES.get(call.capability)
         for name in (capability.datasets if capability else ()):
             if name not in datasets:
                 datasets.append(name)
-    funded = any(d.startswith("funded") for d in datasets)
-    return {"dataset": "+".join(datasets) or "funded",
-            # Full coverage is claimed only for the funded book, which every
-            # governed population here is measured over in full.
-            "coverage_by_balance_pct": 100.0 if funded else None}
+    # THE SHARED PRIMITIVE, not a local copy. This function was the only site in
+    # the estate deriving its reconciliation rather than asserting a literal, and
+    # five routes in `chat_routing` have now adopted it. Keeping a second
+    # implementation here — even the original — would make the consolidation a
+    # duplication. `workspace.reconciliation_for` carries the coverage rule that
+    # was written here: full coverage is claimed only where the funded book is
+    # among the datasets.
+    return _workspace.reconciliation_for(datasets)
 
 
 def build_envelope(result: orchestrator_mod.AnalyticalResult, request: Any
