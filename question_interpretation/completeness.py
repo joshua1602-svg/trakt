@@ -152,6 +152,13 @@ class ExecutedContract:
     filters: Tuple[str, ...] = ()
     dimensions: Tuple[str, ...] = ()
     metric: Optional[str] = None
+    #: EVERY governed measure the answer computed, not just the first. A
+    #: management question naming four ("balance, number of loans,
+    #: weighted-average LTV and average borrower age") executes all four and
+    #: folds only the first into `spec.metric`; `spec.measures` is the estate's
+    #: own ordered record of the set, and reading the singular alone reported
+    #: three delivered measures as lost.
+    measures: Tuple[str, ...] = ()
     forecast_target: Optional[float] = None
     scope_context: Optional[str] = None
     dataset_context: Optional[str] = None
@@ -250,6 +257,8 @@ def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
         filters=tuple(spec.get("filters") or ()),
         dimensions=tuple(dims),
         metric=spec.get("metric"),
+        measures=tuple(str(m.get("field")) for m in (spec.get("measures") or ())
+                       if isinstance(m, dict) and m.get("field")),
         forecast_target=spec.get("forecast_target_value"),
         scope_context=scope.get("context_id"),
         dataset_context=meta.get("datasetContext"),
@@ -482,7 +491,8 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
         # field. Read from the registry, so a band added tomorrow is covered.
         return bool(set(concept.carried_by) & (dims | filters | applied))
     if kind == "measure":
-        if contract.metric == field or field in filters or field in applied:
+        if (contract.metric == field or field in contract.measures
+                or field in filters or field in applied):
             return True
         # A BAND OF A FIELD IS THAT FIELD. "Show balance by borrower age bucket"
         # states `youngest_borrower_age`; the contract groups by `age_bucket`,
