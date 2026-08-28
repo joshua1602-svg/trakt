@@ -215,6 +215,16 @@ _LENS_QUALIFIERS = tuple(dict.fromkeys(
      for t in (term, term.split()[0])]))
 
 
+#: A QUALIFIER AND ITS NOUN MAY BE JOINED BY A HYPHEN, and English routinely
+#: joins them: "Direct-book balance", "ticket-size band". The separator here was
+#: whitespace alone, so "the direct book" resolved the Direct lens and
+#: "Direct-book" resolved nothing — the same sentence, the same governed scope,
+#: decided by a punctuation mark. Four acceptance questions refused on it.
+#: Written once, in the shared helper, so the scope resolver and the lens
+#: resolver cannot drift apart on what counts as one phrase.
+_SEP = r"[\s\u2010-\u2015\-]+"
+
+
 def _qualified_span_re(qualifiers, nouns):
     """The qualified-mention test, ONCE, over whichever vocabulary is passed.
 
@@ -227,14 +237,14 @@ def _qualified_span_re(qualifiers, nouns):
     return re.compile(
         r"\b(?:(?:for|in|of|across|within|on)\s+)?(?:the\s+|our\s+|my\s+|this\s+)?"
         r"(?:" + "|".join(re.escape(q) for q in
-                          sorted(qualifiers, key=len, reverse=True)) + r")\s+"
+                          sorted(qualifiers, key=len, reverse=True)) + r")" + _SEP
         # One optional adjective between the qualifier and the noun, because
         # "the purchased BACK book" is governed provenance language. Bounded to
         # a single short word and a NOUN is still required, so "purchased at
         # auction" — qualifier, two words, no noun — does not match.
-        r"(?:\w{1,8}\s+)?"
-        r"(?:" + "|".join(re.escape(n) for n in
-                          sorted(nouns, key=len, reverse=True)) + r")\b",
+        + r"(?:\w{1,8}" + _SEP + r")?"
+        + r"(?:" + "|".join(re.escape(n) for n in
+                            sorted(nouns, key=len, reverse=True)) + r")\b",
         re.IGNORECASE)
 
 
@@ -559,6 +569,23 @@ def _unknown_family_member(text: Optional[str], registry) -> Optional[PortfolioL
     return None
 
 
+def _strip_edge_separators(token: str) -> str:
+    """A token without the punctuation stuck to its edges.
+
+    THE GUARD MUST BE ABLE TO MATCH THE WORD IT IS HOLDING. "Direct-book" yields
+    the token `Direct-`, and `direct-` appears in no word list here or anywhere
+    else, so the run was judged a proper name whatever the lists held — not
+    because nobody had listed the word, but because the guard was never asked
+    about the word. `direct` is in `_GENERIC_BOOK_WORDS` and always was.
+
+    This is the property the module's own docstring records as unfixed and as
+    the same shape of defect as the sentence-initial one: a token the guard
+    cannot match. It is fixed by normalising the token, not by lengthening a
+    list.
+    """
+    return str(token or "").strip("-\u2010\u2011\u2012\u2013\u2014\u2015'\u2019&")
+
+
 def _unknown_named_book(text: Optional[str], registry) -> Optional[PortfolioLens]:
     """A capitalised book NAME the governed registry does not hold.
 
@@ -623,8 +650,8 @@ def _unknown_named_book(text: Optional[str], registry) -> Optional[PortfolioLens
             token_match = re.search(r"([A-Za-z0-9&'\u2019-]+)$", head)
             if not token_match:
                 break
-            token = token_match.group(1)
-            if not _PROPER_TOKEN_RE.match(token):
+            token = _strip_edge_separators(token_match.group(1))
+            if not token or not _PROPER_TOKEN_RE.match(token):
                 break
             run.insert(0, token)
             before = head[:token_match.start()]

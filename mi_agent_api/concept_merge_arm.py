@@ -128,6 +128,31 @@ def _apply_to_spec(spec, filled) -> List[Dict[str, Any]]:
         elif slot.slot == CM.SLOT_SUBJECT and not getattr(spec, "metric", None):
             spec.metric = slot.value
             applied.append({"kind": "measure", "field": slot.value})
+        elif slot.slot == CM.SLOT_SOURCE_SCOPE and slot.value:
+            # A SCOPE THE MERGE FILLED AND NOTHING CARRIED. This branch did not
+            # exist, so `source_book` was the one proposal kind that could be
+            # proposed, bound by the registry, accepted by the merge, recorded
+            # as `filled_by_model` — and then dropped on the floor. The receipt
+            # then correctly reported `source_portfolio_type` as a lost
+            # narrowing and refused, which is why four questions naming the
+            # Direct book were declined while their siblings answered.
+            #
+            # Applied through the governed lens owner, exactly as the
+            # deterministic path applies one: the model proposed the TERM, the
+            # registry resolved it to a lens, and the lens decides what it
+            # narrows to. Nothing here chooses a field or a value.
+            from mi_agent import portfolio_lens as _PL
+
+            lens = _PL.lens_from_term(str(slot.value))
+            if not getattr(lens, "filters", None):
+                continue        # an unresolved book narrows nothing; say nothing
+            if any(k in filters for k in lens.filters):
+                continue        # never overwrite; the merge already said so
+            _PL.apply_lens(spec, lens)
+            filters = dict(getattr(spec, "filters", None) or {})
+            applied.append({"kind": "scope", "field": "portfolio_lens",
+                            "value": getattr(lens, "name", None),
+                            "narrows": sorted(lens.filters)})
 
     if applied:
         spec.filters = filters

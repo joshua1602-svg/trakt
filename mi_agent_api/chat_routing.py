@@ -3274,6 +3274,24 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
         spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
         source_notes=notes, route=route, warnings=warnings, lens_applied=True)
     envelope["workflow"] = result
+    # THE AXES THIS ANALYSIS ACTUALLY MEASURED, through the primitive every
+    # other grouping route already declares through.
+    #
+    # The concentration methodology governs which field carries a concept: it
+    # measures "product" on `product_type` and declines `erm_product_type` with
+    # a stated reason, and measures "broker" on `origination_channel` and
+    # declines `broker_channel` the same way. The receipt binds those words to
+    # the OTHER field, so with nothing declared it read a governed, delivered
+    # concentration table as a lost axis and refused it — two owners
+    # disagreeing about which field an axis is, with only one of them governed
+    # by the methodology that ran.
+    #
+    # Declaring what ran settles it the way `grouping_proven` already settles
+    # every other route: the axis a route DECLARES is the axis it grouped by.
+    axes = [d.get("field") for d in (result.get("dimension_results") or [])
+            if d.get("field")]
+    if axes:
+        envelope.setdefault("metadata", {})["groupedBy"] = axes
     # Structured evidence of a SINGLE-NAME analysis, so the receipt and the P0
     # share facet can be settled from what executed rather than from the answer
     # text. Reading a percentage out of prose proves only that prose mentions
