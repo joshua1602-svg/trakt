@@ -3897,6 +3897,21 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                 available_columns=getattr(parsed, "available_columns", None))
     except Exception as exc:  # noqa: BLE001 - the arm never fails a request
         _logger.info("concept merge arm skipped: %s: %s", type(exc).__name__, exc)
+        # AND IT RECORDS THAT IT DID NOT RUN. `apply` reports its own failures,
+        # but everything around it — building the interpretation, gathering the
+        # recognisable values — could fail too, and leaving the evidence at
+        # `None` there is indistinguishable from the arm being switched off. The
+        # consumer would then read an augmented request that never reached the
+        # model as an unaugmented one, which is the inference this whole rule
+        # exists to forbid. Recorded only when the arm was actually enabled.
+        try:
+            from . import concept_merge_arm as _arm_state
+            if _arm_state.enabled():
+                concept_merge_evidence = {
+                    "status": _arm_state.PROPOSAL_UNAVAILABLE,
+                    "detail": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
+        except Exception:  # noqa: BLE001 - evidence never fails a request
+            pass
     if concept_merge_evidence is not None:
         # CARRIED ON THE PARSE METADATA, which is already the channel for "how
         # was this contract arrived at". The point-in-time path returns no

@@ -168,7 +168,7 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     envelope.setdefault("sourceNotes", [])
     _stamp_semantic_coverage(envelope, question=req.question,
                              semantics=semantics, frame=frame)
-    return _enforce_semantic_coverage(envelope)
+    return _enforce_model_availability(_enforce_semantic_coverage(envelope))
 
 
 def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
@@ -251,6 +251,62 @@ def _join_terms(terms: List[str]) -> str:
     if len(terms) == 1:
         return terms[0]
     return "%s and %s" % (", ".join(terms[:-1]), terms[-1])
+
+
+#: The words an availability refusal uses. It says what happened and what was
+#: NOT done, in the reader's vocabulary: no model name, no arm, no proposal.
+_AVAILABILITY_REFUSAL = (
+    "I could not complete the language-understanding step for this question, so "
+    "I have not answered it. Answering from the partial reading alone risks "
+    "answering a narrower question than the one you asked. Please try again.")
+
+
+def _enforce_model_availability(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """An unavailable augmentation call refuses; it does not quietly narrow.
+
+    THE SECOND HALF OF THE INVARIANT. Coverage catches a concept the estate can
+    NAME and execution did not carry. This catches the case coverage cannot see:
+    the augmentation arm was switched on, its call did not happen or could not
+    be read, and the deterministic reading — which may be narrower than the
+    sentence — would otherwise be executed and published as though the whole
+    question had been understood.
+
+    Measured, on this build: with the arm on and the credit exhausted, twenty of
+    twenty runs of one product-scoped question returned a whole-book answer.
+    Availability changed the meaning of the answer. It may change whether Trakt
+    answers; it may not change what it answers.
+
+    The rule fires on the arm's OWN status and nothing else. A successful call
+    that validly proposes no concepts reports `no_change` and is untouched — it
+    is a different event from a call that did not happen, and the arm never
+    infers one from the other. An arm that is switched off publishes no evidence
+    and is likewise untouched.
+
+    Successful answers only, and after coverage: where both would refuse, the
+    coverage refusal names the concept, which is the more useful sentence.
+
+    NO EXCEPTION IS ADMITTED. The estate has no completeness proof independent
+    of the deterministic parse — the coverage ledger and the execution receipt
+    are both built from the same owners, so neither can certify a reading whose
+    gap is a term no owner names. "Size" is exactly such a term. Until an
+    independent proof exists, unavailability refuses.
+    """
+    if not envelope.get("ok"):
+        return envelope
+    from . import concept_merge_arm as _arm
+
+    evidence = (envelope.get("metadata") or {}).get("conceptMerge")
+    if not isinstance(evidence, dict):
+        return envelope
+    if evidence.get("status") != _arm.PROPOSAL_UNAVAILABLE:
+        return envelope
+    envelope["ok"] = False
+    envelope["error"] = _AVAILABILITY_REFUSAL
+    envelope["answer"] = _AVAILABILITY_REFUSAL
+    envelope["artifacts"] = []
+    envelope["controlledRefusal"] = True
+    envelope.setdefault("warnings", []).append(_AVAILABILITY_REFUSAL)
+    return envelope
 
 
 def _error_envelope(msg: str, *, req: MiQueryRequest, view: str) -> Dict[str, Any]:

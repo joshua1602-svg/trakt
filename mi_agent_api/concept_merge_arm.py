@@ -40,6 +40,14 @@ logger = logging.getLogger(__name__)
 _VOCAB_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 
+#: THE AVAILABILITY STATE. A call that did not happen, could not be read, or
+#: came back as an error. It is NEVER inferred from an empty proposal list: a
+#: model that successfully proposes nothing returns `no_change` with
+#: `proposed: []`, and the two are different events with different consequences.
+#: Named here so producer and consumer share one string.
+PROPOSAL_UNAVAILABLE = "proposal_unavailable"
+
+
 #: A recorded proposal per question, used INSTEAD of a live call when set.
 #:
 #: The same injection seam `parse_with_repair` already offers as `llm_callable`,
@@ -164,7 +172,7 @@ def apply(question: str, spec: Any, semantics: Dict[str, Any], *,
     except Exception as exc:  # noqa: BLE001 - the arm degrades, the request lives
         logger.info("concept proposal unavailable for %r: %s: %s",
                     question, type(exc).__name__, exc)
-        return {"status": "proposal_unavailable",
+        return {"status": PROPOSAL_UNAVAILABLE,
                 "detail": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
 
     bound, rejected = CP.bind(proposals, vocab)
