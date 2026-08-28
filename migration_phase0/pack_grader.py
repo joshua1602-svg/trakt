@@ -182,10 +182,18 @@ def grade_75(row: Dict[str, Any], truth: Optional[Dict[str, Any]],
             return {"grade": WRONG, "why": "; ".join(checks)}
     if "cells" in truth:
         want = int(truth["cells"])
-        rows = _artefact_rows(row.get("artefacts") or row.get("artifacts"))
-        hit = rows == want or want in _ints(answer)
-        checks.append("cells %d (artefact rows %d) %s" % (want, rows,
-                                                          "found" if hit else "ABSENT"))
+        arte = row.get("artefacts") or row.get("artifacts")
+        rows = _artefact_rows(arte)
+        # THE ARTEFACT IS THE EVIDENCE WHERE THERE IS ONE. The prose fallback
+        # below asks only whether the number appears SOMEWHERE in the sentence,
+        # and a sentence contains many numbers: Q10B returned five groups
+        # against a truth of eight and passed, because it also said "8 loans".
+        # An instrument a coincidence can satisfy is not measuring, so the
+        # fallback now applies only where nothing was rendered to count.
+        hit = (rows == want) if arte else (want in _ints(answer))
+        checks.append("cells %d (artefact rows %d%s) %s"
+                      % (want, rows, "" if arte else ", none rendered",
+                         "found" if hit else "ABSENT"))
         if not hit:
             return {"grade": WRONG, "why": "; ".join(checks)}
     if "delta" in truth:
