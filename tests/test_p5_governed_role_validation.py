@@ -79,6 +79,10 @@ def test_an_ordinary_contract_declares_no_target_and_accepts_an_axis():
     assert p.accepts_grouping_axis
 
 
+def test_a_share_operation_has_no_grouping_axis_to_give():
+    assert not CM.operation_profile(_spec(aggregation="share")).accepts_grouping_axis
+
+
 def test_no_spec_means_no_opinion():
     p = CM.operation_profile(None)
     assert not p.holds_aggregate_target and p.accepts_grouping_axis
@@ -131,6 +135,40 @@ def test_a_second_number_on_the_targets_measure_fails_closed():
 
 
 # --------------------------------------------------------------------------- #
+# Population qualifier vs grouping axis
+# --------------------------------------------------------------------------- #
+def test_a_share_operation_refuses_a_grouping_axis():
+    """CFO63/CFO65: the axis the operation never consumes is never written."""
+    profile = CM.operation_profile(_spec(aggregation="share", metric=BALANCE))
+    result = CM.merge([], [_bound("dimension", "direct or acquired",
+                                  "source_portfolio_type", None)],
+                      profile=profile)
+    assert _outcomes(result) == [CM.DECLINED_ROLE_NOT_IN_OPERATION]
+    assert result.filled_by_model == ()
+
+
+def test_a_share_operation_still_takes_a_population_qualifier():
+    """The concept is not blocked — only the role it cannot have is."""
+    profile = CM.operation_profile(_spec(aggregation="share", metric=BALANCE))
+    result = CM.merge([], [_bound("category_value", "drawdown",
+                                  "erm_product_type", "drawdown")],
+                      profile=profile)
+    assert _outcomes(result) == [CM.FILLED_BY_MODEL]
+    assert result.filled_by_model[0].slot == CM.SLOT_ROW_PREDICATES
+
+
+@pytest.mark.parametrize("aggregation", ["sum", "avg", "count", "weighted_avg"])
+def test_every_other_operation_still_takes_a_grouping_axis(aggregation):
+    """'Show balance by product type.' / 'by portfolio.' — dimensions survive."""
+    profile = CM.operation_profile(_spec(aggregation=aggregation))
+    result = CM.merge([], [_bound("dimension", "product type",
+                                  "erm_product_type", None)],
+                      profile=profile)
+    assert _outcomes(result) == [CM.FILLED_BY_MODEL]
+    assert result.filled_by_model[0].slot == CM.SLOT_DIMENSIONS
+
+
+# --------------------------------------------------------------------------- #
 # Nothing else moves
 # --------------------------------------------------------------------------- #
 def test_rules_one_to_three_are_untouched():
@@ -149,3 +187,12 @@ def test_no_profile_behaves_exactly_as_before():
              _bound("dimension", "product type", "erm_product_type", None)]
     assert _outcomes(CM.merge([], bound)) == [CM.FILLED_BY_MODEL,
                                               CM.FILLED_BY_MODEL]
+
+
+def test_a_declined_role_is_a_finding_never_a_silence():
+    """Proposed-and-refused must stay distinguishable from never-proposed."""
+    profile = CM.operation_profile(_spec(aggregation="share"))
+    result = CM.merge([], [_bound("dimension", "x", "source_portfolio_type", None)],
+                      profile=profile)
+    assert len(result.findings) == 1
+    assert result.findings[0].as_dict()["detail"]

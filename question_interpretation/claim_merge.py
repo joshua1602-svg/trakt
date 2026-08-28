@@ -313,6 +313,11 @@ def _role_refusal(slot: str, key: Optional[str], value: Any,
                 "target and a row condition, so neither is applied"
                 % (profile.aggregate_target_value,))
 
+    if slot == SLOT_DIMENSIONS and not profile.accepts_grouping_axis:
+        return (DECLINED_ROLE_NOT_IN_OPERATION,
+                "this operation reports one population as a share of another "
+                "and has no grouping axis; the concept is not moved to another "
+                "role to make it execute")
     return None
 
 
