@@ -220,4 +220,12 @@ def apply(question: str, spec: Any, semantics: Dict[str, Any], *,
         "findings": [f.as_dict() for f in result.findings],
         "conflicts": len(result.conflicts),
         "usage": dict(usage or {}),
+        # WHAT THE ANSWER COST, on the answer. The arm published raw token
+        # counts and nothing priced them, so cost per question could only be
+        # reconstructed later by whoever still had the envelopes — and the
+        # stability, surface and CR4 harnesses had already discarded them.
+        # Priced by `llm_query_parser.estimate_cost`, the estate's existing
+        # owner of the pricing table, so there is no second opinion about what
+        # a token costs. A replayed proposal is not a call and is not priced.
+        "cost": (LQ.estimate_cost(model_name(), usage) if not replayed else None),
     }
