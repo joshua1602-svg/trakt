@@ -168,7 +168,11 @@ def apply(question: str, spec: Any, semantics: Dict[str, Any], *,
                 "detail": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
 
     bound, rejected = CP.bind(proposals, vocab)
-    result = CM.merge(CM.deterministic_slots(interpretation), bound, rejected)
+    # The governed operation the contract ALREADY selected, so the merge can
+    # check a proposed role rather than trust it. Built from `spec` before any
+    # fill touches it — a profile read after the merge would be circular.
+    result = CM.merge(CM.deterministic_slots(interpretation), bound, rejected,
+                      profile=CM.operation_profile(spec))
     applied = _apply_to_spec(spec, result.filled_by_model)
 
     return {

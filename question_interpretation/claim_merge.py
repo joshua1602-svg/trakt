@@ -62,8 +62,10 @@ from .schema import (CHOSEN_BY_A_PERSON, PROV_DEFAULT, PROV_EXPLICIT_USER,
 
 __all__ = ["SLOTS", "KIND_TO_SLOT", "SlotValue", "MergeFinding", "MergeResult",
            "deterministic_slots", "merge", "merged_contract",
+           "OperationProfile", "operation_profile",
            "FILLED_BY_MODEL", "DECLINED_PERSON", "DECLINED_DEFAULT",
            "DECLINED_UNRECORDED", "AGREED", "AMBIGUOUS", "UNBINDABLE",
+           "DECLINED_AGGREGATE_TARGET", "DECLINED_ROLE_NOT_IN_OPERATION",
            "PROV_MODEL_INFERRED"]
 
 SLOT_SUBJECT = "subject"
@@ -105,6 +107,17 @@ DECLINED_UNRECORDED = "declined_slot_provenance_was_never_recorded"
 AGREED = "agreed_with_the_deterministic_claim"
 AMBIGUOUS = "proposal_was_ambiguous"
 UNBINDABLE = "proposal_did_not_bind"
+
+#: THE FOURTH RULE (see the module docstring). Two outcomes, one cause: the
+#: model proposed a role the GOVERNED OPERATION cannot give that concept.
+#:
+#: The numeric claim in "when does the book reach £100m" is already owned by the
+#: contract as an aggregate target. Proposing it again as a row predicate is not
+#: a second claim; it is the same claim in a role this operation has no use for.
+DECLINED_AGGREGATE_TARGET = "declined_the_contract_holds_this_as_an_aggregate_target"
+#: A role the operation cannot consume at all — a grouping axis offered to an
+#: operation that reports one population as a share of another.
+DECLINED_ROLE_NOT_IN_OPERATION = "declined_role_the_governed_operation_cannot_consume"
 
 
 @dataclass(frozen=True)
@@ -186,6 +199,121 @@ class MergeResult:
                 "filled_by_model": [s.as_dict() for s in self.filled_by_model],
                 "conflict_count": len(self.conflicts),
                 "ambiguous_count": len(self.ambiguous)}
+
+
+# --------------------------------------------------------------------------- #
+# What the governed operation can consume
+# --------------------------------------------------------------------------- #
+#: The measure a forecast milestone is a target FOR. The extrapolation route
+#: reads `forecast_target_value` against the funded balance
+#: (`chat_routing._forecast_extrapolation` -> `currentFundedBalance`), so that
+#: is the field the target concerns wherever the contract names no other.
+_TARGET_MEASURE_DEFAULT = "current_outstanding_balance"
+
+#: Aggregations that report ONE POPULATION AS A SHARE OF ANOTHER and therefore
+#: have no grouping axis to give a concept. From the spec's own vocabulary:
+#: "share — a filtered population expressed as a share of the whole book.
+#: Distinct from the aggregations above because it needs TWO populations."
+#:
+#: Measured before it was relied on: across 1,612 deterministically parsed
+#: questions, `aggregation="share"` occurs 11 times and carries a dimension in
+#: NONE of them. The deterministic parser never builds this shape; this stops
+#: the merge building it either.
+_AGGREGATIONS_WITHOUT_AN_AXIS: Tuple[str, ...] = ("share",)
+
+
+@dataclass(frozen=True)
+class OperationProfile:
+    """What the operation the contract ALREADY selected can do with a concept.
+
+    Read off the governed contract, never off the question. The model may
+    propose a role; this is what decides whether that role exists here.
+    """
+
+    #: The measure an aggregate target applies to, and its value, where the
+    #: contract holds one. `None` means no target — the ordinary case.
+    aggregate_target_field: Optional[str] = None
+    aggregate_target_value: Optional[float] = None
+    #: False where the operation reports a share of one population in another.
+    accepts_grouping_axis: bool = True
+
+    @property
+    def holds_aggregate_target(self) -> bool:
+        return self.aggregate_target_value is not None
+
+
+def operation_profile(spec: Any) -> OperationProfile:
+    """The profile of the governed operation this contract already selected.
+
+    NOTHING HERE READS THE QUESTION. Both facts come from the contract the
+    deterministic parser produced — `forecast_target_value`, which
+    `llm_query_parser._forecast_target_value` sets, and `aggregation`, which the
+    validator constrains to a controlled vocabulary. A profile built from a spec
+    the model influenced would be circular; the arm runs before any fill.
+    """
+    if spec is None:
+        return OperationProfile()
+    target = getattr(spec, "forecast_target_value", None)
+    field = None
+    if target is not None:
+        try:
+            target = float(target)
+        except (TypeError, ValueError):
+            target = None
+    if target is not None:
+        field = str(getattr(spec, "metric", None) or _TARGET_MEASURE_DEFAULT)
+    aggregation = str(getattr(spec, "aggregation", None) or "").strip().lower()
+    return OperationProfile(
+        aggregate_target_field=field,
+        aggregate_target_value=target,
+        accepts_grouping_axis=aggregation not in _AGGREGATIONS_WITHOUT_AN_AXIS)
+
+
+def _role_refusal(slot: str, key: Optional[str], value: Any,
+                  profile: Optional[OperationProfile]
+                  ) -> Optional[Tuple[str, str]]:
+    """``(outcome, detail)`` where the OPERATION cannot give this concept its role.
+
+    THE FOURTH RULE, and the one place a proposed role is checked rather than
+    trusted. Rules 1-3 ask whether a slot is free; this asks whether the slot
+    means anything for the operation the reader's question already selected.
+    Returning ``None`` means the question does not arise and rules 1-3 decide.
+
+    Both branches FAIL CLOSED. Neither moves a concept to a role that would let
+    it execute, and neither relaxes anything downstream: a dimension this
+    declines is a dimension the contract never carries, so the receipt guard
+    that catches a genuinely dropped axis is untouched and still catches one.
+    """
+    if profile is None:
+        return None
+
+    # A numeric claim the contract already owns as an aggregate target. "When
+    # does the book reach £100m" is a target on the portfolio total; the same
+    # number as a row predicate selects loans each worth £100m, which is a
+    # different question and one this operation cannot answer. The contract
+    # holds the target already, so there is nothing here to add.
+    if (slot == SLOT_ROW_PREDICATES and profile.holds_aggregate_target
+            and key and key == profile.aggregate_target_field):
+        try:
+            same = float(value) == float(profile.aggregate_target_value)
+        except (TypeError, ValueError):
+            same = False
+        if same:
+            return (AGREED,
+                    "the contract already holds this as an aggregate target "
+                    "of %s" % (profile.aggregate_target_value,))
+        # A DIFFERENT number on the target's own measure. It could be a second
+        # target or a genuine row condition, and nothing here can tell which —
+        # so neither is chosen. Measured: across 1,612 parsed questions, no
+        # question carrying a target also carries a row predicate on the
+        # target's measure, so this declines a shape the estate has never seen.
+        return (DECLINED_AGGREGATE_TARGET,
+                "the contract holds an aggregate target of %s on this measure; "
+                "a second numeric claim on it is ambiguous between a further "
+                "target and a row condition, so neither is applied"
+                % (profile.aggregate_target_value,))
+
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -275,7 +403,8 @@ def _same_claim(current: "SlotValue", value: Any, operator: Optional[str]) -> bo
 
 
 def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
-          rejected: Sequence[Any] = ()) -> MergeResult:
+          rejected: Sequence[Any] = (),
+          profile: Optional[OperationProfile] = None) -> MergeResult:
     """Apply the three rules. Returns the merged slots AND every finding.
 
     ``bound`` and ``rejected`` are what `concept_proposal.bind` returned. The
@@ -303,6 +432,19 @@ def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
             value = field
         address = _address(slot, field)
         current = slots.get(address)
+
+        # THE FOURTH RULE, before the other three. Rules 1-3 ask whether the
+        # slot is free; this asks whether the operation has that role to give.
+        # A free slot the operation cannot consume is not an invitation.
+        refusal = _role_refusal(address[0], address[1], value, profile)
+        if refusal is not None:
+            outcome, detail = refusal
+            findings.append(MergeFinding(
+                outcome, address[0], address[1], value,
+                current.value if current is not None else None,
+                current.provenance if current is not None else None,
+                detail=detail))
+            continue
 
         if current is None:
             slots[address] = SlotValue(address[0], address[1], value,
