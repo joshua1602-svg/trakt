@@ -704,13 +704,15 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
     notes = [{"field": "reporting_period",
               "note": f"{summary.get('period')} ({summary.get('reportingDate')}); "
                       f"{summary.get('periodCount')} governed period(s) available."}]
-    return _envelope(
+    _summary_env = _envelope(
         ok=True, question=question, answer=answer, spec=spec_dict,
         artifacts=artifacts,
         reconciliation=_workspace.reconciliation_for(
             _workspace.datasets_read(output_root=output_root),
             missing_dimension_policy="exclude"),
         source_notes=notes, route="portfolio_summary")
+    return _declare_lens_scope(_summary_env, interpretation, label=_scope_label,
+                               rows_after=m.get("loan_count"))
 
 
 def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
@@ -1015,6 +1017,38 @@ def _declare_scope(envelope: Dict[str, Any], applied,
         "snapshots": applied.get("snapshots"),
     }
     return envelope
+
+
+def _declare_lens_scope(envelope: Dict[str, Any], interpretation: Any,
+                        *, label: str, rows_after: Any = None) -> Dict[str, Any]:
+    """Declare the source-portfolio scope a route narrowed to, from the contract.
+
+    THE SAME PRIMITIVE the movement and period-change routes already use — this
+    assembles the evidence from `interpretation.source_scope` and hands it to
+    `_declare_scope` rather than composing a second `scopeApplied` dict. Two
+    producers of one execution fact is the pattern this estate has now been
+    bitten by three times.
+
+    Why it is needed at all: `portfolio_summary`, `funded_bridge`, `evolution`
+    and `cohort_progression` APPLY the lens correctly — "Summarise the acquired
+    book" answers over 199 loans, not the book's 640 — and publish no
+    machine-readable record of having done so. Nothing downstream can tell that
+    answer from a whole-book answer mislabelled Acquired, which is the exact
+    confusion `scopeApplied` was introduced to end.
+
+    Metadata only. It states what already happened and changes no row, route,
+    measure, grouping, filter or figure.
+    """
+    scope = getattr(interpretation, "source_scope", None)
+    ids = tuple(getattr(scope, "portfolio_ids", ()) or ())
+    if not ids:
+        return envelope
+    return _declare_scope(envelope, {
+        "context": getattr(scope, "context_id", None),
+        "label": label,
+        "detail": "source portfolio in %s" % ", ".join(str(i) for i in sorted(ids)),
+        "rowsAfter": rows_after,
+    }, context=getattr(scope, "context_id", None), label=label)
 
 
 def _declare_grain(envelope: Dict[str, Any], grain: str) -> Dict[str, Any]:
@@ -1357,6 +1391,11 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                     artifacts=[chart, table], reconciliation=last_recon,
                     source_notes=notes, warnings=warnings, route="evolution")
     _declare_grain(out, "week" if period_field == "week" else "month")
+    # The lens this route narrowed each period by, declared through the same
+    # primitive the movement routes use. Metadata only.
+    _declare_lens_scope(out, interpretation,
+                        label=getattr(getattr(interpretation, "source_scope", None),
+                                      "label", None) or "scope")
     if filtered:
         # P1L: this route genuinely applies the population — per period, which is
         # what makes a filtered trend meaningful — so it DECLARES that it did.

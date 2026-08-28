@@ -166,7 +166,14 @@ class ExecutedContract:
 
     @property
     def scoped(self) -> bool:
-        return (self.scope_context not in (None, "total")
+        # `scope_applied` counts, and it is the STRONGEST of the three: it is a
+        # route's own record of a narrowing it PERFORMED, where `scope_context`
+        # is only the scope the request resolved. Requiring the weaker signal as
+        # a precondition for reading the stronger one made a route that applied
+        # a lens and said so — but published no `portfolioScope` — read as
+        # unscoped, which is the opposite of what the evidence says.
+        return (self.scope_applied
+                or self.scope_context not in (None, "total")
                 or any(f in self.filters for f in SCOPE_FIELDS))
 
     @property
@@ -261,7 +268,8 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
         alts = tuple(term[2]) if len(term) > 2 else ()
         axis_words.update(re.findall(r"[a-z0-9]+", matched.lower()))
         out.append(StatedConcept("dimension", key, "|".join((key,) + alts),
-                                 matched, "requested_dimension_terms"))
+                                 matched, "requested_dimension_terms",
+                                 carried_by=_derived_sources(key, semantics)))
 
     # ---- the SCOPE owner, on a question the value owner has claimed ------- #
     scope_q = PL.mask_claimed_value_spans(q, available_values)
@@ -331,8 +339,21 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
         if facet.kind in _STATED_FACET_KINDS:
             out.append(StatedConcept("facet:" + facet.kind, facet.field_key or "",
                                      facet.label or "", facet.label or "",
-                                     "detect_requested_facets"))
+                                     "detect_requested_facets",
+                                     carried_by=_derived_sources(
+                                         facet.field_key or "", semantics)))
     return out
+
+
+def _derived_sources(field: str, semantics: Dict[str, Any]) -> Tuple[str, ...]:
+    """The field this band is DERIVED FROM, if the registry declares one.
+
+    The inverse of `_bands_of`, from the same declaration. A question naming a
+    band and a contract narrowing its source field are the same concept.
+    """
+    entry = ((semantics or {}).get("fields") or {}).get(field) or {}
+    src = entry.get("derived_from")
+    return (str(src),) if src else ()
 
 
 def _bands_of(field: str, semantics: Dict[str, Any]) -> Tuple[str, ...]:
@@ -355,9 +376,13 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
     applied = set(contract.applied_fields)
 
     if kind == "facet:" + _GROUPING:
-        # ROLE DISAGREEMENT IS NOT LOSS. See the module docstring.
+        # ROLE DISAGREEMENT IS NOT LOSS. See the module docstring. The band
+        # relation applies here for the same reason it applies to the dimension
+        # concept this facet twins: a contract narrowing the field a band is
+        # derived from carries that band's concept.
         return (field in dims or field in applied or field in filters
-                or contract.facet_applied(_GROUPING, value))
+                or contract.facet_applied(_GROUPING, value)
+                or bool(set(concept.carried_by) & (dims | filters | applied)))
     if kind in ("facet:" + k for k in _NARROWING):
         return field in filters or field in dims or field in applied
     if kind.startswith("facet:"):
@@ -386,7 +411,18 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
         return contract.dataset_reconciled == value
     if kind == "dimension":
         want = set(value.split("|"))
-        return bool(want & dims) or bool(want & applied) or bool(want & filters)
+        if bool(want & dims) or bool(want & applied) or bool(want & filters):
+            return True
+        # THE BAND RELATION, READ THE OTHER WAY. `_carried` already accepts a
+        # contract that BANDS a stated field ("balance by borrower age bucket"
+        # states `youngest_borrower_age`, the contract groups `age_bucket`).
+        # The inverse is the same relation and the same governed fact: "for
+        # tickets larger than £150k" states the band `ticket_bucket`, and the
+        # contract narrows `current_outstanding_balance`, which is precisely
+        # what the registry declares `ticket_bucket` is `derived_from`. The
+        # concept reached the contract, as a row predicate on its own source
+        # field. Read from the registry, so a band added tomorrow is covered.
+        return bool(set(concept.carried_by) & (dims | filters | applied))
     if kind == "measure":
         if contract.metric == field or field in filters or field in applied:
             return True
