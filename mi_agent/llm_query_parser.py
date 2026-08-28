@@ -1135,6 +1135,19 @@ _SLOT_IS_A_CLAUSE_RE = re.compile(
     r"give|gives|show|shows|tell|tells)\b", re.I)
 
 
+def _slot_states_a_comparison(piece: str) -> bool:
+    """Does this measure slot compare something against a value?
+
+    Read from `_FILTER_COMPARATORS`, the vocabulary this module already uses to
+    extract predicates, so the two cannot drift: a slot the filter grammar would
+    read as a comparison is not also reported as a measure nobody could resolve.
+    """
+    for pattern, _op in _FILTER_COMPARATORS:
+        if re.search(pattern, piece, re.I):
+            return True
+    return False
+
+
 def unresolved_measure_slots(text: str, semantics: dict,
                              available_columns=None) -> Tuple[str, ...]:
     """Slots in the question's measure list that named no governed measure.
@@ -1184,6 +1197,21 @@ def unresolved_measure_slots(text: str, semantics: dict,
         piece = text[slot_start:slot_end]
         if _SLOT_IS_A_CLAUSE_RE.search(piece):
             continue        # a second question, not a measure name
+        if _slot_states_a_comparison(piece):
+            # A COMPARISON IS A PREDICATE, NOT AN UNNAMED MEASURE. A measure
+            # slot in a coordinated list is a noun phrase — "balance, loan
+            # count, weighted-average LTV". A slot that compares something
+            # against a number is the sentence narrowing its population, and
+            # the threshold owner has already read it.
+            #
+            # Structural, like the clause test beside it, and read from the
+            # comparator vocabulary this module already owns rather than a
+            # second list. Without it "how many loans have a borrower older
+            # than 55 and AN LTV GREATER THAN 50%?" refused: both predicates
+            # were extracted and applied correctly, and the answer was withheld
+            # because a guard could not match the span an article was attached
+            # to. The same question without the article answered.
+            continue
         residue = [w for w in re.findall(r"[a-z][a-z'-]*", piece.lower())
                    if w not in _MEASURE_SLOT_FILLER]
         if not residue or len(residue) > 6:
@@ -1604,7 +1632,20 @@ _RISK_LIMIT_RE = re.compile(
     r"\brisk limits?\b|concentration limit|\blimit breach|\bbreach(?:ed|es)?\b|"
     r"\bheadroom\b|within (?:the |our )?limits?|over (?:the )?limits?|"
     r"exceed(?:s|ed)? (?:the )?limits?|against (?:the )?limits?|schedule 8|"
-    r"limit status|limit utilis|which limits|are we within")
+    r"limit status|limit utilis|which limits|are we within|"
+    # THE NOUN THE ANSWER ITSELF USES. The governed limit monitor publishes one
+    # row per TEST — the artefact is titled "Risk limit tests", its column is
+    # `test`, and each row is a named test against Schedule 8. That noun was
+    # readable on the way out and not on the way in, so "which of our
+    # concentration TESTS are most at risk today?" fell through to the generic
+    # exposure-concentration route and answered with a ranking of largest
+    # exposures: a different operation over the same book, and the only one of
+    # the two that never consults the governing document.
+    #
+    # Bounded to the test noun QUALIFIED by limit or concentration, so an
+    # ordinary "show product concentration" is untouched and still reaches the
+    # concentration methodology.
+    r"(?:concentration|limit)\s+tests?\b|tests?\s+(?:are|is)\s+(?:most )?at risk")
 
 # Natural-language risk-limit category -> the category key used by the risk
 # monitor (``risk_limits.testsByCategory``). Order matters (most specific first).
@@ -3557,6 +3598,22 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
                     if ("scatter" in q or " vs " in q or " versus " in q) else None)
     explicit_plot = ("bubble" in q or "scatter" in q or "sized by" in q
                      or scatter_axes is not None or "plot" in q or "against" in q)
+    # A SCATTER NEEDS TWO NUMERIC AXES. "Plot" and "against" are in that list to
+    # catch loan-level plotting language, but "plot" is also the ordinary
+    # imperative verb for showing anything — and as a bare substring it caught
+    # "PLOT portfolio balance across LTV buckets and borrower-age buckets",
+    # disabled the grouped-matrix path below, and returned a one-dimension
+    # answer to a two-dimension question. The receipt then correctly reported
+    # the second axis as lost and refused.
+    #
+    # Decided by what the axes ARE, not by the verb that introduced them: where
+    # a segment resolves to a categorical dimension there is nothing to scatter,
+    # so the grouped matrix is the only reading. The unambiguous scatter words
+    # and a resolved pair of numeric axes still disqualify it.
+    if explicit_plot and not ("bubble" in q or "scatter" in q or "sized by" in q
+                              or scatter_axes is not None):
+        if any(c[0] == "categorical" for c in seg_classes):
+            explicit_plot = False
     numeric_bubble = False
     if len(seg_classes) >= 2 and not explicit_plot and "treemap" not in q:
         n_categorical = sum(1 for c in seg_classes if c[0] == "categorical")

@@ -10251,7 +10251,7 @@
    "controlledRefusal": null,
    "grade": "EXACT",
    "grader_rationale": "Direct +\u00a312.4m vs Acquired +\u00a310.2m; larger = direct",
-   "independent_truth": {"direct": {"open": 104990413.93, "close": 117356785.33, "delta": 12366371.4}, "acquired": {"open": 44468825.05, "close": 54698762.06, "delta": 10229937.01}, "larger": "Direct", "cohorts": {"Direct": {"open": 104990413.93, "close": 117356785.33, "delta": 12366371.4}, "Acquired": {"open": 44468825.05, "close": 54698762.06, "delta": 10229937.01}}, "desc": "month-on-month balance growth by source portfolio, 2026-05-31 -> 2026-06-30"}
+   "independent_truth": {"direct": {"open": 104990413.93, "close": 117356785.33, "delta": 12366371.4}, "acquired": {"open": 44468825.05, "close": 54698762.06, "delta": 10229937.01}, "larger": "Direct", "cohorts": {"Direct": {"open": 104990413.93, "close": 117356785.33, "delta": 12366371.4}}, "desc": "which source portfolio grew most, 2026-05-31 -> 2026-06-30; the question names one side, so the winner and the winner's delta are what it must state. Its siblings Q22B/Q22C name both books and are adjudicated on both."}
   },
   {
    "case": "Q22",
