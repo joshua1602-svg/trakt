@@ -131,6 +131,62 @@ def _artefact_rows(artefacts) -> int:
     return max([int(a.get("rows") or 0) for a in (artefacts or [])] or [0])
 
 
+#: A narrated measure: "Weighted-average Current LTV: 55.59%".
+_NARRATED_PCT = re.compile(r"([A-Za-z][A-Za-z /()-]{2,40}?):\s*(-?[\d,]+\.?\d*)\s*%")
+_MEASURE_PREFIXES = ("weighted-average ", "weighted average ", "average ", "wa ")
+
+
+def _kpi_percentages(row: Dict[str, Any]) -> Dict[str, float]:
+    out: Dict[str, float] = {}
+    arte = row.get("artefacts") or row.get("artifacts") or []
+    for a in arte:
+        for k in (a.get("kpis") or []):
+            value = str(k.get("value") or "")
+            if not value.endswith("%"):
+                continue
+            try:
+                out[str(k.get("label") or "").strip().lower()] = float(
+                    value[:-1].replace(",", ""))
+            except ValueError:
+                continue
+    return out
+
+
+def coherent_rendering(row: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """WRONG where the answer's own prose contradicts its own rendered figure.
+
+    EVERY FACTUAL ASSERTION IN AN ANSWER IS GRADED, not only the one the reader
+    asked for. A count can be right while the sentence beside it states a
+    governed measure the reader did not ask about and states it wrongly — and
+    the oracle used to pass that, because the requested figure was present.
+
+    This needs no truth file and no question id: the prose and the KPI tile are
+    two renderings of ONE executed row, so a disagreement between them is a
+    defect no matter what the question was. It is how the weighted-average LTV
+    published as "0.56%" beside a tile reading "55.6%" becomes visible.
+
+    Silent where the answer renders no percentage tile, which is most answers.
+    """
+    kpis = _kpi_percentages(row)
+    if not kpis:
+        return None
+    for match in _NARRATED_PCT.finditer(row.get("answer") or ""):
+        label, stated = match.group(1).strip(), float(match.group(2).replace(",", ""))
+        key = label.lower()
+        for prefix in _MEASURE_PREFIXES:
+            if key.startswith(prefix):
+                key = key[len(prefix):]
+                break
+        rendered = next((v for k, v in kpis.items() if key in k or k in key), None)
+        if rendered is None:
+            continue
+        if abs(rendered - stated) > 0.15:
+            return {"grade": WRONG,
+                    "why": ("the answer states %s as %s%% and renders it as %s%% "
+                            "in the same result" % (label, stated, rendered))}
+    return None
+
+
 def grade_75(row: Dict[str, Any], truth: Optional[Dict[str, Any]],
              frozen: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """One 75-bank answer against its pre-registered truth.
@@ -149,6 +205,9 @@ def grade_75(row: Dict[str, Any], truth: Optional[Dict[str, Any]],
     ok = bool(row.get("ok"))
     if not ok:
         return {"grade": FALSE_REFUSAL, "why": "expected an answer, got a refusal"}
+    incoherent = coherent_rendering(row)
+    if incoherent is not None:
+        return incoherent
     if not truth:
         deferred = frozen_verdict(row, frozen)
         if deferred is not None:
@@ -202,6 +261,38 @@ def grade_75(row: Dict[str, Any], truth: Optional[Dict[str, Any]],
         checks.append("delta %.2f %s" % (want, "found" if hit else "ABSENT"))
         if not hit:
             return {"grade": WRONG, "why": "; ".join(checks)}
+    if "must_state" in truth:
+        # THE ANSWER MUST CARRY THE OPERATION'S OWN EVIDENCE, not merely some
+        # figure. A question asking which governed limit TESTS are most at risk
+        # is not answered by a ranking of largest exposures, however accurate
+        # that ranking is — the two are different operations over the same book,
+        # and only one of them consults the governing document. Each entry names
+        # something only the requested operation can produce.
+        missing = [str(x) for x in truth["must_state"]
+                   if str(x).lower() not in answer.lower()]
+        checks.append("states %s%s" % (", ".join(map(str, truth["must_state"])),
+                                       "" if not missing else
+                                       " — ABSENT: " + ", ".join(missing)))
+        if missing:
+            return {"grade": WRONG, "why": "; ".join(checks)}
+    if "cohorts" in truth:
+        # A COMPARISON IS ADJUDICATED AS A COMPARISON. The truth carries each
+        # cohort's open, close and delta, and which one is larger; an answer that
+        # names one of them and not the other has not compared anything. Every
+        # delta must appear, and the winner must be named.
+        cohorts = truth["cohorts"] or {}
+        for name, figures in sorted(cohorts.items()):
+            want = float(figures["delta"])
+            hit = any(_near(g, want, 0.02) for g in _monies(answer))
+            checks.append("%s delta %.2f %s" % (name, want, "found" if hit else "ABSENT"))
+            if not hit:
+                return {"grade": WRONG, "why": "; ".join(checks)}
+        winner = str(truth.get("larger") or "")
+        if winner:
+            hit = winner.lower() in answer.lower()
+            checks.append("names %s as larger %s" % (winner, "yes" if hit else "NO"))
+            if not hit:
+                return {"grade": WRONG, "why": "; ".join(checks)}
     if "top_region" in truth:
         want = str(truth["top_region"])
         hit = want.lower() in answer.lower()
@@ -225,6 +316,9 @@ def grade_cfo(row: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
         return {"grade": TRUE_REFUSAL, "why": "refused, as the bank expects"}
     if not ok:
         return {"grade": FALSE_REFUSAL, "why": "the bank expects an answer"}
+    incoherent = coherent_rendering(row)
+    if incoherent is not None:
+        return incoherent
     low = answer.lower()
     for needle in (spec.get("must") or []):
         if str(needle).lower() not in low:
@@ -238,4 +332,54 @@ def grade_cfo(row: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
         if rows < int(want_rows):
             return {"grade": WRONG,
                     "why": "expected at least %s rows, got %d" % (want_rows, rows)}
+    ranked = spec.get("ranked_artefact")
+    if ranked:
+        verdict = _ranked_artefact_verdict(row, ranked)
+        if verdict is not None:
+            return verdict
     return {"grade": CORRECT, "why": "answered and met every frozen assertion"}
+
+
+def _ranked_artefact_verdict(row: Dict[str, Any], spec: Dict[str, Any]
+                             ) -> Optional[Dict[str, str]]:
+    """THE ARTEFACT IS THE ANSWER when a question asks for a ranked list.
+
+    "Show the largest 10 loan exposures" is answered by ten ranked rows, not by
+    a sentence about the largest one — and the sentence is what the oracle used
+    to read. This checks the thing the reader was actually given: the row count
+    the question asked for, the ranking order, and that the cumulative share
+    climbs to the pre-registered total.
+
+    Needs the FULL artefact rows, so a capture that records only row counts
+    reports NOT MEASURED rather than passing.
+    """
+    arte = [a for a in (row.get("artefacts") or row.get("artifacts") or [])
+            if isinstance(a.get("row_data"), list) and a["row_data"]]
+    if not arte:
+        return {"grade": NO_ORACLE,
+                "why": "the ranked artefact was not captured, so it was not measured"}
+    table = max(arte, key=lambda a: len(a["row_data"]))
+    rows = table["row_data"]
+    want_n = int(spec["exact_rows"])
+    if len(rows) != want_n:
+        return {"grade": WRONG,
+                "why": "expected exactly %d ranked rows, got %d" % (want_n, len(rows))}
+    key, order = spec["key"], list(spec["order"])
+    got = [str(r.get(key)) for r in rows]
+    if got != order:
+        return {"grade": WRONG,
+                "why": "ranking is %s, expected %s" % (got, order)}
+    cum_key = spec.get("cumulative_key")
+    if cum_key:
+        try:
+            cums = [float(str(r.get(cum_key)).rstrip("%")) for r in rows]
+        except (TypeError, ValueError):
+            return {"grade": WRONG, "why": "cumulative share is not readable"}
+        if any(b < a - 1e-9 for a, b in zip(cums, cums[1:])):
+            return {"grade": WRONG, "why": "cumulative share does not increase: %s" % cums}
+        want_cum = spec.get("cumulative_total")
+        if want_cum is not None and abs(cums[-1] - float(want_cum)) > 0.05:
+            return {"grade": WRONG,
+                    "why": "cumulative share ends at %.2f%%, expected %.2f%%"
+                           % (cums[-1], float(want_cum))}
+    return None

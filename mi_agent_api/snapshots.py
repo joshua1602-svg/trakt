@@ -220,9 +220,8 @@ def _hint_scale(contract: Dict[str, Any], field: str) -> Optional[str]:
 
 
 def _to_points(value: Optional[float], scale: Optional[str]) -> Optional[float]:
-    if value is None:
-        return None
-    return value * 100.0 if scale == "percent_fraction" else value
+    from mi_agent.mi_dataset_profile import to_display_points
+    return to_display_points(value, scale)
 
 
 def _fmt_gbp(value: Optional[float], *, signed: bool = False) -> str:

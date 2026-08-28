@@ -196,10 +196,8 @@ def _format_kpi_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
     if fmt == "pct":
         # Apply the storage scale from the dataset contract: a fraction (0.51)
         # displays as 51.0%, points (51) display as 51.0%. Never guessed.
-        v = float(value)
-        if scale == "percent_fraction":
-            v *= 100.0
-        return f"{v:.1f}%"
+        from mi_agent.mi_dataset_profile import to_display_points
+        return f"{to_display_points(float(value), scale):.1f}%"
     if fmt == "decimal":
         return f"{float(value):.2f}"
     return f"{value:,.0f}" if isinstance(value, (int, float)) else str(value)

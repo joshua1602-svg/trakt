@@ -21,7 +21,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from .mi_dataset_profile import profile_dataset, validate_query_data
+from .mi_dataset_profile import (display_hint_for, profile_dataset,
+                                  to_display_points, validate_query_data)
 from .parsed_question import ParsedQuestion
 from .mi_chart_factory import MIChartError, MIChartResult, create_mi_chart
 from .mi_query_executor import (
@@ -357,8 +358,17 @@ def _capability_explanation(question: str, frame, history_periods: int = 1
 
 
 #: How each governed format reads in a management answer.
-def _format_measure_value(value, fmt: str) -> str:
-    """One measure, formatted the way a reader expects to see it."""
+def _format_measure_value(value, fmt: str, scale: Optional[str] = None) -> str:
+    """One measure, formatted the way a reader expects to see it.
+
+    FORMATTING IS THIS FUNCTION'S; SCALE IS THE DATASET'S. Prose and a KPI tile
+    may legitimately round a figure differently, but they may not disagree about
+    whether the stored column holds 0.556 or 55.6 — that is a fact about the
+    data, decided once by the profile. Reading only the registry's `format` and
+    never the profile's `scale` is how one weighted-average LTV was published
+    from a single executed row as "55.6%" in the tile and "0.56%" in the
+    sentence beside it.
+    """
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -369,13 +379,14 @@ def _format_measure_value(value, fmt: str) -> str:
                 return f"£{number / cut:,.2f}{suffix}"
         return f"£{number:,.2f}"
     if fmt == "percent":
-        return f"{number:.2f}%"
+        return f"{to_display_points(number, scale):.2f}%"
     if fmt == "integer":
         return f"{number:,.1f}" if number % 1 else f"{int(number):,}"
     return f"{number:,.2f}"
 
 
-def _multi_measure_answer(spec, qres, semantics: dict) -> Optional[str]:
+def _multi_measure_answer(spec, qres, semantics: dict,
+                          profile: Optional[dict] = None) -> Optional[str]:
     """A CFO-readable answer for a governed multi-measure request.
 
     One request, several measures, ONE population — so the answer reads as a
@@ -405,8 +416,11 @@ def _multi_measure_answer(spec, qres, semantics: dict) -> Optional[str]:
                 label = f"Weighted-average {label}"
             elif measure.get("aggregation") == "avg":
                 label = f"Average {label}"
+            # The SAME hint the KPI renderer reads, suffix-aware, so the two
+            # renderings of one executed figure cannot disagree.
+            hint = display_hint_for(profile or {}, column)
             lines.append(f"{label}: "
-                         f"{_format_measure_value(row[column], entry.get('format'))}")
+                         f"{_format_measure_value(row[column], entry.get('format'), hint.get('scale'))}")
         if not lines:
             return None
         unavailable = (getattr(qres, "metadata", None) or {}).get(
@@ -1059,7 +1073,7 @@ def run_mi_agent_query(
     # P1E: a multi-measure request gets a management answer naming every figure.
     if qres is not None and (getattr(qres, "metadata", None) or {}).get(
             "measures_executed"):
-        line = _multi_measure_answer(spec, qres, semantics)
+        line = _multi_measure_answer(spec, qres, semantics, profile)
         if line:
             result["answer"] = line
 

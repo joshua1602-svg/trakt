@@ -179,7 +179,20 @@ class TestRecognition:
         assert ca.requested_single_name_kind("Show top exposures") == "loan"
         assert ca.requested_single_name_kind("largest borrower exposures") == "borrower"
         assert ca.requested_single_name_kind("top 10 obligors") == "obligor"
-        assert ca.requested_single_name_kind("single name concentration") == "loan"
+        # "SINGLE NAME" IS A BORROWER. This assertion used to read `== "loan"`,
+        # and that expectation was the defect: Schedule 8 6.1 writes the
+        # single-name limit about "any single Borrower (or group of connected
+        # Borrowers)", and the risk-limits engine binds it to
+        # `borrower_largest_share`. Reading the phrase as the loan kind answered
+        # "our largest single-name exposure" with the largest single LOAN,
+        # against a limit written about borrowers — and did so silently on a
+        # tape that carries no borrower identifier at all.
+        assert ca.requested_single_name_kind("single name concentration") == "borrower"
+        assert ca.requested_single_name_kind("largest single-name exposure") == "borrower"
+        # THE HOSTILE CONTROLS. A question that names the loan still gets the
+        # loan, and a bare superlative still falls through to the loan default.
+        assert ca.requested_single_name_kind("Show the largest 10 loan exposures.") == "loan"
+        assert ca.requested_single_name_kind("show me the largest exposures") == "loan"
         # "largest concentrations" is an overview, not a single-name ranking.
         assert ca.requested_single_name_kind("largest concentrations") is None
         assert ca.requested_single_name_kind("broker concentration") is None

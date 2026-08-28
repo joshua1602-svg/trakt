@@ -334,9 +334,24 @@ def requested_concept(question: str) -> Optional[str]:
 #: Single-name language → the identifier kind it names. Checked in order;
 #: bare "largest/top exposures" defaults to loan-level exposure.
 _SINGLE_NAME_LANGUAGE: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("borrower", ("borrower",)),
+    # "SINGLE NAME" IS A BORROWER, AND THE GOVERNING DOCUMENT SAYS SO.
+    # Schedule 8 §6.1 reads "the aggregate Current Balance attributable to any
+    # single Borrower (or group of connected Borrowers)", and the risk-limits
+    # engine already binds that limit to `borrower_largest_share`. This table
+    # read the same phrase as the LOAN kind, so "our largest single-name
+    # exposure" answered with the largest single LOAN — £449k, 0.26% of the
+    # book — against a limit written about borrowers. A book with several loans
+    # to one borrower would understate the true single-name exposure without
+    # anything in the answer saying so.
+    #
+    # Nothing else moves: "largest 10 loan exposures" still names the loan, and
+    # a bare "largest exposures" still falls through to the loan default below.
+    # Where no borrower identifier is on the tape, `_single_name_result`
+    # already declines and records why, which is the correct answer to a
+    # question this book cannot support.
+    ("borrower", ("borrower", "single name", "single-name")),
     ("obligor", ("obligor",)),
-    ("loan", ("loan", "single name", "single-name", "exposure")),
+    ("loan", ("loan", "exposure")),
 )
 
 #: A superlative over NAMES ("largest exposures", "top 10 borrowers") — note

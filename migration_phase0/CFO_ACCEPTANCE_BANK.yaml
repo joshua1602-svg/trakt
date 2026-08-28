@@ -109,8 +109,35 @@ questions:
 - {q: "Are any of our concentration limits at risk?", family: specialist, expect: DELIVER}
 - {q: "Which of our limits are currently most at risk?", family: specialist, expect: DELIVER}
 - {q: "At the current run rate, when do we reach £250m of loans?", family: specialist, expect: DELIVER}
-- {q: "What is our largest single-name exposure?", family: specialist, expect: DELIVER}
-- {q: "Show the largest 10 loan exposures.", family: specialist, expect: DELIVER}
+# Schedule 8 6.1 defines single-name as a single Borrower, and this tape carries no
+# borrower identifier. The governed answer is a refusal that says so -- not the
+# largest single LOAN, which is a different exposure measured against a different
+# limit. The estate already reports the borrower-concentration limit as unavailable
+# for exactly this reason.
+- {q: "What is our largest single-name exposure?", family: specialist, expect: REFUSE}
+# The answer to this question IS the table; the sentence describes only the largest
+# one. Verified against the tape: ten rows, this ranking, cumulative share climbing
+# to 2.6% of book exposure.
+- q: "Show the largest 10 loan exposures."
+  family: specialist
+  expect: DELIVER
+  ranked_artefact:
+    exact_rows: 10
+    key: category
+    cumulative_key: cumulative_share
+    cumulative_total: 2.6
+    order:
+    - L00141
+    - L00617
+    - L00576
+    - L00343
+    - L00173
+    - L00383
+    - L00234
+    - L00438
+    - L00425
+    - L00400
+
 
 # ---- ambiguity and insufficiency: the correct answer is a refusal -------- #
 - {q: "Which region grew the most?", family: insufficiency, expect: REFUSE, must: ["period"]}
