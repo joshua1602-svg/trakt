@@ -196,3 +196,53 @@ def test_a_declined_role_is_a_finding_never_a_silence():
                       profile=profile)
     assert len(result.findings) == 1
     assert result.findings[0].as_dict()["detail"]
+
+
+# --------------------------------------------------------------------------- #
+# A field the reader has already placed
+# --------------------------------------------------------------------------- #
+def test_a_field_already_narrowed_on_is_not_also_an_axis():
+    """'What is the total balance for North loans?'
+
+    The contract narrows on `geographic_region_obligor`. Offering that same
+    field as a breakdown axis re-places a concept the reader has placed; the
+    route computes a filtered total, never groups, and the guard refuses.
+    """
+    existing = [CM.SlotValue(CM.SLOT_ROW_PREDICATES, "geographic_region_obligor",
+                             "North", CM.PROV_EXPLICIT_USER)]
+    result = CM.merge(existing,
+                      [_bound("dimension", "region",
+                              "geographic_region_obligor", None)],
+                      profile=CM.operation_profile(_spec()))
+    assert _outcomes(result) == [CM.DECLINED_FIELD_ALREADY_PLACED]
+    assert result.filled_by_model == ()
+
+
+def test_the_mirror_direction_is_left_alone():
+    """'Balance by region for London loans.'
+
+    A field held as an AXIS with the value LOST is the recovery this arm exists
+    for: the deterministic path refuses saying the scope was not applied, and
+    the model supplying `London` is what answers it. Declining this direction
+    too would take back seven correct answers to buy two.
+    """
+    existing = [CM.SlotValue(CM.SLOT_DIMENSIONS, "geographic_region_obligor",
+                             "geographic_region_obligor", CM.PROV_EXPLICIT_USER)]
+    result = CM.merge(existing,
+                      [_bound("category_value", "london",
+                              "geographic_region_obligor", "London")],
+                      profile=CM.operation_profile(_spec()))
+    assert _outcomes(result) == [CM.FILLED_BY_MODEL]
+    assert result.filled_by_model[0].slot == CM.SLOT_ROW_PREDICATES
+
+
+def test_an_axis_on_a_field_nothing_narrows_still_fills():
+    """The rule is about a field ALREADY placed, not about axes in general."""
+    existing = [CM.SlotValue(CM.SLOT_ROW_PREDICATES, "erm_product_type",
+                             "drawdown", CM.PROV_EXPLICIT_USER)]
+    result = CM.merge(existing,
+                      [_bound("dimension", "geography",
+                              "geographic_region_obligor", None)],
+                      profile=CM.operation_profile(_spec()))
+    assert _outcomes(result) == [CM.FILLED_BY_MODEL]
+    assert result.filled_by_model[0].slot == CM.SLOT_DIMENSIONS

@@ -55,7 +55,8 @@ proposed" are different objects, not the same absence.
 from __future__ import annotations
 
 from dataclasses import dataclass, field as _field
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import (Any, Dict, Iterable, List, Mapping, Optional, Sequence,
+                    Tuple)
 
 from .schema import (CHOSEN_BY_A_PERSON, PROV_DEFAULT, PROV_EXPLICIT_USER,
                      PROV_MODEL_INFERRED, SCOPE_PROVENANCES)
@@ -66,6 +67,7 @@ __all__ = ["SLOTS", "KIND_TO_SLOT", "SlotValue", "MergeFinding", "MergeResult",
            "FILLED_BY_MODEL", "DECLINED_PERSON", "DECLINED_DEFAULT",
            "DECLINED_UNRECORDED", "AGREED", "AMBIGUOUS", "UNBINDABLE",
            "DECLINED_AGGREGATE_TARGET", "DECLINED_ROLE_NOT_IN_OPERATION",
+           "DECLINED_FIELD_ALREADY_PLACED",
            "PROV_MODEL_INFERRED"]
 
 SLOT_SUBJECT = "subject"
@@ -118,6 +120,11 @@ DECLINED_AGGREGATE_TARGET = "declined_the_contract_holds_this_as_an_aggregate_ta
 #: A role the operation cannot consume at all — a grouping axis offered to an
 #: operation that reports one population as a share of another.
 DECLINED_ROLE_NOT_IN_OPERATION = "declined_role_the_governed_operation_cannot_consume"
+#: The same GOVERNED FIELD, proposed in a second role while the reader's own
+#: claim already places it in one. "What is the total balance for North loans?"
+#: narrows on `geographic_region_obligor`; offering that field as a breakdown
+#: axis as well does not add a concept, it re-places one the reader has placed.
+DECLINED_FIELD_ALREADY_PLACED = "declined_field_already_placed_in_another_role"
 
 
 @dataclass(frozen=True)
@@ -270,7 +277,8 @@ def operation_profile(spec: Any) -> OperationProfile:
 
 
 def _role_refusal(slot: str, key: Optional[str], value: Any,
-                  profile: Optional[OperationProfile]
+                  profile: Optional[OperationProfile],
+                  occupied: Optional[Mapping[Tuple[str, Optional[str]], "SlotValue"]] = None
                   ) -> Optional[Tuple[str, str]]:
     """``(outcome, detail)`` where the OPERATION cannot give this concept its role.
 
@@ -312,6 +320,27 @@ def _role_refusal(slot: str, key: Optional[str], value: Any,
                 "a second numeric claim on it is ambiguous between a further "
                 "target and a row condition, so neither is applied"
                 % (profile.aggregate_target_value,))
+
+    # A field the READER has already placed. Where the deterministic contract
+    # narrows on a field, that field is this question's population, and
+    # offering it as a breakdown axis as well is a SECOND placement of a
+    # concept already placed rather than a concept recovered.
+    #
+    # ONE DIRECTION ONLY, and the asymmetry is measured rather than assumed.
+    # The mirror — a field held as an AXIS, with the model supplying the value
+    # to narrow it — is frequently the recovery this arm exists for: "Balance
+    # by region for London loans." parses as an axis with the scope LOST, the
+    # deterministic path refuses saying so, and the model restoring `London`
+    # is what answers it. Declining that direction too would take back seven
+    # correct answers to buy two.
+    if (slot == SLOT_DIMENSIONS and key
+            and (occupied or {}).get((SLOT_ROW_PREDICATES, key)) is not None):
+        held = occupied[(SLOT_ROW_PREDICATES, key)]
+        if held.chosen_by_a_person:
+            return (DECLINED_FIELD_ALREADY_PLACED,
+                    "the contract already narrows on this field (%s), so it is "
+                    "this question's population rather than its axis"
+                    % (held.value,))
 
     if slot == SLOT_DIMENSIONS and not profile.accepts_grouping_axis:
         return (DECLINED_ROLE_NOT_IN_OPERATION,
@@ -441,7 +470,7 @@ def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
         # THE FOURTH RULE, before the other three. Rules 1-3 ask whether the
         # slot is free; this asks whether the operation has that role to give.
         # A free slot the operation cannot consume is not an invitation.
-        refusal = _role_refusal(address[0], address[1], value, profile)
+        refusal = _role_refusal(address[0], address[1], value, profile, slots)
         if refusal is not None:
             outcome, detail = refusal
             findings.append(MergeFinding(
