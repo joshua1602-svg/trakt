@@ -3183,7 +3183,7 @@ def population_applied(facet: RequestedFacet, *,
              for k in list(keys)}
     if keys & {str(f) for f in (applied_fields or ())}:
         return True
-    declared = {str(a).split(" ")[0] for a in ((ledger or {}).get("applied") or ())}
+    declared = declared_population_fields(ledger)
     if keys & declared:
         return True
     if envelope is not None and _analytical_population_satisfies(envelope, facet):
@@ -3199,6 +3199,21 @@ def population_ledger(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
     ledger = (envelope.get("metadata") or {}).get("populationApplied")
     return ledger if isinstance(ledger, dict) else {}
+
+
+def declared_population_fields(ledger: Optional[Mapping[str, Any]]) -> Set[str]:
+    """The FIELD NAMES a route's `populationApplied` ledger declares it narrowed on.
+
+    The ledger's `applied` entries are field-named prose — "erm_product_type",
+    "source_portfolio_type (applied within each period)" — so the field is the
+    leading token. That parsing rule is a contract between the routes that write
+    the ledger and every reader of it, and it now has two readers: this module's
+    `_population_satisfied` and the semantic coverage adapter. Written once,
+    here, beside the ledger accessor, because a second copy of a format rule is
+    the shape of defect this estate has now been bitten by four times.
+    """
+    return {str(a).split(" ")[0] for a in ((ledger or {}).get("applied") or ())
+            if str(a).strip()}
 
 
 def drill_population_facets(extra_filters: Optional[Mapping[str, Any]],

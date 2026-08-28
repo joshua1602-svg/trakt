@@ -223,8 +223,29 @@ def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
 
     facets = tuple((f.get("kind") or "", f.get("label") or "", f.get("status") or "")
                    for f in (ex.get("facets") or []))
-    applied = tuple(sorted({f.get("field") for f in (ex.get("facets") or [])
-                            if f.get("status") == "applied" and f.get("field")}))
+    applied = {f.get("field") for f in (ex.get("facets") or [])
+               if f.get("status") == "applied" and f.get("field")}
+    # THE ANALYTICAL ROUTE'S OWN NARROWING RECORD. `analyticalComposition
+    # .narrowedTo` is `route.narrowed_entries`: the field-named row predicates a
+    # plan's findings ACTUALLY narrowed to. That route composes its populations
+    # instead of writing `spec.filters`, so an answer that had genuinely split
+    # the book by `source_portfolio_type` and measured Direct against Acquired
+    # published the split in `narrowedTo` and nowhere this adapter read. The
+    # concept was reported UNACCOUNTED against an answer that carried it
+    # correctly. The evidence already existed; only the reader was missing.
+    applied.update(str(e.get("field")) for e in
+                   ((meta.get("analyticalComposition") or {}).get("narrowedTo") or [])
+                   if e.get("field"))
+    # THE POPULATION LEDGER'S OWN FIELD NAMES. `metadata.populationApplied` is
+    # the seam every route uses to declare the narrowing it performed, and the
+    # receipt has always read the fields out of it; this adapter read only
+    # whether the ledger was non-empty. So a funnel trend that had narrowed the
+    # pipeline to one governed stage declared exactly that and still reported
+    # the stage as UNACCOUNTED. Parsed by the receipt's own primitive, never a
+    # second copy of the format rule.
+    from mi_agent import execution_receipt as _R
+    applied.update(_R.declared_population_fields(pop))
+    applied = tuple(sorted(applied))
     return ExecutedContract(
         filters=tuple(spec.get("filters") or ()),
         dimensions=tuple(dims),
@@ -269,9 +290,18 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
     # ---- the AXIS owner, first, so its terms are not re-read as values ---- #
     dim_terms = R.requested_dimension_terms(q, semantics, available_columns) or []
     axis_words = set()
+    #: The axis owner's OWN alternates, keyed by the field it resolved. The
+    #: facet owner re-reads the same terms and reports only the resolved key, so
+    #: its concept lost the alternates its dimension twin keeps. "Show balance
+    #: by region" resolves `collateral_geography` with the alternate
+    #: `geographic_region_obligor`; a contract grouping the alternate carried
+    #: the dimension concept and reported the facet twin as lost. One owner, one
+    #: set of alternates, read here rather than re-derived.
+    alts_by_key: Dict[str, Tuple[str, ...]] = {}
     for term in dim_terms:
         key, matched = term[0], str(term[1])
         alts = tuple(term[2]) if len(term) > 2 else ()
+        alts_by_key[key] = alts_by_key.get(key, ()) + alts
         axis_words.update(re.findall(r"[a-z0-9]+", matched.lower()))
         out.append(StatedConcept("dimension", key, "|".join((key,) + alts),
                                  matched, "requested_dimension_terms",
@@ -347,7 +377,8 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
                                      facet.label or "", facet.label or "",
                                      "detect_requested_facets",
                                      carried_by=_derived_sources(
-                                         facet.field_key or "", semantics)))
+                                         facet.field_key or "", semantics)
+                                     + alts_by_key.get(facet.field_key or "", ())))
     return out
 
 

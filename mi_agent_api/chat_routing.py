@@ -1020,7 +1020,8 @@ def _declare_scope(envelope: Dict[str, Any], applied,
 
 
 def _declare_lens_scope(envelope: Dict[str, Any], interpretation: Any,
-                        *, label: str, rows_after: Any = None) -> Dict[str, Any]:
+                        *, label: str, rows_after: Any = None,
+                        lens: Any = None) -> Dict[str, Any]:
     """Declare the source-portfolio scope a route narrowed to, from the contract.
 
     THE SAME PRIMITIVE the movement and period-change routes already use — this
@@ -1042,7 +1043,25 @@ def _declare_lens_scope(envelope: Dict[str, Any], interpretation: Any,
     scope = getattr(interpretation, "source_scope", None)
     ids = tuple(getattr(scope, "portfolio_ids", ()) or ())
     if not ids:
-        return envelope
+        # A ROUTE THAT HOLDS THE LENS AND NOT THE CONTRACT. `cohort_progression`
+        # resolves its own `PortfolioLens` from the question and narrows the
+        # cohort by `lens.filters`; it never receives an interpretation, so the
+        # branch above returned an unmarked envelope and "how has funded balance
+        # evolved for the direct book" answered the Direct book while declaring
+        # no scope at all. The filters ARE the realised scope — that is what the
+        # lens dataclass says they are — so they are the evidence here.
+        filters = dict(getattr(lens, "filters", None) or {})
+        if not filters:
+            return envelope
+        ctx = _portfolio_lens.context_id(lens)
+        ctx = ctx if isinstance(ctx, str) else ", ".join(str(c) for c in ctx)
+        return _declare_scope(envelope, {
+            "context": ctx,
+            "label": label,
+            "detail": "; ".join("%s = %s" % (k, v)
+                                for k, v in sorted(filters.items())),
+            "rowsAfter": rows_after,
+        }, context=ctx, label=label)
     return _declare_scope(envelope, {
         "context": getattr(scope, "context_id", None),
         "label": label,
@@ -1274,6 +1293,18 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                         artifacts=[chart, table],
                         reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
                         source_notes=notes, route="evolution_funnel")
+        # THE STAGE THIS TREND IS OF. The funnel series is built for exactly one
+        # governed pipeline stage, which is a narrowing of the pipeline by
+        # `pipeline_stage` however the series is assembled. It was declared
+        # nowhere, so "Show KFI trend by week." published a KFI-only answer that
+        # no reader could distinguish from a whole-pipeline one. Declared through
+        # the population ledger every other route narrows through.
+        from question_interpretation.lexical import PIPELINE_STAGE_FIELD
+        out.setdefault("metadata", {})["populationApplied"] = {
+            "applied": [f"{PIPELINE_STAGE_FIELD} (funnel stage "
+                        f"{summ.get('label', funnel_stage)})"],
+            "unavailable": [], "rowsBefore": None, "rowsAfter": None,
+        }
         return _declare_grain(out, "week")
 
     # Pipeline amount by stage over time (multi-series).
@@ -2314,9 +2345,14 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
         _workspace.datasets_read(output_root=output_root),
         reporting_date=(last or {}).get("reporting_date"))
     notes = [{"field": "cohort", "note": prog["lineage"]["note"]}]
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
-                     warnings=warnings, route="cohort_progression")
+    out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                    artifacts=[chart, table], reconciliation=recon, source_notes=notes,
+                    warnings=warnings, route="cohort_progression")
+    # The lens this route narrowed the cohort by, through the same primitive
+    # every other lens route uses. Metadata only: it states what already
+    # happened and changes no row, period, metric or figure.
+    return _declare_lens_scope(out, None, label=lens.label, lens=lens,
+                               rows_after=(last or {}).get("loanCount"))
 
 
 # --------------------------------------------------------------------------- #
