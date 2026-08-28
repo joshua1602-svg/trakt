@@ -1,32 +1,25 @@
 # MI Query Agent — acceptance bank, final answers
 
-Commit `23804de` · portfolio `client_001/mi_2026_06` · as at 30 June 2026 · 640 loans
-· model `claude-opus-5` recorded from live responses. Every run made from scratch at this
-commit; nothing spliced. Graded against the recalibrated oracle: every factual claim in
-an answer is checked, not only the requested one, and a ranked answer is checked through
-its table.
+Production SHA `23804de` · acceptance SHA `c1ca905` · portfolio `client_001/mi_2026_06`
+· as at 30 June 2026 · 640 loans · model `claude-opus-5` recorded from live responses.
 
-Two configurations are shown for every question:
-
-* **LANG** — with the language layer available. The shipping configuration.
-* **ENGINE** — the governed engine alone, language layer switched off.
+Every run made from scratch; nothing spliced. Graded against the recalibrated oracle:
+every factual claim is checked, not only the requested one; a ranked answer is checked
+through its table; and an answer must have reconciled against the dataset its question
+named.
 
 | verdict | with the language layer | governed engine alone |
 |---|---:|---:|
-| CORRECT | 135 | 126 |
+| CORRECT | 136 | 127 |
 | CORRECTLY DECLINED | 16 | 16 |
-| NO CHECKABLE TRUTH | 1 | 1 |
+| NO CHECKABLE TRUTH | 0 | 0 |
 | DECLINED BUT ANSWERABLE | 12 | 19 |
 | WRONG | 2 | 4 |
 | **total** | **166** | **166** |
 
-Correct or correctly declined: **151 of 166 (91.0%)**. Wrong: **2 (1.2%)**.
+Correct or correctly declined: **152 of 166 (91.6%)**. Wrong: **2 (1.2%)**.
 
-Previous bank: 124 correct / 4 wrong (LANG), 117 correct / 6 wrong (ENGINE).
-
-Ten questions changed this sprint — eight recovered from a refusal, two corrected from a
-wrong answer. Each was run six independent times against the live model; all are 6/6
-correct and none produced a wrong answer in any run.
+Reach recovery: **8 of the original 16** existing-capability cases — 50%.
 
 ---
 
@@ -676,23 +669,25 @@ Calculated: Concentration limits vs the governing document.
 
 ### Q10A · Summarise the current pipeline.
 
-**LANG — NO CHECKABLE TRUTH** · call `no_change`
+*oracle closed in close-out*
+
+**LANG — CORRECT** · call `no_change`
 
 ```
 8 loans · Current Outstanding Balance: £3.6MM.
 
 Calculated: Count of loans · 8 loans.
 ```
-*Verdict: no independent truth, and the frozen grade 'WRONG / SILENT' was recorded against a different answer*
+*Verdict: count 8 found; balance 3600000.00 found; reconciled against pipeline (answer read pipeline) yes*
 
-**ENGINE — NO CHECKABLE TRUTH**
+**ENGINE — CORRECT**
 
 ```
 8 loans · Current Outstanding Balance: £3.6MM.
 
 Calculated: Count of loans · 8 loans.
 ```
-*Verdict: no independent truth, and the frozen grade 'WRONG / SILENT' was recorded against a different answer*
+*Verdict: count 8 found; balance 3600000.00 found; reconciled against pipeline (answer read pipeline) yes*
 
 *Stability over six independent live runs: 6/6 NO_COMPUTABLE_TRUTH*
 
