@@ -415,6 +415,86 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
     return True
 
 
+# --------------------------------------------------------------------------- #
+# The coverage ledger
+# --------------------------------------------------------------------------- #
+#: The concept reached the contract and execution records it.
+RESOLVED = "resolved"
+#: The ESTATE ITSELF declined the concept — a facet it stamped unsupported or
+#: unavailable. Kept distinct from `UNACCOUNTED` on purpose: "we cannot do this
+#: and said so" and "this vanished without trace" are different events, and
+#: collapsing them would let a governed refusal read as a silent loss.
+UNSUPPORTED_BY_ESTATE = "unsupported"
+#: Stated by an owner, and nothing in the executed contract records it. THE
+#: FINDING. An answer carrying one of these widened, dropped or substituted
+#: something the reader asked for, and nothing downstream can see it because
+#: no claim was ever made to lose.
+UNACCOUNTED = "unaccounted"
+
+#: Facet statuses that mean the estate GAVE AN ANSWER ABOUT the concept rather
+#: than losing it. Read from `mi_agent.execution_receipt`'s own vocabulary.
+_DECLINED_STATUSES = ("unsupported", "unavailable")
+
+#: There is deliberately no NON_SEMANTIC state. Ordinary words never enter this
+#: ledger at all: it is built from what governed OWNERS name, not from
+#: tokenising the sentence, so a word no owner claims is absent rather than
+#: dispositioned. That is why the measured false-positive rate on correct
+#: answers is zero rather than tuned.
+
+
+def coverage_report(question: str, envelope: Dict[str, Any],
+                    semantics: Dict[str, Any], *,
+                    available_values: Any = None,
+                    available_columns: Optional[Iterable[str]] = None,
+                    frame: Any = None) -> Dict[str, Any]:
+    """Every governed concept the question states, and how it was accounted for.
+
+    THE ONE OWNER of "all material user meaning has been accounted for". Routes
+    publish what they executed; this decides whether that covers what was asked.
+    The decision is not distributed.
+
+    Independent BY CONSTRUCTION, which is the whole reason this exists:
+    `stated_concepts` receives the question and the governed registry/value
+    catalogue and never the spec, the contract or this envelope. So a concept
+    the interpretation dropped is still named here — which is exactly the case
+    no existing control can see, because every one of them compares two records
+    that both exist and a dropped concept leaves none.
+
+    CONCEPT-FOUNDED, NEVER SPAN-FOUNDED. `question_interpretation.schema.Slot`
+    records that 170 of 690 measured claims carry no recoverable span and that a
+    consumer "must never require it". Spans ride along for diagnostics where an
+    owner supplied one; coverage never depends on them.
+
+    Returns the ledger. Decides nothing about the answer: the caller does that.
+    """
+    concepts = stated_concepts(question, semantics,
+                               available_values=available_values,
+                               available_columns=available_columns, frame=frame)
+    contract = from_envelope(envelope)
+    declined = {label for kind, label, status in contract.facets
+                if status in _DECLINED_STATUSES}
+    entries: List[Dict[str, Any]] = []
+    for c in concepts:
+        if _carried(c, contract):
+            disposition = RESOLVED
+        elif c.term and c.term in declined:
+            disposition = UNSUPPORTED_BY_ESTATE
+        else:
+            disposition = UNACCOUNTED
+        entries.append({"kind": c.kind, "field": c.field, "value": str(c.value),
+                        "term": c.term, "owner": c.owner,
+                        "disposition": disposition})
+    return {"version": 1, "concepts": entries,
+            "unaccounted": [e for e in entries if e["disposition"] == UNACCOUNTED]}
+
+
+def unaccounted_concepts(ledger: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The ledger's unaccounted entries, or ``[]``. The gate reads only this."""
+    if not isinstance(ledger, dict):
+        return []
+    return list(ledger.get("unaccounted") or ())
+
+
 def unresolved_concepts(concepts: Sequence[StatedConcept],
                         contract: ExecutedContract) -> List[StatedConcept]:
     """The stated concepts the executed contract does not record carrying."""

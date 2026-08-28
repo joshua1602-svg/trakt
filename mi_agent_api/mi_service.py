@@ -136,7 +136,8 @@ def split_portfolio(portfolio_id: Optional[str],
 # --------------------------------------------------------------------------- #
 def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
                       client_id: str, run_id: Optional[str], view: str,
-                      run_required: bool) -> Dict[str, Any]:
+                      run_required: bool, semantics: Optional[Dict[str, Any]] = None,
+                      frame: Any = None) -> Dict[str, Any]:
     """Stamp the channel-neutral analytical metadata onto the envelope.
 
     Additive only — every pre-existing React key is left exactly as the adapter
@@ -165,7 +166,40 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     envelope.setdefault("warnings", [])
     envelope.setdefault("diagnostics", [])
     envelope.setdefault("sourceNotes", [])
+    _stamp_semantic_coverage(envelope, question=req.question,
+                             semantics=semantics, frame=frame)
     return envelope
+
+
+def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
+                             semantics: Optional[Dict[str, Any]],
+                             frame: Any) -> None:
+    """Record which governed concepts the question stated, and their disposition.
+
+    THE ONE SEAM. Both return paths — routed and point-in-time — pass through
+    `_governed_context`, so this sees every answer the service emits without a
+    per-route call and without a route deciding anything about coverage.
+
+    DISCLOSE ONLY. It publishes `metadata.semanticCoverage` and changes nothing:
+    no route, no answer, no refusal. The enforcement that reads it is a separate
+    change, deliberately, because the ledger's first measurement is what tells
+    us whether enforcement is safe to switch on.
+
+    Never raises into a request. A ledger that cannot be built is absent, which
+    reads as "not measured" rather than "clean" — the standing F3 rule.
+    """
+    if semantics is None:
+        return
+    try:
+        from question_interpretation import completeness as _coverage
+
+        envelope["metadata"]["semanticCoverage"] = _coverage.coverage_report(
+            question, envelope, semantics,
+            available_values=_book_values(frame, semantics) if frame is not None else None,
+            available_columns=set(frame.columns) if frame is not None else None,
+            frame=frame)
+    except Exception as exc:  # noqa: BLE001 - coverage must never cost an answer
+        logger.info("semantic coverage unavailable: %s: %s", type(exc).__name__, exc)
 
 
 def _error_envelope(msg: str, *, req: MiQueryRequest, view: str) -> Dict[str, Any]:
@@ -1242,7 +1276,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # SITE 1 OF 2 — a named category this book does not carry.
         routed = _guard_unknown_category(routed)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
-                                 view=view, run_required=_route_requires_run(route))
+                                 view=view, run_required=_route_requires_run(route),
+                                 semantics=semantics, frame=df)
 
     # ---- point-in-time: active governed dataset (or the selected run) ----- #
     if frame_error:
@@ -1318,6 +1353,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                                      semantics=semantics, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
+                             semantics=semantics, frame=df,
                              view=view, run_required=bool(run_id))
 
 
