@@ -261,6 +261,20 @@ def grade_75(row: Dict[str, Any], truth: Optional[Dict[str, Any]],
         checks.append("delta %.2f %s" % (want, "found" if hit else "ABSENT"))
         if not hit:
             return {"grade": WRONG, "why": "; ".join(checks)}
+    if "dataset" in truth:
+        # THE ANSWER MUST HAVE READ THE DATASET THE QUESTION NAMED. Checked
+        # against the envelope's own reconciliation record rather than against
+        # the prose — a pipeline figure and a funded figure read alike in a
+        # sentence, and the whole point of the reconciliation field is that they
+        # do not have to. This is the check that would have caught the pipeline
+        # summary answering from the funded book.
+        want = str(truth["dataset"])
+        got = str(row.get("reconciliation_dataset") or "")
+        hit = got == want or want in got.split("+")
+        checks.append("reconciled against %s (answer read %s) %s"
+                      % (want, got or "nothing", "yes" if hit else "NO"))
+        if not hit:
+            return {"grade": WRONG, "why": "; ".join(checks)}
     if "must_state" in truth:
         # THE ANSWER MUST CARRY THE OPERATION'S OWN EVIDENCE, not merely some
         # figure. A question asking which governed limit TESTS are most at risk

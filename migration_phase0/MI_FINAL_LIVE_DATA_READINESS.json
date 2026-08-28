@@ -4149,7 +4149,7 @@
    "controlledRefusal": null,
    "grade": "WRONG / SILENT",
    "grader_rationale": "answered from the FUNDED book; the question named the pipeline dataset",
-   "independent_truth": null
+   "independent_truth": {"desc": "the latest governed weekly pipeline extract (2026-05-29): 8 cases, Loan Amount summing to 3,600,000.00, read from the pipeline dataset", "count": 8, "balance": 3600000.0, "dataset": "pipeline"}
   },
   {
    "case": "Q10",
