@@ -161,6 +161,9 @@ class ExecutedContract:
     population_total: Optional[int] = None
     population_applied: bool = False
     scope_applied: bool = False
+    #: The answer IS a forecast — the estate's own record, from the analytical
+    #: plan's `projected` flag or the spec's forecast mode.
+    projected: bool = False
     applied_fields: Tuple[str, ...] = ()
     facets: Tuple[Tuple[str, str, str], ...] = ()   # (kind, label, status)
 
@@ -235,6 +238,9 @@ def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
         population_total=ex.get("populationTotal"),
         population_applied=bool(pop.get("applied") or meta.get("applied_filter_fields")),
         scope_applied=bool(scope_ledger),
+        projected=bool((meta.get("analyticalComposition") or {}).get("projected")
+                       or spec.get("forecast_mode")
+                       or spec.get("forecast_question")),
         applied_fields=applied,
         facets=facets,
     )
@@ -408,7 +414,28 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
         # `datasetContext: pipeline` beside `reconciliation.dataset: funded` —
         # the contradiction is already in the envelope, and reading the decision
         # alone would have called that carried.
-        return contract.dataset_reconciled == value
+        reconciled = str(contract.dataset_reconciled or "")
+        if reconciled == value:
+            return True
+        # A COMPOSITE READ. `workspace.reconciliation_for` joins the datasets an
+        # answer read with "+", so an answer over `funded+pipeline` has read the
+        # pipeline. Its own format, parsed rather than re-derived.
+        if value in reconciled.split("+"):
+            return True
+        # A FORECAST IS AN ANALYTIC, NOT A TAPE. `forecast` is a governed view
+        # with nothing to read: it is computed FROM funded and pipeline, so
+        # `reconciliation.dataset` can never equal it and requiring that would
+        # report every correct forecast as having lost the concept. What
+        # carries it is the estate's own record that the answer IS projected.
+        #
+        # Deliberately NOT extended to the other views: `funded` and `pipeline`
+        # are real tapes, and for those the reconciliation record is the whole
+        # point. Measured: "Show funded vs pipeline contribution." reconciles to
+        # `funded` alone and stays uncovered, which is correct — that answer
+        # genuinely does not include the pipeline.
+        if value == "forecast":
+            return contract.projected
+        return False
     if kind == "dimension":
         want = set(value.split("|"))
         if bool(want & dims) or bool(want & applied) or bool(want & filters):

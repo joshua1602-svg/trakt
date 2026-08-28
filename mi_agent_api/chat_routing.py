@@ -1582,7 +1582,15 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
     notes = [{"field": "assumptions",
               "note": f"Base run-rate {_gbp(base)}/mo over {rr.get('observedMonths')} month(s); "
                       f"signal = month-on-month funded growth. {caveat}"}]
-    recon = {"dataset": "forecast", "coverage_by_balance_pct": 100.0}
+    # THE DATASETS THIS EXTRAPOLATION ACTUALLY READ, derived through the shared
+    # primitive rather than asserted. It read the funded runs and the pipeline
+    # extract; "forecast" is the analytic it produced, not a tape it opened, and
+    # naming the analytic here left a question that asked about the pipeline
+    # unable to show the pipeline had been read at all. Same correction, same
+    # primitive, as the five sites that adopted it before this one.
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root,
+                                 pipeline_root=pipeline_root))
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                      artifacts=artifacts, reconciliation=recon, source_notes=notes,
                      warnings=warnings, route="forecast_extrapolation")
@@ -2178,6 +2186,10 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
     envelope = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                          artifacts=[chart, table], reconciliation=recon,
                          source_notes=notes, route="funded_bridge")
+    # The lens this bridge narrowed to, through the shared primitive.
+    _declare_lens_scope(envelope, interpretation,
+                        label=getattr(getattr(interpretation, "source_scope", None),
+                                      "label", None) or "scope")
     # D7: the route states the axis its bridge ACTUALLY attributed movement by,
     # so `grouping_proven` can certify a requested grouping from execution
     # evidence rather than from route identity. Without it this route declared
