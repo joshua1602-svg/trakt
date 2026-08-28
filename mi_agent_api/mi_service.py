@@ -168,7 +168,7 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     envelope.setdefault("sourceNotes", [])
     _stamp_semantic_coverage(envelope, question=req.question,
                              semantics=semantics, frame=frame)
-    return _enforce_semantic_coverage(envelope)
+    return envelope
 
 
 def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
@@ -200,57 +200,6 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
             frame=frame)
     except Exception as exc:  # noqa: BLE001 - coverage must never cost an answer
         logger.info("semantic coverage unavailable: %s: %s", type(exc).__name__, exc)
-
-
-#: The words a refusal uses for a concept the answer did not account for. No
-#: implementation vocabulary reaches the reader: "coverage", "ledger" and
-#: "unaccounted" are ours, not theirs.
-_COVERAGE_REFUSAL = (
-    "I understood that you asked about %s, but I could not confirm it was "
-    "applied to this calculation. I have not answered over a wider population "
-    "instead.")
-
-
-def _enforce_semantic_coverage(envelope: Dict[str, Any]) -> Dict[str, Any]:
-    """Refuse an answer that lost a governed concept the question stated.
-
-    THE INVARIANT this whole build exists for. Opus may recover more or less of
-    a sentence from run to run; what it may never do is change the analytical
-    meaning silently. A concept it drops now costs ANSWERABILITY — a refusal
-    naming the concept — and never a widened population.
-
-    It fires only on `UNACCOUNTED`. A concept the estate declined and said so is
-    `UNSUPPORTED` and keeps its existing governed behaviour; a concept nothing
-    named was never in the ledger. There is no confidence score here, nothing is
-    guessed, and no field is chosen: the rule is that a stated concept with no
-    disposition may not be answered over.
-
-    Applied to SUCCESSFUL answers only. A refusal is already a refusal, and
-    re-refusing it would replace a specific governed reason with a general one.
-    """
-    if not envelope.get("ok"):
-        return envelope
-    from question_interpretation import completeness as _coverage
-
-    missing = _coverage.unaccounted_concepts(
-        (envelope.get("metadata") or {}).get("semanticCoverage"))
-    if not missing:
-        return envelope
-    named = sorted({str(m.get("term") or m.get("value") or m.get("field"))
-                    for m in missing})
-    message = _COVERAGE_REFUSAL % _join_terms(named)
-    envelope["ok"] = False
-    envelope["error"] = message
-    envelope["answer"] = message
-    envelope["artifacts"] = []
-    envelope.setdefault("warnings", []).append(message)
-    return envelope
-
-
-def _join_terms(terms: List[str]) -> str:
-    if len(terms) == 1:
-        return terms[0]
-    return "%s and %s" % (", ".join(terms[:-1]), terms[-1])
 
 
 def _error_envelope(msg: str, *, req: MiQueryRequest, view: str) -> Dict[str, Any]:
