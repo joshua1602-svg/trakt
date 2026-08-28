@@ -275,6 +275,18 @@ def grade_75(row: Dict[str, Any], truth: Optional[Dict[str, Any]],
                                        " — ABSENT: " + ", ".join(missing)))
         if missing:
             return {"grade": WRONG, "why": "; ".join(checks)}
+    if "must_not_state" in truth:
+        # THE OPERATION'S NEGATIVE EVIDENCE. A milestone question about a target
+        # the book has NOT reached must not report it as reached, and the
+        # positive assertions alone cannot catch that — both answers name the
+        # target. Same mechanism as `must_state`, read the other way.
+        present = [str(x) for x in truth["must_not_state"]
+                   if str(x).lower() in answer.lower()]
+        checks.append("does not state %s%s" % (", ".join(map(str, truth["must_not_state"])),
+                                               "" if not present else
+                                               " — PRESENT: " + ", ".join(present)))
+        if present:
+            return {"grade": WRONG, "why": "; ".join(checks)}
     if "cohorts" in truth:
         # A COMPARISON IS ADJUDICATED AS A COMPARISON. The truth carries each
         # cohort's open, close and delta, and which one is larger; an answer that

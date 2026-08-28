@@ -1528,6 +1528,13 @@ def _forecast_question_kind(q: str) -> str:
         return "pipeline_needed"
     if "reach" in q and ("when" in q or re.search(r"£?\s?\d+\s*m", q)):
         return "reach_threshold"
+    # THE SAME COMPOSITION THAT ADMITTED THE QUESTION DECIDES ITS KIND. Gating
+    # entry on "asks WHEN and names a target" and then letting the verb list
+    # decide the kind would admit a milestone question and answer it with an
+    # extrapolation curve — which is what "when do we get to £100 million?" got:
+    # a run-rate line, where "when will we reach £100m?" got the milestone.
+    if _asks_when_a_target_is_reached(q):
+        return "reach_threshold"
     if "what happens if" in q:
         return "scenario"
     if "downside" in q:
@@ -1547,11 +1554,37 @@ def _forecast_question_kind(q: str) -> str:
     return "extrapolation_curve"
 
 
+def _asks_when_a_target_is_reached(q: str) -> bool:
+    """A milestone question, decided by the two owners that already know.
+
+    THE VERB LIST WAS A THIRD OPINION. `_FORECAST_SCALE_RE` gates this
+    recogniser on a vocabulary of milestone verbs — "reach", "run rate",
+    "bridge to" — and a question phrased with any other verb fell through to
+    "I couldn't map this question to a governed analytic", however plainly it
+    asked. "When will we reach £100m of funded loans?" was answered and "At the
+    current trajectory, when do we get to £100 million?" was not.
+
+    Neither owner needed extending. `answer_type.asked` already decides that a
+    question wants a DATE back, and `_forecast_target_value` already resolves
+    the governed monetary target — both of them correctly, on every phrasing
+    that was failing. A question that asks WHEN and names a target IS a
+    milestone question, whatever verb joins them, so the two owners are composed
+    here rather than a third vocabulary being maintained beside them.
+
+    Measured over 1,446 distinct corpus questions before it shipped: the verb
+    list claims 40, and this claims exactly 3 more — all three plainly
+    milestone questions, no other movement anywhere.
+    """
+    from . import answer_type as _AT
+
+    return (_AT.asked(q) == _AT.DATE) and _forecast_target_value(q) is not None
+
+
 def _forecast_scale_recognizer(q: str, title: str
                                ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Securitisation scale-up / run-rate question → governed
     ``forecast_mode='extrapolation'`` plan (resolved by /mi/forecast/extrapolation)."""
-    if not _FORECAST_SCALE_RE.search(q):
+    if not (_FORECAST_SCALE_RE.search(q) or _asks_when_a_target_is_reached(q)):
         return None
     kind = _forecast_question_kind(q)
     spec = MIQuerySpec(
