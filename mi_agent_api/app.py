@@ -168,11 +168,111 @@ def _execution_context(request: "Request", *, channel: str):
     )
 
 
+#: How many of each client's most recent runs to prepare at startup. Two by
+#: default: the latest run is what every dashboard read opens on, and the one
+#: before it is what the month-on-month comparison needs, so the funded snapshot
+#: lands fully warm. 0 disables the run warm and restores the previous startup
+#: cost exactly.
+_WARM_RUNS_ENV = "TRAKT_MI_WARM_RUNS"
+
+
+def _warm_runs_limit() -> int:
+    try:
+        return max(0, int(os.environ.get(_WARM_RUNS_ENV, "2")))
+    except (TypeError, ValueError):
+        return 2
+
+
+def _warm_pipeline_extracts(client_id: str, historical_model=None) -> None:
+    """Prepare each governed weekly pipeline extract once, serially.
+
+    These are immutable published files, and every pipeline / forecast route
+    re-reads the same set, so preparing them at startup is the single largest
+    saving available to a first interaction.
+
+    ``historical_model`` MUST be the model the routes will use: the prepared
+    frame is memoised on the extract's identity AND the model's fingerprint, so
+    warming without it fills a key nothing later reads.
+    """
+    proot = _pipeline_discovery_root()
+    if not proot:
+        return
+    from . import pipeline_contract as pipeline_mod
+    try:
+        extracts = pipeline_mod.collect_weekly_history(proot, client_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("startup pipeline inventory skipped for %s: %s", client_id, exc)
+        return
+    for extract in extracts:
+        source = extract.get("source_file") or extract.get("path")
+        if not source:
+            continue
+        as_of = extract.get("pipeline_as_of_date") or extract.get("extract_date")
+        for model in (historical_model, None) if historical_model else (None,):
+            try:
+                pipeline_mod.load_prepared_pipeline(source, as_of_date=as_of,
+                                                    historical_model=model)
+            except Exception as exc:  # noqa: BLE001 - one bad extract must not stop the warm
+                logger.info("startup pipeline warm skipped for %s: %s", source, exc)
+                break
+
+
+def _warm_shared_preparation() -> None:
+    """Prepare the shared, expensive artefacts each worker will need.
+
+    Deliberately SERIAL. Measurement on a 50k-loan book with 26 weekly extracts
+    showed concurrency makes cold preparation monotonically worse — the routes
+    are synchronous handlers doing GIL-bound pandas work, and the serving caches
+    build outside their lock, so fanning out duplicates preparation rather than
+    overlapping it (fan-out x9 took 36.7s against 17.1s serial).
+
+    Runs per worker, which is what makes the two-worker asymmetry disappear:
+    each process warms itself before it serves, so a user cannot warm worker A
+    and then pay a second cold start on worker B.
+    """
+    limit = _warm_runs_limit()
+    if limit <= 0:
+        return
+    try:
+        root = _onboarding_output_root()
+        if not root:
+            return
+        if platform_blob_mod.is_blob_root(root):
+            index = _blob_platform_index(root) or {"portfolios": []}
+        else:
+            index = snapshots_mod.discover_snapshots(root)
+    except Exception as exc:  # noqa: BLE001 - discovery must never block startup
+        logger.info("startup run discovery skipped: %s", exc)
+        return
+
+    for portfolio in (index.get("portfolios") or []):
+        client_id = portfolio.get("client_id")
+        runs = portfolio.get("runs") or []
+        if not client_id or not runs:
+            continue
+        for run in runs[-limit:]:
+            run_id = run.get("run_id")
+            if not run_id:
+                continue
+            try:
+                _resolve_run_dataframe(client_id, run_id, root)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("startup funded warm skipped for %s/%s: %s",
+                            client_id, run_id, exc)
+        model = None
+        try:
+            model = _pipeline_history(client_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.info("startup pipeline warm skipped for %s: %s", client_id, exc)
+        _warm_pipeline_extracts(client_id, model)
+
+
 def _warm_caches() -> None:
     """Best-effort warm so the FIRST user request isn't cold. Loads the active
-    dataset (populating the signature cache) and parses the semantics registry
-    (populating its mtime cache). Never fatal: a deploy with no data source yet
-    still starts; the first request simply pays the cold cost as before."""
+    dataset (populating the signature cache), parses the semantics registry
+    (populating its mtime cache) and prepares each client's latest run plus its
+    pipeline history model. Never fatal: a deploy with no data source yet still
+    starts; the first request simply pays the cold cost as before."""
     try:
         get_dataframe()
     except Exception as exc:  # noqa: BLE001 - warming must never block startup
@@ -181,6 +281,10 @@ def _warm_caches() -> None:
         load_mi_semantics(semantics_path())
     except Exception as exc:  # noqa: BLE001
         logger.info("startup semantics warm skipped: %s", exc)
+    try:
+        _warm_shared_preparation()
+    except Exception as exc:  # noqa: BLE001 - a warm fault must never fail startup
+        logger.info("startup shared-preparation warm skipped: %s", exc)
 
 
 @asynccontextmanager
@@ -626,61 +730,66 @@ def snapshot(portfolioId: Optional[str] = None,
         request, route="mi.snapshot", scope=portfolioContext,
         identity=http_cache.dataset_identity(client_id, run_id))
 
-    root = _onboarding_output_root()
-    df, prep_report = _resolve_run_dataframe(client_id, run_id, root)
-    if df is None:
-        return {"ok": False,
-                "error": f"No funded dataset found for {client_id}/{run_id}.",
-                "portfolio": {"client_id": client_id, "run_id": run_id},
-                "kpis": [], "warnings": ["No funded data available for this run."],
-                "diagnostics": []}
 
-    semantics = load_mi_semantics(semantics_path())
+    def _compute():
+        root = _onboarding_output_root()
+        df, prep_report = _resolve_run_dataframe(client_id, run_id, root)
+        if df is None:
+            return {"ok": False,
+                    "error": f"No funded dataset found for {client_id}/{run_id}.",
+                    "portfolio": {"client_id": client_id, "run_id": run_id},
+                    "kpis": [], "warnings": ["No funded data available for this run."],
+                    "diagnostics": []}
 
-    # Governed portfolio scope. Resolved once, applied to BOTH the current and
-    # the prior frame so the month-on-month change compares like with like.
-    resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
-    unscoped_df = df
-    df = _scoped_frame(df, resolved)
+        semantics = load_mi_semantics(semantics_path())
 
-    # Resolve the prior available run for month-on-month change.
-    prior_df = prior_run_id = prior_reporting_date = None
-    reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
-    if root and platform_blob_mod.is_blob_root(root):
-        try:
-            index = _blob_platform_index(root) or {"portfolios": []}
-            prior = snapshots_mod.find_prior_run(index, client_id, run_id)
-            if prior:
-                prior_run_id = prior["run_id"]
-                prior_reporting_date = prior["reporting_date"]
-                prior_df, _ = _resolve_run_dataframe(client_id, prior_run_id, root)
-        except Exception as exc:  # noqa: BLE001 - prior comparison is additive
-            logger.warning("blob prior-run resolution failed: %s", exc)
-    elif root:
-        try:
-            index = snapshots_mod.discover_snapshots(root)
-            prior = snapshots_mod.find_prior_run(index, client_id, run_id)
-            if prior:
-                prior_run_id = prior["run_id"]
-                prior_reporting_date = prior["reporting_date"]
-                prior_tape = snapshots_mod.resolve_tape_path(root, client_id, prior_run_id)
-                if prior_tape is not None:
-                    prior_df, _ = snapshots_mod.load_prepared_run(prior_tape)
-        except Exception as exc:  # noqa: BLE001 - prior comparison is additive
-            logger.warning("prior-run resolution failed: %s", exc)
+        # Governed portfolio scope. Resolved once, applied to BOTH the current and
+        # the prior frame so the month-on-month change compares like with like.
+        resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
+        unscoped_df = df
+        df = _scoped_frame(df, resolved)
 
-    result = snapshots_mod.compute_funded_snapshot(
-        df, semantics, client_id=client_id, run_id=run_id,
-        reporting_date=reporting_date, prep_report=prep_report,
-        prior_df=_scoped_frame(prior_df, resolved), prior_run_id=prior_run_id,
-        prior_reporting_date=prior_reporting_date,
-        scope=resolved.scope if resolved else None,
-    )
-    block = _scope_block(unscoped_df, resolved)
-    if block is not None:
-        result["portfolioScope"] = block
-    for d in result.get("diagnostics", []):
-        logger.info("snapshot diagnostic [%s/%s]: %s", client_id, run_id, d)
+        # Resolve the prior available run for month-on-month change.
+        prior_df = prior_run_id = prior_reporting_date = None
+        reporting_date = snapshots_mod.infer_reporting_date(run_id, df)
+        if root and platform_blob_mod.is_blob_root(root):
+            try:
+                index = _blob_platform_index(root) or {"portfolios": []}
+                prior = snapshots_mod.find_prior_run(index, client_id, run_id)
+                if prior:
+                    prior_run_id = prior["run_id"]
+                    prior_reporting_date = prior["reporting_date"]
+                    prior_df, _ = _resolve_run_dataframe(client_id, prior_run_id, root)
+            except Exception as exc:  # noqa: BLE001 - prior comparison is additive
+                logger.warning("blob prior-run resolution failed: %s", exc)
+        elif root:
+            try:
+                index = snapshots_mod.discover_snapshots(root)
+                prior = snapshots_mod.find_prior_run(index, client_id, run_id)
+                if prior:
+                    prior_run_id = prior["run_id"]
+                    prior_reporting_date = prior["reporting_date"]
+                    prior_tape = snapshots_mod.resolve_tape_path(root, client_id, prior_run_id)
+                    if prior_tape is not None:
+                        prior_df, _ = snapshots_mod.load_prepared_run(prior_tape)
+            except Exception as exc:  # noqa: BLE001 - prior comparison is additive
+                logger.warning("prior-run resolution failed: %s", exc)
+
+        result = snapshots_mod.compute_funded_snapshot(
+            df, semantics, client_id=client_id, run_id=run_id,
+            reporting_date=reporting_date, prep_report=prep_report,
+            prior_df=_scoped_frame(prior_df, resolved), prior_run_id=prior_run_id,
+            prior_reporting_date=prior_reporting_date,
+            scope=resolved.scope if resolved else None,
+        )
+        block = _scope_block(unscoped_df, resolved)
+        if block is not None:
+            result["portfolioScope"] = block
+        for d in result.get("diagnostics", []):
+            logger.info("snapshot diagnostic [%s/%s]: %s", client_id, run_id, d)
+        return result
+
+    result = http_cache.cached(etag, _compute)
     return http_cache.finish(response, etag, result)
 
 
@@ -893,13 +1002,15 @@ def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
     resolved = _resolve_portfolio_context(portfolioContext, cid)
     scope = resolved.scope if resolved else None
     try:
-        if platform_blob_mod.is_blob_root(root):
-            result = _blob_funded_evolution(root, cid, trid, scope=scope)
-        else:
-            result = evolution_mod.funded_evolution(root, cid, trid, scope=scope)
-        if scope is not None:
-            result["portfolioScope"] = scope.to_dict()
-        return http_cache.finish(response, etag, result)
+        def _compute():
+            if platform_blob_mod.is_blob_root(root):
+                result = _blob_funded_evolution(root, cid, trid, scope=scope)
+            else:
+                result = evolution_mod.funded_evolution(root, cid, trid, scope=scope)
+            if scope is not None:
+                result["portfolioScope"] = scope.to_dict()
+            return result
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
     except Exception as exc:  # noqa: BLE001 - evolution must never 500
         logger.warning("funded evolution failed: %s", exc)
         return {"dataset": "funded", "portfolioId": cid, "toRunId": trid,
@@ -1234,15 +1345,18 @@ def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = N
         request, route="mi.geo.exposure", scope=portfolioContext,
         identity=http_cache.dataset_identity(client_id, run_id))
     try:
-        df, _report = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
-        currency_mod.resolve_and_set(df)
-        resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
-        result = geo_mod.exposure_by_itl3(_scoped_frame(df, resolved))
-        result.update({"dataset": "geo_itl3", "portfolioId": pid,
-                       "currencyCode": currency_mod.current_code()})
-        block = _scope_block(df, resolved)
-        if block is not None:
-            result["portfolioScope"] = block
+        def _compute():
+            df, _report = _resolve_run_dataframe(client_id, run_id, _onboarding_output_root())
+            currency_mod.resolve_and_set(df, client_id=client_id)
+            resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
+            result = geo_mod.exposure_by_itl3(_scoped_frame(df, resolved))
+            result.update({"dataset": "geo_itl3", "portfolioId": pid,
+                           "currencyCode": currency_mod.current_code()})
+            block = _scope_block(df, resolved)
+            if block is not None:
+                result["portfolioScope"] = block
+            return result
+        result = http_cache.cached(etag, _compute)
         return http_cache.finish(response, etag, result)
     except Exception as exc:  # noqa: BLE001 - geo view must never 500
         logger.warning("geo exposure failed for %s: %s", pid, exc)
@@ -1472,18 +1586,20 @@ def forecast_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
         request, route="mi.evolution.forecast", scope=portfolioContext,
         identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
     try:
-        # Weight the pipeline by the governed historical stage rates (same basis
-        # as the point-in-time bridge and the scale-up forecast) so every forecast
-        # surface shows ONE consistent 'weighted expected pipeline'.
-        resolved = _resolve_portfolio_context(portfolioContext, cid)
-        scope = resolved.scope if resolved else None
-        result = evolution_mod.forecast_evolution(
-            root, proot or root, cid, trid, historical_model=_pipeline_history(cid),
-            scope=scope,
-            include_pipeline=_originates(resolved, portfolioContext))
-        if resolved is not None:
-            result["portfolioScope"] = _scope_block(None, resolved) or scope.to_dict()
-        return http_cache.finish(response, etag, result)
+        def _compute():
+            # Weight the pipeline by the governed historical stage rates (same basis
+            # as the point-in-time bridge and the scale-up forecast) so every forecast
+            # surface shows ONE consistent 'weighted expected pipeline'.
+            resolved = _resolve_portfolio_context(portfolioContext, cid)
+            scope = resolved.scope if resolved else None
+            result = evolution_mod.forecast_evolution(
+                root, proot or root, cid, trid, historical_model=_pipeline_history(cid),
+                scope=scope,
+                include_pipeline=_originates(resolved, portfolioContext))
+            if resolved is not None:
+                result["portfolioScope"] = _scope_block(None, resolved) or scope.to_dict()
+            return result
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
     except Exception as exc:  # noqa: BLE001
         logger.warning("forecast evolution failed: %s", exc)
         return {"dataset": "forecast", "portfolioId": cid, "toRunId": trid,
@@ -1514,14 +1630,16 @@ def forecast_extrapolation(portfolioId: Optional[str] = None, client_id: Optiona
         request, route="mi.forecast.extrapolation", scope=portfolioContext,
         identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
     try:
-        history = _pipeline_history(cid)
-        resolved = _resolve_portfolio_context(portfolioContext, cid)
-        result = fx_mod.build_extrapolation(root, proot or root, cid, trid,
-                                            history_model=history,
-                                            scope=resolved.scope if resolved else None)
-        if resolved is not None:
-            result["portfolioScope"] = resolved.scope.to_dict()
-        return http_cache.finish(response, etag, result)
+        def _compute():
+            history = _pipeline_history(cid)
+            resolved = _resolve_portfolio_context(portfolioContext, cid)
+            result = fx_mod.build_extrapolation(root, proot or root, cid, trid,
+                                                history_model=history,
+                                                scope=resolved.scope if resolved else None)
+            if resolved is not None:
+                result["portfolioScope"] = resolved.scope.to_dict()
+            return result
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
     except Exception as exc:  # noqa: BLE001 - forecast must never 500
         logger.warning("forecast extrapolation failed: %s", exc)
         return {"portfolioId": cid, "toRunId": trid, "currentFundedBalance": 0.0,
@@ -1585,12 +1703,14 @@ def concentration_tests(portfolioId: Optional[str] = None,
         request, route="mi.concentration-tests", scope=portfolioContext,
         identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
     try:
-        resolved = _resolve_portfolio_context(portfolioContext, cid)
-        result = conc_mod.compute_concentration_tests(
-            root, cid, trid, scope=resolved.scope if resolved else None)
-        if resolved is not None:
-            result["portfolioScope"] = resolved.scope.to_dict()
-        return http_cache.finish(response, etag, result)
+        def _compute():
+            resolved = _resolve_portfolio_context(portfolioContext, cid)
+            result = conc_mod.compute_concentration_tests(
+                root, cid, trid, scope=resolved.scope if resolved else None)
+            if resolved is not None:
+                result["portfolioScope"] = resolved.scope.to_dict()
+            return result
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
     except Exception as exc:  # noqa: BLE001 - the monitor must never 500
         logger.warning("concentration-tests failed: %s", exc)
         return {"portfolioId": cid, "toRunId": trid, "available": False,

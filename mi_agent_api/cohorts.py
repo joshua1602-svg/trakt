@@ -126,13 +126,35 @@ def _vintage_series(df: pd.DataFrame, grain: str = "Y") -> Optional[pd.Series]:
     return None
 
 
+#: Which LTV basis a caller wants banded. A static-pool cohort is defined AT
+#: ORIGINATION, so the cohort lens keeps ``origination``. A funded-book
+#: stratification describes the book AS IT STANDS, so it asks for ``current``
+#: and reconciles with the MI Query Agent, which answers "balance by LTV band"
+#: from the canonical ``ltv_bucket``. The bands themselves are unchanged in
+#: either case — this selects the column, never the banding.
+LTV_BASIS_ORIGINATION = "origination"
+LTV_BASIS_CURRENT = "current"
+
+#: (pre-bucketed column, raw column) precedence per basis.
+_LTV_BASIS_COLUMNS = {
+    LTV_BASIS_ORIGINATION: ((_ORIG_LTV_BUCKET, _LTV_BUCKET), (_ORIG_LTV, _LTV)),
+    LTV_BASIS_CURRENT: ((_LTV_BUCKET, _ORIG_LTV_BUCKET), (_LTV, _ORIG_LTV)),
+}
+
+
 def _dimension_series(df: pd.DataFrame, dimension: str,
-                      grain: str) -> Tuple[Optional[pd.Series], str]:
+                      grain: str, *, ltv_basis: str = LTV_BASIS_ORIGINATION
+                      ) -> Tuple[Optional[pd.Series], str]:
     """The per-row cohort label for ``dimension``, and its column header.
 
     Prefers a pre-bucketed column derived by ``funded_prep`` (age_bucket,
     original_ltv_bucket …); falls back to banding the raw value. Returns
-    ``(None, header)`` when the tape carries no source for the dimension."""
+    ``(None, header)`` when the tape carries no source for the dimension.
+
+    ``ltv_basis`` selects WHICH LTV the ``ltv`` dimension bands. It defaults to
+    ``origination`` so every existing cohort caller is unchanged; the funded
+    stratification passes ``current``.
+    """
     header = _DIMENSION_LABELS.get(dimension, "Cohort")
     if dimension == "vintage":
         return _vintage_series(df, grain), header
@@ -145,10 +167,12 @@ def _dimension_series(df: pd.DataFrame, dimension: str,
             return banded.astype("string"), header
         return None, header
     if dimension == "ltv":
-        for col in (_ORIG_LTV_BUCKET, _LTV_BUCKET):
+        bucket_cols, raw_cols = _LTV_BASIS_COLUMNS.get(
+            ltv_basis, _LTV_BASIS_COLUMNS[LTV_BASIS_ORIGINATION])
+        for col in bucket_cols:
             if _has_labels(df, col):
                 return df[col].astype("string"), header
-        for col in (_ORIG_LTV, _LTV):
+        for col in raw_cols:
             if _has_values(df, col):
                 banded = pd.cut(_ltv_as_fraction(df[col]), _LTV_BINS,
                                 labels=_LTV_LABELS, right=False)

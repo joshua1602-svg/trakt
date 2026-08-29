@@ -417,10 +417,12 @@ def _amount_threshold(limit: Dict[str, Any]) -> Optional[float]:
 
 
 def _compute_tests(df: pd.DataFrame, limits: List[Dict[str, Any]],
-                   prior_df: Optional[pd.DataFrame], limits_source: str
+                   prior_df: Optional[pd.DataFrame], limits_source: str,
+                   client_id: Optional[str] = None
                    ) -> List[Dict[str, Any]]:
     tests: List[Dict[str, Any]] = []
-    currency_mod.resolve_and_set(df)  # display currency from the tape (falls back to GBP)
+    # Governed client configuration first, then the tape, then GBP.
+    currency_mod.resolve_and_set(df, client_id=client_id)
     region_shares = _region_shares(df)
     prior_region_shares = _region_shares(prior_df) if prior_df is not None else None
     region_lookup = ({str(r[_REGION]).lower(): float(r["balance_share"]) * 100.0
@@ -700,7 +702,7 @@ def _risk_limit_envelope(df, prior_df, reporting_date: Optional[str],
     if df is None:
         # No funded data: still surface the limits with unavailable actuals.
         df = pd.DataFrame()
-    tests = _compute_tests(df, limits, prior_df, limits_source) if limits else []
+    tests = _compute_tests(df, limits, prior_df, limits_source, client_id) if limits else []
 
     by_category: Dict[str, List[Dict[str, Any]]] = {}
     for t in tests:

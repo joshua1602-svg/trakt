@@ -2016,8 +2016,12 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
     for t in tests:
         if (t.get("status") in ("green", "amber", "red") and t.get("actualValue") is not None
                 and t.get("limitValue") and t.get("unit") == "percent"):
+            # P0-2: these tests measure a PERCENTAGE of the portfolio. The
+            # extracted Schedule 8 record carries no numerator balance, so no
+            # `balance` is emitted — a share must never be handed to a renderer
+            # that would present it as a currency amount.
             groups.append({
-                "name": t["label"], "balance": t["actualValue"],
+                "name": t["label"],
                 "share": float(t["actualValue"]) / 100.0,
                 "status": t["status"], "limit": float(t["limitValue"]) / 100.0,
                 "approaching": t["status"] == "amber",

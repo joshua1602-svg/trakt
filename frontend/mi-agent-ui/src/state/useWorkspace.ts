@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { setDisplayCurrency } from "@/lib/utils";
 import type {
   AgentRequest,
   Artifact,
@@ -441,6 +442,9 @@ export function useWorkspace(client: AgentClient): Workspace {
       .getSnapshot(portfolioId, selectedContextId)
       .then((snap) => {
         if (cancelled) return;
+        // The reporting currency is governed by the client configuration and
+        // stated by the API. Adopt it before any money is rendered.
+        setDisplayCurrency(snap?.currencyCode);
         setSnapshot(snap);
         setSnapshotError(null);
       })

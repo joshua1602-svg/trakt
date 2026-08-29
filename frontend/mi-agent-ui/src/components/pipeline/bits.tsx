@@ -75,37 +75,62 @@ export function BarList({
   data,
   format = "gbp",
   emptyLabel = "No data",
+  onSelect,
+  selectTitle,
 }: {
   data: BarDatum[];
-  format?: "gbp" | "count";
+  format?: "gbp" | "count" | "pct";
   emptyLabel?: string;
+  /** Selecting a bar. Presentation-only: the handler decides what a selection
+   *  means, and no measure is recomputed here. */
+  onSelect?: (label: string) => void;
+  selectTitle?: (label: string) => string;
 }) {
   if (data.length === 0) {
     return <p className="text-[11px] text-ink-500">{emptyLabel}</p>;
   }
   const max = Math.max(...data.map((d) => d.value), 1);
+  const render = (v: number) =>
+    format === "gbp" ? formatGBP(v)
+      : format === "pct" ? `${v.toFixed(1)}%`
+      : v.toLocaleString("en-GB");
   return (
     <div className="grid grid-cols-[7rem_1fr_auto] items-center gap-x-2 gap-y-1.5">
-      {data.map((d) => (
-        <div key={d.label} className="contents">
-          <span className="truncate text-[11px] text-ink-300" title={d.label}>
-            {d.label}
-          </span>
-          <div className="h-3.5 overflow-hidden rounded-sm bg-navy-800/70">
-            <div
-              className="h-full rounded-sm bg-peri-400/70"
-              style={{ width: `${Math.max(2, (d.value / max) * 100)}%` }}
-            />
-          </div>
-          <span className="text-right font-mono text-[11px] tabular-nums text-ink-200">
-            {format === "gbp" ? formatGBP(d.value) : d.value.toLocaleString("en-GB")}
-            {d.count != null && format === "gbp" && (
-              <span className="ml-1 text-ink-500">· {d.count}</span>
-            )}
-            {d.secondary && <span className="ml-1 text-ink-500">{d.secondary}</span>}
-          </span>
-        </div>
-      ))}
+      {data.map((d) => {
+        const cells = (
+          <>
+            <span className="truncate text-[11px] text-ink-300" title={d.label}>
+              {d.label}
+            </span>
+            <div className="h-3.5 overflow-hidden rounded-sm bg-navy-800/70">
+              <div
+                className="h-full rounded-sm bg-peri-400/70"
+                style={{ width: `${Math.max(2, (d.value / max) * 100)}%` }}
+              />
+            </div>
+            <span className="text-right font-mono text-[11px] tabular-nums text-ink-200">
+              {render(d.value)}
+              {d.count != null && format === "gbp" && (
+                <span className="ml-1 text-ink-500">· {d.count}</span>
+              )}
+              {d.secondary && <span className="ml-1 text-ink-500">{d.secondary}</span>}
+            </span>
+          </>
+        );
+        if (!onSelect) return <div key={d.label} className="contents">{cells}</div>;
+        return (
+          <button
+            key={d.label}
+            type="button"
+            onClick={() => onSelect(d.label)}
+            title={selectTitle?.(d.label)}
+            className="col-span-3 grid grid-cols-[7rem_1fr_auto] items-center gap-x-2 rounded-sm
+                       px-1 py-0.5 text-left hover:bg-navy-700/50 focus-visible:bg-navy-700/50"
+          >
+            {cells}
+          </button>
+        );
+      })}
     </div>
   );
 }

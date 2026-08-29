@@ -31,6 +31,7 @@ Disable with ``TRAKT_HTTP_CACHE=off`` — routes then behave exactly as before.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from typing import Any, Iterable, Mapping, Optional
 
@@ -123,6 +124,46 @@ def begin(request: Any, *, route: str, identity: Iterable[Any],
     return etag
 
 
+#: Route results, keyed by the SAME validator the response carries. A hit is by
+#: construction a response the server would otherwise have re-sent as a 304, so
+#: the cache cannot answer for a different client, portfolio, scope, as-of date,
+#: data version or configuration version — each of those already changes the
+#: validator, and an unestablishable identity yields no validator and therefore
+#: no caching at all.
+_RESULT_CACHE = serving_cache.BoundedCache("http_result", max_entries=96)
+
+
+def cached(etag: Optional[str], build):
+    """Return the result for ``etag``, computing it once per validator.
+
+    ``etag is None`` means identity could not be established, so the result is
+    computed and NOT stored — the same rule that governs whether a validator is
+    issued at all. A payload that reports failure is never stored, so a
+    transient error cannot be replayed to later callers.
+    """
+    if etag is None or not enabled():
+        return build()
+
+    def _build_and_screen():
+        payload = build()
+        if not _is_successful(payload):
+            raise _Unsuccessful(payload)
+        return payload
+
+    try:
+        return _RESULT_CACHE.get_or_build(etag, _build_and_screen)
+    except _Unsuccessful as exc:
+        return exc.payload
+
+
+class _Unsuccessful(Exception):
+    """Carries a failed payload out of the cache builder so it is not stored."""
+
+    def __init__(self, payload: Any) -> None:
+        super().__init__("payload reported failure")
+        self.payload = payload
+
+
 #: Keys whose falsity marks a payload as an error / unavailable state. A payload
 #: reporting any of these is served WITHOUT a validator.
 _FAILURE_FLAGS = ("ok", "available")
@@ -164,6 +205,28 @@ def finish(response: Any, etag: Optional[str], payload: Any) -> Any:
 # --------------------------------------------------------------------------- #
 # Source identity
 # --------------------------------------------------------------------------- #
+def config_fingerprint(client_id: Optional[str]) -> str:
+    """A short content hash of the governed client configuration in force.
+
+    Used as part of a route's identity so that re-approving a client's
+    configuration invalidates every cached result derived from it. Never raises:
+    an absent or unreadable configuration fingerprints as ``"-"``, which is
+    stable and therefore still cacheable.
+    """
+    try:
+        from . import currency as currency_mod
+        location = currency_mod.client_config_path(client_id)
+        if not location:
+            return "-"
+        doc = currency_mod._load_client_config(location)
+        if not doc:
+            return "-"
+        blob = json.dumps(doc, sort_keys=True, default=str)
+        return hashlib.sha256(blob.encode("utf-8", "replace")).hexdigest()[:16]
+    except Exception:  # noqa: BLE001 - identity must never fail a read
+        return "-"
+
+
 def dataset_identity(client_id: Optional[str], run_id: Optional[str], *,
                      include_pipeline: bool = False) -> Optional[list]:
     """The immutable identity of the data a run-scoped route answers from.
@@ -187,6 +250,11 @@ def _dataset_identity_uncached(client_id: Optional[str], run_id: Optional[str],
     from . import platform_snapshots_blob as blob_mod
 
     identity: list = [client_id or "-", run_id or "-"]
+    # The governed client CONFIGURATION is part of what a response means (it
+    # decides, among other things, the reporting currency), so a configuration
+    # change must produce a different validator. Absent config contributes a
+    # stable marker rather than nothing, so identity stays establishable.
+    identity.append(("config", config_fingerprint(client_id)))
     try:
         root = datasets_mod._onboarding_output_root()
     except Exception:  # noqa: BLE001

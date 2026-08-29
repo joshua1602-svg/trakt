@@ -212,6 +212,15 @@ export function AppShell() {
     }
   }, [client, workspacePortfolioId, ws.selectedContextId, ws.dataVersion]);
 
+  // Stratification drill-down. Selecting a band asks the GOVERNED MI engine for
+  // that population rather than deriving one in the browser: the answer, its
+  // reconciliation and its provenance all come from the same deterministic
+  // service every other channel uses. One seam, every stratification chart.
+  const askAboutBand = useCallback((dimension: string, band: string) => {
+    const lens = dimension.replace(/^By\s+/i, "").trim() || dimension;
+    ws.ask(`Show the funded loans where ${lens} is ${band}`);
+  }, [ws]);
+
   const scrollToArtifact = useCallback((id: string) => {
     // Guarded: jsdom (tests) has no scrollIntoView.
     document.getElementById(`artifact-${id}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
@@ -410,7 +419,8 @@ export function AppShell() {
                           onRetry={ws.refresh}
                         />
                       )}
-                      <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading} />
+                      <FundedSnapshotPanel snapshot={ws.snapshot} loading={ws.snapshotLoading}
+                        onDrill={askAboutBand} />
                       <LineagePanel lineage={fundedLineage(ws.snapshot?.portfolio.reporting_date ?? null)} />
                     </KeepMounted>
                     <KeepMounted active={fundedTab === "geo"} testId="funded-geo-pane">

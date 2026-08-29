@@ -296,23 +296,25 @@ export function riskMigrationArtifact(ctx: Ctx): RiskArtifact {
 export function scenarioArtifact(ctx: Ctx): ScenarioArtifact {
   const projection = Array.from({ length: 11 }, (_, i) => {
     const year = i;
-    const balance = 842.6 * Math.pow(1.052, year) * Math.pow(0.96, year);
-    const propertyValue = 2680 * Math.pow(1.02, year);
+    // Absolute currency units, matching the artifact contract: a payload
+    // carries real amounts and the view never rescales them.
+    const balance = 842.6e6 * Math.pow(1.052, year) * Math.pow(0.96, year);
+    const propertyValue = 2680e6 * Math.pow(1.02, year);
     const ltv = (balance / propertyValue) * 100;
     const nnegLoss = Math.max(0, (ltv - 70) * 0.18) * (year > 0 ? 1 : 0);
     return {
       year,
-      balance: Math.round(balance * 10) / 10,
+      balance: Math.round(balance),
       propertyValue: Math.round(propertyValue),
       ltv: Math.round(ltv * 10) / 10,
-      nnegLoss: Math.round(nnegLoss * 100) / 100,
+      nnegLoss: Math.round(nnegLoss * 1e6),
       cumulativeNneg: 0,
     };
   });
   let cum = 0;
   for (const p of projection) {
     cum += p.nnegLoss;
-    p.cumulativeNneg = Math.round(cum * 100) / 100;
+    p.cumulativeNneg = Math.round(cum);
   }
   return {
     id: uid("art"),
