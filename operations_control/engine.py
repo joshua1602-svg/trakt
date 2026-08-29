@@ -1058,7 +1058,13 @@ class OpsEngine:
         # ---- Stage: regulatory details preflight (I3) -------------------- #
         from .annex2 import preflight as _pf
         overrides = self._client_rule_overrides(run)
-        pf = _pf.run_preflight(client_config_path=self.client_config_path,
+        # THIS client's configuration, not the repository default. The default
+        # is one existing client's file: reading it here assessed every other
+        # lender's regulatory identity — LEI, originator, jurisdiction —
+        # against someone else's, which is both wrong and a cross-client leak.
+        # The resolver already owns this lookup; the delivery chain now uses it.
+        client_config = self._config_resolver().client_config_for(run.client_id)
+        pf = _pf.run_preflight(client_config_path=client_config,
                                overrides=overrides,
                                reporting_period=run.reporting_period)
         if pf["status"] == "blocked":
@@ -1111,7 +1117,7 @@ class OpsEngine:
             effective_cfg = None
             if overrides:
                 effective_cfg = _pf.materialise_effective_config(
-                    base_config_path=self.client_config_path,
+                    base_config_path=client_config,
                     overrides=overrides,
                     out_path=chain_dir / "effective_client_config.yaml")
                 a2["effective_config"] = str(effective_cfg)
@@ -1590,11 +1596,25 @@ class OpsEngine:
             return
         out = pending.parent / APPROVED_DECISIONS_FILE
         out.write_text(yaml.safe_dump(docy, sort_keys=False), encoding="utf-8")
-        # Durable copy in the operations-control container.
+        text = out.read_text(encoding="utf-8")
+        # Durable copy in the operations-control container: the run's own audit
+        # trail...
         self.store.storage.write_text(
             f"blob://{self.store.layout.container}/{run.client_id}/workflow-runs/"
-            f"{run.workflow_id}/onboarding/{APPROVED_DECISIONS_FILE}",
-            out.read_text(encoding="utf-8"))
+            f"{run.workflow_id}/onboarding/{APPROVED_DECISIONS_FILE}", text)
+        # ...and the source's standing mapping contract, which is what makes
+        # next month deterministic. Decisions are matched on target_field, not
+        # on position, so the same contract answers the same schema again.
+        self.store.storage.write_text(
+            self.store.layout.approved_decisions_uri(
+                run.client_id, run.portfolio_id,
+                run.delivery.get("dataset", "funded"), APPROVED_DECISIONS_FILE),
+            text)
+        self.store.append_audit(
+            run.client_id, "approved_mapping_contract_saved", actor="system",
+            workflow_id=run.workflow_id,
+            detail={"portfolio_id": run.portfolio_id,
+                    "dataset": run.delivery.get("dataset", "funded")})
 
     @staticmethod
     def _sole_delivery_file(run: WorkflowRun) -> str:
@@ -1619,8 +1639,32 @@ class OpsEngine:
         return hashlib.sha256(p.read_bytes()).hexdigest()
 
     def _approved_decisions_path(self, run: WorkflowRun) -> Optional[Path]:
+        """This run's approved mapping contract, if it has one.
+
+        A run that has been through review has its own copy in staging. A NEW
+        delivery for a source that was approved in an earlier period has none —
+        so the source's standing contract is materialised into this run's
+        staging and used, which is what lets month 2 process without asking the
+        same questions again. Scoped by client + portfolio + dataset, so no
+        other client's contract is reachable from here.
+        """
         p = _find_artifact(self._staging_dir(run), APPROVED_DECISIONS_FILE)
-        return p
+        if p is not None:
+            return p
+        uri = self.store.layout.approved_decisions_uri(
+            run.client_id, run.portfolio_id,
+            run.delivery.get("dataset", "funded"), APPROVED_DECISIONS_FILE)
+        try:
+            text = self.store.storage.read_text(uri) \
+                if self.store.storage.exists(uri) else ""
+        except Exception:  # noqa: BLE001 — a missing contract is not an error
+            text = ""
+        if not text:
+            return None
+        dest = self._staging_dir(run) / APPROVED_DECISIONS_FILE
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding="utf-8")
+        return dest
 
     def _validation_exception_approved(self, run: WorkflowRun) -> bool:
         for d in self.store.list_decisions(run.client_id,
