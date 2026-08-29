@@ -177,6 +177,79 @@ def _mi_domain(entry: Dict[str, Any]) -> str:
     return {"core_canonical": "core", "derived_bucket": "derived_dimension"}.get(crit, crit)
 
 
+def regulatory_target_extension(
+    existing: List[Dict[str, Any]],
+    annex2_config_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
+    """Regulatory targets to add to the MI contract for a regime-required run.
+
+    The MI semantics registry is a curated management contract and does not carry
+    every field ESMA asks for. A delivery that owes an Annex 2 return is projected
+    from the SAME canonical, so a regulatory-only column the lender has supplied
+    has to be recognised here or it is gone: excluded from coverage, absent from
+    the tape, and reappearing at projection as a mandatory field with no value.
+
+    The rows come from the EXISTING Annex 2 contract, renamed from ESMA codes to
+    canonical field names, so each one keeps the dispositions the regulator's own
+    rules already define — its default, its permitted ND codes, its derivation.
+    That is what makes a missing regulatory field an ND or a default rather than
+    a question, and it is why this is a rename of an existing contract rather
+    than a second regulatory mapper.
+
+    Every added row is OPTIONAL and never enforces presence, so no ESMA target
+    becomes a mandatory lender source field. What changes is visibility: the
+    field now has a coverage row, so it can be source-mapped, derived, defaulted,
+    ND-coded, marked not applicable, or — when none of those fit — asked about.
+    """
+    reg_path = Path(registry_path) if registry_path else (
+        _REPO_ROOT / "config" / "system" / "fields_registry.yaml")
+    try:
+        fields = (yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
+                  ).get("fields", {}) or {}
+    except Exception:  # noqa: BLE001
+        return []
+    code_to_field: Dict[str, str] = {}
+    for name, entry in fields.items():
+        for mapping in ((entry or {}).get("regime_mapping") or {}).values():
+            code = (mapping or {}).get("code")
+            if code:
+                code_to_field.setdefault(str(code), str(name))
+    try:
+        _cid, _csrc, annex_rows = load_annex2_target_contract(annex2_config_path)
+    except Exception:  # noqa: BLE001
+        return []
+
+    have = {str(r.get("target_field", "")) for r in existing}
+    have |= {str(r.get("match_field", "")) for r in existing}
+    rows: List[Dict[str, Any]] = []
+    seen: set = set()
+    for row in annex_rows:
+        canonical = code_to_field.get(str(row.get("target_field", "")), "")
+        if not canonical or canonical in have or canonical in seen:
+            continue
+        seen.add(canonical)
+        out = dict(row)
+        out["esma_code"] = str(row.get("target_field", ""))
+        out["target_field"] = canonical
+        out["match_field"] = canonical
+        out["target_label"] = canonical.replace("_", " ")
+        # In scope to be answered; never a requirement on the lender.
+        out["required_status"] = "optional"
+        out["enforce_presence"] = False
+        # An enum map is a PROJECTION instruction — it turns a lender value into
+        # a regulator code at Gate 4. On the management canonical it is not a
+        # configured value, and treating it as one dispositions the field as
+        # "configured static" with nothing to configure: no column, and a
+        # projection that then rejects the field it was told was handled. Drop
+        # the marker so a field with no source falls through to its ND code or
+        # default, which is what the regime rules actually say to do.
+        if not out.get("default_value"):
+            out["configured_value_source"] = ""
+        rows.append(out)
+    return rows
+
+
 def load_mi_target_contract(
     registry_path: Optional[str | Path] = None,
 ) -> Tuple[str, str, List[Dict[str, Any]]]:
@@ -2104,7 +2177,14 @@ def load_target_contract(
 ) -> Tuple[str, str, List[Dict[str, Any]]]:
     """Load the mode-appropriate target contract."""
     if target_contract_kind(mode, context) == "mi_semantics":
-        return load_mi_target_contract(mi_registry_path)
+        cid, csrc, rows = load_mi_target_contract(mi_registry_path)
+        if (context or {}).get("regulatory_reporting_enabled"):
+            extra = regulatory_target_extension(
+                rows, annex2_config_path=annex2_config_path)
+            if extra:
+                rows = rows + extra
+                csrc = f"{csrc} + regulatory registry ({len(extra)} fields)"
+        return cid, csrc, rows
     return load_annex2_target_contract(annex2_config_path)
 
 

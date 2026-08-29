@@ -681,6 +681,7 @@ def run_operator_workflow(
     managed_service: bool = False,
     product_profile: str = "",
     enable_context_resolver: Optional[bool] = None,
+    regulatory_reporting_enabled: bool = False,
 ) -> Dict[str, Any]:
     """Run the managed-service operator workflow; returns the 40 summary dict."""
     client_id = client_id or client_name.lower().replace(" ", "_")
@@ -760,6 +761,10 @@ def run_operator_workflow(
             enable_context_resolver=use_context_resolver,
             context_llm_callable=context_callable,
             reporting_date=reporting_date,
+            # Regime-required delivery: keep regulatory-category fields in the
+            # field scope so a column the lender supplied for Annex 2 survives
+            # into the canonical. Scope only — what blocks is unchanged.
+            regulatory_reporting_enabled=regulatory_reporting_enabled,
         )
         input_files = len(project.file_inventory)
     except Exception as exc:  # produce a FAILED summary instead of crashing

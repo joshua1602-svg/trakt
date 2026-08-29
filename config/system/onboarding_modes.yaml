@@ -41,6 +41,13 @@ modes:
     include_core_canonical: true
     include_categories: [analytics]
     exclude_categories: [regulatory]
+    # ...unless this delivery is regime-required. A regulatory-only column the
+    # lender has supplied must not be discarded merely because MI does not need
+    # it: Annex 2 is projected from the same canonical, so anything dropped here
+    # is unrecoverable downstream. This re-activates them IN SCOPE only —
+    # regulatory_missing stays false, so none of them becomes a mandatory
+    # lender source field, and the canonical keeps management semantics.
+    regulatory_fields_active_if: [regulatory_reporting_enabled]
     attempt_full_coverage: false
     blocking_rules:
       core_canonical_missing: true

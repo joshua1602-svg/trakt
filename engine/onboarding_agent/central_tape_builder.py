@@ -460,15 +460,57 @@ _CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "system"
 _CONFIG_PATH = _CONFIG_DIR / "onboarding_agent.yaml"
 
 
+#: Modes whose run produces the central lender tape, and therefore consumes the
+#: target-coverage matrix, the entity-key resolution and the reporting-period
+#: gate. A regime-required delivery is graded against the regulatory contract but
+#: still produces ONE canonical that both management information and the Annex 2
+#: delivery are made from, so it needs all of this too.
+_CENTRAL_TAPE_MODES = ("mi_only", "mna_dd", "regulatory_mi")
+
 # Coverage statuses (28a) the central tape consumes as RESOLVED selections.
 _COV_SOURCE_MAPPED = {"source_mapped", "source_mapped_with_alternatives"}
 _COV_CONSTANT = {"defaulted_value", "configured_static", "defaulted_ND"}
 _COV_DERIVED = "derived"
 
 
+_REGIME_CODE_TO_FIELD: Optional[Dict[str, str]] = None
+
+
+def _regime_code_to_field(registry_fields: Dict[str, Any]) -> Dict[str, str]:
+    """``{ESMA code: canonical field}`` from the registry's own regime mappings.
+
+    The target-coverage matrix names its rows by the CONTRACT's vocabulary: the
+    MI contract uses canonical field names, the regulatory contract uses ESMA
+    codes. The central tape is canonical either way, so a regulatory coverage
+    matrix has to be read back through the registry rather than ignored — which
+    is what used to happen, and is why a regulatory-only field resolved by Gate 1
+    never reached the canonical.
+    """
+    global _REGIME_CODE_TO_FIELD
+    if _REGIME_CODE_TO_FIELD is not None:
+        return _REGIME_CODE_TO_FIELD
+    out: Dict[str, str] = {}
+    for name, spec in (registry_fields or {}).items():
+        for mapping in ((spec or {}).get("regime_mapping") or {}).values():
+            code = (mapping or {}).get("code")
+            if code:
+                out.setdefault(str(code), str(name))
+    _REGIME_CODE_TO_FIELD = out
+    return out
+
+
+def _canonical_target(target_field: str, registry_fields: Dict[str, Any]) -> str:
+    """The canonical field a 28a row is about, whichever vocabulary named it."""
+    t = str(target_field or "").strip()
+    if not t or t in (registry_fields or {}):
+        return t
+    return _regime_code_to_field(registry_fields).get(t, "")
+
+
 def _coverage_selections(
     coverage_rows: List[Dict[str, Any]],
     inventory_by_name: Dict[str, Dict[str, Any]],
+    registry_fields: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, "_Source"], Dict[str, Any], Dict[str, str]]:
     """Turn the resolved 28a coverage matrix into authoritative selections.
 
@@ -486,7 +528,7 @@ def _coverage_selections(
     constants: Dict[str, Any] = {}
     derive_from: Dict[str, str] = {}
     for r in coverage_rows or []:
-        canon = r.get("target_field", "")
+        canon = _canonical_target(r.get("target_field", ""), registry_fields or {})
         status = r.get("coverage_status", "")
         if not canon:
             continue
@@ -738,7 +780,7 @@ def _build_lender_tape(
         return spe._norm_col(classification) in pipeline_roles
 
     forced, tape_constants, tape_derivations = _coverage_selections(
-        coverage_rows or [], inventory_by_name)
+        coverage_rows or [], inventory_by_name, registry_fields)
     for canon, src in forced.items():
         if not in_lender_scope(canon):
             continue
@@ -1702,7 +1744,7 @@ def build_central_tapes(
     # whose 28a target fields are canonical field names; the regulatory (Annex 2)
     # contract uses ESMA codes and keeps the legacy generic tape unchanged.
     coverage_rows: List[Dict[str, Any]] = []
-    if mode in ("mi_only", "mna_dd"):
+    if mode in _CENTRAL_TAPE_MODES:
         coverage_doc = _load_json(project_dir / "28a_target_coverage_matrix.json") or {}
         coverage_rows = (coverage_doc.get("rows", [])
                          if isinstance(coverage_doc, dict) else [])
@@ -1725,7 +1767,7 @@ def build_central_tapes(
     # Consumed for the MI central-tape flow only; regulatory (Annex 2) is untouched.
     entity_keys: Dict[Tuple[str, str], Dict[str, Any]] = {}
     period_gate: Dict[str, Any] = {}
-    if mode in ("mi_only", "mna_dd"):
+    if mode in _CENTRAL_TAPE_MODES:
         from . import entity_key_resolver as _ekr
         entity_keys = _ekr.load_resolution(project_dir)
         # Reporting-period eligibility (04c): the lender-tape universe is built from

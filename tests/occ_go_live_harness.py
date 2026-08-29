@@ -151,6 +151,31 @@ def name_the_file(env, client_id: str, role: str = "loan_extract") -> int:
     return len(qs)
 
 
+_CODE_TO_FIELD: Optional[Dict[str, str]] = None
+
+
+def canonical_for(target_field: str) -> str:
+    """The canonical field a review question is about.
+
+    A question raised under the MI contract names a canonical field; the same
+    question under the regulatory contract names the ESMA code. An operator reads
+    the friendly title either way ("The report needs 'data cut off date'"), so the
+    harness resolves the code the same way the operator's eye does.
+    """
+    global _CODE_TO_FIELD
+    t = str(target_field or "").strip()
+    if _CODE_TO_FIELD is None:
+        import yaml
+        reg = yaml.safe_load(
+            Path("config/system/fields_registry.yaml").read_text(encoding="utf-8"))
+        _CODE_TO_FIELD = {}
+        for name, spec in (reg.get("fields") or {}).items():
+            for m in ((spec or {}).get("regime_mapping") or {}).values():
+                if (m or {}).get("code"):
+                    _CODE_TO_FIELD.setdefault(str(m["code"]), name)
+    return _CODE_TO_FIELD.get(t, t)
+
+
 def answer_mapping_queue(env, client_id: str, workflow_id: str, *,
                          mapping: Dict[str, str],
                          static: Optional[Dict[str, str]] = None,
@@ -169,10 +194,19 @@ def answer_mapping_queue(env, client_id: str, workflow_id: str, *,
         # the mapping queue.
         if d["kind"] in ("publication", "enum"):
             continue
-        if (d.get("subject") or {}).get("artefact") in (
-                "regulatory_source", "central_tape_gaps"):
-            continue    # answered by name, not by treatment
-        target = (d.get("subject") or {}).get("target_field") or ""
+        subject = d.get("subject") or {}
+        if subject.get("artefact") == "central_tape_gaps":
+            # "Which column is the loan?" — answered with a column name, from the
+            # same data dictionary, rather than with a treatment.
+            wanted = mapping.get(str(subject.get("canonical_field") or ""))
+            if wanted and any(o["value"] == wanted for o in d["options"]):
+                engine.resolve_decision(
+                    client_id=client_id, decision_id=d["decision_id"],
+                    action="approve", actor="Operator", value=wanted,
+                    scope="portfolio", actor_is_admin=True)
+                counts["mapped"] += 1
+            continue
+        target = canonical_for((d.get("subject") or {}).get("target_field") or "")
         if target in mapping:
             engine.resolve_decision(
                 client_id=client_id, decision_id=d["decision_id"],
@@ -296,6 +330,8 @@ def alpha_tape(path: Path, period: str = "2025-11-30", rows: int = 30) -> Path:
 #: Client A's data dictionary, as an operator would read it.
 ALPHA_MAPPING = {
     "loan_identifier": "ACCT_REF",
+    "unique_identifier": "ACCT_REF",
+    "data_cut_off_date": "SNAPSHOT_DT",
     "account_status": "STATUS_CD",
     "current_outstanding_balance": "BAL_OS",
     "current_principal_balance": "BAL_OS",
@@ -354,6 +390,8 @@ def beta_tape(path: Path, period: str = "2026-01-31") -> Path:
 
 BETA_MAPPING = {
     "loan_identifier": "Policy Number",
+    "unique_identifier": "Policy Number",
+    "data_cut_off_date": "Reporting Month End",
     "account_status": "Policy Status",
     "current_outstanding_balance": "Loan Balance",
     "current_principal_balance": "Loan Balance",

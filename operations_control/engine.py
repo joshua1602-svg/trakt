@@ -343,13 +343,45 @@ class OpsEngine:
     def _staging_dir(self, run: WorkflowRun) -> Path:
         return self.staging_root / run.client_id / run.workflow_id
 
+    def _contract_target(self, run: WorkflowRun) -> str:
+        """The TARGET whose field contract this delivery must satisfy.
+
+        Distinct from the execution target below. The existing routing rule
+        already knows the answer from the dataset and whether regulatory output
+        is required — pipeline and forecast are never in regime scope, a funded
+        book is when its source says so — so it is asked rather than restated.
+        """
+        from apps.blob_trigger_app.target_selection import select_target
+        return select_target(
+            run.delivery.get("dataset", "funded") or "funded",
+            run.delivery.get("frequency", "") or "",
+            regime_required=(run.outcome == OUTCOME_MI_ANNEX2)).target
+
+    def _regulatory_reporting_required(self, run: WorkflowRun) -> bool:
+        """Does this delivery owe a regulatory return?
+
+        When it does, Gate 1 keeps regulatory-category fields IN SCOPE, so a
+        column the lender supplied only for Annex 2 survives into the canonical.
+        Under the MI field scope the regulatory category is excluded outright,
+        which meant such a column was discarded before Gate 4 ever saw it and
+        reappeared at projection as a mandatory field with no value — the
+        go-live blocker this closes.
+
+        Scope, not requirements. Nothing regulatory becomes a mandatory lender
+        source (``regulatory_missing`` stays false), the coverage matrix still
+        distinguishes source-mapped, derived, configured, defaulted, ND-eligible,
+        not-applicable and genuinely-missing, and the canonical keeps management
+        semantics: lender enum values unchanged, no ND sentinels. ESMA codes and
+        ND belong to Gate 4's projection.
+        """
+        return self._contract_target(run) != "mi"
+
     def _orchestrator_target(self, run: WorkflowRun) -> str:
-        # Both outcomes run the conductor on the MI target: the AUTHORITATIVE
-        # (and only XSD-proven) Annex 2 route projects from the assembled
-        # platform canonical; the regulatory delivery steps are the OCC's own
-        # governed chain (see _run_annex2_chain), mirroring the proven route
-        # exactly rather than the regulatory-onboarding path that cannot reach
-        # XML today.
+        # EXECUTION target. Both outcomes run the conductor on MI: the
+        # AUTHORITATIVE (and only XSD-proven) Annex 2 route projects from the
+        # assembled platform canonical, and the regulatory delivery steps are the
+        # OCC's own governed chain (see _run_annex2_chain). Depth and contract are
+        # separate levers — see _onboarding_mode for the contract.
         return "mi"
 
     def _annex2_runners(self):
@@ -861,6 +893,7 @@ class OpsEngine:
             inner = RealAgentAdapters(
                 client_name=run.client_id,
                 onboarding_mode="mi_only",
+                regulatory_reporting_enabled=self._regulatory_reporting_required(run),
                 # The agent consumes the immutable effective-configuration
                 # snapshot, never live repository YAML.
                 registry=snap.get("registry"),

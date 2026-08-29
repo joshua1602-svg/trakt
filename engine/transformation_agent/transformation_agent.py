@@ -812,9 +812,29 @@ def _materialise_fields(
         col = df[canonical].astype("string")
         blank_mask = col.isna() | (col.str.strip() == "") | (col.str.strip() == "<NA>")
         if blank_mask.any():
+            # An ND code is a STRING sentinel ("ND1" = not collected), and the
+            # regulator asks for it in numeric and date fields as readily as in
+            # text ones. Writing it into a column pandas has typed Int64 or
+            # float64 raises, so the column is widened first. Only reached for a
+            # partially-populated numeric column: an all-blank one is already
+            # object dtype. The value is never coerced or rounded — it must reach
+            # the XML exactly as the regulator defined it.
+            if not _fits_dtype(df[canonical], value):
+                df[canonical] = df[canonical].astype(object)
             df.loc[blank_mask, canonical] = value
         results[tf] = {"value_source": source, "materialised": True, "value": value}
     return results
+
+
+def _fits_dtype(series: "pd.Series", value: Any) -> bool:
+    """Can ``value`` be stored in ``series`` without changing its dtype?"""
+    if series.dtype == object:
+        return True
+    try:
+        series.dtype.type(value)   # numpy/pandas extension dtypes both accept this
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 # --------------------------------------------------------------------------- #

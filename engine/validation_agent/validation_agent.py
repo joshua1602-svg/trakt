@@ -393,11 +393,24 @@ def build_validation_package(
                 defaultable = bool(rule.get("default_allowed")) or bool(rule.get("nd_allowed"))
                 if mandatory and not defaultable and canonical not in seen_mandatory_absent:
                     seen_mandatory_absent.add(canonical)
+                    # WHOSE mandatory? A field the core canonical contract
+                    # requires is management data, and its absence makes the
+                    # canonical wrong — that blocks validation. A field only the
+                    # regulator requires makes the RETURN wrong, not the figures,
+                    # so it blocks projection and leaves valid MI publishable.
+                    # Same failure, reported once, routed to the branch it
+                    # actually breaks.
+                    core = bool((registry_fields.get(canonical, {}) or {})
+                                .get("core_canonical"))
                     results.append(ra._result(
                         f"VR-{canonical}-presence", canonical, canonical, esma,
-                        "presence", "fail", "error", 0, int(row_count), 0,
-                        ["<column absent>"], True, True,
-                        notes="mandatory field absent from transformed tape"))
+                        "presence", "fail", "error" if core else "warn",
+                        0, int(row_count), 0,
+                        ["<column absent>"], core, True,
+                        notes=("mandatory field absent from transformed tape"
+                               if core else
+                               "required by the regulator and absent — blocks the "
+                               "Annex 2 delivery, not the management report")))
                 continue
             meta = registry_fields.get(canonical, {}) or {}
             fmt = str(meta.get("format", "")).lower()
