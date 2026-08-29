@@ -6,6 +6,9 @@ account_status:
   - loanstatus
   - status of loan
   - Acct Stat
+  # Equity release lenders describe the loan as a "policy"; "Policy Status" is that
+  # book's word for performing / redeemed / probate. Approved as R-1.
+  - policy status
 accrual_of_interest_allowed:
   aliases:
   - accrual of int allowed
