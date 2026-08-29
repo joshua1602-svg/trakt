@@ -67,6 +67,32 @@ def source_registry(storage) -> SourceRegistry:
                           storage=storage)
 
 
+@pytest.fixture(autouse=True)
+def onboarded_clients(request, store):
+    """The suite's clients have been through Client Onboarding.
+
+    A delivery for a client Trakt has never onboarded is blocked before
+    classification, because it would otherwise inherit the repository's default
+    client configuration. These tests are about what happens AFTER a client is
+    governed, so they say so once here rather than each building an onboarding
+    case. :mod:`tests.operations_control.test_onboarding` covers activation
+    itself, and the block is covered in ``test_intake``.
+    """
+    # The OCC Agent's own tests assert that a practice run writes NOTHING to the
+    # live operations container, and registering a client is a write. They drive
+    # onboarding themselves, so they neither need this nor may have it.
+    if "occ_agent" in str(request.node.fspath):
+        return None
+    from operations_control.onboarding.store import OnboardingStore
+    ob = OnboardingStore(store)
+    # Only the clients that RECEIVE deliveries in this suite. Client Onboarding
+    # has its own tests and creates its clients itself, so nothing it invents is
+    # pre-registered here — a pre-registered identifier would collide.
+    for client_id in ("client_a", "client_b", "client_c"):
+        ob._register(client_id)
+    return ob
+
+
 @pytest.fixture()
 def delivery_dir(tmp_path) -> Path:
     d = tmp_path / "delivery"

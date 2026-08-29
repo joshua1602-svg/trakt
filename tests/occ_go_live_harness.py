@@ -164,6 +164,11 @@ def answer_mapping_queue(env, client_id: str, workflow_id: str, *,
     engine, store = env["engine"], env["store"]
     counts = {"mapped": 0, "static": 0, "not_applicable": 0}
     for d in store.open_decisions(client_id, workflow_id):
+        # Publication is approved explicitly, and a regulatory enum translation
+        # is a different question with different answers — neither belongs in
+        # the mapping queue.
+        if d["kind"] in ("publication", "enum"):
+            continue
         target = (d.get("subject") or {}).get("target_field") or ""
         if target in mapping:
             engine.resolve_decision(
@@ -250,11 +255,18 @@ def handoff(run) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 def alpha_tape(path: Path, period: str = "2025-11-30", rows: int = 30) -> Path:
-    """Client A's vocabulary: terse core-system codes."""
+    """Client A's vocabulary: terse core-system codes.
+
+    Three columns are unique for every row — the account reference, the
+    servicing roll number and the customer identifier. Only the first is the
+    loan. This is the ordinary shape of a lending extract, and it is the case
+    where a name-driven guess picks the borrower.
+    """
     import numpy as np
     rng = np.random.default_rng(11)
     df = pd.DataFrame({
         "ACCT_REF": [f"ACC{100000 + i}" for i in range(rows)],
+        "ROLL_NO": [f"R{5000 + i}" for i in range(rows)],
         "CUST_ID": [f"C{9000 + i}" for i in range(rows)],
         "COMPLETION_DT": (pd.to_datetime("2016-01-01")
                           + pd.to_timedelta(rng.integers(0, 3000, rows), "D")

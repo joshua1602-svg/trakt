@@ -73,6 +73,8 @@ STEP_TO_STAGE = {
 ACTION_PROVIDE_SOURCE_MAPPING = "provide_source_mapping"
 
 DECISIONS_FILE = "34_target_first_decisions.yaml"
+OVERRIDES_FILE = "12_approved_mapping_overrides.yaml"
+TAPE_GAPS_FILE = "18c_central_tape_gaps.csv"
 APPROVED_DECISIONS_FILE = "34_target_first_decisions_approved.yaml"
 REVIEW_QUEUE_FILE = "33_mapping_review_queue.json"
 LLM_RECS_FILE = "36_target_first_llm_recommendations.json"
@@ -281,6 +283,67 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
                     subject={"artefact": "mapping_review_queue",
                              "source_column": src, "candidate": tgt,
                              "group": group}))
+
+    # 3. Which column IS the loan? Several columns in a lender's tape are unique
+    # per row — an account reference, a policy number, a customer identifier —
+    # and only one of them keys the loan. Gate 1 records the ambiguity rather
+    # than settling it by column order; this is where a person settles it.
+    out.extend(_loan_key_decisions(work_dir, workflow))
+    return out
+
+
+def _loan_key_decisions(work_dir: Optional[Path],
+                        workflow: WorkflowRun) -> List[DecisionRequired]:
+    if not work_dir:
+        return []
+    path = _find_artifact(Path(work_dir), TAPE_GAPS_FILE)
+    if path is None:
+        return []
+    try:
+        import csv
+        with path.open(encoding="utf-8", newline="") as fh:
+            rows = [r for r in csv.DictReader(fh)
+                    if r.get("issue_type") == "ambiguous_loan_key"]
+    except Exception:  # noqa: BLE001
+        return []
+    out: List[DecisionRequired] = []
+    for r in rows:
+        selected = str(r.get("source_column") or "")
+        # The description carries the candidates in parentheses; the file column
+        # carries the one that was used.
+        import re
+        m = re.search(r"\(([^)]*)\)", str(r.get("description") or ""))
+        candidates = [c.strip() for c in (m.group(1).split(",") if m else [])
+                      if c.strip()]
+        if selected and selected not in candidates:
+            candidates.insert(0, selected)
+        if len(candidates) < 2:
+            continue
+        options = [{"value": c,
+                    "label": (f"{c} — the one Trakt used" if c == selected
+                              else c)} for c in candidates]
+        out.append(DecisionRequired(
+            decision_id=f"{workflow.workflow_id}_loankey_{_slug(selected)}",
+            kind=KIND_FIELD_MAPPING,
+            title="Confirm which column identifies the loan",
+            question=("More than one column in this file is unique for every "
+                      "row, so more than one could be the loan reference. "
+                      "Which one is it? If Trakt groups by the borrower "
+                      "instead of the loan, a borrower's separate loans are "
+                      "merged and every figure in the report changes."),
+            blocking=False,
+            recommendation=({"source": "deterministic", "value": selected,
+                             "checked": True} if selected else {}),
+            options=options,
+            evidence=[{"label": "What Trakt found", "kind": "text",
+                       "data": {"file": r.get("source_file", ""),
+                                "candidates": ", ".join(candidates),
+                                "used": selected}}],
+            allowed_scopes=["portfolio", "client"],
+            default_scope="portfolio",
+            subject={"artefact": "central_tape_gaps",
+                     "source_column": selected,
+                     "canonical_field": "loan_identifier"}))
     return out
 
 

@@ -24,5 +24,12 @@ from __future__ import annotations
 import os
 
 
-def pytest_configure(config):  # noqa: ARG001 - pytest hook signature
+def pytest_configure(config):
     os.environ.setdefault("TRAKT_RUNTIME_MODE", "test")
+    # "slow" marks the end-to-end rehearsals that drive the real agents over a
+    # real tape (tests/test_occ_go_live_e2e.py). They are part of the normal
+    # suite; the marker exists so they can be deselected during quick loops
+    # with -m "not slow".
+    config.addinivalue_line(
+        "markers", "slow: end-to-end run with the real agents (minutes, not "
+                   "seconds)")

@@ -31,6 +31,7 @@ from .adapters import (
     _slug,
     APPROVED_DECISIONS_FILE,
     DECISIONS_FILE,
+    OVERRIDES_FILE,
     GovernedAdapters,
     _find_artifact,
     translate_run_state,
@@ -604,6 +605,14 @@ class OpsEngine:
         batch = self.intake.classify(batch, role_schemas=role_schemas,
                                      aliases=aliases)
 
+        # A delivery for a client Trakt has never onboarded stops here. Without
+        # this it would resolve to the repository's default client
+        # configuration — another lender's regulatory identity, LEI included —
+        # and process as though it were governed. Fail closed: the fix is an
+        # onboarding case, not a rerun.
+        if not self._client_is_activated(batch["client_id"]):
+            return self._park_batch_unactivated(batch, actor)
+
         # Configuration readiness (no persistence — the run pins its own).
         cfg = self._config_resolver().resolve(
             client_id=batch["client_id"], portfolio_id=batch["portfolio_id"],
@@ -625,6 +634,62 @@ class OpsEngine:
                 and not batch.get("workflow_id"):
             return self.start_batch(client_id=client_id,
                                     batch_id=batch["batch_id"], actor=actor)
+        return batch
+
+    #: Said to the operator when a delivery arrives for a client that has not
+    #: been through Client Onboarding.
+    UNACTIVATED_SENTENCE = (
+        "Complete client onboarding and activate the client configuration "
+        "before processing this delivery.")
+
+    def _client_is_activated(self, client_id: str) -> bool:
+        """Is this client governed by a configuration of its OWN?
+
+        Three ways to be: the onboarding index lists it (activated through a
+        case), it has a generated client configuration (activated or migrated),
+        or the repository's configured client file is that client's — which is
+        how a client that predates Client Onboarding stays governed without
+        being onboarded twice.
+        """
+        if not client_id:
+            return False
+        try:
+            from .onboarding.artefacts import client_config_rel
+            from .onboarding.store import OnboardingStore
+            ob = OnboardingStore(self.store)
+            if client_id in ob.onboarded_clients():
+                return True
+            if ob.read_artefact(client_id, client_config_rel(client_id)):
+                return True
+        except Exception:  # noqa: BLE001
+            # Never let a store problem quietly admit an ungoverned client.
+            return False
+        return client_id == self._configured_client_id()
+
+    def _configured_client_id(self) -> str:
+        """The client the repository's configured client file belongs to."""
+        cached = getattr(self, "_configured_client_id_cache", None)
+        if cached is not None:
+            return cached
+        value = ""
+        try:
+            doc = yaml.safe_load(
+                self.client_config_path.read_text(encoding="utf-8")) or {}
+            value = str((doc.get("client") or {}).get("client_id") or "")
+        except Exception:  # noqa: BLE001
+            value = ""
+        self._configured_client_id_cache = value
+        return value
+
+    def _park_batch_unactivated(self, batch: Dict[str, Any],
+                                actor: str) -> Dict[str, Any]:
+        batch["status"] = "blocked"
+        batch["status_reason"] = self.UNACTIVATED_SENTENCE
+        self.intake.save_batch(batch)
+        self.store.append_audit(
+            batch["client_id"], "delivery_blocked_client_not_activated",
+            actor=actor, detail={"batch_id": batch["batch_id"],
+                                 "source_prefix": batch.get("source_prefix", "")})
         return batch
 
     def _sync_file_role_decisions(self, batch: Dict[str, Any]) -> List[str]:
@@ -895,6 +960,11 @@ class OpsEngine:
             self._on_step(client_id, workflow_id, step, result)
 
         adapters = self._build_adapters(run, recorder, snapshot)
+        # Approved column mappings, materialised where Gate 1 reads them. Done
+        # for EVERY run, not only after an approval, so a later month's fresh
+        # working directory carries the same approved choices.
+        self._write_approved_overrides_file(
+            run, project_dir=(staging / orun_id / "portfolios" / run.portfolio_id))
         spec = PortfolioSpec(
             source_portfolio_id=run.portfolio_id,
             input=run.delivery.get("input_path", ""),
@@ -1067,7 +1137,14 @@ class OpsEngine:
             if not field or not raw:
                 continue
             values = [v.strip().strip("'\"") for v in raw.split(",")]
-            for value in [v for v in values if v][:20]:
+            # A regulatory field that is EMPTY is not a translation question —
+            # there is no lender word to translate. Asking "how should NULL be
+            # reported?" is noise, and answering it would map absence to a code.
+            # Those stay as the plain blocker the stage already carries.
+            values = [v for v in values
+                      if v and v.lower() not in ("null", "none", "nan", "na",
+                                                 "<na>", "nat", "-")]
+            for value in values[:20]:
                 friendly = field.replace("_", " ")
                 out.append(DecisionRequired(
                     decision_id=f"{run.workflow_id}_enum_{_slug(field)}_{_slug(value)}",
@@ -1556,6 +1633,7 @@ class OpsEngine:
                                         "scope": scope})
 
         self._write_approved_decisions_file(run)
+        self._write_approved_overrides_file(run)
 
         rerun_scheduled = False
         # Rerun only when the whole review batch is resolved — never mid-batch,
@@ -1578,11 +1656,21 @@ class OpsEngine:
         kind = doc["kind"]
         payload: Dict[str, Any]
         if kind in ("field_mapping", "alias"):
-            payload = {"source_column": subject.get("source_column")
-                       or subject.get("target_field", ""),
-                       "canonical_field": value}
-            desc = (f"Treat '{subject.get('source_column') or subject.get('target_field')}' "
-                    f"as '{value.replace('_', ' ')}'.")
+            if subject.get("canonical_field"):
+                # The question was "which column is this field?", so the
+                # operator's answer IS the source column and the canonical side
+                # is already known. (The usual direction is the other way: "what
+                # is this column?", answered with a canonical field.)
+                payload = {"source_column": value,
+                           "canonical_field": str(subject["canonical_field"])}
+                desc = (f"'{value}' is the "
+                        f"{str(subject['canonical_field']).replace('_', ' ')}.")
+            else:
+                payload = {"source_column": subject.get("source_column")
+                           or subject.get("target_field", ""),
+                           "canonical_field": value}
+                desc = (f"Treat '{subject.get('source_column') or subject.get('target_field')}' "
+                        f"as '{value.replace('_', ' ')}'.")
         elif kind == "enum":
             payload = {"field": subject.get("field", ""),
                        "source_value": subject.get("source_value", ""),
@@ -1713,6 +1801,46 @@ class OpsEngine:
             workflow_id=run.workflow_id,
             detail={"portfolio_id": run.portfolio_id,
                     "dataset": run.delivery.get("dataset", "funded")})
+
+    def _write_approved_overrides_file(self, run: WorkflowRun,
+                                       project_dir: Optional[Path] = None) -> None:
+        """Materialise approved column mappings as Gate 1's overrides artefact.
+
+        ``12_approved_mapping_overrides.yaml`` is what the central tape builder
+        already reads for approved source selections — including which column is
+        the loan identifier, a choice no target-contract decision can express
+        because the loan key is the tape's identity rather than one of its
+        fields.
+        """
+        rules = [r for r in self.rules.applicable(
+            client_id=run.client_id, portfolio_id=run.portfolio_id,
+            file_ref=run.delivery.get("schema_fingerprint", ""))
+            if r.kind in ("field_mapping", "alias")
+            and (r.payload or {}).get("source_column")
+            and (r.payload or {}).get("canonical_field")]
+        if not rules:
+            return
+        doc = {"version": 1,
+               "_doc": "Approved by operators in the Operations Control "
+                       "Centre; regenerated from the governed rule store on "
+                       "every approval.",
+               "user_overrides": [
+                   {"source_file": "", "source_column": r.payload["source_column"],
+                    "canonical_field": r.payload["canonical_field"],
+                    "method": "operator_approved", "confidence": 1.0,
+                    "rule_id": r.rule_id, "rule_version": r.version}
+                   for r in rules]}
+        text = yaml.safe_dump(doc, sort_keys=False)
+        work_dir = self._staging_dir(run)
+        pending = _find_artifact(work_dir, DECISIONS_FILE)
+        target_dir = (project_dir if project_dir is not None
+                      else (pending.parent if pending is not None else work_dir))
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / OVERRIDES_FILE).write_text(text, encoding="utf-8")
+        self.store.storage.write_text(
+            self.store.layout.approved_decisions_uri(
+                run.client_id, run.portfolio_id,
+                run.delivery.get("dataset", "funded"), OVERRIDES_FILE), text)
 
     @staticmethod
     def _sole_delivery_file(run: WorkflowRun) -> str:
@@ -2000,7 +2128,11 @@ class OpsEngine:
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
                            "That workflow could not be found.", 404)
-        if run.status != RUN_AWAITING_PUBLICATION:
+        # Symmetric with approve_publication: a run held on the regulatory
+        # branch sits at needs_review with a ready publication stage, and
+        # holding that report must stay available.
+        if (run.status != RUN_AWAITING_PUBLICATION
+                and run.stage_status(STAGE_PUBLICATION) != ST_READY):
             raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
                            "This workflow is not awaiting publication.", 409)
         period = run.reporting_period or "unspecified"

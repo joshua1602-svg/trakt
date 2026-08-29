@@ -80,7 +80,11 @@ RUN_TRANSITIONS: Dict[str, tuple] = {
     RUN_RECEIVED: (RUN_RUNNING, RUN_CANCELLED),
     RUN_RUNNING: (RUN_NEEDS_REVIEW, RUN_BLOCKED, RUN_AWAITING_PUBLICATION,
                   RUN_FAILED, RUN_CANCELLED),
-    RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED),
+    # A run held on the REGULATORY branch sits here with its management
+    # report prepared, so publishing or holding that report is legal
+    # from needs_review — the open questions are about the delivery.
+    RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED, RUN_PUBLISHED,
+                       RUN_HELD),
     RUN_BLOCKED: (RUN_RUNNING, RUN_CANCELLED),
     RUN_AWAITING_PUBLICATION: (RUN_PUBLISHED, RUN_HELD, RUN_RUNNING, RUN_CANCELLED),
     RUN_HELD: (RUN_AWAITING_PUBLICATION, RUN_RUNNING, RUN_CANCELLED),
